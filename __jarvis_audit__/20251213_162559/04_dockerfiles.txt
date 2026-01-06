@@ -1,0 +1,14 @@
+./apps/analytics-service/Dockerfile
+./apps/api-gateway/Dockerfile
+./apps/assistant-core/Dockerfile
+./apps/life-tracker/Dockerfile
+./apps/llm-service/Dockerfile
+./apps/nlp-service/Dockerfile
+./apps/orchestrator/Dockerfile
+./apps/pc-control/Dockerfile
+./apps/planner-service/Dockerfile
+./apps/security-service/Dockerfile
+./apps/smart-home-service/Dockerfile
+./apps/user-profile/Dockerfile
+./apps/voice-gateway/Dockerfile
+./docker/llm-server/Dockerfile

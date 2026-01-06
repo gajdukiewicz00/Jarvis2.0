@@ -1,0 +1,98 @@
+# =============================================================================
+# Jarvis 2.0 - Ingress (Dev Profile)
+# =============================================================================
+# HTTPS termination + routing to api-gateway
+# Требует: nginx-ingress controller
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jarvis-ingress
+  namespace: jarvis
+  labels:
+    app: jarvis-ingress
+    app.kubernetes.io/name: jarvis-ingress
+    app.kubernetes.io/part-of: jarvis
+  annotations:
+    # Nginx Ingress annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/websocket-services: "api-gateway"
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # CORS (если нужно)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://jarvis.local"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Requested-With"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - jarvis.local
+      secretName: jarvis-tls
+  rules:
+    - host: jarvis.local
+      http:
+        paths:
+          # Все API запросы → api-gateway
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          # WebSocket для LLM
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          # Actuator endpoints (для мониторинга)
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          # Catch-all → api-gateway
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+---
+# =============================================================================
+# NodePort Service (альтернатива Ingress для простого доступа)
+# =============================================================================
+# Раскомментируй, если не хочешь настраивать Ingress
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: api-gateway-nodeport
+#   namespace: jarvis
+# spec:
+#   type: NodePort
+#   ports:
+#     - port: 8080
+#       targetPort: 8080
+#       nodePort: 30080
+#       name: http
+#   selector:
+#     app: api-gateway
+

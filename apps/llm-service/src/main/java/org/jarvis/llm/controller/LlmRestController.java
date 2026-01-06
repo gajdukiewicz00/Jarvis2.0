@@ -1,0 +1,154 @@
+package org.jarvis.llm.controller;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.jarvis.llm.dto.ChatRequestDto;
+import org.jarvis.llm.dto.ChatResponseDto;
+import org.jarvis.llm.dto.DialogRequest;
+import org.jarvis.llm.dto.DialogResponse;
+import org.jarvis.llm.service.LlmService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+
+/**
+ * REST controller for LLM service.
+ * 
+ * <h2>Manual Testing (curl)</h2>
+ * <pre>
+ * # 1. Health check (should return "healthy" when llm-server is up)
+ * curl -s http://localhost:8091/api/v1/llm/health | jq
+ * 
+ * # 2. Dialog request (user-profile optional - works even if unavailable)
+ * curl -s -X POST http://localhost:8091/api/v1/llm/dialog \
+ *   -H "Content-Type: application/json" \
+ *   -H "X-Correlation-ID: test-$(date +%s)" \
+ *   -d '{"sessionId":"test-session","userId":"user1","input":"Привет, как дела?","mode":"dialog"}' | jq
+ * </pre>
+ */
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/llm")
+@RequiredArgsConstructor
+public class LlmRestController {
+
+    private final LlmService llmService;
+
+    /**
+     * Process chat request
+     */
+    @PostMapping("/chat")
+    public ResponseEntity<ChatResponseDto> chat(
+            @RequestBody ChatRequestDto request,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+
+        if (correlationId == null) {
+            correlationId = java.util.UUID.randomUUID().toString();
+        }
+
+        log.info("Received REST chat request for session: {}, correlationId: {}", request.getSessionId(),
+                correlationId);
+
+        try {
+            // Get last user message from request
+            String userMessage = request.getMessages().get(request.getMessages().size() - 1).getContent();
+
+            ChatResponseDto response = llmService.processMessage(
+                    request.getSessionId(),
+                    userMessage,
+                    correlationId);
+
+            return ResponseEntity.ok(response);
+
+        } catch (org.jarvis.llm.client.LlmClient.LlmClientException e) {
+            log.error("LLM Client error: {}", e.getMessage());
+            Throwable cause = e.getCause();
+            if (cause instanceof org.springframework.web.client.ResourceAccessException) {
+                return ResponseEntity.status(504).build(); // Gateway Timeout
+            } else if (cause instanceof org.springframework.web.client.HttpServerErrorException) {
+                return ResponseEntity.status(503).build(); // Service Unavailable
+            } else if (cause instanceof org.springframework.web.client.HttpClientErrorException) {
+                return ResponseEntity.badRequest().build();
+            }
+            return ResponseEntity.status(503).build();
+        } catch (Exception e) {
+            log.error("Error processing chat request: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Process dialog mode interaction.
+     * 
+     * Unlike /chat, this endpoint:
+     * - Maintains conversation context across requests
+     * - Supports dialog/command/scenario modes
+     * - Detects exit phrases to end dialog mode
+     * - Returns structured response with shouldContinue flag
+     * 
+     * @param request Dialog request with sessionId, userId, input, mode
+     * @param correlationId Optional correlation ID for tracing
+     * @return DialogResponse with reply and metadata
+     */
+    @PostMapping("/dialog")
+    public ResponseEntity<DialogResponse> dialog(
+            @RequestBody DialogRequest request,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+        
+        if (correlationId == null) {
+            correlationId = java.util.UUID.randomUUID().toString();
+        }
+        
+        log.info("📝 Dialog request: sessionId={}, mode={}, correlationId={}", 
+                request.getSessionId(), request.getMode(), correlationId);
+        
+        try {
+            DialogResponse response = llmService.processDialog(request, correlationId);
+            return ResponseEntity.ok(response);
+            
+        } catch (org.jarvis.llm.client.LlmClient.LlmClientException e) {
+            log.error("LLM Client error in dialog: {}", e.getMessage());
+            
+            // Return fallback response instead of error
+            return ResponseEntity.ok(DialogResponse.builder()
+                    .sessionId(request.getSessionId())
+                    .reply("Извини, сейчас не могу ответить. Попробуй позже.")
+                    .shouldContinue(true)
+                    .mode("dialog")
+                    .build());
+                    
+        } catch (Exception e) {
+            log.error("Error processing dialog request: {}", e.getMessage(), e);
+            
+            return ResponseEntity.ok(DialogResponse.builder()
+                    .sessionId(request.getSessionId())
+                    .reply("Произошла ошибка. Попробуй ещё раз.")
+                    .shouldContinue(true)
+                    .mode("dialog")
+                    .build());
+        }
+    }
+
+    /**
+     * Clear session history
+     */
+    @DeleteMapping("/session/{sessionId}")
+    public ResponseEntity<Void> clearSession(@PathVariable String sessionId) {
+        log.info("Clearing session: {}", sessionId);
+        llmService.clearSession(sessionId);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Health check
+     */
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, Object>> health() {
+        boolean available = llmService.isAvailable();
+
+        return ResponseEntity.ok(Map.of(
+                "status", available ? "healthy" : "degraded",
+                "llm_server_available", available));
+    }
+}

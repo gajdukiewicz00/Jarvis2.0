@@ -1,0 +1,77 @@
+# =============================================================================
+# Jarvis 2.0 - Voice Gateway - Kubernetes Profile
+# =============================================================================
+
+# Vosk STT
+jarvis:
+  vosk:
+    enabled: ${JARVIS_VOSK_ENABLED:true}
+    model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:/app/models/vosk-model-small-ru-0.22}
+    model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:/app/models/vosk-model-small-en-us-0.15}
+    default-language: ${JARVIS_VOSK_DEFAULT_LANGUAGE:ru-RU}
+    sample-rate: ${JARVIS_VOSK_SAMPLE_RATE:16000}
+  orchestrator:
+    url: ${JARVIS_ORCHESTRATOR_URL:http://orchestrator:8083}
+  voice:
+    whisper:
+      enabled: ${WHISPER_ENABLED:false}
+      model-path: ${WHISPER_MODEL_PATH:models/ggml-small.bin}
+  features:
+    rabbitmq-voice: ${FEATURE_RABBITMQ_VOICE:false}
+
+# TTS
+tts:
+  enabled: true
+  provider: espeak
+  espeak:
+    voice: russian
+    speed: 150
+
+# RabbitMQ (для команд)
+spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:jarvis}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:jarvis}
+    connection-timeout: 10000
+    publisher-confirm-type: correlated
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000
+        max-attempts: 3
+
+  # Kafka (для voice events)
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# Actuator - КРИТИЧНО: исправляет "No static resource actuator/health"
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    rabbit:
+      enabled: false  # RabbitMQ может быть недоступен - не падать
+    kafka:
+      enabled: false  # Kafka отключена
+
+logging:
+  level:
+    org.jarvis.voicegateway: INFO
+    org.vosk: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+

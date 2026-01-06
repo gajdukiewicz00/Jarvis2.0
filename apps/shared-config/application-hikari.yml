@@ -1,0 +1,93 @@
+# =============================================================================
+# Shared HikariCP Connection Pool Configuration for Jarvis 2.0
+# =============================================================================
+#
+# Import this file in service-specific application.yml files using:
+#   spring.config.import: optional:classpath:application-hikari.yml
+#
+# This configuration prevents common connection pool issues:
+# - Thread starvation (keepalive prevents idle connection closure)
+# - Connection timeouts (reasonable wait time)
+# - Stale/closed connections (max-lifetime forces refresh before PostgreSQL timeout)
+# - Validation failures (connection-test-query verifies health)
+# - "This connection has been closed" errors
+#
+# PostgreSQL Configuration (docker/postgres/postgres.conf):
+# - max_connections: 100
+# - statement_timeout: 300000 (5 minutes)
+#
+# With 6 DB-using services × 10 max connections = 60 total, within limits
+# =============================================================================
+
+spring:
+  datasource:
+    hikari:
+      # =========================================================================
+      # Pool Size Configuration
+      # =========================================================================
+      # Conservative sizing to avoid overwhelming PostgreSQL
+      # Total pool across all services should be < max_connections (100)
+      maximum-pool-size: 10           # Max connections per service
+      minimum-idle: 2                 # Always keep 2 warm connections
+      
+      # =========================================================================
+      # Connection Timeouts
+      # =========================================================================
+      # Time to wait for connection from pool before SQLException
+      connection-timeout: 30000       # 30 seconds
+      
+      # =========================================================================
+      # Idle Connection Management
+      # =========================================================================
+      # Close idle connections after this time to free resources
+      # Should be less than PostgreSQL's idle connection timeout
+      idle-timeout: 600000            # 10 minutes
+      
+      # =========================================================================
+      # Connection Lifetime - CRITICAL
+      # =========================================================================
+      # Force connection refresh BEFORE PostgreSQL closes it
+      # PostgreSQL default idle timeout is typically 30+ minutes
+      # Setting to 20 minutes ensures we refresh before server-side timeout
+      # This PREVENTS "This connection has been closed" errors
+      max-lifetime: 1200000           # 20 minutes
+      
+      # =========================================================================
+      # Keepalive - Prevents Silent Disconnection
+      # =========================================================================
+      # Test idle connections periodically to keep them alive
+      # Prevents silent connection closure by PostgreSQL or network equipment
+      keepalive-time: 300000          # 5 minutes
+      
+      # =========================================================================
+      # Connection Validation
+      # =========================================================================
+      # Quick check to ensure connection is healthy before use
+      validation-timeout: 5000        # 5 seconds max for validation
+      connection-test-query: SELECT 1 # Simple, fast query
+      
+      # =========================================================================
+      # Leak Detection (Development/Debugging)
+      # =========================================================================
+      # Warn if connection held longer than threshold
+      # Helps identify code that doesn't release connections properly
+      leak-detection-threshold: 60000 # 60 seconds - log warning
+      
+      # =========================================================================
+      # Initialization Behavior
+      # =========================================================================
+      # Allow service to start even if database is temporarily unavailable
+      # Critical for Docker Compose where services may start before PostgreSQL
+      # Set to positive value in production if you want fail-fast behavior
+      initialization-fail-timeout: -1 # -1 = don't fail, keep retrying
+      
+      # =========================================================================
+      # Auto-commit
+      # =========================================================================
+      # Let Spring/JPA manage transactions
+      auto-commit: true
+      
+      # =========================================================================
+      # Register MBeans for JMX monitoring
+      # =========================================================================
+      register-mbeans: true

@@ -1,0 +1,7 @@
+# Development profile for life-tracker
+# Activate with: SPRING_PROFILES_ACTIVE=dev
+
+logging:
+  level:
+    org.jarvis.lifetracker: DEBUG
+

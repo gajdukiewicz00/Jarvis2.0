@@ -1,0 +1,387 @@
+apps/nlp-service/src/main/java/org/jarvis/nlp/security/GatewayAuthFilter.java:9:import org.springframework.security.core.context.SecurityContextHolder;
+apps/nlp-service/src/main/java/org/jarvis/nlp/security/GatewayAuthFilter.java:30:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/nlp-service/src/main/java/org/jarvis/nlp/service/EnhancedNlpService.java:23:     * @deprecated Use analyzeWithConfidence instead
+apps/nlp-service/src/main/java/org/jarvis/nlp/model/EnhancedNlpResult.java:18:     * High confidence threshold - execute directly
+apps/nlp-service/src/main/java/org/jarvis/nlp/model/EnhancedNlpResult.java:23:     * Low confidence threshold - request clarification
+apps/user-profile/target/classes/application.yaml:18:      leak-detection-threshold: 60000
+apps/user-profile/src/main/resources/application.yaml:18:      leak-detection-threshold: 60000
+apps/user-profile/src/main/java/org/jarvis/userprofile/security/GatewayAuthFilter.java:11:import org.springframework.security.core.context.SecurityContextHolder;
+apps/user-profile/src/main/java/org/jarvis/userprofile/security/GatewayAuthFilter.java:35:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/orchestrator/target/surefire-reports/TEST-org.jarvis.orchestrator.phrases.JarvisPhraseProviderTest.xml:65:  <testcase name="templateSubstitution" classname="org.jarvis.orchestrator.phrases.JarvisPhraseProviderTest" time="0.001"/>
+apps/orchestrator/target/classes/application-docker.yml:11:    # LLM disabled by default in k8s - enable via env JARVIS_LLM_ENABLED=true
+apps/orchestrator/target/classes/application-docker.yml:15:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/target/classes/application.yml:21:    # LLM Feature flag - disabled by default for stability
+apps/orchestrator/target/classes/application.yml:28:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/src/test/java/org/jarvis/orchestrator/phrases/JarvisPhraseProviderTest.java:89:    void templateSubstitution() {
+apps/orchestrator/src/main/resources/application-docker.yml:11:    # LLM disabled by default in k8s - enable via env JARVIS_LLM_ENABLED=true
+apps/orchestrator/src/main/resources/application-docker.yml:15:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/src/main/resources/application.yml:21:    # LLM Feature flag - disabled by default for stability
+apps/orchestrator/src/main/resources/application.yml:28:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:23: * 3. Use template placeholders like {time}, {userName}, {city}, etc.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:49:     * Get a random phrase for the given context and language, with template substitution.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:72:        String template = variants.get(ThreadLocalRandom.current().nextInt(variants.size()));
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:75:        return substituteParams(template, params);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:95:    private String substituteParams(String template, Map<String, Object> params) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:96:        String result = template;
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:98:            String placeholder = "{" + entry.getKey() + "}";
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:100:            result = result.replace(placeholder, value);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:102:        // Remove any remaining unreplaced placeholders
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:117:                "Доброе утро, {userName}. Сейчас {time}. В {city} {temp}°C, {conditions}.",
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:123:                "Good morning, sir. It's {time}. The weather in {city} is {temp} degrees with {conditions}.",
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:337:                "On hold, sir."
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:32: * - Circuit breaker: after N consecutive failures, LLM is disabled for M seconds
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:51:    @Value("${jarvis.llm.circuit-breaker.failure-threshold:3}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:52:    private int circuitBreakerFailureThreshold;
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:363:     * If LLM is disabled, times out, or circuit is open → returns rule-based phrase immediately.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:369:            log.debug("🧠 LLM_SKIPPED: feature disabled, correlationId={}", correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:376:            log.warn("🧠 LLM_CIRCUIT_OPEN: disabled until {}, correlationId={}", openUntil, correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:422:        if (failures >= circuitBreakerFailureThreshold) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:425:            log.warn("🧠 LLM_CIRCUIT_OPENED: {} consecutive failures, disabled until {}", 
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:49:    public ChatResponseDto chat(List<ChatMessageDto> messages, Integer maxTokens, Double temperature,
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:64:        if (temperature != null) {
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:65:            requestBody.put("temperature", temperature);
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:78:        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:80:                log.debug("Sending chat request to LLM server (attempt {}/{})", attempt, MAX_RETRIES);
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:100:                log.warn("Server error from LLM server (attempt {}/{}): {} - {}",
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:101:                        attempt, MAX_RETRIES, e.getStatusCode(), e.getResponseBodyAsString());
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:105:                log.warn("Connection error to LLM server (attempt {}/{}): {}",
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:106:                        attempt, MAX_RETRIES, e.getMessage());
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:114:            // Wait before retry (except on last attempt)
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:115:            if (attempt < MAX_RETRIES) {
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:125:        throw new LlmClientException("Failed to get response from LLM server after " + MAX_RETRIES + " attempts",
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:131:     * Returns false immediately if LLM is disabled
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:135:            log.debug("LLM is disabled (jarvis.llm.enabled=false)");
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatRequestDto.java:19:    private Double temperature;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java:36:            // Keep system messages and trim oldest user/assistant messages
+apps/security-service/target/classes/application.yml:57:    clean-disabled: true
+apps/security-service/src/main/resources/application.yml:57:    clean-disabled: true
+apps/security-service/src/main/java/org/jarvis/security/config/GlobalExceptionHandler.java:124:            "Authentication temporarily unavailable due to database issues",
+apps/security-service/src/main/java/org/jarvis/security/config/GlobalExceptionHandler.java:172:                "Authentication temporarily unavailable due to database issues",
+apps/security-service/src/main/java/org/jarvis/security/config/GlobalExceptionHandler.java:203:            "Authentication temporarily unavailable",
+apps/security-service/src/main/java/org/jarvis/security/controller/AuthController.java:46:        log.info("Registration attempt for user: {}", request.username());
+apps/security-service/src/main/java/org/jarvis/security/controller/AuthController.java:67:        log.info("Login attempt for user: {}", request.username());
+apps/security-service/src/main/java/org/jarvis/security/controller/AuthController.java:83:        log.debug("Token refresh attempt");
+apps/security-service/src/main/java/org/jarvis/security/service/AuthService.java:78:            log.warn("Failed login attempt for user: {}", request.username());
+apps/security-service/src/main/java/org/jarvis/security/service/AuthService.java:84:            log.warn("Login attempt for disabled user: {}", request.username());
+apps/security-service/src/main/java/org/jarvis/security/service/AuthService.java:85:            throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
+apps/security-service/src/main/java/org/jarvis/security/service/AuthService.java:119:            throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
+apps/api-gateway/target/classes/application.yaml:74:        failureRateThreshold: 50
+apps/api-gateway/target/classes/application-k8s.yml:49:    template:
+apps/api-gateway/target/classes/application-k8s.yml:53:        max-attempts: 3
+apps/api-gateway/target/classes/application-k8s.yml:102:        failureRateThreshold: 50
+apps/api-gateway/target/classes/application-k8s.yml:108:        failureRateThreshold: 60
+apps/api-gateway/target/classes/application-k8s.yml:113:        maxAttempts: 3
+apps/api-gateway/src/main/resources/application.yaml:74:        failureRateThreshold: 50
+apps/api-gateway/src/main/resources/application-k8s.yml:49:    template:
+apps/api-gateway/src/main/resources/application-k8s.yml:53:        max-attempts: 3
+apps/api-gateway/src/main/resources/application-k8s.yml:102:        failureRateThreshold: 50
+apps/api-gateway/src/main/resources/application-k8s.yml:108:        failureRateThreshold: 60
+apps/api-gateway/src/main/resources/application-k8s.yml:113:        maxAttempts: 3
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/SecurityConfig.java:64:                            .requestMatchers("/api/v1/**").permitAll() // Allow all /api/v1/** endpoints (temporary for
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/JwtAuthenticationFilter.java:13:import org.springframework.security.core.context.SecurityContextHolder;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/JwtAuthenticationFilter.java:54:                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/JwtAuthenticationFilter.java:65:                    SecurityContextHolder.getContext().setAuthentication(authToken);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/filter/JwtFilter.java:51:            "/api/v1/", // Allow all /api/v1/** endpoints (temporary for development)
+apps/api-gateway/src/main/java/org/jarvis/apigateway/filter/JwtFilter.java:81:        // JWT disabled - skip validation entirely
+apps/api-gateway/src/main/java/org/jarvis/apigateway/filter/JwtFilter.java:83:            log.trace("JwtFilter: JWT disabled, passing through");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/GlobalExceptionHandler.java:80:            message = String.format("Service %s temporarily unavailable", serviceName);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/GlobalExceptionHandler.java:164:        body.put("message", "Service temporarily unavailable");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/CorsConfig.java:44:            log.info("CORS is disabled");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:9:import org.springframework.web.context.request.RequestContextHolder;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:23:            public void apply(RequestTemplate template) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:24:                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:40:                        template.header("X-User-Id", userId);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:44:                        template.header("X-Username", username);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:48:                        template.header("X-User-Roles", userRoles);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:52:                        template.header("X-User-Role", userRole);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:59:                        template.header("X-Trace-Id", traceId);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:60:                        log.info("Propagating traceId {} to {}", traceId, template.url());
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:62:                        log.info("No traceId found, but request is to: {}", template.url());
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:65:                    log.warn("FeignConfig: RequestContextHolder.getRequestAttributes() returned null");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:69:                if (!template.headers().containsKey("X-User-Id")) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:71:                    template.header("X-User-Id", "dev-user");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:72:                    template.header("X-Username", "dev-user");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/FeignConfig.java:73:                    template.header("X-User-Role", "USER");
+apps/analytics-service/target/classes/application-k8s.yml:48:        failureRateThreshold: 50
+apps/analytics-service/target/classes/application-k8s.yml:54:        maxAttempts: 3
+apps/analytics-service/src/main/resources/application-k8s.yml:48:        failureRateThreshold: 50
+apps/analytics-service/src/main/resources/application-k8s.yml:54:        maxAttempts: 3
+apps/analytics-service/src/main/java/org/jarvis/analytics/security/GatewayAuthFilter.java:11:import org.springframework.security.core.context.SecurityContextHolder;
+apps/analytics-service/src/main/java/org/jarvis/analytics/security/GatewayAuthFilter.java:35:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/GlobalExceptionHandler.java:47:        body.put("message", "Upstream service temporarily unavailable");
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:9:import org.springframework.security.core.context.SecurityContextHolder;
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:12:import org.springframework.web.context.request.RequestContextHolder;
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:28:        return template -> {
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:31:                template.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:36:                template.header(USER_ID_HEADER, userId);
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:41:                template.header(USER_ROLES_HEADER, roles);
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:47:        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:64:        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:87:        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+apps/analytics-service/src/main/java/org/jarvis/analytics/config/FeignAuthConfig.java:110:        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+apps/analytics-service/src/main/java/org/jarvis/analytics/service/AnalyticsService.java:13:import java.time.temporal.ChronoUnit;
+apps/voice-gateway/target/classes/application-k8s.yml:40:    template:
+apps/voice-gateway/target/classes/application-k8s.yml:44:        max-attempts: 3
+apps/voice-gateway/src/main/resources/application-k8s.yml:40:    template:
+apps/voice-gateway/src/main/resources/application-k8s.yml:44:        max-attempts: 3
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/security/GatewayAuthFilter.java:9:import org.springframework.security.core.context.SecurityContextHolder;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/security/GatewayAuthFilter.java:30:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/client/OrchestratorClient.java:8:     * Send raw text command to orchestrator (legacy method).
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:34:            log.info("TTS is disabled");
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:59:            throw new IllegalStateException("TTS is disabled");
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:118:            // Create temporary file for output
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:119:            java.io.File tempFile = java.io.File.createTempFile("tts_", ".wav");
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:120:            tempFile.deleteOnExit();
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:126:                    "-w", tempFile.getAbsolutePath(),
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/TtsService.java:139:            byte[] audioData = java.nio.file.Files.readAllBytes(tempFile.toPath());
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/impl/WhisperSttService.java:41:            log.info("Whisper STT is disabled (jarvis.voice.whisper.enabled=false)");
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/service/impl/WhisperSttService.java:129:            if (energy > 0.01) { // Threshold
+apps/planner-service/target/classes/application-docker.yml:16:      leak-detection-threshold: 60000
+apps/planner-service/target/classes/application-k8s.yml:41:    clean-disabled: false
+apps/planner-service/target/classes/db/migration/V3__change_amount_to_decimal.sql:5:-- Empty migration placeholder
+apps/planner-service/src/main/resources/application-docker.yml:16:      leak-detection-threshold: 60000
+apps/planner-service/src/main/resources/application-k8s.yml:41:    clean-disabled: false
+apps/planner-service/src/main/resources/db/migration/V3__change_amount_to_decimal.sql:5:-- Empty migration placeholder
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:37:    // Placeholder for LLM enhancement
+apps/planner-service/src/main/java/org/jarvis/planner/client/AnalyticsClient.java:37:    // Placeholder methods for analytics data
+apps/planner-service/src/main/java/org/jarvis/planner/client/UserProfileClient.java:40:    // Placeholder methods
+apps/planner-service/src/main/java/org/jarvis/planner/controller/ReminderController.java:12:import java.time.temporal.ChronoUnit;
+apps/planner-service/src/main/java/org/jarvis/planner/service/NotificationService.java:8: * Placeholder for future integration with desktop-client and voice-gateway
+apps/planner-service/src/main/java/org/jarvis/planner/service/LlmEnhancementService.java:40:        // Placeholder: in future, call LLM with prompt engineering
+apps/planner-service/src/main/java/org/jarvis/planner/service/RecommendationEngine.java:27:        // Placeholder recommendations (will be replaced with real analytics)
+apps/smart-home-service/src/main/java/org/jarvis/smarthome/security/GatewayAuthFilter.java:9:import org.springframework.security.core.context.SecurityContextHolder;
+apps/smart-home-service/src/main/java/org/jarvis/smarthome/security/GatewayAuthFilter.java:30:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/shared-config/application-hikari.yml:72:      # Warn if connection held longer than threshold
+apps/shared-config/application-hikari.yml:74:      leak-detection-threshold: 60000 # 60 seconds - log warning
+apps/shared-config/application-hikari.yml:79:      # Allow service to start even if database is temporarily unavailable
+apps/desktop-client-javafx/target/classes/fxml/LoginView.fxml:22:                    <Font name="System Bold" size="36"/>
+apps/desktop-client-javafx/target/classes/fxml/LoginView.fxml:68:                                <Font size="14" name="System Bold"/>
+apps/desktop-client-javafx/target/classes/fxml/LoginView.fxml:105:                                <Font size="14" name="System Bold"/>
+apps/desktop-client-javafx/target/classes/css/login.css:59:    -fx-font-weight: bold;
+apps/desktop-client-javafx/target/classes/css/login.css:83:    -fx-font-weight: bold;
+apps/desktop-client-javafx/target/classes/css/login.css:100:.primary-button:disabled {
+apps/desktop-client-javafx/WAKE_WORD_SETUP.md:68:# Move downloaded jarvis_ru.ppn to this folder
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:20: * - Wake word is enabled/disabled correctly
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:21: * - Cooldown behavior works as expected
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:92:        assertFalse(wakeWordEnabled.get(), "Wake word should be disabled when listening")
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:210:        // TTS playback finished → cooldown
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:213:        assertFalse(wakeWordEnabled.get(), "Wake word should be disabled during cooldown")
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:215:        // Wait for cooldown to finish (default is 1500ms)
+apps/desktop-client-javafx/src/test/kotlin/org/jarvis/desktop/service/VoiceSessionTest.kt:224:        assertTrue(wakeWordEnabled.get(), "Wake word should be re-enabled after cooldown")
+apps/desktop-client-javafx/src/main/resources/fxml/LoginView.fxml:22:                    <Font name="System Bold" size="36"/>
+apps/desktop-client-javafx/src/main/resources/fxml/LoginView.fxml:68:                                <Font size="14" name="System Bold"/>
+apps/desktop-client-javafx/src/main/resources/fxml/LoginView.fxml:105:                                <Font size="14" name="System Bold"/>
+apps/desktop-client-javafx/src/main/resources/css/login.css:59:    -fx-font-weight: bold;
+apps/desktop-client-javafx/src/main/resources/css/login.css:83:    -fx-font-weight: bold;
+apps/desktop-client-javafx/src/main/resources/css/login.css:100:.primary-button:disabled {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/audio/AudioRecorder.kt:66:                    // Convert to WAV format (for legacy/full file usage)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:45:    /** Cooldown duration (ms) after TTS before re-enabling wake word (prevents echo/self-trigger) */
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:46:    val cooldownMs: Long by lazy {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/HomeTab.kt:16:        // For now, just a placeholder or fetch simple data
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/SettingsTab.kt:23:        title.style = "-fx-font-size: 18px; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/SettingsTab.kt:27:        statusLabel.style = "-fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/SettingsTab.kt:48:            statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/SettingsTab.kt:140:            statusLabel.style = "-fx-text-fill: orange; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/SettingsTab.kt:154:        statusLabel.style = "-fx-text-fill: blue; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/SettingsTab.kt:193:                statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:27: * - Cooldown period after TTS prevents background noise triggers
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:153:        statusLabel.style = "-fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/DevicesTab.kt:18:        statusLabel.style = "-fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/DevicesTab.kt:27:                statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/DevicesTab.kt:31:                statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/PcControlTab.kt:26:            style = "-fx-font-size: 20px; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/PcControlTab.kt:30:        statusLabel.style = "-fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/PcControlTab.kt:66:                style = "-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #555;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/PcControlTab.kt:255:            "-fx-text-fill: #2e7d32; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/PcControlTab.kt:257:            "-fx-text-fill: #c62828; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/AnalyticsTab.kt:24:        title.style = "-fx-font-size: 18px; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/AnalyticsTab.kt:28:        statusLabel.style = "-fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/AnalyticsTab.kt:89:        titleLabel.style = "-fx-font-weight: bold; -fx-font-size: 14px;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/AnalyticsTab.kt:104:        statusLabel.style = "-fx-text-fill: blue; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/AnalyticsTab.kt:115:                    statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/AnalyticsTab.kt:125:                    statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:26:        statusLabel.style = "-fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:65:                    statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:71:                    statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:75:                statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:105:                statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:108:                statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:116:                statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:119:                statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:144:            statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/LifeTab.kt:153:            statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/controller/LoginController.kt:64:                logger.info("Attempting login for user: $username")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/controller/LoginController.kt:145:                logger.info("Attempting registration for user: $username")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/api/ApiClient.kt:229:                if (hasRetried || !attemptTokenRefresh()) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/api/ApiClient.kt:237:    private fun attemptTokenRefresh(): Boolean {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:47:                logger.info("Development mode: attempting auto-login for user: $devUsername")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:35:    private var reconnectAttempts = 0
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:36:    private val maxReconnectAttempts = 5
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:73:        reconnectAttempts = 0
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:246:        if (code != 1000 && reconnectAttempts < maxReconnectAttempts) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:256:        if (reconnectAttempts < maxReconnectAttempts) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:262:        reconnectAttempts++
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:263:        val delay = (reconnectAttempts * 2).coerceAtMost(30) // Max 30 seconds
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:264:        logger.info("Scheduling reconnect attempt $reconnectAttempts in ${delay}s")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:21: * - COOLDOWN → IDLE (after cooldown timer)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:49:    private var cooldownFuture: ScheduledFuture<*>? = null
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:190:        logger.info("🔊 TTS playback finished, starting cooldown ({} ms), correlationId={}", 
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:191:            VoiceConfig.cooldownMs, correlationId)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:196:        // Start cooldown timer
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:197:        cooldownFuture = scheduler.schedule({
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:198:            endCooldown()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:199:        }, VoiceConfig.cooldownMs, TimeUnit.MILLISECONDS)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:203:     * End cooldown and return to IDLE/LISTENING_WAKE_WORD state.
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:205:    private fun endCooldown() {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:209:            logger.debug("Not in COOLDOWN state, skipping cooldown end")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:216:        logger.info("✅ Cooldown finished, re-enabling wake word, correlationId={}", endedCorrelationId)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:246:        cooldownFuture?.cancel(false)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:286:        cooldownFuture?.cancel(false)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:328:     * Return to IDLE state when always-listening mode is disabled.
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:335:            cancelSession("Always-listening disabled")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceSession.kt:431:        cooldownFuture?.cancel(true)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:49:    private var reconnectAttempts = 0
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:50:    private val maxReconnectAttempts = 5
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:93:        if (!shouldReconnect || reconnectAttempts >= maxReconnectAttempts) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:94:            logger.warn("🔌 Not reconnecting: shouldReconnect={}, attempts={}/{}", 
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:95:                shouldReconnect, reconnectAttempts, maxReconnectAttempts)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:99:        reconnectAttempts++
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:100:        val delay = (reconnectAttempts * 2).coerceAtMost(10) // Max 10 seconds
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:101:        logger.info("🔌 Scheduling Voice WS reconnect attempt {}/{} in {}s", 
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:102:            reconnectAttempts, maxReconnectAttempts, delay)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:109:                logger.info("🔌 Attempting Voice WS reconnect...")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:142:            // Skip sending audio when not in LISTENING state (TTS playback, cooldown, etc.)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:188:        reconnectAttempts = 0 // Reset on successful connection
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/model/VoiceState.kt:11: * - COOLDOWN → IDLE (after cooldown timer expires)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/model/VoiceState.kt:32:    /** Cooldown after TTS - mic NOT streaming, wake word DISABLED */
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/model/VoiceState.kt:58:    /** Returns true if wake word detection should be disabled in this state */
+apps/pc-control/target/classes/application-k8s.yml:31:          max-attempts: 3
+apps/pc-control/src/test/java/org/jarvis/pccontrol/service/impl/LinuxFileServiceTest.java:18:    Path tempDir;
+apps/pc-control/src/test/java/org/jarvis/pccontrol/service/impl/LinuxFileServiceTest.java:22:        Files.createFile(tempDir.resolve("test1.txt"));
+apps/pc-control/src/test/java/org/jarvis/pccontrol/service/impl/LinuxFileServiceTest.java:23:        Files.createDirectory(tempDir.resolve("subdir"));
+apps/pc-control/src/test/java/org/jarvis/pccontrol/service/impl/LinuxFileServiceTest.java:25:        List<String> files = fileService.listFiles(tempDir.toString());
+apps/pc-control/src/test/java/org/jarvis/pccontrol/service/impl/LinuxFileServiceTest.java:33:        Path file = tempDir.resolve("content.txt");
+apps/pc-control/src/test/java/org/jarvis/pccontrol/service/impl/LinuxFileServiceTest.java:43:        Path file = tempDir.resolve("info.txt");
+apps/pc-control/src/main/resources/application-k8s.yml:31:          max-attempts: 3
+apps/pc-control/src/main/java/org/jarvis/pccontrol/security/CommandValidator.java:29:            log.warn("Blocked dangerous action attempt: {}", actionType);
+apps/pc-control/src/main/java/org/jarvis/pccontrol/security/GatewayAuthFilter.java:9:import org.springframework.security.core.context.SecurityContextHolder;
+apps/pc-control/src/main/java/org/jarvis/pccontrol/security/GatewayAuthFilter.java:30:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/pc-control/src/main/java/org/jarvis/pccontrol/filter/TokenValidationFilter.java:52:            log.warn("Unauthorized PC control attempt to {}", path);
+apps/pc-control/src/main/java/org/jarvis/pccontrol/filter/TokenValidationFilter.java:61:            log.warn("User {} attempted admin command: {}", userId, path);
+apps/assistant-core/target/classes/application-docker.yml:15:      leak-detection-threshold: 60000
+apps/assistant-core/target/classes/application.yml:34:    retention-days: 90  # Auto-delete conversations older than 90 days
+apps/assistant-core/target/classes/application.yml:40:    temperature: 0.7  # 0.0-1.0, higher = more creative
+apps/assistant-core/src/main/resources/application-docker.yml:15:      leak-detection-threshold: 60000
+apps/assistant-core/src/main/resources/application.yml:34:    retention-days: 90  # Auto-delete conversations older than 90 days
+apps/assistant-core/src/main/resources/application.yml:40:    temperature: 0.7  # 0.0-1.0, higher = more creative
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/config/LlmConfig.java:35:    private double temperature = 0.7;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/BehavioralAnalysisService.java:88:        // Simple heuristic: if total expenses > 10000 (dummy threshold), suggest saving
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/ConversationMemoryService.java:56:        // Reverse to get chronological order (oldest to newest)
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/ConversationMemoryService.java:116:        log.info("Deleted conversation history older than {}", cutoff);
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:28:    // Optional LLM services (may be null if LLM is disabled)
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/LlmClient.java:30:            double temperature,
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/PromptTemplates.java:10: * Centralized prompt templates for LLM interactions
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/OllamaLlmClient.java:38:            body.put("temperature", request.temperature());
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/OllamaLlmClient.java:87:            options.put("temperature", request.temperature());
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/external/LifeTrackerClient.java:25:        // Placeholder for actual API call
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/external/LifeTrackerClient.java:37:        // Placeholder for actual API call
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/external/NlpServiceClient.java:24:        return null; // Placeholder
+apps/life-tracker/target/classes/application-docker.yml:41:    clean-disabled: true              # Запретить clean в docker
+apps/life-tracker/target/classes/application.yaml:39:      leak-detection-threshold: 60000 # 60s - предупреждение о leak
+apps/life-tracker/target/classes/application.yaml:65:    clean-disabled: true              # Запретить clean в production
+apps/life-tracker/src/main/resources/application-docker.yml:41:    clean-disabled: true              # Запретить clean в docker
+apps/life-tracker/src/main/resources/application.yaml:39:      leak-detection-threshold: 60000 # 60s - предупреждение о leak
+apps/life-tracker/src/main/resources/application.yaml:65:    clean-disabled: true              # Запретить clean в production
+apps/life-tracker/src/main/java/org/jarvis/lifetracker/security/GatewayAuthFilter.java:9:import org.springframework.security.core.context.SecurityContextHolder;
+apps/life-tracker/src/main/java/org/jarvis/lifetracker/security/GatewayAuthFilter.java:44:            SecurityContextHolder.getContext().setAuthentication(auth);
+apps/life-tracker/src/main/java/org/jarvis/lifetracker/config/GlobalExceptionHandler.java:41:            "Database temporarily unavailable. Please try again later.",
+docker/postgres/postgres.conf:20:autovacuum_vacuum_threshold = 50
+docker/postgres/postgres.conf:22:autovacuum_analyze_threshold = 50
+docker/llm-server/app/chat_handler.py:70:        temperature: float = None
+docker/llm-server/app/chat_handler.py:78:            temperature: Sampling temperature
+docker/llm-server/app/chat_handler.py:89:            # Keep system message if present, then trim oldest messages
+docker/llm-server/app/chat_handler.py:96:        temperature = temperature or config.TEMPERATURE
+docker/llm-server/app/chat_handler.py:107:                temperature=temperature,
+docker/llm-server/app/model_loader.py:67:        temperature: float = 0.7,
+docker/llm-server/app/model_loader.py:76:            temperature: Sampling temperature
+docker/llm-server/app/model_loader.py:105:                    temperature=temperature,
+docker/llm-server/app/main.py:36:    temperature: Optional[float] = Field(None, description="Sampling temperature")
+docker/llm-server/app/main.py:124:      "temperature": 0.7
+docker/llm-server/app/main.py:141:            temperature=request.temperature
+docker/llm-server/README.md:27:  "temperature": 0.7
+docker/llm-server/README.md:65:- `TEMPERATURE`: Default temperature (default: `0.7`)
+k8s/dev/postgres/statefulset.yaml:22:  template:
+k8s/dev/postgres/statefulset.yaml:73:            failureThreshold: 3
+k8s/dev/postgres/statefulset.yaml:85:            failureThreshold: 3
+k8s/dev/rabbitmq/statefulset.yaml:20:  template:
+k8s/dev/rabbitmq/statefulset.yaml:78:            failureThreshold: 3
+k8s/dev/rabbitmq/statefulset.yaml:88:            failureThreshold: 3
+k8s/dev/01-configmap.yaml:94:  # LLM (disabled by default - enable only when llm-service is healthy)
+k8s/dev/README.md:65:LLM is **disabled by default** for stability. To enable:
+k8s/dev/services/api-gateway.yaml:24:  template:
+k8s/dev/services/api-gateway.yaml:160:            failureThreshold: 3
+k8s/dev/services/api-gateway.yaml:168:            failureThreshold: 3
+k8s/dev/services/pc-control.yaml:22:  template:
+k8s/dev/services/pc-control.yaml:120:            failureThreshold: 3
+k8s/dev/services/pc-control.yaml:128:            failureThreshold: 3
+k8s/dev/services/remaining-services.yaml:5:# (llm-service и llm-server временно отключены - см. llm-disabled.yaml)
+k8s/dev/services/remaining-services.yaml:26:  template:
+k8s/dev/services/remaining-services.yaml:61:            failureThreshold: 5
+k8s/dev/services/remaining-services.yaml:69:            failureThreshold: 3
+k8s/dev/services/remaining-services.yaml:105:  template:
+k8s/dev/services/remaining-services.yaml:192:  template:
+k8s/dev/services/remaining-services.yaml:283:  template:
+k8s/dev/services/security-service.yaml:21:  template:
+k8s/dev/services/security-service.yaml:88:            failureThreshold: 3
+k8s/dev/services/security-service.yaml:96:            failureThreshold: 3
+k8s/dev/services/life-tracker.yaml:22:  template:
+k8s/dev/services/life-tracker.yaml:110:            failureThreshold: 3
+k8s/dev/services/life-tracker.yaml:118:            failureThreshold: 3
+k8s/dev/services/assistant-core.yaml:21:  template:
+k8s/dev/services/assistant-core.yaml:111:            failureThreshold: 3
+k8s/dev/services/assistant-core.yaml:119:            failureThreshold: 3
+k8s/dev/services/voice-gateway.yaml:22:  template:
+k8s/dev/services/voice-gateway.yaml:95:            failureThreshold: 3
+k8s/dev/services/voice-gateway.yaml:103:            failureThreshold: 3
+k8s/dev/services/analytics-service.yaml:22:  template:
+k8s/dev/services/analytics-service.yaml:103:            failureThreshold: 3
+k8s/dev/services/analytics-service.yaml:111:            failureThreshold: 3
+k8s/dev/services/llm-stack.yaml:34:    health_tmp="$(mktemp)"
+k8s/dev/services/llm-stack.yaml:48:      tmp="$(mktemp)"
+k8s/dev/services/llm-stack.yaml:115:  template:
+k8s/dev/services/llm-stack.yaml:158:            failureThreshold: 40   # allows ~13 minutes for model load
+k8s/dev/services/llm-stack.yaml:166:            failureThreshold: 6
+k8s/dev/services/llm-stack.yaml:173:            failureThreshold: 5
+k8s/dev/services/llm-stack.yaml:207:  template:
+k8s/dev/services/llm-stack.yaml:239:            failureThreshold: 5
+k8s/dev/services/llm-stack.yaml:247:            failureThreshold: 5
+k8s/dev/services/smart-home-service.yaml:23:  template:
+k8s/dev/services/smart-home-service.yaml:110:            failureThreshold: 3
+k8s/dev/services/smart-home-service.yaml:118:            failureThreshold: 3
+k8s/dev/kafka/zookeeper.yaml:23:  template:
+k8s/dev/kafka/zookeeper.yaml:70:            failureThreshold: 3
+k8s/dev/kafka/zookeeper.yaml:80:            failureThreshold: 3
+k8s/dev/kafka/kafka.yaml:20:  template:
+k8s/dev/kafka/kafka.yaml:78:            failureThreshold: 3
+k8s/dev/kafka/kafka.yaml:85:            failureThreshold: 3
+k8s/dev/kafka/topics-init-job.yaml:17:  template:
+k8s/README.md:100:# Создаём secret (уже включён в secrets.yaml как placeholder)
+k8s/prod-like/postgres/statefulset.yaml:22:  template:
+k8s/prod-like/postgres/statefulset.yaml:136:            failureThreshold: 3
+k8s/prod-like/postgres/statefulset.yaml:146:            failureThreshold: 3
+k8s/prod-like/rabbitmq/statefulset.yaml:21:  template:
+k8s/prod-like/rabbitmq/statefulset.yaml:109:            failureThreshold: 3
+k8s/prod-like/rabbitmq/statefulset.yaml:119:            failureThreshold: 3
+k8s/prod-like/kafka/zookeeper.yaml:21:  template:
+k8s/prod-like/kafka/zookeeper.yaml:87:            failureThreshold: 3
+k8s/prod-like/kafka/zookeeper.yaml:97:            failureThreshold: 3
+k8s/prod-like/kafka/kafka.yaml:21:  template:
+k8s/prod-like/kafka/kafka.yaml:97:            failureThreshold: 3
+k8s/prod-like/kafka/kafka.yaml:104:            failureThreshold: 3
+k8s/prod-like/kafka/topics-init-job.yaml:15:  template:
+k8s/prod-like/kafka/topics-init-job.yaml:38:                echo "Waiting for all brokers... (attempt $i/60, found: $BROKERS)"
+scripts/llm-smoke.sh:21:health_tmp="$(mktemp)"
+scripts/llm-smoke.sh:35:  tmp="$(mktemp)"
+scripts/legacy/README.md:28:The main differences between old and new:
+scripts/legacy/README.md:58:# NOT RECOMMENDED - legacy only
+scripts/legacy/README.md:59:cd scripts/legacy/docker-compose

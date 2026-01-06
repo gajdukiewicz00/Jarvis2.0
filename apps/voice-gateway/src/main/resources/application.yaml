@@ -1,0 +1,46 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: voice-gateway
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+jarvis:
+  vosk:
+    enabled: ${JARVIS_VOSK_ENABLED:true}
+    model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:vosk-model-small-ru-0.22}
+    model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:vosk-model-small-en-us-0.15}
+    default-language: ${JARVIS_VOSK_DEFAULT_LANGUAGE:ru-RU}
+    sample-rate: ${JARVIS_VOSK_SAMPLE_RATE:16000}
+  orchestrator:
+    url: ${JARVIS_ORCHESTRATOR_URL:http://orchestrator:8083}
+
+# Text-to-Speech Configuration
+tts:
+  enabled: true
+  provider: espeak  # Using espeak (no credentials needed)
+  espeak:
+    voice: russian
+    speed: 150
+  google:
+    voice-name: ru-RU-Wavenet-A
+    language-code: ru-RU
+    speaking-rate: 1.0
+    pitch: 0.0
+
+logging:
+  level:
+    org.jarvis.voicegateway: INFO
+    org.vosk: INFO
+

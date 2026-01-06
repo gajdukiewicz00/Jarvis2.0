@@ -1,0 +1,498 @@
+apps/orchestrator/target/classes/application-docker.yml:9:  llm:
+apps/orchestrator/target/classes/application-docker.yml:10:    url: http://llm-service:8091
+apps/orchestrator/target/classes/application.yml:19:  llm:
+apps/orchestrator/src/main/resources/application-docker.yml:9:  llm:
+apps/orchestrator/src/main/resources/application-docker.yml:10:    url: http://llm-service:8091
+apps/orchestrator/src/main/resources/application.yml:19:  llm:
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/LlmServiceClient.java:10:@FeignClient(name = "llm-service", url = "${jarvis.llm.url:http://localhost:8091}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/LlmServiceClient.java:13:    @PostMapping("/api/v1/llm/chat")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:42:    private final org.jarvis.orchestrator.client.LlmServiceClient llmClient;
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:45:    @Value("${jarvis.llm.enabled:false}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:46:    private boolean llmEnabled;
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:48:    @Value("${jarvis.llm.timeout-seconds:10}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:49:    private int llmTimeoutSeconds;
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:51:    @Value("${jarvis.llm.circuit-breaker.failure-threshold:3}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:54:    @Value("${jarvis.llm.circuit-breaker.reset-timeout-seconds:60}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:62:    private final ExecutorService llmExecutor = Executors.newCachedThreadPool();
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:69:            org.jarvis.orchestrator.client.LlmServiceClient llmClient) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:74:        this.llmClient = llmClient;
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:368:        if (!llmEnabled) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:383:                    text, llmTimeoutSeconds, correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:390:            Future<org.jarvis.orchestrator.dto.LlmChatResponse> future = llmExecutor.submit(
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:391:                    () -> llmClient.chat(request, correlationId));
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:395:                response = future.get(llmTimeoutSeconds, TimeUnit.SECONDS);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:398:                log.warn("🧠 LLM_TIMEOUT: exceeded {}s, correlationId={}", llmTimeoutSeconds, correlationId);
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:1:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/LlmServiceApplication.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:2:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:3:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/client/PcControlClient.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:4:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:5:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/DevSecurityConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:6:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/LocaleConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:7:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/RestClientConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:8:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/SecurityConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:9:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/SystemPromptConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:10:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/WebSocketConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:11:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:12:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:13:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatMessageDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:14:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatRequestDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:15:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatResponseDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:16:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:17:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatMessage.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:18:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatResponse.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:19:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/model/CommunicationStyle.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:20:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/model/Emotion.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:21:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:22:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:23:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:24:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/PersonalizedPromptBuilder.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:25:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:1:org/jarvis/llm/dto/ChatMessageDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:2:org/jarvis/llm/config/SecurityConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:3:org/jarvis/llm/config/DevSecurityConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:4:org/jarvis/llm/client/LlmClient.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:5:org/jarvis/llm/dto/UserPreferencesDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:6:org/jarvis/llm/dto/WebSocketChatMessage.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:7:org/jarvis/llm/service/PersonalizedPromptBuilder$1.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:8:org/jarvis/llm/client/UserProfileClient.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:9:org/jarvis/llm/service/EmotionSelector.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:10:org/jarvis/llm/config/WebSocketConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:11:org/jarvis/llm/dto/WebSocketChatResponse.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:12:org/jarvis/llm/service/LlmService.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:13:org/jarvis/llm/client/LlmClient$LlmClientException.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:14:org/jarvis/llm/service/RussianLanguageEnforcer.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:15:org/jarvis/llm/LlmServiceApplication.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:16:org/jarvis/llm/client/PcControlClient.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:17:org/jarvis/llm/config/RestClientConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:18:org/jarvis/llm/controller/LlmWebSocketController.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:19:org/jarvis/llm/model/CommunicationStyle.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:20:org/jarvis/llm/dto/ChatMessageDto$Role.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:21:org/jarvis/llm/model/Emotion.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:22:org/jarvis/llm/service/PersonalizedPromptBuilder.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:23:org/jarvis/llm/config/SystemPromptConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:24:org/jarvis/llm/controller/LlmRestController.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:25:org/jarvis/llm/config/LocaleConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:26:org/jarvis/llm/dto/ChatRequestDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:27:org/jarvis/llm/dto/ChatResponseDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:28:org/jarvis/llm/service/LlmConversationMemory.class
+apps/llm-service/target/maven-archiver/pom.properties:1:artifactId=llm-service
+apps/llm-service/target/classes/application-docker.yml:3:    name: llm-service
+apps/llm-service/target/classes/application-docker.yml:5:llm:
+apps/llm-service/target/classes/application-docker.yml:7:    url: http://llm-server:5000
+apps/llm-service/target/classes/application-docker.yml:15:    org.jarvis.llm: DEBUG
+apps/llm-service/target/classes/application.yml:6:    name: llm-service
+apps/llm-service/target/classes/application.yml:15:  llm:
+apps/llm-service/target/classes/application.yml:18:llm:
+apps/llm-service/target/classes/application.yml:41:    org.jarvis.llm: INFO
+apps/llm-service/pom.xml:13:    <artifactId>llm-service</artifactId>
+apps/llm-service/src/main/resources/application-docker.yml:3:    name: llm-service
+apps/llm-service/src/main/resources/application-docker.yml:5:llm:
+apps/llm-service/src/main/resources/application-docker.yml:7:    url: http://llm-server:5000
+apps/llm-service/src/main/resources/application-docker.yml:15:    org.jarvis.llm: DEBUG
+apps/llm-service/src/main/resources/application.yml:6:    name: llm-service
+apps/llm-service/src/main/resources/application.yml:15:  llm:
+apps/llm-service/src/main/resources/application.yml:18:llm:
+apps/llm-service/src/main/resources/application.yml:41:    org.jarvis.llm: INFO
+apps/llm-service/src/main/java/org/jarvis/llm/LlmServiceApplication.java:1:package org.jarvis.llm;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:1:package org.jarvis.llm.client;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:4:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:5:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:26:    private final String llmServerUrl;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:39:            @Value("${llm.server.url}") String llmServerUrl,
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:40:            @Value("${jarvis.llm.enabled:false}") boolean enabled) {
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:42:        this.llmServerUrl = llmServerUrl;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:51:        String url = llmServerUrl + "/api/v1/llm/chat";
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:135:            log.debug("LLM is disabled (jarvis.llm.enabled=false)");
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:140:            String url = llmServerUrl + "/health";
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:1:package org.jarvis.llm.client;
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:4:import org.jarvis.llm.dto.UserPreferencesDto;
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:5:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:84:        dto.setTtsEmotionDefault(org.jarvis.llm.model.Emotion.NEUTRAL);
+apps/llm-service/src/main/java/org/jarvis/llm/client/PcControlClient.java:1:package org.jarvis.llm.client;
+apps/llm-service/src/main/java/org/jarvis/llm/config/WebSocketConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/WebSocketConfig.java:29:        registry.addEndpoint("/ws/jarvis-llm")
+apps/llm-service/src/main/java/org/jarvis/llm/config/SecurityConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/DevSecurityConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/RestClientConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/LocaleConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/LocaleConfig.java:14:@ConfigurationProperties(prefix = "llm.locale")
+apps/llm-service/src/main/java/org/jarvis/llm/config/SystemPromptConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/SystemPromptConfig.java:12:    @Value("${llm.system-prompt:#{null}}")
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatRequestDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatMessage.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatMessageDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatResponseDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatResponseDto.java:6:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java:6:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java:7:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatResponse.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:1:package org.jarvis.llm.controller;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:5:import org.jarvis.llm.dto.ChatRequestDto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:6:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:7:import org.jarvis.llm.service.LlmService;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:18:@RequestMapping("/api/v1/llm")
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:22:    private final LlmService llmService;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:43:            ChatResponseDto response = llmService.processMessage(
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:50:        } catch (org.jarvis.llm.client.LlmClient.LlmClientException e) {
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:73:        llmService.clearSession(sessionId);
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:82:        boolean available = llmService.isAvailable();
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:86:                "llm_server_available", available));
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:1:package org.jarvis.llm.controller;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:5:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:6:import org.jarvis.llm.dto.WebSocketChatMessage;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:7:import org.jarvis.llm.dto.WebSocketChatResponse;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:8:import org.jarvis.llm.service.LlmService;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:23:    private final LlmService llmService;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:29:     * Client sends to: /app/llm-chat
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:30:     * Client subscribes to: /topic/llm-response/{sessionId}
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:32:    @MessageMapping("/llm-chat")
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:42:            ChatResponseDto llmResponse = llmService.processMessage(sessionId, userMessage, correlationId);
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:47:                    llmResponse.getReply(),
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:49:                    llmResponse.getProcessingTimeMs());
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:52:            messagingTemplate.convertAndSend("/topic/llm-response/" + sessionId, response);
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:66:            messagingTemplate.convertAndSend("/topic/llm-response/" + sessionId, errorResponse);
+apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java:5:import org.jarvis.llm.config.LocaleConfig;
+apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java:6:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/PersonalizedPromptBuilder.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/PersonalizedPromptBuilder.java:5:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java:4:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java:22:    @Value("${llm.conversation.max-history:20}")
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:5:import org.jarvis.llm.client.LlmClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:6:import org.jarvis.llm.client.UserProfileClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:7:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:9:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:10:import org.jarvis.llm.dto.UserPreferencesDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:11:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:28:    private final LlmClient llmClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:34:    private final org.jarvis.llm.client.PcControlClient pcControlClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:94:        ChatResponseDto response = llmClient.chat(messages, 512, 0.7, correlationId);
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:129:        return llmClient.isHealthy();
+apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java:4:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java:5:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/model/CommunicationStyle.java:1:package org.jarvis.llm.model;
+apps/llm-service/src/main/java/org/jarvis/llm/model/Emotion.java:1:package org.jarvis.llm.model;
+apps/api-gateway/target/classes/application-docker.yml:21:  llm:
+apps/api-gateway/target/classes/application-docker.yml:22:    url: http://llm-service:8091
+apps/api-gateway/target/classes/application.yaml:32:          llm-service:
+apps/api-gateway/target/classes/application.yaml:64:  llm:
+apps/api-gateway/target/classes/application.yaml:65:    url: ${LLM_SERVICE_URL:http://llm-service:8091}
+apps/api-gateway/target/classes/application-k8s.yml:26:  llm:
+apps/api-gateway/target/classes/application-k8s.yml:27:    url: ${LLM_SERVICE_URL:http://llm-service:8091}
+apps/api-gateway/target/classes/application-k8s.yml:79:          llm-service:
+apps/api-gateway/src/main/resources/application-docker.yml:21:  llm:
+apps/api-gateway/src/main/resources/application-docker.yml:22:    url: http://llm-service:8091
+apps/api-gateway/src/main/resources/application.yaml:32:          llm-service:
+apps/api-gateway/src/main/resources/application.yaml:64:  llm:
+apps/api-gateway/src/main/resources/application.yaml:65:    url: ${LLM_SERVICE_URL:http://llm-service:8091}
+apps/api-gateway/src/main/resources/application-k8s.yml:26:  llm:
+apps/api-gateway/src/main/resources/application-k8s.yml:27:    url: ${LLM_SERVICE_URL:http://llm-service:8091}
+apps/api-gateway/src/main/resources/application-k8s.yml:79:          llm-service:
+apps/planner-service/target/classes/application-docker.yml:35:  llm-service:
+apps/planner-service/target/classes/application-docker.yml:36:    url: http://llm-service:8091
+apps/planner-service/target/classes/application.yml:46:  llm-service:
+apps/planner-service/target/classes/application-k8s.yml:57:  # llm-service:
+apps/planner-service/target/classes/application-k8s.yml:58:  #   url: ${LLM_SERVICE_URL:http://llm-service:8091}
+apps/planner-service/src/main/resources/application-docker.yml:35:  llm-service:
+apps/planner-service/src/main/resources/application-docker.yml:36:    url: http://llm-service:8091
+apps/planner-service/src/main/resources/application.yml:46:  llm-service:
+apps/planner-service/src/main/resources/application-k8s.yml:57:  # llm-service:
+apps/planner-service/src/main/resources/application-k8s.yml:58:  #   url: ${LLM_SERVICE_URL:http://llm-service:8091}
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:9: * Client for llm-service
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:16:    private final String llmServiceUrl;
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:20:            @Value("${services.llm-service.url}") String llmServiceUrl
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:23:        this.llmServiceUrl = llmServiceUrl;
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:28:            String url = llmServiceUrl + "/api/v1/llm/health";
+apps/planner-service/src/main/java/org/jarvis/planner/client/LlmServiceClient.java:32:            log.warn("llm-service health check failed: {}", e.getMessage());
+apps/planner-service/src/main/java/org/jarvis/planner/controller/LlmController.java:16:@RequestMapping("/api/v1/planner/llm")
+apps/planner-service/src/main/java/org/jarvis/planner/controller/LlmController.java:20:    private final LlmEnhancementService llmService;
+apps/planner-service/src/main/java/org/jarvis/planner/controller/LlmController.java:33:        String result = llmService.generateDocument(userId, documentType, context);
+apps/planner-service/src/main/java/org/jarvis/planner/controller/LlmController.java:51:        String result = llmService.parseNaturalLanguageTask(userId, naturalLanguage);
+apps/planner-service/src/main/java/org/jarvis/planner/service/LlmEnhancementService.java:17:    private final LlmServiceClient llmClient;
+apps/planner-service/src/main/java/org/jarvis/planner/service/LlmEnhancementService.java:31:        return llmClient.enhancePlanDescription(userId, planText.toString());
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:50:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/LlmClient.java
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:51:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/OllamaLlmClient.java
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:52:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/PromptTemplates.java
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:22:org/jarvis/assistantcore/infra/llm/OllamaLlmClient.class
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:28:org/jarvis/assistantcore/infra/llm/LlmClient$LlmResponse.class
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:31:org/jarvis/assistantcore/infra/llm/PromptTemplates.class
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:33:org/jarvis/assistantcore/infra/llm/PromptTemplates$1.class
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:36:org/jarvis/assistantcore/infra/llm/LlmClient$Message.class
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:45:org/jarvis/assistantcore/infra/llm/LlmClient$LlmRequest.class
+apps/assistant-core/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:86:org/jarvis/assistantcore/infra/llm/LlmClient.class
+apps/assistant-core/target/classes/application.yml:35:  llm:
+apps/assistant-core/target/classes/application.yml:43:    use-llm-for-nlu: true  # Use LLM for intent recognition
+apps/assistant-core/target/classes/application.yml:44:    use-llm-for-dialog: true  # Use LLM for response generation
+apps/assistant-core/src/main/resources/application.yml:35:  llm:
+apps/assistant-core/src/main/resources/application.yml:43:    use-llm-for-nlu: true  # Use LLM for intent recognition
+apps/assistant-core/src/main/resources/application.yml:44:    use-llm-for-dialog: true  # Use LLM for response generation
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:10:import org.jarvis.assistantcore.infra.llm.LlmClient;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:11:import org.jarvis.assistantcore.infra.llm.PromptTemplates;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:23:@Service("llmNluService")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:24:@ConditionalOnProperty(prefix = "jarvis.llm", name = "enabled", havingValue = "true")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:28:    private final LlmClient llmClient;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:35:    public LlmNluService(LlmClient llmClient, LlmConfig config, ObjectMapper objectMapper,
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:37:        this.llmClient = llmClient;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:52:        if (!config.isEnabled() || !llmClient.isAvailable()) {
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:69:            LlmClient.LlmResponse response = llmClient.generate(request);
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/dm/LlmDialogManager.java:8:import org.jarvis.assistantcore.infra.llm.LlmClient;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/dm/LlmDialogManager.java:9:import org.jarvis.assistantcore.infra.llm.PromptTemplates;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/dm/LlmDialogManager.java:20:@ConditionalOnProperty(prefix = "jarvis.llm", name = "enabled", havingValue = "true")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/dm/LlmDialogManager.java:24:    private final LlmClient llmClient;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/dm/LlmDialogManager.java:70:            LlmClient.LlmResponse response = llmClient.generate(request);
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/config/LlmConfig.java:8:@ConfigurationProperties(prefix = "jarvis.llm")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/HybridDialogService.java:22:@ConditionalOnProperty(prefix = "jarvis.llm", name = "enabled", havingValue = "true")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/HybridDialogService.java:28:    private final LlmDialogManager llmDialogManager;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/HybridDialogService.java:46:                return llmDialogManager.handle(nlu, context);
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:26:    private final LlmConfig llmConfig;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:30:    private LlmNluService llmNluService;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:41:            LlmConfig llmConfig) {
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:45:        this.llmConfig = llmConfig;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:76:            if (llmConfig.isEnabled() && llmConfig.isUseLlmForNlu() && llmNluService != null) {
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:78:                nluResult = llmNluService.infer(text, language, context);
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:93:            if (llmConfig.isEnabled() && llmConfig.isUseLlmForDialog() && hybridDialogService != null) {
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:111:                    "llm_nlu", usedLlmForNlu,
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/OrchestratorService.java:112:                    "llm_dialog", usedLlmForDialog));
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/LlmClient.java:1:package org.jarvis.assistantcore.infra.llm;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/PromptTemplates.java:1:package org.jarvis.assistantcore.infra.llm;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/OllamaLlmClient.java:1:package org.jarvis.assistantcore.infra.llm;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/OllamaLlmClient.java:22:@ConditionalOnProperty(prefix = "jarvis.llm", name = "provider", havingValue = "ollama")
+docker/llm-server/app/main.py:111:@app.post("/api/v1/llm/chat", response_model=ChatResponse)
+docker/llm-server/README.md:15:### POST /api/v1/llm/chat
+docker/llm-server/README.md:84:docker build -t jarvis-llm-server .
+docker/llm-server/README.md:89:  jarvis-llm-server
+k8s/dev/01-configmap.yaml:80:  LLM_SERVICE_URL: "http://llm-service.jarvis.svc.cluster.local:8091"
+k8s/dev/01-configmap.yaml:81:  LLM_SERVER_URL: "http://llm-server.jarvis.svc.cluster.local:5000"
+k8s/dev/01-configmap.yaml:94:  # LLM (disabled by default - enable only when llm-service is healthy)
+k8s/dev/README.md:69:kubectl apply -f k8s/dev/services/llm-stack.yaml
+k8s/dev/README.md:72:kubectl wait --for=condition=ready pod -l app=llm-server -n jarvis --timeout=900s
+k8s/dev/README.md:73:kubectl wait --for=condition=ready pod -l app=llm-service -n jarvis --timeout=300s
+k8s/dev/README.md:84:- Set `DEVICE=cuda` in llm-server deployment
+k8s/dev/README.md:127:| `services/llm-stack.yaml` | LLM server + service (optional) |
+k8s/dev/services/remaining-services.yaml:5:# (llm-service и llm-server временно отключены - см. llm-disabled.yaml)
+k8s/dev/services/llm-stack.yaml:1:# Jarvis 2.0 — LLM stack (llm-server + llm-service) for dev/minikube.
+k8s/dev/services/llm-stack.yaml:10:  name: llm-smoke-script
+k8s/dev/services/llm-stack.yaml:13:  llm-smoke.sh: |
+k8s/dev/services/llm-stack.yaml:17:    # Smoke test for llm-service REST API with session memory check.
+k8s/dev/services/llm-stack.yaml:20:    #   LLM_SERVICE_URL=http://localhost:8091 ./llm-smoke.sh
+k8s/dev/services/llm-stack.yaml:21:    #   TIMEOUT_SEC=60 SESSION_ID=smoke1 CODEWORD=alpha ./llm-smoke.sh
+k8s/dev/services/llm-stack.yaml:23:    LLM_SERVICE_URL="${LLM_SERVICE_URL:-http://llm-service:8091}"
+k8s/dev/services/llm-stack.yaml:30:    health_url="${LLM_SERVICE_URL}/api/v1/llm/health"
+k8s/dev/services/llm-stack.yaml:31:    chat_url="${LLM_SERVICE_URL}/api/v1/llm/chat"
+k8s/dev/services/llm-stack.yaml:33:    echo "Checking llm-service health at ${health_url} ..."
+k8s/dev/services/llm-stack.yaml:101:    echo "✅ llm-service smoke test passed (session memory OK)"
+k8s/dev/services/llm-stack.yaml:106:  name: llm-server
+k8s/dev/services/llm-stack.yaml:109:    app: llm-server
+k8s/dev/services/llm-stack.yaml:114:      app: llm-server
+k8s/dev/services/llm-stack.yaml:118:        app: llm-server
+k8s/dev/services/llm-stack.yaml:121:        - name: llm-server
+k8s/dev/services/llm-stack.yaml:122:          image: jarvis/llm-server:latest
+k8s/dev/services/llm-stack.yaml:151:            - name: llm-models
+k8s/dev/services/llm-stack.yaml:176:        - name: llm-models
+k8s/dev/services/llm-stack.yaml:184:  name: llm-server
+k8s/dev/services/llm-stack.yaml:189:    app: llm-server
+k8s/dev/services/llm-stack.yaml:198:  name: llm-service
+k8s/dev/services/llm-stack.yaml:201:    app: llm-service
+k8s/dev/services/llm-stack.yaml:206:      app: llm-service
+k8s/dev/services/llm-stack.yaml:210:        app: llm-service
+k8s/dev/services/llm-stack.yaml:213:        - name: llm-service
+k8s/dev/services/llm-stack.yaml:214:          image: jarvis/llm-service:latest
+k8s/dev/services/llm-stack.yaml:225:              value: "http://llm-server:5000"
+k8s/dev/services/llm-stack.yaml:235:              path: /api/v1/llm/health
+k8s/dev/services/llm-stack.yaml:243:              path: /api/v1/llm/health
+k8s/dev/services/llm-stack.yaml:250:            - name: llm-smoke
+k8s/dev/services/llm-stack.yaml:251:              mountPath: /scripts/llm-smoke.sh
+k8s/dev/services/llm-stack.yaml:252:              subPath: llm-smoke.sh
+k8s/dev/services/llm-stack.yaml:255:        - name: llm-smoke
+k8s/dev/services/llm-stack.yaml:257:            name: llm-smoke-script
+k8s/dev/services/llm-stack.yaml:263:  name: llm-service
+k8s/dev/services/llm-stack.yaml:268:    app: llm-service
+k8s/base/configmap.yaml:80:  LLM_SERVICE_URL: "http://llm-service.jarvis.svc.cluster.local:8091"
+k8s/base/configmap.yaml:81:  LLM_SERVER_URL: "http://llm-server.jarvis.svc.cluster.local:5000"
+scripts/llm-smoke.sh:4:# Smoke test for llm-service REST API with session memory check.
+scripts/llm-smoke.sh:7:#   LLM_SERVICE_URL=http://localhost:8091 ./scripts/llm-smoke.sh
+scripts/llm-smoke.sh:8:#   TIMEOUT_SEC=60 SESSION_ID=smoke1 CODEWORD=alpha ./scripts/llm-smoke.sh
+scripts/llm-smoke.sh:10:LLM_SERVICE_URL="${LLM_SERVICE_URL:-http://llm-service:8091}"
+scripts/llm-smoke.sh:17:health_url="${LLM_SERVICE_URL}/api/v1/llm/health"
+scripts/llm-smoke.sh:18:chat_url="${LLM_SERVICE_URL}/api/v1/llm/chat"
+scripts/llm-smoke.sh:20:echo "Checking llm-service health at ${health_url} ..."
+scripts/llm-smoke.sh:88:echo "✅ llm-service smoke test passed (session memory OK)"
+scripts/legacy/jarvis-k8s-launch.sh:114:    "llm-service"
+scripts/legacy/jarvis-k8s-launch.sh:127:if [ -f "$PROJECT_DIR/docker/llm-server/Dockerfile" ]; then
+scripts/legacy/jarvis-k8s-launch.sh:128:    echo "  Building jarvis/llm-server..."
+scripts/legacy/jarvis-k8s-launch.sh:129:    docker build -t "jarvis/llm-server:latest" "$PROJECT_DIR/docker/llm-server" -q
+scripts/legacy/jarvis-k8s-launch.sh:148:    kind load docker-image "jarvis/llm-server:latest" --name $(kind get clusters | head -1)
+scripts/legacy/docker-compose/docker-compose-dev.yml:58:  llm-service:
+scripts/legacy/docker-compose/docker-compose-full.yml:53:      - LLM_SERVICE_URL=http://llm-service:8091
+scripts/legacy/docker-compose/docker-compose-full.yml:371:  llm-service:
+scripts/legacy/docker-compose/docker-compose-full.yml:372:    build: ./apps/llm-service
+scripts/legacy/docker-compose/docker-compose-full.yml:373:    container_name: jarvis20_llm-service
+scripts/legacy/docker-compose/docker-compose-full.yml:378:      - LLM_SERVER_URL=http://llm-server:5000
+scripts/legacy/docker-compose/docker-compose-full.yml:386:      llm-server:
+scripts/legacy/docker-compose/docker-compose-full.yml:395:  llm-server:
+scripts/legacy/docker-compose/docker-compose-full.yml:396:    build: ./docker/llm-server
+scripts/legacy/docker-compose/docker-compose-full.yml:397:    container_name: jarvis20_llm-server
+scripts/legacy/docker-compose/docker-compose-full.yml:438:      - LLM_SERVICE_URL=http://llm-service:8091
+scripts/legacy/docker-compose/docker-compose.yml:295:  llm-server:
+scripts/legacy/docker-compose/docker-compose.yml:296:    build: ./docker/llm-server
+scripts/legacy/docker-compose/docker-compose.yml:297:    container_name: jarvis20_llm-server
+scripts/legacy/docker-compose/docker-compose.yml:322:  llm-service:
+scripts/legacy/docker-compose/docker-compose.yml:323:    build: ./apps/llm-service
+scripts/legacy/docker-compose/docker-compose.yml:324:    container_name: jarvis20_llm-service
+scripts/legacy/docker-compose/docker-compose.yml:330:      - LLM_SERVER_URL=http://llm-server:5000
+scripts/legacy/docker-compose/docker-compose.yml:339:      llm-server:
+scripts/legacy/docker-compose/docker-compose.yml:370:      llm-service:
+scripts/jarvis-k8s-up.sh:135:echo "     kubectl apply -f $K8S_DEV/services/llm-stack.yaml"
+--- env flags ---
+apps/orchestrator/target/classes/application-docker.yml:11:    # LLM disabled by default in k8s - enable via env JARVIS_LLM_ENABLED=true
+apps/orchestrator/target/classes/application-docker.yml:12:    enabled: ${JARVIS_LLM_ENABLED:false}
+apps/orchestrator/target/classes/application-docker.yml:13:    timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
+apps/orchestrator/target/classes/application-docker.yml:15:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/target/classes/application-docker.yml:16:      reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+apps/orchestrator/target/classes/application.yml:22:    enabled: ${JARVIS_LLM_ENABLED:false}
+apps/orchestrator/target/classes/application.yml:24:    timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
+apps/orchestrator/target/classes/application.yml:28:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/target/classes/application.yml:30:      reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+apps/orchestrator/src/main/resources/application-docker.yml:11:    # LLM disabled by default in k8s - enable via env JARVIS_LLM_ENABLED=true
+apps/orchestrator/src/main/resources/application-docker.yml:12:    enabled: ${JARVIS_LLM_ENABLED:false}
+apps/orchestrator/src/main/resources/application-docker.yml:13:    timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
+apps/orchestrator/src/main/resources/application-docker.yml:15:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/src/main/resources/application-docker.yml:16:      reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+apps/orchestrator/src/main/resources/application.yml:22:    enabled: ${JARVIS_LLM_ENABLED:false}
+apps/orchestrator/src/main/resources/application.yml:24:    timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
+apps/orchestrator/src/main/resources/application.yml:28:      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+apps/orchestrator/src/main/resources/application.yml:30:      reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/LlmServiceClient.java:10:@FeignClient(name = "llm-service", url = "${jarvis.llm.url:http://localhost:8091}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:30: * - Feature flag: JARVIS_LLM_ENABLED (default: false)
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:31: * - Timeout: JARVIS_LLM_TIMEOUT_SECONDS (default: 10)
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:45:    @Value("${jarvis.llm.enabled:false}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:48:    @Value("${jarvis.llm.timeout-seconds:10}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:51:    @Value("${jarvis.llm.circuit-breaker.failure-threshold:3}")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:54:    @Value("${jarvis.llm.circuit-breaker.reset-timeout-seconds:60}")
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:1:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/LlmServiceApplication.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:2:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:3:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/client/PcControlClient.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:4:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:5:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/DevSecurityConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:6:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/LocaleConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:7:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/RestClientConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:8:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/SecurityConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:9:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/SystemPromptConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:10:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/config/WebSocketConfig.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:11:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:12:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:13:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatMessageDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:14:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatRequestDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:15:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatResponseDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:16:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:17:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatMessage.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:18:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatResponse.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:19:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/model/CommunicationStyle.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:20:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/model/Emotion.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:21:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:22:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:23:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:24:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/PersonalizedPromptBuilder.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:25:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:1:org/jarvis/llm/dto/ChatMessageDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:2:org/jarvis/llm/config/SecurityConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:3:org/jarvis/llm/config/DevSecurityConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:4:org/jarvis/llm/client/LlmClient.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:5:org/jarvis/llm/dto/UserPreferencesDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:6:org/jarvis/llm/dto/WebSocketChatMessage.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:7:org/jarvis/llm/service/PersonalizedPromptBuilder$1.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:8:org/jarvis/llm/client/UserProfileClient.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:9:org/jarvis/llm/service/EmotionSelector.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:10:org/jarvis/llm/config/WebSocketConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:11:org/jarvis/llm/dto/WebSocketChatResponse.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:12:org/jarvis/llm/service/LlmService.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:13:org/jarvis/llm/client/LlmClient$LlmClientException.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:14:org/jarvis/llm/service/RussianLanguageEnforcer.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:15:org/jarvis/llm/LlmServiceApplication.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:16:org/jarvis/llm/client/PcControlClient.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:17:org/jarvis/llm/config/RestClientConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:18:org/jarvis/llm/controller/LlmWebSocketController.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:19:org/jarvis/llm/model/CommunicationStyle.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:20:org/jarvis/llm/dto/ChatMessageDto$Role.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:21:org/jarvis/llm/model/Emotion.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:22:org/jarvis/llm/service/PersonalizedPromptBuilder.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:23:org/jarvis/llm/config/SystemPromptConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:24:org/jarvis/llm/controller/LlmRestController.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:25:org/jarvis/llm/config/LocaleConfig.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:26:org/jarvis/llm/dto/ChatRequestDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:27:org/jarvis/llm/dto/ChatResponseDto.class
+apps/llm-service/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:28:org/jarvis/llm/service/LlmConversationMemory.class
+apps/llm-service/target/classes/application-docker.yml:15:    org.jarvis.llm: DEBUG
+apps/llm-service/target/classes/application.yml:41:    org.jarvis.llm: INFO
+apps/llm-service/src/main/resources/application-docker.yml:15:    org.jarvis.llm: DEBUG
+apps/llm-service/src/main/resources/application.yml:41:    org.jarvis.llm: INFO
+apps/llm-service/src/main/java/org/jarvis/llm/LlmServiceApplication.java:1:package org.jarvis.llm;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:1:package org.jarvis.llm.client;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:4:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:5:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:40:            @Value("${jarvis.llm.enabled:false}") boolean enabled) {
+apps/llm-service/src/main/java/org/jarvis/llm/client/LlmClient.java:135:            log.debug("LLM is disabled (jarvis.llm.enabled=false)");
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:1:package org.jarvis.llm.client;
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:4:import org.jarvis.llm.dto.UserPreferencesDto;
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:5:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/client/UserProfileClient.java:84:        dto.setTtsEmotionDefault(org.jarvis.llm.model.Emotion.NEUTRAL);
+apps/llm-service/src/main/java/org/jarvis/llm/client/PcControlClient.java:1:package org.jarvis.llm.client;
+apps/llm-service/src/main/java/org/jarvis/llm/config/WebSocketConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/WebSocketConfig.java:29:        registry.addEndpoint("/ws/jarvis-llm")
+apps/llm-service/src/main/java/org/jarvis/llm/config/SecurityConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/DevSecurityConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/RestClientConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/LocaleConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/config/SystemPromptConfig.java:1:package org.jarvis.llm.config;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatRequestDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatMessage.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatMessageDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatResponseDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/ChatResponseDto.java:6:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java:6:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/UserPreferencesDto.java:7:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/dto/WebSocketChatResponse.java:1:package org.jarvis.llm.dto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:1:package org.jarvis.llm.controller;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:5:import org.jarvis.llm.dto.ChatRequestDto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:6:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:7:import org.jarvis.llm.service.LlmService;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmRestController.java:50:        } catch (org.jarvis.llm.client.LlmClient.LlmClientException e) {
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:1:package org.jarvis.llm.controller;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:5:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:6:import org.jarvis.llm.dto.WebSocketChatMessage;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:7:import org.jarvis.llm.dto.WebSocketChatResponse;
+apps/llm-service/src/main/java/org/jarvis/llm/controller/LlmWebSocketController.java:8:import org.jarvis.llm.service.LlmService;
+apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java:5:import org.jarvis.llm.config.LocaleConfig;
+apps/llm-service/src/main/java/org/jarvis/llm/service/RussianLanguageEnforcer.java:6:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/PersonalizedPromptBuilder.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/PersonalizedPromptBuilder.java:5:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmConversationMemory.java:4:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:5:import org.jarvis.llm.client.LlmClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:6:import org.jarvis.llm.client.UserProfileClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:7:import org.jarvis.llm.dto.ChatMessageDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:9:import org.jarvis.llm.dto.ChatResponseDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:10:import org.jarvis.llm.dto.UserPreferencesDto;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:11:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/service/LlmService.java:34:    private final org.jarvis.llm.client.PcControlClient pcControlClient;
+apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java:1:package org.jarvis.llm.service;
+apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java:4:import org.jarvis.llm.model.CommunicationStyle;
+apps/llm-service/src/main/java/org/jarvis/llm/service/EmotionSelector.java:5:import org.jarvis.llm.model.Emotion;
+apps/llm-service/src/main/java/org/jarvis/llm/model/CommunicationStyle.java:1:package org.jarvis.llm.model;
+apps/llm-service/src/main/java/org/jarvis/llm/model/Emotion.java:1:package org.jarvis.llm.model;
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/nlu/impl/LlmNluService.java:24:@ConditionalOnProperty(prefix = "jarvis.llm", name = "enabled", havingValue = "true")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/domain/dm/LlmDialogManager.java:20:@ConditionalOnProperty(prefix = "jarvis.llm", name = "enabled", havingValue = "true")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/config/LlmConfig.java:8:@ConfigurationProperties(prefix = "jarvis.llm")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/service/HybridDialogService.java:22:@ConditionalOnProperty(prefix = "jarvis.llm", name = "enabled", havingValue = "true")
+apps/assistant-core/src/main/java/org/jarvis/assistantcore/infra/llm/OllamaLlmClient.java:22:@ConditionalOnProperty(prefix = "jarvis.llm", name = "provider", havingValue = "ollama")
+k8s/dev/services/assistant-core.yaml:95:            - name: JARVIS_LLM_ENABLED
+k8s/dev/services/llm-stack.yaml:122:          image: jarvis/llm-server:latest
+k8s/dev/services/llm-stack.yaml:214:          image: jarvis/llm-service:latest
+k8s/dev/services/llm-stack.yaml:222:            - name: JARVIS_LLM_ENABLED

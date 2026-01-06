@@ -1,0 +1,278 @@
+package org.jarvis.desktop.service
+
+import javafx.application.Platform
+import kotlinx.serialization.json.*
+import okhttp3.*
+import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.auth.TokenManager
+import org.slf4j.LoggerFactory
+import java.util.concurrent.TimeUnit
+
+/**
+ * WebSocket client for receiving PC Control commands from the orchestrator/API gateway.
+ * 
+ * Handles messages like:
+ * - {"type": "PC_ACTION", "action": "VOLUME_UP", "params": {"delta": 10}}
+ * - {"type": "PC_ACTION", "action": "OPEN_APP", "params": {"app": "browser"}}
+ * - {"type": "PC_ACTION", "action": "MEDIA_CONTROL", "params": {"action": "NEXT"}}
+ */
+class PcControlWebSocketClient(
+    private val url: String = AppConfig.pcControlWebSocketUrl,
+    private val systemControl: SystemControlService,
+    private val onStatusChange: (String) -> Unit = {}
+) : WebSocketListener() {
+
+    private val logger = LoggerFactory.getLogger(PcControlWebSocketClient::class.java)
+    private val json = Json { ignoreUnknownKeys = true }
+    
+    private val client = OkHttpClient.Builder()
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
+        .build()
+    
+    private var webSocket: WebSocket? = null
+    private var isConnected = false
+    private var reconnectAttempts = 0
+    private val maxReconnectAttempts = 5
+    
+    fun connect() {
+        if (isConnected) {
+            logger.debug("Already connected to PC Control WebSocket")
+            return
+        }
+        
+        logger.info("🔌 Connecting to PC Control WebSocket: $url")
+        updateStatus("Connecting...")
+        
+        val requestBuilder = Request.Builder()
+            .url(url)
+
+        val token = TokenManager.getAccessToken()
+        if (!token.isNullOrBlank()) {
+            requestBuilder.addHeader("Authorization", "Bearer $token")
+        } else {
+            logger.debug("No access token available for PC Control WS - connecting without Authorization header")
+        }
+        val request = requestBuilder.build()
+            
+        webSocket = client.newWebSocket(request, this)
+    }
+    
+    fun disconnect() {
+        logger.info("Disconnecting from PC Control WebSocket")
+        webSocket?.close(1000, "Client disconnecting")
+        webSocket = null
+        isConnected = false
+        updateStatus("Disconnected")
+    }
+    
+    fun isConnected(): Boolean = isConnected
+    
+    override fun onOpen(webSocket: WebSocket, response: Response) {
+        isConnected = true
+        reconnectAttempts = 0
+        logger.info("✅ Connected to PC Control WebSocket")
+        updateStatus("Connected")
+        
+        // Send identification message
+        val identifyMsg = buildJsonObject {
+            put("type", "IDENTIFY")
+            put("client", "desktop")
+            put("capabilities", buildJsonArray {
+                add("VOLUME_CONTROL")
+                add("MEDIA_CONTROL")
+                add("APP_CONTROL")
+                add("WINDOW_CONTROL")
+                add("HOTKEY")
+                add("NOTIFICATION")
+                add("SCENARIO")
+            })
+        }
+        webSocket.send(identifyMsg.toString())
+    }
+
+    override fun onMessage(webSocket: WebSocket, text: String) {
+        logger.debug("Received message: $text")
+        
+        try {
+            val jsonObj = json.parseToJsonElement(text).jsonObject
+            val type = jsonObj["type"]?.jsonPrimitive?.content
+            
+            when (type) {
+                "PC_ACTION" -> handlePcAction(jsonObj)
+                "PING" -> webSocket.send("""{"type": "PONG"}""")
+                "ACK" -> logger.debug("Command acknowledged")
+                else -> logger.warn("Unknown message type: $type")
+            }
+        } catch (e: Exception) {
+            logger.error("Error parsing message: $text", e)
+        }
+    }
+
+    private fun handlePcAction(jsonObj: JsonObject) {
+        val action = jsonObj["action"]?.jsonPrimitive?.content ?: return
+        val params = jsonObj["params"]?.jsonObject ?: buildJsonObject { }
+        
+        logger.info("🎯 Executing PC action: $action with params: $params")
+        updateStatus("Executing: $action")
+        
+        Platform.runLater {
+            try {
+                val result = when (action.uppercase()) {
+                    // Volume
+                    "VOLUME_UP" -> {
+                        val delta = params["delta"]?.jsonPrimitive?.intOrNull ?: 10
+                        systemControl.changeVolume(delta, "+")
+                    }
+                    "VOLUME_DOWN" -> {
+                        val delta = params["delta"]?.jsonPrimitive?.intOrNull ?: 10
+                        systemControl.changeVolume(delta, "-")
+                    }
+                    "VOLUME_SET" -> {
+                        val level = params["level"]?.jsonPrimitive?.intOrNull ?: 50
+                        systemControl.setVolume(level)
+                    }
+                    "MUTE" -> systemControl.mute()
+                    "UNMUTE" -> systemControl.unmute()
+                    "MUTE_TOGGLE" -> systemControl.toggleMute()
+                    
+                    // Media
+                    "MEDIA_CONTROL", "MEDIA" -> {
+                        val mediaAction = params["action"]?.jsonPrimitive?.content ?: "PLAY_PAUSE"
+                        systemControl.mediaControl(mediaAction)
+                    }
+                    "PLAY", "PAUSE", "PLAY_PAUSE", "NEXT", "PREV", "PREVIOUS", "STOP" -> {
+                        systemControl.mediaControl(action)
+                    }
+                    
+                    // Apps
+                    "OPEN_APP" -> {
+                        val app = params["app"]?.jsonPrimitive?.content 
+                            ?: params["appName"]?.jsonPrimitive?.content 
+                            ?: return@runLater
+                        systemControl.openApp(app)
+                    }
+                    
+                    // Hotkeys
+                    "HOTKEY", "KEY" -> {
+                        val keys = params["keys"]?.jsonPrimitive?.content 
+                            ?: params["combination"]?.jsonPrimitive?.content 
+                            ?: return@runLater
+                        systemControl.executeHotkey(keys)
+                    }
+                    
+                    // Windows
+                    "WINDOW" -> {
+                        val windowAction = params["action"]?.jsonPrimitive?.content ?: return@runLater
+                        val target = params["target"]?.jsonPrimitive?.content
+                        systemControl.windowAction(windowAction, target)
+                    }
+                    "MINIMIZE" -> systemControl.windowAction("MINIMIZE")
+                    "MAXIMIZE" -> systemControl.windowAction("MAXIMIZE")
+                    "FULLSCREEN" -> systemControl.windowAction("FULLSCREEN")
+                    "LOCK_SCREEN" -> systemControl.lockScreen()
+                    
+                    // Notifications
+                    "NOTIFY", "NOTIFICATION" -> {
+                        val title = params["title"]?.jsonPrimitive?.content ?: "Jarvis"
+                        val message = params["message"]?.jsonPrimitive?.content ?: ""
+                        systemControl.showNotification(title, message)
+                    }
+                    
+                    // Scenarios
+                    "SCENARIO" -> {
+                        val scenario = params["name"]?.jsonPrimitive?.content 
+                            ?: params["scenario"]?.jsonPrimitive?.content 
+                            ?: return@runLater
+                        systemControl.executeScenario(scenario)
+                    }
+                    "WORK_MODE" -> systemControl.executeScenario("work")
+                    "REST_MODE" -> systemControl.executeScenario("rest")
+                    "FOCUS_MODE" -> systemControl.executeScenario("focus")
+                    
+                    // Beep
+                    "BEEP" -> systemControl.beep()
+                    
+                    else -> {
+                        logger.warn("Unknown action: $action")
+                        Result.failure(IllegalArgumentException("Unknown action: $action"))
+                    }
+                }
+                
+                if (result.isSuccess) {
+                    logger.info("✓ Action completed: $action")
+                    updateStatus("✓ $action")
+                    sendAck(action, true)
+                } else {
+                    logger.error("✗ Action failed: $action - ${result.exceptionOrNull()?.message}")
+                    updateStatus("✗ $action failed")
+                    sendAck(action, false, result.exceptionOrNull()?.message)
+                }
+            } catch (e: Exception) {
+                logger.error("Error executing action: $action", e)
+                updateStatus("✗ Error: ${e.message}")
+                sendAck(action, false, e.message)
+            }
+        }
+    }
+    
+    private fun sendAck(action: String, success: Boolean, error: String? = null) {
+        val ack = buildJsonObject {
+            put("type", "ACK")
+            put("action", action)
+            put("success", success)
+            if (error != null) put("error", error)
+        }
+        webSocket?.send(ack.toString())
+    }
+
+    override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+        // Binary messages not expected for PC control
+        logger.debug("Received binary message (ignored)")
+    }
+
+    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+        isConnected = false
+        logger.info("WebSocket closing: $code / $reason")
+        updateStatus("Disconnected")
+    }
+    
+    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+        isConnected = false
+        logger.info("WebSocket closed: $code / $reason")
+        updateStatus("Disconnected")
+        
+        // Auto-reconnect if not intentional close
+        if (code != 1000 && reconnectAttempts < maxReconnectAttempts) {
+            scheduleReconnect()
+        }
+    }
+
+    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+        isConnected = false
+        logger.warn("WebSocket failure: ${t.message}")
+        updateStatus("Connection failed")
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+            scheduleReconnect()
+        }
+    }
+    
+    private fun scheduleReconnect() {
+        reconnectAttempts++
+        val delay = (reconnectAttempts * 2).coerceAtMost(30) // Max 30 seconds
+        logger.info("Scheduling reconnect attempt $reconnectAttempts in ${delay}s")
+        updateStatus("Reconnecting in ${delay}s...")
+        
+        Thread {
+            Thread.sleep(delay * 1000L)
+            if (!isConnected) {
+                connect()
+            }
+        }.start()
+    }
+    
+    private fun updateStatus(status: String) {
+        Platform.runLater { onStatusChange(status) }
+    }
+}

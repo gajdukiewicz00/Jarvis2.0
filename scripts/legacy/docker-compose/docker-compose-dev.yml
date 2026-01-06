@@ -1,0 +1,65 @@
+version: '3.8'
+
+# Development docker-compose override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose-dev.yml up
+#
+# This file enables dev profile for all services with:
+# - Simplified security (permitAll)
+# - Extended JWT token TTL (24 hours)
+# - Debug logging
+
+services:
+  api-gateway:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+      - JWT_SECRET=${JWT_SECRET:-jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm}
+
+  assistant-core:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  voice-gateway:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  nlp-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  orchestrator:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  pc-control:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  life-tracker:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  smart-home-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  analytics-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  security-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+      - JWT_SECRET=${JWT_SECRET:-jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm}
+
+  user-profile:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  llm-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+
+  planner-service:
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev,docker
+

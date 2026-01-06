@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.3.4</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>org.jarvis</groupId>
+    <artifactId>jarvis-root</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <properties>
+        <java.version>21</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <modules>
+        <!-- Shared library (must be first) -->
+        <module>apps/jarvis-common</module>
+        
+        <!-- Core services -->
+        <module>apps/api-gateway</module>
+        <module>apps/voice-gateway</module>
+        <module>apps/nlp-service</module>
+        <module>apps/orchestrator</module>
+        <module>apps/pc-control</module>
+        
+        <!-- Data services -->
+        <module>apps/life-tracker</module>
+        <module>apps/analytics-service</module>
+        <module>apps/planner-service</module>
+        <module>apps/user-profile</module>
+        
+        <!-- Security -->
+        <module>apps/security-service</module>
+        
+        <!-- LLM services -->
+        <module>apps/llm-service</module>
+        <module>apps/memory-service</module>
+        
+        <!-- IoT -->
+        <module>apps/smart-home-service</module>
+        
+        <!-- Clients -->
+        <module>apps/desktop-client-javafx</module>
+        <module>apps/launcher-javafx</module>
+        
+        <!-- REMOVED: apps/assistant-core (legacy, functionality moved to llm-service + orchestrator) -->
+    </modules>
+
+</project>

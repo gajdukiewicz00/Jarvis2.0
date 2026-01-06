@@ -1,0 +1,135 @@
+server:
+  port: 8080
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  # Disable static resource handling - API Gateway doesn't serve static files
+  # and this was causing GET /auth/me to fall through to ResourceHttpRequestHandler
+  web:
+    resources:
+      add-mappings: false
+  
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 5000
+            readTimeout: 10000
+            loggerLevel: BASIC
+          # Longer timeouts for auth operations
+          auth-service:
+            connectTimeout: 5000
+            readTimeout: 30000
+          # Longer timeouts for LLM operations  
+          llm-service:
+            connectTimeout: 5000
+            readTimeout: 60000
+          # Standard timeouts for data services
+          life-tracker:
+            connectTimeout: 5000
+            readTimeout: 30000
+          analytics-service:
+            connectTimeout: 5000
+            readTimeout: 30000
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+# Service URLs
+services:
+  voice-gateway:
+    url: ${VOICE_GATEWAY_URL:http://voice-gateway:8081}
+  nlp-service:
+    url: ${NLP_SERVICE_URL:http://nlp-service:8082}
+  orchestrator:
+    url: ${ORCHESTRATOR_URL:http://orchestrator:8083}
+  pc-control:
+    url: ${PC_CONTROL_URL:http://pc-control:8084}
+  life-tracker:
+    url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
+  smart-home:
+    url: ${SMART_HOME_URL:http://smart-home-service:8086}
+  analytics:
+    url: ${ANALYTICS_URL:http://analytics-service:8087}
+  security:
+    url: ${SECURITY_URL:http://security-service:8088}
+  llm:
+    url: ${LLM_SERVICE_URL:http://llm-service:8091}
+
+# Circuit Breaker
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 3
+
+# Actuator & Metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: false  # Enable in production with monitoring setup
+    tags:
+      application: ${spring.application.name}
+
+# Rate Limiting (requests per minute)
+rate-limit:
+  enabled: false
+  max-requests-per-minute: 100
+
+# JWT (enabled for security)
+jwt:
+  enabled: true
+  secret: ${JWT_SECRET}
+  expiration: 86400000  # 24 hours
+  issuer: jarvis
+
+# CORS
+cors:
+  enabled: true
+  allowed-origins:
+    - http://localhost:*
+    - http://192.168.*.*:*
+    - https://*.jarvis.app
+  allowed-methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - PATCH
+    - OPTIONS
+  allowed-headers:
+    - "*"
+  allow-credentials: true
+
+logging:
+  level:
+    org.jarvis.apigateway: INFO
+    org.jarvis.apigateway.filter.JwtFilter: INFO
+    feign: WARN
+    org.springframework.cloud.openfeign: WARN

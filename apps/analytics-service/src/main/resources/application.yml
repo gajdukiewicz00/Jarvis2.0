@@ -1,0 +1,53 @@
+server:
+  port: 8087
+  shutdown: graceful
+
+spring:
+  application:
+    name: analytics-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration  
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 5000
+            readTimeout: 30000
+            loggerLevel: BASIC
+          life-tracker:
+            connectTimeout: 5000
+            readTimeout: 30000    # 30s for data fetching
+            loggerLevel: FULL
+      circuitbreaker:
+        enabled: true
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+# Life-tracker URL
+jarvis:
+  life-tracker:
+    url: ${LIFE_TRACKER_URL:http://localhost:8085}
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+
+logging:
+  level:
+    org.jarvis.analytics: INFO
+    feign: INFO
+    org.springframework.cloud.openfeign: INFO

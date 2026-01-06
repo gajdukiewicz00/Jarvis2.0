@@ -1,0 +1,12 @@
+# Development profile for analytics-service
+# Activate with: SPRING_PROFILES_ACTIVE=dev
+
+# Life-tracker URL for local development
+jarvis:
+  life-tracker:
+    url: http://localhost:8085
+
+logging:
+  level:
+    org.jarvis.analytics: DEBUG
+

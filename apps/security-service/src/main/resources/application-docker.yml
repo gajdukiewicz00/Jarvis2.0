@@ -1,0 +1,17 @@
+# Docker profile for security-service
+# Activate with: SPRING_PROFILES_ACTIVE=docker
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/jarvis_security
+    username: jarvis
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      max-lifetime: 1800000      # 30 minutes
+      idle-timeout: 600000       # 10 minutes
+      connection-timeout: 30000  # 30 seconds
+      validation-timeout: 5000   # 5 seconds
+      initialization-fail-timeout: -1  # Don't fail on startup if DB not ready
+      connection-test-query: SELECT 1

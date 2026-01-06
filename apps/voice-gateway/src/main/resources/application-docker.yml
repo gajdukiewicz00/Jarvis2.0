@@ -1,0 +1,26 @@
+# Docker profile for voice-gateway
+# Activate with: SPRING_PROFILES_ACTIVE=docker
+
+# TTS Configuration
+tts:
+  enabled: true
+  provider: espeak  # Using eSpeak fallback (Google Cloud TTS not configured)
+
+# STT Configuration
+jarvis:
+  voice:
+    whisper:
+      enabled: false  # Set to true to enable Whisper STT (requires model download)
+      model-path: models/ggml-small.bin  # Path to Whisper model file
+      # To enable:
+      # 1. Download model from https://huggingface.co/ggerganov/whisper.cpp/tree/main
+      # 2. Place at path above (relative to working directory)
+      # 3. Set enabled: true
+  orchestrator:
+    url: http://orchestrator:8083  # Docker service name
+  vosk:
+    enabled: true
+    model-path-ru: /app/models/vosk-model-small-ru-0.22
+    model-path-en: /app/models/vosk-model-small-en-us-0.15
+    default-language: ru-RU
+    sample-rate: 16000

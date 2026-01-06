@@ -1,0 +1,16 @@
+# Docker profile for pc-control
+# Activate with: SPRING_PROFILES_ACTIVE=docker
+
+server:
+  port: 8084
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+security:
+  allowed-actions: VOLUME_UP,VOLUME_DOWN,VOLUME_MUTE,LAUNCH_APP,MEDIA_CONTROL,TIMER_START,TIMER_STOP
+
+

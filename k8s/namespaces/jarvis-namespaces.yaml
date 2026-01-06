@@ -1,0 +1,35 @@
+# Jarvis 2.0 Kubernetes Namespaces
+# All services organized by functional area
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-core
+  labels:
+    app.kubernetes.io/part-of: jarvis
+    app.kubernetes.io/component: core
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-llm
+  labels:
+    app.kubernetes.io/part-of: jarvis
+    app.kubernetes.io/component: llm
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-data
+  labels:
+    app.kubernetes.io/part-of: jarvis
+    app.kubernetes.io/component: data
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis-iot
+  labels:
+    app.kubernetes.io/part-of: jarvis
+    app.kubernetes.io/component: iot
+

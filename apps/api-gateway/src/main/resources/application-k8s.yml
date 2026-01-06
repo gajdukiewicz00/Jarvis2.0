@@ -1,0 +1,165 @@
+# =============================================================================
+# Jarvis 2.0 - API Gateway - Kubernetes Profile
+# =============================================================================
+# Активируется через: SPRING_PROFILES_ACTIVE=k8s
+# Все URLs и credentials приходят из environment variables (K8s ConfigMap/Secrets)
+# =============================================================================
+
+# Service URLs (из ConfigMap)
+services:
+  voice-gateway:
+    url: ${VOICE_GATEWAY_URL:http://voice-gateway:8081}
+  nlp-service:
+    url: ${NLP_SERVICE_URL:http://nlp-service:8082}
+  orchestrator:
+    url: ${ORCHESTRATOR_URL:http://orchestrator:8083}
+  pc-control:
+    url: ${PC_CONTROL_URL:http://pc-control:8084}
+  life-tracker:
+    url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
+  smart-home:
+    url: ${SMART_HOME_URL:http://smart-home-service:8086}
+  analytics:
+    url: ${ANALYTICS_URL:http://analytics-service:8087}
+  security:
+    url: ${SERVICES_SECURITY_URL:http://security-service:8088}
+  llm:
+    url: ${LLM_SERVICE_URL:http://llm-service:8091}
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:86400000}
+  issuer: ${JWT_ISSUER:jarvis}
+
+# RabbitMQ (для поэтапной миграции)
+spring:
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:jarvis}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:jarvis}
+    # Connection settings
+    connection-timeout: 10000
+    requested-heartbeat: 30
+    # Publisher confirms
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000
+        max-attempts: 3
+        multiplier: 2.0
+
+  # Kafka (для audit logs)
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+
+  # Feign with Circuit Breaker
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 5000
+            readTimeout: 10000
+            loggerLevel: BASIC
+          auth-service:
+            connectTimeout: 5000
+            readTimeout: 30000
+          llm-service:
+            connectTimeout: 5000
+            readTimeout: 60000
+      circuitbreaker:
+        enabled: true
+
+# Feature flags (для поэтапной миграции HTTP → Brokers)
+jarvis:
+  features:
+    rabbitmq:
+      pc-control: ${FEATURE_RABBITMQ_PC_CONTROL:false}
+      smart-home: ${FEATURE_RABBITMQ_SMART_HOME:false}
+      voice: ${FEATURE_RABBITMQ_VOICE:false}
+    kafka:
+      audit-logs: ${FEATURE_KAFKA_AUDIT:false}
+
+# Resilience4j Circuit Breaker
+resilience4j:
+  circuitbreaker:
+    instances:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10000
+        permittedNumberOfCallsInHalfOpenState: 3
+      security-service:
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        failureRateThreshold: 60
+        waitDurationInOpenState: 5000
+  retry:
+    instances:
+      default:
+        maxAttempts: 3
+        waitDuration: 1000
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+    rabbit:
+      enabled: true
+    kafka:
+      enabled: true
+
+# ==========================================================================
+# CORS Configuration
+# ==========================================================================
+# ВАЖНО: все cors параметры должны быть определены как списки
+cors:
+  enabled: true
+  allowed-origins:
+    - "http://localhost:*"
+    - "http://127.0.0.1:*"
+    - "http://192.168.*.*:*"
+  allowed-methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - PATCH
+    - OPTIONS
+  allowed-headers:
+    - "*"
+  allow-credentials: true
+
+# Logging
+logging:
+  level:
+    org.jarvis.apigateway: INFO
+    org.springframework.amqp: INFO
+    org.apache.kafka: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+

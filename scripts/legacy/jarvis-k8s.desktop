@@ -1,0 +1,25 @@
+[Desktop Entry]
+Type=Application
+Name=Jarvis K8s
+Comment=Запуск Jarvis AI через Kubernetes
+Exec=/home/kwaqa/IdeaProjects/Jarvis2.0/jarvis-k8s-launch.sh
+Icon=/home/kwaqa/IdeaProjects/Jarvis2.0/icons/jarvis-icon.png
+Terminal=true
+Categories=Utility;Application;Development;
+StartupNotify=true
+Keywords=jarvis;ai;assistant;kubernetes;k8s;
+
+Actions=Stop;Logs;Status;
+
+[Desktop Action Stop]
+Name=Stop Jarvis K8s
+Exec=gnome-terminal --title="Jarvis K8s Stop" -- /home/kwaqa/IdeaProjects/Jarvis2.0/jarvis-k8s-stop.sh
+
+[Desktop Action Logs]
+Name=View K8s Logs
+Exec=gnome-terminal --title="Jarvis K8s Logs" -- /home/kwaqa/IdeaProjects/Jarvis2.0/jarvis-k8s-logs.sh
+
+[Desktop Action Status]
+Name=K8s Status
+Exec=gnome-terminal --title="Jarvis K8s Status" -- bash -c "kubectl get pods -n jarvis -w; exec bash"
+

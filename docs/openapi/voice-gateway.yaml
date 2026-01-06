@@ -1,0 +1,20 @@
+openapi: 3.0.0
+info:
+  title: Voice Gateway Service API
+  version: 1.0.0
+paths:
+  /api/v1/voice/command:
+    post:
+      summary: Send a text command (debug/fallback)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+      responses:
+        '200':
+          description: Command received

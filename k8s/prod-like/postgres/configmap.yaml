@@ -1,0 +1,118 @@
+# =============================================================================
+# Jarvis 2.0 - PostgreSQL Init Scripts ConfigMap (Prod-like)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: jarvis
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres-init
+    app.kubernetes.io/part-of: jarvis
+data:
+  # ==========================================================================
+  # 01-init-databases.sh - Создание всех баз данных
+  # ==========================================================================
+  01-init-databases.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "=== Jarvis 2.0: Initializing databases (Prod-like) ==="
+    
+    # Список баз данных для микросервисов
+    DATABASES=(
+      "jarvis_db"
+      "jarvis_assistant_core"
+      "jarvis_user_profile"
+      "jarvis_security"
+      "jarvis_analytics"
+    )
+    
+    for dbname in "${DATABASES[@]}"; do
+      echo "Creating database: $dbname"
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+        SELECT 'CREATE DATABASE $dbname'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$dbname')\gexec
+        
+        GRANT ALL PRIVILEGES ON DATABASE $dbname TO $POSTGRES_USER;
+    EOSQL
+      echo "Database $dbname created successfully"
+    done
+    
+    echo "=== All databases initialized ==="
+
+  # ==========================================================================
+  # 02-create-replication-user.sh - Пользователь для репликации
+  # ==========================================================================
+  02-create-replication-user.sh: |
+    #!/bin/bash
+    set -e
+    
+    echo "=== Creating replication user ==="
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+      DO \$\$
+      BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'replicator') THEN
+          CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$POSTGRES_PASSWORD';
+        END IF;
+      END
+      \$\$;
+    EOSQL
+    echo "=== Replication user created ==="
+
+  # ==========================================================================
+  # 03-pg_hba.conf - Настройка доступа
+  # ==========================================================================
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    local   all             all                                     trust
+    host    all             all             127.0.0.1/32            scram-sha-256
+    host    all             all             ::1/128                 scram-sha-256
+    host    all             all             0.0.0.0/0               scram-sha-256
+    host    replication     replicator      0.0.0.0/0               scram-sha-256
+
+  # ==========================================================================
+  # postgresql.conf override (prod-like)
+  # ==========================================================================
+  postgresql.conf: |
+    # =======================================================================
+    # Jarvis 2.0 PostgreSQL Configuration (Prod-like Profile)
+    # =======================================================================
+    
+    # Connection Settings
+    max_connections = 200
+    
+    # Memory Settings
+    shared_buffers = 256MB
+    work_mem = 8MB
+    maintenance_work_mem = 128MB
+    effective_cache_size = 512MB
+    
+    # Write Ahead Log
+    wal_level = replica
+    max_wal_senders = 5
+    max_replication_slots = 5
+    wal_keep_size = 256MB
+    
+    # Checkpoints
+    checkpoint_completion_target = 0.9
+    
+    # Query Tuning
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    
+    # Logging
+    log_destination = 'stderr'
+    logging_collector = off
+    log_statement = 'ddl'
+    log_min_duration_statement = 500
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    
+    # Statistics
+    track_activities = on
+    track_counts = on
+    track_io_timing = on
+

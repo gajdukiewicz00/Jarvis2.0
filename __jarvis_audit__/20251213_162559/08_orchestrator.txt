@@ -1,0 +1,43 @@
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/PhraseContext.java:4: * Contexts / intents for Jarvis cinematic phrases.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/PhraseContext.java:17:    /** Small talk - simple wake acknowledgment without action */
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:40:     * @param context The phrase context (intent type)
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/phrases/JarvisPhraseProvider.java:472:                "All distractions blocked, sir."
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/PcControlClient.java:12:    @PostMapping("/api/v1/pc/action")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/PcControlClient.java:15:    record ActionRequest(String actionType, Map<String, String> parameters) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/NlpClient.java:18:    record NlpResult(String intent, Map<String, String> slots) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/ApiGatewayPcClient.java:12: * Sends PC actions to be relayed via WebSocket to Desktop clients.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/ApiGatewayPcClient.java:18:     * Send PC action to connected Desktop clients via WebSocket.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/ApiGatewayPcClient.java:20:    @PostMapping("/internal/pc-control/action")
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/client/ApiGatewayPcClient.java:29:    record PcActionRequest(String action, Map<String, Object> params) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:23:        if (request.intent() != null) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:24:            log.info("📥 Received intent execution: intent={}, params={}, lang={}, correlationId={}",
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:25:                    request.intent(), request.parameters(), language, correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:26:            String result = orchestratorService.executeIntent(request.intent(), request.parameters(), language,
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:27:                    correlationId, request.text() != null ? request.text() : request.intent());
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:37:            log.warn("❌ Invalid request - no intent or text, correlationId={}", correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:38:            throw new IllegalArgumentException("Either intent or text must be provided");
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/controller/OrchestratorController.java:43:            String intent,
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:87:        log.info("🔍 NLP Result: intent={}, slots={}, correlationId={}", result.intent(), result.slots(),
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:89:        return executeIntent(result.intent(), result.slots(), lang.getCode(), correlationId, text);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:93:    public String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:95:        // Normalize intent to lowercase snake_case for consistent matching
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:96:        String normalizedIntent = normalizeIntent(intent);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:101:        log.info("🎯 Executing intent: {} (normalized: {}), slots={}, lang={}, correlationId={}",
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:102:                intent, normalizedIntent, slots, lang, correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:297:                    log.warn("⚠️ Unknown intent: {} (normalized: {}), correlationId={}", intent, normalizedIntent,
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:303:            log.error("❌ Error executing intent: {}, correlationId={}", intent, correlationId, e);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:309:     * Normalize intent to lowercase snake_case for consistent matching.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:312:    private String normalizeIntent(String intent) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:313:        if (intent == null)
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:317:        String normalized = intent.toLowerCase(Locale.ROOT)
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:326:     * Send PC action to Desktop via API Gateway WebSocket.
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:328:    private void sendPcAction(String action, Map<String, Object> params, String correlationId) {
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:330:            log.info("📤 Sending PC action via API Gateway: action={}, params={}, correlationId={}",
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:331:                    action, params, correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:333:                    new ApiGatewayPcClient.PcActionRequest(action, params));
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:334:            log.info("📥 PC action result: {}, correlationId={}", result, correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:336:            log.warn("⚠️ Failed to send PC action via WebSocket ({}), falling back to direct call, correlationId={}",
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:342:                pcControlClient.executeAction(new PcControlClient.ActionRequest(action, stringParams));
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:343:                log.info("✅ PC action sent via direct client, correlationId={}", correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/impl/OrchestratorServiceImpl.java:345:                log.error("❌ Failed to execute PC action: {}, correlationId={}", ex.getMessage(), correlationId);
+apps/orchestrator/src/main/java/org/jarvis/orchestrator/service/OrchestratorService.java:8:    String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,

@@ -1,0 +1,51 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: orchestrator
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+# Service URLs (local development defaults)
+jarvis:
+  nlp:
+    url: ${NLP_SERVICE_URL:http://localhost:8082}
+  pc-control:
+    url: ${PC_CONTROL_URL:http://localhost:8084}
+  llm:
+    url: ${LLM_SERVICE_URL:http://localhost:8091}
+    # LLM Feature flag - disabled by default for stability
+    enabled: ${JARVIS_LLM_ENABLED:false}
+    # Timeout for LLM calls (seconds)
+    timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
+    # Circuit breaker configuration
+    circuit-breaker:
+      # Open circuit after N consecutive failures
+      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+      # Keep circuit open for N seconds before retrying
+      reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+
+# API Gateway for PC Control WebSocket
+api-gateway:
+  url: ${API_GATEWAY_URL:http://localhost:8080}
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+# Logging
+logging:
+  level:
+    org.jarvis.orchestrator: INFO
+

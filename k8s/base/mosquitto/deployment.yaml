@@ -1,0 +1,90 @@
+# Mosquitto MQTT Broker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosquitto
+  namespace: jarvis
+  labels:
+    app: mosquitto
+    app.kubernetes.io/name: mosquitto
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosquitto
+  template:
+    metadata:
+      labels:
+        app: mosquitto
+    spec:
+      containers:
+        - name: mosquitto
+          image: eclipse-mosquitto:2
+          ports:
+            - containerPort: 1883
+              name: mqtt
+            - containerPort: 9001
+              name: websocket
+          volumeMounts:
+            - name: config
+              mountPath: /mosquitto/config
+            - name: data
+              mountPath: /mosquitto/data
+            - name: log
+              mountPath: /mosquitto/log
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+            requests:
+              memory: "64Mi"
+              cpu: "25m"
+      volumes:
+        - name: config
+          configMap:
+            name: mosquitto-config
+        - name: data
+          emptyDir: {}
+        - name: log
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto
+  namespace: jarvis
+  labels:
+    app: mosquitto
+spec:
+  type: ClusterIP
+  ports:
+    - port: 1883
+      targetPort: 1883
+      name: mqtt
+    - port: 9001
+      targetPort: 9001
+      name: websocket
+  selector:
+    app: mosquitto
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquitto-config
+  namespace: jarvis
+data:
+  mosquitto.conf: |
+    listener 1883
+    allow_anonymous true
+    
+    listener 9001
+    protocol websockets
+    allow_anonymous true
+    
+    persistence true
+    persistence_location /mosquitto/data/
+    
+    log_dest stdout
+    log_type all
+

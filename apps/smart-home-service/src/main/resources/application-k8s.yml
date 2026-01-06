@@ -1,0 +1,72 @@
+# =============================================================================
+# Jarvis 2.0 - Smart Home Service - Kubernetes Profile
+# =============================================================================
+
+server:
+  port: 8086
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+  # RabbitMQ consumer
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:jarvis}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:jarvis}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+
+  # Kafka producer (для событий)
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+# MQTT
+mqtt:
+  broker-url: ${MQTT_BROKER_URL:tcp://mosquitto:1883}
+
+jarvis:
+  rabbitmq:
+    queue: ${RABBITMQ_QUEUE_SMART_HOME:smart-home.commands}
+  kafka:
+    topic: ${KAFKA_TOPIC_SMART_HOME:jarvis.events.smarthome}
+  features:
+    rabbitmq-enabled: ${FEATURE_RABBITMQ_SMART_HOME:false}
+
+security:
+  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:TURN_ON,TURN_OFF,DIM,BRIGHTEN,SET_COLOR,SET_TEMPERATURE,LOCK,UNLOCK}
+
+# Actuator для K8s probes
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    rabbit:
+      enabled: false  # RabbitMQ может быть недоступен - не падать
+    kafka:
+      enabled: false  # Kafka отключена
+
+logging:
+  level:
+    org.jarvis.smarthome: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+

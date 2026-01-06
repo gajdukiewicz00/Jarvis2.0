@@ -1,0 +1,71 @@
+server:
+  port: 8091
+
+spring:
+  application:
+    name: llm-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+# LLM Configuration
+jarvis:
+  llm:
+    # IMPORTANT: Must be true for LLM to work!
+    enabled: ${JARVIS_LLM_ENABLED:true}
+
+llm:
+  base-url: ${LLM_SERVER_URL:http://localhost:5000}
+  # Timeouts for chat requests (CPU inference can take 60-120+ seconds)
+  timeouts:
+    connect-ms: ${LLM_CONNECT_TIMEOUT_MS:5000}
+    read-ms: ${LLM_READ_TIMEOUT_MS:600000}  # 10 min default
+  # Timeouts for health checks (must be short to not block actuator)
+  health:
+    timeouts:
+      connect-ms: ${LLM_HEALTH_CONNECT_TIMEOUT_MS:2000}
+      read-ms: ${LLM_HEALTH_READ_TIMEOUT_MS:2000}
+  conversation:
+    max-history: 20
+  system-prompt: >
+    Ты - Jarvis, персональный AI-ассистент.
+    ВАЖНО: Ты ВСЕГДА отвечаешь ТОЛЬКО на русском языке.
+    Твои возможности включают: управление компьютером (громкость, приложения, таймеры), 
+    умный дом (свет, климат), трекинг финансов и времени, календарь, аналитика.
+    Отвечай кратко, по-дружески, ТОЛЬКО на русском языке.
+  locale:
+    default-locale: ru_RU
+    force-russian: true
+  # Token budget management
+  budget:
+    system-prompt: ${LLM_BUDGET_SYSTEM:500}
+    memory-context: ${LLM_BUDGET_MEMORY:600}
+    history: ${LLM_BUDGET_HISTORY:1400}
+    total: ${LLM_BUDGET_TOTAL:3500}
+
+# Long-term memory integration
+memory:
+  enabled: ${MEMORY_ENABLED:true}
+  service:
+    url: ${MEMORY_SERVICE_URL:http://localhost:8093}
+    enabled: ${MEMORY_SERVICE_ENABLED:true}
+  search:
+    top-k: ${MEMORY_TOPK:5}
+    max-tokens: ${MEMORY_MAX_TOKENS:600}
+
+# External services
+services:
+  user-profile:
+    base-url: ${USER_PROFILE_URL:http://localhost:8089}
+    enabled: ${USER_PROFILE_ENABLED:false}  # Optional, disabled by default for standalone testing
+    timeouts:
+      connect-ms: ${USER_PROFILE_CONNECT_TIMEOUT_MS:3000}
+      read-ms: ${USER_PROFILE_READ_TIMEOUT_MS:5000}
+
+# Logging
+logging:
+  level:
+    org.jarvis.llm: INFO
+    org.jarvis.llm.config: INFO

@@ -1,0 +1,28 @@
+openapi: 3.0.0
+info:
+  title: Smart Home Service API
+  version: 1.0.0
+paths:
+  /api/v1/smarthome/devices/{deviceId}/action:
+    post:
+      summary: Execute an action on a device
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                payload:
+                  type: string
+      responses:
+        '200':
+          description: Action sent

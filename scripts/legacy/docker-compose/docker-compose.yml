@@ -1,0 +1,374 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build: ./apps/api-gateway
+    container_name: jarvis20_api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - JWT_SECRET=${JWT_SECRET:-jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      security-service:
+        condition: service_started
+      life-tracker:
+        condition: service_started
+      voice-gateway:
+        condition: service_started
+      nlp-service:
+        condition: service_started
+      orchestrator:
+        condition: service_started
+      pc-control:
+        condition: service_started
+      assistant-core:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+  assistant-core:
+    build: ./apps/assistant-core
+    container_name: jarvis20_assistant-core
+    # Port 8090 only accessible within docker network
+    expose:
+      - "8090"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/jarvis_assistant_core
+      - SPRING_DATASOURCE_USERNAME=jarvis
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-jarvis123}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jarvis-net
+
+  voice-gateway:
+    build: ./apps/voice-gateway
+    container_name: jarvis20_voice-gateway
+    # Port 8081 only accessible within docker network
+    expose:
+      - "8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    volumes:
+      - ./models/vosk-model-small-ru-0.22:/app/models/vosk-model-small-ru-0.22:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+  nlp-service:
+    build: ./apps/nlp-service
+    container_name: jarvis20_nlp-service
+    # Port 8082 only accessible within docker network
+    expose:
+      - "8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+  orchestrator:
+    build: ./apps/orchestrator
+    container_name: jarvis20_orchestrator
+    # Port 8083 only accessible within docker network
+    expose:
+      - "8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+  pc-control:
+    build: ./apps/pc-control
+    container_name: jarvis20_pc-control
+    # Port 8084 only accessible within docker network
+    expose:
+      - "8084"
+    volumes:
+      - /run/user/1000/pulse:/run/user/1000/pulse
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+      - DISPLAY=:0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - jarvis-net
+
+  life-tracker:
+    build: ./apps/life-tracker
+    container_name: jarvis20_life-tracker
+    # Port 8085 only accessible within docker network
+    expose:
+      - "8085"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/jarvis_db
+      - SPRING_DATASOURCE_USERNAME=jarvis
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-jarvis123}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jarvis-net
+
+  smart-home-service:
+    build: ./apps/smart-home-service
+    container_name: jarvis20_smart-home-service
+    # Port 8086 only accessible within docker network
+    expose:
+      - "8086"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    networks:
+      - jarvis-net
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./docker/mosquitto/config:/mosquitto/config
+      - ./docker/mosquitto/data:/mosquitto/data
+      - ./docker/mosquitto/log:/mosquitto/log
+    networks:
+      - jarvis-net
+
+  analytics-service:
+    build: ./apps/analytics-service
+    container_name: jarvis20_analytics-service
+    # Port 8087 only accessible within docker network
+    expose:
+      - "8087"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      life-tracker:
+        condition: service_started
+    networks:
+      - jarvis-net
+
+  security-service:
+    build: ./apps/security-service
+    container_name: jarvis20_security-service
+    # Port 8088 only accessible within docker network
+    expose:
+      - "8088"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/jarvis_security
+      - SPRING_DATASOURCE_USERNAME=jarvis
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-jarvis123}
+      - JWT_SECRET=${JWT_SECRET:-jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jarvis-net
+
+  user-profile:
+    build: ./apps/user-profile
+    container_name: jarvis20_user-profile
+    # Port 8089 only accessible within docker network
+    expose:
+      - "8089"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/jarvis_user_profile
+      - SPRING_DATASOURCE_USERNAME=jarvis
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-jarvis123}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - jarvis-net
+
+  postgres:
+    image: postgres:16
+    container_name: jarvis20_postgres
+    command: postgres -c config_file=/etc/postgresql/postgres.conf
+    environment:
+      - POSTGRES_DB=jarvis
+      - POSTGRES_USER=jarvis
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-jarvis123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+      - ./docker/postgres/postgres.conf:/etc/postgresql/postgres.conf:ro
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U jarvis -d jarvis && psql -U jarvis -d jarvis -tAc \"SELECT 1 FROM pg_database WHERE datname IN ('jarvis_db', 'jarvis_assistant_core', 'jarvis_user_profile', 'jarvis_security')\" | grep -q 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s  # Allow time for database initialization
+    deploy:
+      resources:
+        limits:
+          memory: 1G # Prevent excessive memory usage
+        reservations:
+          memory: 512M # Guarantee minimum memory
+    networks:
+      - jarvis-net
+
+  llm-server:
+    build: ./docker/llm-server
+    container_name: jarvis20_llm-server
+    runtime: nvidia
+    ports:
+      - "5000:5000"
+    volumes:
+      - /home/kwaqa/models/h2ogpt-4096-llama2-7b-chat:/models:ro
+    environment:
+      - MODEL_PATH=/models
+      - HOST=0.0.0.0
+      - PORT=5000
+      - MAX_NEW_TOKENS=128
+      - MAX_GENERATION_SECONDS=120
+      - NVIDIA_VISIBLE_DEVICES=all
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - jarvis-net
+
+  llm-service:
+    build: ./apps/llm-service
+    container_name: jarvis20_llm-service
+    # Port 8091 only accessible within docker network
+    expose:
+      - "8091"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - LLM_SERVER_URL=http://llm-server:5000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8091/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      llm-server:
+        condition: service_healthy
+    networks:
+      - jarvis-net
+
+  planner-service:
+    build: ./apps/planner-service
+    container_name: jarvis20_planner-service
+    ports:
+      - "8092:8092"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/jarvis_db
+      - SPRING_DATASOURCE_USERNAME=jarvis
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-jarvis123}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8092/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      life-tracker:
+        condition: service_started
+      analytics-service:
+        condition: service_started
+      user-profile:
+        condition: service_started
+      llm-service:
+        condition: service_started
+    networks:
+      - jarvis-net
+
+networks:
+  jarvis-net:
+    driver: bridge

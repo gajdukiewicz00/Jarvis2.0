@@ -1,0 +1,19 @@
+# Docker/K8s profile for orchestrator
+# Activate with: SPRING_PROFILES_ACTIVE=docker or SPRING_PROFILES_ACTIVE=k8s
+
+jarvis:
+  nlp:
+    url: http://nlp-service:8082
+  pc-control:
+    url: http://pc-control:8084
+  llm:
+    url: http://llm-service:8091
+    # LLM disabled by default in k8s - enable via env JARVIS_LLM_ENABLED=true
+    enabled: ${JARVIS_LLM_ENABLED:false}
+    timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
+    circuit-breaker:
+      failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
+      reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+
+api-gateway:
+  url: http://api-gateway:8080

@@ -1,0 +1,19 @@
+# =============================================================================
+# Jarvis 2.0 - Kubernetes Base Kustomization
+# =============================================================================
+# Base resources shared across all environments
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis
+
+resources:
+  - namespace.yaml
+  - postgres-init-configmap.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/part-of: jarvis
+  app.kubernetes.io/managed-by: kustomize
+

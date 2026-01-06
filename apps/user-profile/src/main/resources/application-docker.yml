@@ -1,0 +1,21 @@
+spring:
+  config:
+    import: optional:file:../shared-config/application-hikari.yml
+  
+  datasource:
+    url: jdbc:postgresql://postgres:5432/jarvis_user_profile
+    username: jarvis
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      max-lifetime: 1800000      # 30 minutes
+      idle-timeout: 600000       # 10 minutes
+      connection-timeout: 30000  # 30 seconds
+      validation-timeout: 5000   # 5 seconds
+      initialization-fail-timeout: -1  # Don't fail on startup if DB not ready
+      connection-test-query: SELECT 1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update  # Auto-update schema to add missing columns

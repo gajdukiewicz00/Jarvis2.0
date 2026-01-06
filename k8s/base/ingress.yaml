@@ -1,0 +1,82 @@
+# =============================================================================
+# Jarvis 2.0 - Ingress with TLS (Production Standard)
+# =============================================================================
+# Iteration 1.5 (Stage 7): HTTPS/TLS as mandatory standard
+# Domains: api.jarvis.local (REST API) and voice.jarvis.local (WebSocket)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jarvis-ingress
+  namespace: jarvis
+  annotations:
+    # HTTP to HTTPS redirect (mandatory for production)
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # WebSocket support for voice gateway
+    nginx.ingress.kubernetes.io/websocket-services: "api-gateway"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://api.jarvis.local,https://voice.jarvis.local"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Requested-With"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    
+    # Security headers (using server-snippet if available, otherwise removed for compatibility)
+    # Note: configuration-snippet may be disabled by ingress administrator
+    # nginx.ingress.kubernetes.io/configuration-snippet: |
+    #   add_header X-Frame-Options "SAMEORIGIN" always;
+    #   add_header X-Content-Type-Options "nosniff" always;
+    #   add_header X-XSS-Protection "1; mode=block" always;
+    #   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Timeouts and body size
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+  labels:
+    app: jarvis-ingress
+    app.kubernetes.io/name: jarvis-ingress
+    app.kubernetes.io/part-of: jarvis
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.jarvis.local
+        - voice.jarvis.local
+      secretName: jarvis-tls
+  rules:
+    # API Gateway (REST API)
+    - host: api.jarvis.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+    # Voice Gateway (WebSocket)
+    - host: voice.jarvis.local
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080
+

@@ -1,0 +1,21 @@
+# Test profile configuration
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  
+  flyway:
+    enabled: false
+
+logging:
+  level:
+    org.jarvis: DEBUG
+    org.springframework.test: INFO
+    org.testcontainers: INFO
+

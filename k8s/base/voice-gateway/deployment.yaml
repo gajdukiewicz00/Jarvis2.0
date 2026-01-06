@@ -1,0 +1,77 @@
+# Voice Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis
+  labels:
+    app: voice-gateway
+    app.kubernetes.io/name: voice-gateway
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: voice-gateway
+  template:
+    metadata:
+      labels:
+        app: voice-gateway
+    spec:
+      containers:
+        - name: voice-gateway
+          image: jarvis/voice-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "kubernetes"
+            - name: ORCHESTRATOR_URL
+              value: "http://orchestrator.jarvis.svc.cluster.local:8083"
+          volumeMounts:
+            - name: vosk-models
+              mountPath: /app/models
+              readOnly: true
+          resources:
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8081
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 5
+      volumes:
+        - name: vosk-models
+          hostPath:
+            path: /home/kwaqa/IdeaProjects/Jarvis2.0/models
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: voice-gateway
+  namespace: jarvis
+  labels:
+    app: voice-gateway
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8081
+      targetPort: 8081
+      name: http
+  selector:
+    app: voice-gateway
+

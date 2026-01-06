@@ -1,0 +1,46 @@
+# Docker profile for life-tracker
+# Activate with: SPRING_PROFILES_ACTIVE=docker
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/jarvis_db
+    username: jarvis
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:}}
+    hikari:
+      # Pool Size
+      maximum-pool-size: 10
+      minimum-idle: 2
+      
+      # Connection Timeouts
+      connection-timeout: 30000       # 30s
+      
+      # Idle Connection Management  
+      idle-timeout: 600000            # 10 min
+      
+      # Connection Lifetime - предотвращение "Connection closed"
+      max-lifetime: 1200000           # 20 min (меньше PostgreSQL timeout)
+      keepalive-time: 300000          # 5 min keepalive
+      
+      # Validation
+      validation-timeout: 5000        # 5s
+      connection-test-query: SELECT 1
+      
+      # Startup
+      initialization-fail-timeout: -1 # Не падать если БД недоступна
+      
+      # Pool name
+      pool-name: life-tracker-docker-pool
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    baseline-on-migrate: true
+    clean-disabled: true              # Запретить clean в docker
+
+logging:
+  level:
+    org.jarvis.lifetracker: INFO
+    com.zaxxer.hikari: INFO

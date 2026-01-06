@@ -1,0 +1,139 @@
+# =============================================================================
+# Jarvis 2.0 - Assistant Core (Dev Profile)
+# =============================================================================
+# Core logic, memory, behavioral analysis
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: assistant-core
+  namespace: jarvis
+  labels:
+    app: assistant-core
+    app.kubernetes.io/name: assistant-core
+    app.kubernetes.io/part-of: jarvis
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: assistant-core
+  template:
+    metadata:
+      labels:
+        app: assistant-core
+        app.kubernetes.io/name: assistant-core
+        app.kubernetes.io/part-of: jarvis
+        tier: backend
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "Waiting for PostgreSQL..."
+              until nc -z postgres 5432; do sleep 5; done
+              echo "PostgreSQL is ready!"
+      containers:
+        - name: assistant-core
+          image: jarvis/assistant-core:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8090
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: SPRING_PROFILES_ACTIVE
+            # Database
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_assistant_core"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_DATASOURCE_PASSWORD
+            # RabbitMQ
+            - name: SPRING_RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: RABBITMQ_HOST
+            - name: SPRING_RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: RABBITMQ_PORT
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_RABBITMQ_USERNAME
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_RABBITMQ_PASSWORD
+            - name: SPRING_RABBITMQ_VIRTUAL_HOST
+              value: "jarvis"
+            # Kafka
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            # LLM settings
+            - name: JARVIS_LLM_ENABLED
+              value: "false"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8090
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8090
+            initialDelaySeconds: 45
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: assistant-core
+  namespace: jarvis
+  labels:
+    app: assistant-core
+    app.kubernetes.io/name: assistant-core
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      targetPort: 8090
+      protocol: TCP
+      name: http
+  selector:
+    app: assistant-core
+

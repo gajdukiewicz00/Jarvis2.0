@@ -1,0 +1,187 @@
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:33:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:34:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:35:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:1:org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler$BackendHandler.class
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:8:org/jarvis/apigateway/websocket/PcControlWebSocketHandler.class
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:20:org/jarvis/apigateway/websocket/PcControlWebSocketHandler$ClientSession.class
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:24:org/jarvis/apigateway/websocket/WebSocketConfig.class
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:29:org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.class
+apps/api-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:37:org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler$ProxySession.class
+apps/api-gateway/pom.xml:36:        <!-- JSR-356 client for WebSocket proxying -->
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/SecurityConfig.java:35:     * This makes sure the handshake for PC Control is not intercepted by auth filters.
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/SecurityConfig.java:40:                "/ws/**",
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/SecurityConfig.java:66:                            .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
+apps/api-gateway/src/main/java/org/jarvis/apigateway/security/SecurityConfig.java:85:     * Open CORS configuration for PC control REST + WebSocket handshake.
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:4:import jakarta.websocket.WebSocketContainer;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:9:import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:10:import org.springframework.web.socket.handler.AbstractWebSocketHandler;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:19: * Simple reverse proxy WebSocket handler that forwards /ws/voice from API Gateway
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:26:public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:31:    private final StandardWebSocketClient backendClient;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:33:    public VoiceWebSocketProxyHandler() {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:34:        // Configure WebSocket container with larger buffer sizes for audio streaming
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:35:        WebSocketContainer container = ContainerProvider.getWebSocketContainer();
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:38:        this.backendClient = new StandardWebSocketClient(container);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:44:    public void afterConnectionEstablished(WebSocketSession clientSession) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:45:        String targetUrl = toWsUrl(voiceGatewayUrl) + "/ws/voice";
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:46:        WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:51:            CompletableFuture<WebSocketSession> future = backendClient.execute(
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:54:            WebSocketSession backendSession = future.get(5, TimeUnit.SECONDS);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:58:            log.error("❌ Voice WS proxy handshake failed for client {} -> {}: {}", clientSession.getId(), targetUrl, e.getMessage(), e);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:64:    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:75:    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:86:    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:95:    public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:109:    private record ProxySession(WebSocketSession client, WebSocketSession backend) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:115:    private class BackendHandler extends AbstractWebSocketHandler {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:116:        private final WebSocketSession clientSession;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:118:        BackendHandler(WebSocketSession clientSession) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:123:        protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:130:        protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:137:        public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/VoiceWebSocketProxyHandler.java:144:        public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:6:import org.springframework.web.socket.config.annotation.EnableWebSocket;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:7:import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:8:import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:12: * WebSocket configuration for PC Control and Voice endpoints.
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:15:@EnableWebSocket
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:17:public class WebSocketConfig implements WebSocketConfigurer {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:19:    private final PcControlWebSocketHandler pcControlHandler;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:20:    private final VoiceWebSocketProxyHandler voiceWebSocketProxyHandler;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:23:    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:24:        registry.addHandler(pcControlHandler, "/ws/pc-control")
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:25:                .setAllowedOriginPatterns("*");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:26:        registry.addHandler(voiceWebSocketProxyHandler, "/ws/voice")
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:27:                .setAllowedOriginPatterns("*");
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:31:     * Configure WebSocket container with larger buffer sizes for audio streaming.
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/WebSocketConfig.java:34:    public ServletServerContainerFactoryBean createWebSocketContainer() {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:10:import org.springframework.web.socket.WebSocketSession;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:11:import org.springframework.web.socket.handler.TextWebSocketHandler;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:17: * WebSocket handler for PC Control commands.
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:23:public class PcControlWebSocketHandler extends TextWebSocketHandler {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:28:    private record ClientSession(WebSocketSession session, String clientType, String clientId) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:32:    public void afterConnectionEstablished(WebSocketSession session) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:33:        log.info("🔌 PC Control WebSocket connected: {}", session.getId());
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:39:    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:58:    private void handleIdentify(WebSocketSession session, JsonNode json) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:71:    private void handleAck(WebSocketSession session, JsonNode json) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:78:    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:79:        log.info("🔌 PC Control WebSocket disconnected: {} ({})", session.getId(), status);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:84:    public void handleTransportError(WebSocketSession session, Throwable exception) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:85:        log.error("WebSocket transport error for {}: {}", session.getId(), exception.getMessage());
+apps/api-gateway/src/main/java/org/jarvis/apigateway/websocket/PcControlWebSocketHandler.java:145:    private void sendMessage(WebSocketSession session, String message) {
+apps/api-gateway/src/main/java/org/jarvis/apigateway/filter/JwtFilter.java:54:            "/ws/", // WebSocket endpoints (PC control handshake)
+apps/api-gateway/src/main/java/org/jarvis/apigateway/config/CorsConfig.java:51:        config.setAllowedOriginPatterns(allowedOrigins);
+apps/api-gateway/src/main/java/org/jarvis/apigateway/controller/PcControlInternalController.java:7:import org.jarvis.apigateway.websocket.PcControlWebSocketHandler;
+apps/api-gateway/src/main/java/org/jarvis/apigateway/controller/PcControlInternalController.java:14: * Internal controller for triggering PC actions via WebSocket.
+apps/api-gateway/src/main/java/org/jarvis/apigateway/controller/PcControlInternalController.java:23:    private final PcControlWebSocketHandler webSocketHandler;
+apps/voice-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:8:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java
+apps/voice-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst:25:/home/kwaqa/IdeaProjects/Jarvis2.0/apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java
+apps/voice-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:9:org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.class
+apps/voice-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:26:org/jarvis/voicegateway/websocket/VoiceWebSocketHandler$SessionContext.class
+apps/voice-gateway/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst:28:org/jarvis/voicegateway/config/WebSocketConfig.class
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:19:import org.springframework.web.socket.WebSocketSession;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:20:import org.springframework.web.socket.handler.AbstractWebSocketHandler;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:31:public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:49:    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:61:    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:116:    protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:268:    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:269:        log.info("WebSocket connection closed: {}", session.getId());
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:276:    private void sendJsonMessage(WebSocketSession session, Object payload) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:287:    private void updateLanguage(WebSocketSession session, String language) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:309:    private void finalizeRecognition(WebSocketSession session) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:324:    private void handleSttTimeout(WebSocketSession session, String correlationId) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:381:        final WebSocketSession session;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/websocket/VoiceWebSocketHandler.java:386:        SessionContext(WebSocketSession session, StreamingRecognitionSession recognitionSession, String language) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:3:import org.jarvis.voicegateway.websocket.VoiceWebSocketHandler;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:6:import org.springframework.web.socket.config.annotation.EnableWebSocket;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:7:import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:8:import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:12:@EnableWebSocket
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:13:public class WebSocketConfig implements WebSocketConfigurer {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:15:    private final VoiceWebSocketHandler voiceWebSocketHandler;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:17:    public WebSocketConfig(VoiceWebSocketHandler voiceWebSocketHandler) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:18:        this.voiceWebSocketHandler = voiceWebSocketHandler;
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:22:    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:23:        registry.addHandler(voiceWebSocketHandler, "/ws/voice")
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:24:                .setAllowedOrigins("*"); // Allow all origins for direct connection
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:28:     * Configure WebSocket container with larger buffer sizes for audio streaming.
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/WebSocketConfig.java:31:    public ServletServerContainerFactoryBean createWebSocketContainer() {
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/SecurityConfig.java:22:                        // Allow health and websocket upgrade without JWT to avoid 401 on handshake
+apps/voice-gateway/src/main/java/org/jarvis/voicegateway/config/SecurityConfig.java:23:                        .requestMatchers("/actuator/**", "/ws/**").permitAll()
+apps/desktop-client-javafx/pom.xml:67:        <!-- OkHttp for WebSocket -->
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:9: * WebSocket URLs are derived automatically to stay in sync with the REST base.
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:24:    val pcControlWebSocketUrl: String by lazy {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:27:            ?: "${wsBase()}/ws/pc-control"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:30:    val voiceWebSocketUrl: String by lazy {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt:33:            ?: "${wsBase()}/ws/voice"
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:15:import org.jarvis.desktop.service.VoiceWebSocketClient
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:43:    private lateinit var voiceWebSocketClient: VoiceWebSocketClient
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:66:                voiceWebSocketClient.endOfSpeech()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:90:                voiceWebSocketClient.requestTimeoutPhrase()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:100:        // Initialize WebSocket Client with session-aware callbacks
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:101:        voiceWebSocketClient = VoiceWebSocketClient(
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:103:                logger.debug("WebSocket State: {}", state)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:109:                    voiceSession.cancelSession("WebSocket disconnected")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:136:            voiceWebSocketClient.isSendingAllowed = false
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:144:        voiceWebSocketClient.connect()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:196:                voiceWebSocketClient.endOfSpeech()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:368:            // Pass the unified correlationId to WebSocket client
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:369:            voiceWebSocketClient.startCommand(correlationId)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:386:            // Pass the unified correlationId to WebSocket client
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:387:            voiceWebSocketClient.startCommand(correlationId)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:407:        voiceWebSocketClient.isSendingAllowed = true
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:419:                if (voiceWebSocketClient.isSendingAllowed) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:420:                    voiceWebSocketClient.sendAudio(chunk)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:434:        voiceWebSocketClient.isSendingAllowed = false
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/ui/tabs/VoiceTab.kt:444:        voiceWebSocketClient.disconnect()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:18:import org.jarvis.desktop.service.PcControlWebSocketClient
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:36:    private var pcWebSocketClient: PcControlWebSocketClient? = null
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:99:        // Initialize PC Control WebSocket connection
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:100:        initPcControlWebSocket()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:105:            pcWebSocketClient?.disconnect()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:112:    private fun initPcControlWebSocket() {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:113:        // Get API Gateway URL for WebSocket
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:114:        val wsUrl = AppConfig.pcControlWebSocketUrl
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:116:        pcWebSocketClient = PcControlWebSocketClient(
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:120:                logger.debug("PC WebSocket status: $status")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:128:                pcWebSocketClient?.connect()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:130:                logger.warn("Failed to connect PC Control WebSocket: ${e.message}")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:134:        logger.info("🔌 PC Control WebSocket initialized")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/DesktopApplication.kt:229:        pcWebSocketClient?.disconnect()
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:12: * WebSocket client for receiving PC Control commands from the orchestrator/API gateway.
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:19:class PcControlWebSocketClient(
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:20:    private val url: String = AppConfig.pcControlWebSocketUrl,
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:23:) : WebSocketListener() {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:25:    private val logger = LoggerFactory.getLogger(PcControlWebSocketClient::class.java)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:33:    private var webSocket: WebSocket? = null
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:40:            logger.debug("Already connected to PC Control WebSocket")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:44:        logger.info("🔌 Connecting to PC Control WebSocket: $url")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:58:        webSocket = client.newWebSocket(request, this)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:62:        logger.info("Disconnecting from PC Control WebSocket")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:71:    override fun onOpen(webSocket: WebSocket, response: Response) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:74:        logger.info("✅ Connected to PC Control WebSocket")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:94:    override fun onMessage(webSocket: WebSocket, text: String) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:229:    override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:234:    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:236:        logger.info("WebSocket closing: $code / $reason")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:240:    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:242:        logger.info("WebSocket closed: $code / $reason")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:251:    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/PcControlWebSocketClient.kt:253:        logger.warn("WebSocket failure: ${t.message}")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:14: * WebSocket client for voice streaming and receiving transcripts/responses.
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:25:class VoiceWebSocketClient(
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:26:    private val url: String = AppConfig.voiceWebSocketUrl,
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:31:) : WebSocketListener() {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:37:    private val logger = LoggerFactory.getLogger(VoiceWebSocketClient::class.java)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:39:    private var webSocket: WebSocket? = null
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:80:        logger.info("🔌 Connecting to Voice WebSocket: {}", url)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:81:        webSocket = client.newWebSocket(request, this)
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:186:    override fun onOpen(webSocket: WebSocket, response: Response) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:191:        println("WebSocket connected to $url")
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:194:    override fun onMessage(webSocket: WebSocket, text: String) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:239:    override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:245:    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:250:    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/service/VoiceWebSocketClient.kt:261:    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {

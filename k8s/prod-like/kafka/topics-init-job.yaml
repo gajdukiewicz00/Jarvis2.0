@@ -1,0 +1,84 @@
+# =============================================================================
+# Jarvis 2.0 - Kafka Topics Initialization Job (Prod-like)
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics-init
+  namespace: jarvis
+  labels:
+    app: kafka-topics-init
+    app.kubernetes.io/name: kafka-topics-init
+    app.kubernetes.io/part-of: jarvis
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: kafka-topics-init
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-kafka
+          image: bitnami/kafka:3.7
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Waiting for Kafka cluster to be ready..."
+              BOOTSTRAP="kafka.jarvis.svc.cluster.local:9092"
+              
+              # Ждём все 3 брокера
+              for i in {1..60}; do
+                BROKERS=$(kafka-broker-api-versions.sh --bootstrap-server $BOOTSTRAP 2>/dev/null | grep -c "ApiVersion")
+                if [ "$BROKERS" -ge 3 ]; then
+                  echo "All Kafka brokers are ready!"
+                  exit 0
+                fi
+                echo "Waiting for all brokers... (attempt $i/60, found: $BROKERS)"
+                sleep 5
+              done
+              echo "Timeout waiting for Kafka brokers"
+              exit 1
+      containers:
+        - name: create-topics
+          image: bitnami/kafka:3.7
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              BOOTSTRAP="kafka.jarvis.svc.cluster.local:9092"
+              
+              echo "=== Creating Jarvis Kafka Topics (Prod-like) ==="
+              
+              # Топики с replication factor 3
+              TOPICS=(
+                "jarvis.events.expenses:3:3:604800000"
+                "jarvis.events.time-tracking:3:3:604800000"
+                "jarvis.events.calendar:3:3:604800000"
+                "jarvis.events.smarthome:3:3:259200000"
+                "jarvis.events.pc-control:3:3:259200000"
+                "jarvis.events.voice:3:3:86400000"
+                "jarvis.events.audit:3:3:2592000000"
+                "jarvis.events.logs:3:3:86400000"
+              )
+              
+              for topic_config in "${TOPICS[@]}"; do
+                IFS=':' read -r topic partitions replication retention <<< "$topic_config"
+                
+                echo "Creating topic: $topic"
+                
+                kafka-topics.sh --bootstrap-server $BOOTSTRAP \
+                  --create --if-not-exists \
+                  --topic "$topic" \
+                  --partitions "$partitions" \
+                  --replication-factor "$replication" \
+                  --config retention.ms="$retention" \
+                  --config min.insync.replicas=2 \
+                  --config cleanup.policy=delete
+              done
+              
+              echo "=== All topics created ==="
+              kafka-topics.sh --bootstrap-server $BOOTSTRAP --describe
+

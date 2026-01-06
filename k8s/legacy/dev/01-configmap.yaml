@@ -1,0 +1,114 @@
+# =============================================================================
+# Jarvis 2.0 - Common ConfigMap (Dev)
+# =============================================================================
+# Apply after namespace: kubectl apply -f k8s/dev/01-configmap.yaml
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jarvis-config
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/name: jarvis-config
+    app.kubernetes.io/part-of: jarvis
+    environment: dev
+data:
+  # ==========================================================================
+  # Database Configuration
+  # ==========================================================================
+  POSTGRES_HOST: "postgres.jarvis.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  
+  # Database names per service
+  DB_NAME_SECURITY: "jarvis_security"
+  DB_NAME_LIFE_TRACKER: "jarvis_db"
+  DB_NAME_ASSISTANT_CORE: "jarvis_assistant_core"
+  DB_NAME_USER_PROFILE: "jarvis_user_profile"
+  DB_NAME_ANALYTICS: "jarvis_analytics"
+  
+  # ==========================================================================
+  # RabbitMQ Configuration
+  # ==========================================================================
+  RABBITMQ_HOST: "rabbitmq.jarvis.svc.cluster.local"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_MANAGEMENT_PORT: "15672"
+  RABBITMQ_VHOST: "jarvis"
+  
+  # Exchanges
+  RABBITMQ_EXCHANGE_COMMANDS: "jarvis.commands"
+  RABBITMQ_EXCHANGE_RPC: "jarvis.rpc"
+  
+  # Queues
+  RABBITMQ_QUEUE_PC_CONTROL: "pc-control.commands"
+  RABBITMQ_QUEUE_SMART_HOME: "smart-home.commands"
+  RABBITMQ_QUEUE_VOICE: "voice.commands"
+  RABBITMQ_QUEUE_ASSISTANT: "assistant-core.commands"
+  
+  # Routing Keys
+  RABBITMQ_RK_PC_CONTROL: "pc.control.#"
+  RABBITMQ_RK_SMART_HOME: "smarthome.#"
+  RABBITMQ_RK_VOICE: "voice.#"
+  RABBITMQ_RK_ASSISTANT: "assistant.#"
+  
+  # ==========================================================================
+  # Kafka Configuration
+  # ==========================================================================
+  KAFKA_BOOTSTRAP_SERVERS: "kafka.jarvis.svc.cluster.local:9092"
+  
+  # Topics
+  KAFKA_TOPIC_EXPENSES: "jarvis.events.expenses"
+  KAFKA_TOPIC_TIME_TRACKING: "jarvis.events.time-tracking"
+  KAFKA_TOPIC_CALENDAR: "jarvis.events.calendar"
+  KAFKA_TOPIC_SMART_HOME: "jarvis.events.smarthome"
+  KAFKA_TOPIC_PC_CONTROL: "jarvis.events.pc-control"
+  KAFKA_TOPIC_VOICE: "jarvis.events.voice"
+  KAFKA_TOPIC_AUDIT: "jarvis.events.audit"
+  KAFKA_TOPIC_LOGS: "jarvis.events.logs"
+  
+  # ==========================================================================
+  # Service URLs (for services that still use HTTP)
+  # ==========================================================================
+  SECURITY_SERVICE_URL: "http://security-service.jarvis.svc.cluster.local:8088"
+  LIFE_TRACKER_URL: "http://life-tracker.jarvis.svc.cluster.local:8085"
+  ANALYTICS_SERVICE_URL: "http://analytics-service.jarvis.svc.cluster.local:8087"
+  VOICE_GATEWAY_URL: "http://voice-gateway.jarvis.svc.cluster.local:8081"
+  NLP_SERVICE_URL: "http://nlp-service.jarvis.svc.cluster.local:8082"
+  ORCHESTRATOR_URL: "http://orchestrator.jarvis.svc.cluster.local:8083"
+  PC_CONTROL_URL: "http://pc-control.jarvis.svc.cluster.local:8084"
+  SMART_HOME_URL: "http://smart-home-service.jarvis.svc.cluster.local:8086"
+  ASSISTANT_CORE_URL: "http://assistant-core.jarvis.svc.cluster.local:8090"
+  LLM_SERVICE_URL: "http://llm-service.jarvis.svc.cluster.local:8091"
+  LLM_SERVER_URL: "http://llm-server.jarvis.svc.cluster.local:5000"
+  USER_PROFILE_URL: "http://user-profile.jarvis.svc.cluster.local:8089"
+  PLANNER_SERVICE_URL: "http://planner-service.jarvis.svc.cluster.local:8092"
+  
+  # ==========================================================================
+  # Feature Flags
+  # ==========================================================================
+  # RabbitMQ migration (HTTP → Brokers)
+  FEATURE_RABBITMQ_PC_CONTROL: "false"
+  FEATURE_RABBITMQ_SMART_HOME: "false"
+  FEATURE_RABBITMQ_VOICE: "false"
+  # Kafka analytics
+  FEATURE_KAFKA_ANALYTICS: "false"
+  # LLM (disabled by default - enable only when llm-service is healthy)
+  FEATURE_LLM_ENABLED: "false"
+  
+  # ==========================================================================
+  # Logging & Observability
+  # ==========================================================================
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  ENABLE_TRACE_ID: "true"
+  
+  # ==========================================================================
+  # Spring Profiles
+  # ==========================================================================
+  SPRING_PROFILES_ACTIVE: "k8s"
+  
+  # ==========================================================================
+  # JWT Configuration (non-secret parts)
+  # ==========================================================================
+  JWT_ISSUER: "jarvis"
+  JWT_EXPIRATION: "86400000"
+

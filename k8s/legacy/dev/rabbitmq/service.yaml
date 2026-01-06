@@ -1,0 +1,58 @@
+# =============================================================================
+# Jarvis 2.0 - RabbitMQ Services (Dev Profile)
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-headless
+  namespace: jarvis
+  labels:
+    app: rabbitmq
+    app.kubernetes.io/name: rabbitmq-headless
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 5672
+      targetPort: 5672
+      protocol: TCP
+      name: amqp
+    - port: 15672
+      targetPort: 15672
+      protocol: TCP
+      name: management
+    - port: 4369
+      targetPort: 4369
+      protocol: TCP
+      name: epmd
+    - port: 25672
+      targetPort: 25672
+      protocol: TCP
+      name: clustering
+  selector:
+    app: rabbitmq
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: jarvis
+  labels:
+    app: rabbitmq
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5672
+      targetPort: 5672
+      protocol: TCP
+      name: amqp
+    - port: 15672
+      targetPort: 15672
+      protocol: TCP
+      name: management
+  selector:
+    app: rabbitmq
+

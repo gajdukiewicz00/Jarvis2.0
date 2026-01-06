@@ -1,0 +1,113 @@
+openapi: 3.0.0
+info:
+  title: Security Service API
+  description: JWT token generation and validation service
+  version: 1.0.0
+servers:
+  - url: http://localhost:8088/api/v1/security
+    description: Local development
+
+paths:
+  /token/generate:
+    post:
+      summary: Generate JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+              properties:
+                username:
+                  type: string
+                  example: "jarvis-user"
+                claims:
+                  type: object
+                  additionalProperties: true
+                  example:
+                    role: "admin"
+                    deviceId: "desktop-001"
+      responses:
+        '200':
+          description: Token generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  type:
+                    type: string
+                    default: "Bearer"
+                  expiresIn:
+                    type: integer
+                    format: int64
+                    description: Token expiration in milliseconds
+
+  /token/validate:
+    post:
+      summary: Validate JWT token
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  username:
+                    type: string
+                  claims:
+                    type: object
+                    additionalProperties: true
+                  error:
+                    type: string
+
+  /token/username:
+    get:
+      summary: Extract username from token
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Username extracted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  error:
+                    type: string
+
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  service:
+                    type: string

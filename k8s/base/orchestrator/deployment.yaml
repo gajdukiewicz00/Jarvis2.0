@@ -1,0 +1,74 @@
+# Orchestrator Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis
+  labels:
+    app: orchestrator
+    app.kubernetes.io/name: orchestrator
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      containers:
+        - name: orchestrator
+          image: jarvis/orchestrator:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8083
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "kubernetes"
+            - name: NLP_SERVICE_URL
+              value: "http://nlp-service.jarvis.svc.cluster.local:8082"
+            - name: PC_CONTROL_URL
+              value: "http://pc-control.jarvis.svc.cluster.local:8084"
+            - name: SMART_HOME_URL
+              value: "http://smart-home-service.jarvis.svc.cluster.local:8086"
+            - name: LLM_SERVICE_URL
+              value: "http://llm-service.jarvis.svc.cluster.local:8091"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8083
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8083
+            initialDelaySeconds: 30
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: jarvis
+  labels:
+    app: orchestrator
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8083
+      targetPort: 8083
+      name: http
+  selector:
+    app: orchestrator
+

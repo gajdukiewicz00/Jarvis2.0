@@ -1,0 +1,22 @@
+openapi: 3.0.0
+info:
+  title: Orchestrator Service API
+  version: 1.0.0
+paths:
+  /api/v1/orchestrator/execute:
+    post:
+      summary: Execute a processed command
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                intent:
+                  type: string
+                parameters:
+                  type: object
+      responses:
+        '200':
+          description: Command execution started

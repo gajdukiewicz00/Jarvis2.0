@@ -1,0 +1,62 @@
+server:
+  port: 8093
+
+spring:
+  application:
+    name: memory-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jarvis_memory}
+    username: ${SPRING_DATASOURCE_USERNAME:jarvis}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+# Memory service configuration
+memory:
+  embedding:
+    service-url: ${EMBEDDING_SERVICE_URL:http://localhost:5001}
+    dimension: 384  # multilingual-e5-small
+    timeout-ms: 30000
+  
+  search:
+    top-k: ${MEMORY_TOPK:5}
+    max-tokens: ${MEMORY_MAX_TOKENS:600}
+    min-similarity: 0.5
+  
+  chunking:
+    size: ${CHUNK_SIZE:500}
+    overlap: 50
+    min-size: 100
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+
+# Logging
+logging:
+  level:
+    org.jarvis.memory: INFO
+    org.hibernate.SQL: WARN
+
+
+

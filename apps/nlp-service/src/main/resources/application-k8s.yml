@@ -1,0 +1,38 @@
+# =============================================================================
+# Jarvis 2.0 - NLP Service - Kubernetes Profile
+# =============================================================================
+# Простой сервис для NLP обработки (intent detection, entity extraction)
+# Не требует внешних зависимостей кроме API
+# =============================================================================
+
+server:
+  port: 8082
+
+spring:
+  application:
+    name: nlp-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+# Actuator для K8s probes - разрешаем без аутентификации
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+logging:
+  level:
+    org.jarvis.nlp: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+

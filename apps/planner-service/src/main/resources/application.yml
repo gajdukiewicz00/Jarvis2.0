@@ -1,0 +1,65 @@
+spring:
+  config:
+    import: optional:file:../shared-config/application-hikari.yml
+  
+  application:
+    name: planner-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/jarvis_db}
+    username: ${DB_USER:jarvis}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    # HikariCP configuration imported from application-hikari.yml
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    clean-on-validation-error: false
+    repair-on-migrate: true
+
+server:
+  port: 8092
+
+# External services
+services:
+  life-tracker:
+    url: ${LIFE_TRACKER_URL:http://localhost:8088}
+  analytics:
+    url: ${ANALYTICS_URL:http://localhost:8087}
+  user-profile:
+    url: ${USER_PROFILE_URL:http://localhost:8089}
+  llm-service:
+    url: ${LLM_SERVICE_URL:http://localhost:8091}
+
+# Planner configuration
+planner:
+  task:
+    default-duration: 30  # minutes
+    max-daily-tasks: 8
+  reminder:
+    advance-notification: 15  # minutes before
+  plan:
+    generation-time: "06:00"  # Daily plan generation time
+    work-hours-start: "09:00"
+    work-hours-end: "17:00"
+
+# Logging
+logging:
+  level:
+    org.jarvis.planner: DEBUG
+    org.springframework.web: INFO

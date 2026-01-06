@@ -1,0 +1,170 @@
+apps/user-profile/target/classes/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_user_profile
+apps/user-profile/target/classes/application-docker.yml:21:      ddl-auto: update  # Auto-update schema to add missing columns
+apps/user-profile/target/classes/application.yaml:8:    url: jdbc:postgresql://localhost:5432/jarvis_user_profile
+apps/user-profile/target/classes/application.yaml:11:    driver-class-name: org.postgresql.Driver
+apps/user-profile/target/classes/application.yaml:24:      ddl-auto: validate
+apps/user-profile/target/classes/application.yaml:29:  flyway:
+apps/user-profile/target/classes/application-k8s.yml:13:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_user_profile}
+apps/user-profile/target/classes/application-k8s.yml:16:    driver-class-name: org.postgresql.Driver
+apps/user-profile/target/classes/application-k8s.yml:31:      ddl-auto: update  # Автоматически добавляет недостающие колонки
+apps/user-profile/target/classes/application-k8s.yml:36:  flyway:
+apps/user-profile/target/classes/application-k8s.yml:58:    org.flywaydb: INFO
+apps/user-profile/pom.xml:40:            <groupId>org.postgresql</groupId>
+apps/user-profile/pom.xml:41:            <artifactId>postgresql</artifactId>
+apps/user-profile/pom.xml:45:            <groupId>org.flywaydb</groupId>
+apps/user-profile/pom.xml:46:            <artifactId>flyway-core</artifactId>
+apps/user-profile/pom.xml:49:            <groupId>org.flywaydb</groupId>
+apps/user-profile/pom.xml:50:            <artifactId>flyway-database-postgresql</artifactId>
+apps/user-profile/src/main/resources/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_user_profile
+apps/user-profile/src/main/resources/application-docker.yml:21:      ddl-auto: update  # Auto-update schema to add missing columns
+apps/user-profile/src/main/resources/application.yaml:8:    url: jdbc:postgresql://localhost:5432/jarvis_user_profile
+apps/user-profile/src/main/resources/application.yaml:11:    driver-class-name: org.postgresql.Driver
+apps/user-profile/src/main/resources/application.yaml:24:      ddl-auto: validate
+apps/user-profile/src/main/resources/application.yaml:29:  flyway:
+apps/user-profile/src/main/resources/application-k8s.yml:13:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_user_profile}
+apps/user-profile/src/main/resources/application-k8s.yml:16:    driver-class-name: org.postgresql.Driver
+apps/user-profile/src/main/resources/application-k8s.yml:31:      ddl-auto: update  # Автоматически добавляет недостающие колонки
+apps/user-profile/src/main/resources/application-k8s.yml:36:  flyway:
+apps/user-profile/src/main/resources/application-k8s.yml:58:    org.flywaydb: INFO
+apps/security-service/target/classes/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_security
+apps/security-service/target/classes/application.yml:14:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jarvis_security}
+apps/security-service/target/classes/application.yml:17:    driver-class-name: org.postgresql.Driver
+apps/security-service/target/classes/application.yml:45:      ddl-auto: validate
+apps/security-service/target/classes/application.yml:53:  flyway:
+apps/security-service/target/classes/application.yml:55:    locations: classpath:db/migration
+apps/security-service/target/classes/application-k8s.yml:7:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_security}
+apps/security-service/target/classes/application-k8s.yml:10:    driver-class-name: org.postgresql.Driver
+apps/security-service/target/classes/application-k8s.yml:25:      ddl-auto: validate
+apps/security-service/target/classes/application-k8s.yml:29:  flyway:
+apps/security-service/target/classes/application-k8s.yml:31:    locations: classpath:db/migration
+apps/security-service/pom.xml:33:            <groupId>org.postgresql</groupId>
+apps/security-service/pom.xml:34:            <artifactId>postgresql</artifactId>
+apps/security-service/pom.xml:39:            <groupId>org.flywaydb</groupId>
+apps/security-service/pom.xml:40:            <artifactId>flyway-core</artifactId>
+apps/security-service/pom.xml:44:            <groupId>org.flywaydb</groupId>
+apps/security-service/pom.xml:45:            <artifactId>flyway-database-postgresql</artifactId>
+apps/security-service/src/main/resources/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_security
+apps/security-service/src/main/resources/application.yml:14:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jarvis_security}
+apps/security-service/src/main/resources/application.yml:17:    driver-class-name: org.postgresql.Driver
+apps/security-service/src/main/resources/application.yml:45:      ddl-auto: validate
+apps/security-service/src/main/resources/application.yml:53:  flyway:
+apps/security-service/src/main/resources/application.yml:55:    locations: classpath:db/migration
+apps/security-service/src/main/resources/application-k8s.yml:7:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_security}
+apps/security-service/src/main/resources/application-k8s.yml:10:    driver-class-name: org.postgresql.Driver
+apps/security-service/src/main/resources/application-k8s.yml:25:      ddl-auto: validate
+apps/security-service/src/main/resources/application-k8s.yml:29:  flyway:
+apps/security-service/src/main/resources/application-k8s.yml:31:    locations: classpath:db/migration
+apps/planner-service/target/classes/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_db
+apps/planner-service/target/classes/application-docker.yml:24:  flyway:
+apps/planner-service/target/classes/application.yml:14:    url: ${DB_URL:jdbc:postgresql://localhost:5432/jarvis_db}
+apps/planner-service/target/classes/application.yml:17:    driver-class-name: org.postgresql.Driver
+apps/planner-service/target/classes/application.yml:22:      ddl-auto: validate
+apps/planner-service/target/classes/application.yml:29:  flyway:
+apps/planner-service/target/classes/application-k8s.yml:14:    url: jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_db
+apps/planner-service/target/classes/application-k8s.yml:27:      ddl-auto: validate
+apps/planner-service/target/classes/application-k8s.yml:36:  flyway:
+apps/planner-service/target/classes/application-k8s.yml:43:    # table: flyway_schema_history_planner  # альтернатива - отдельная таблица истории
+apps/planner-service/target/classes/application-k8s.yml:88:    org.flywaydb: INFO
+apps/planner-service/target/classes/db/migration/V3__change_amount_to_decimal.sql:2:-- NOTE: Original migration referenced expense table which belongs to life-tracker
+apps/planner-service/target/classes/db/migration/V3__change_amount_to_decimal.sql:3:-- This migration is intentionally empty to preserve version history
+apps/planner-service/target/classes/db/migration/V3__change_amount_to_decimal.sql:5:-- Empty migration placeholder
+apps/planner-service/pom.xml:46:            <groupId>org.postgresql</groupId>
+apps/planner-service/pom.xml:47:            <artifactId>postgresql</artifactId>
+apps/planner-service/pom.xml:51:            <groupId>org.flywaydb</groupId>
+apps/planner-service/pom.xml:52:            <artifactId>flyway-core</artifactId>
+apps/planner-service/pom.xml:55:            <groupId>org.flywaydb</groupId>
+apps/planner-service/pom.xml:56:            <artifactId>flyway-database-postgresql</artifactId>
+apps/planner-service/src/main/resources/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_db
+apps/planner-service/src/main/resources/application-docker.yml:24:  flyway:
+apps/planner-service/src/main/resources/application.yml:14:    url: ${DB_URL:jdbc:postgresql://localhost:5432/jarvis_db}
+apps/planner-service/src/main/resources/application.yml:17:    driver-class-name: org.postgresql.Driver
+apps/planner-service/src/main/resources/application.yml:22:      ddl-auto: validate
+apps/planner-service/src/main/resources/application.yml:29:  flyway:
+apps/planner-service/src/main/resources/application-k8s.yml:14:    url: jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_db
+apps/planner-service/src/main/resources/application-k8s.yml:27:      ddl-auto: validate
+apps/planner-service/src/main/resources/application-k8s.yml:36:  flyway:
+apps/planner-service/src/main/resources/application-k8s.yml:43:    # table: flyway_schema_history_planner  # альтернатива - отдельная таблица истории
+apps/planner-service/src/main/resources/application-k8s.yml:88:    org.flywaydb: INFO
+apps/planner-service/src/main/resources/db/migration/V3__change_amount_to_decimal.sql:2:-- NOTE: Original migration referenced expense table which belongs to life-tracker
+apps/planner-service/src/main/resources/db/migration/V3__change_amount_to_decimal.sql:3:-- This migration is intentionally empty to preserve version history
+apps/planner-service/src/main/resources/db/migration/V3__change_amount_to_decimal.sql:5:-- Empty migration placeholder
+apps/shared-config/application-hikari.yml:15:# PostgreSQL Configuration (docker/postgres/postgres.conf):
+apps/assistant-core/target/classes/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_assistant_core
+apps/assistant-core/target/classes/application-docker.yml:21:      ddl-auto: update  # Auto-create missing tables
+apps/assistant-core/target/classes/application.yml:13:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jarvis_assistant_core}
+apps/assistant-core/target/classes/application.yml:16:    driver-class-name: org.postgresql.Driver
+apps/assistant-core/target/classes/application.yml:21:      ddl-auto: update
+apps/assistant-core/pom.xml:47:            <groupId>org.postgresql</groupId>
+apps/assistant-core/pom.xml:48:            <artifactId>postgresql</artifactId>
+apps/assistant-core/src/main/resources/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_assistant_core
+apps/assistant-core/src/main/resources/application-docker.yml:21:      ddl-auto: update  # Auto-create missing tables
+apps/assistant-core/src/main/resources/application.yml:13:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jarvis_assistant_core}
+apps/assistant-core/src/main/resources/application.yml:16:    driver-class-name: org.postgresql.Driver
+apps/assistant-core/src/main/resources/application.yml:21:      ddl-auto: update
+apps/life-tracker/target/test-classes/application-test.yml:10:      ddl-auto: create-drop
+apps/life-tracker/target/test-classes/application-test.yml:13:  flyway:
+apps/life-tracker/target/classes/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_db
+apps/life-tracker/target/classes/application-docker.yml:37:      ddl-auto: validate
+apps/life-tracker/target/classes/application-docker.yml:39:  flyway:
+apps/life-tracker/target/classes/application.yaml:15:    url: jdbc:postgresql://localhost:5432/jarvis_db
+apps/life-tracker/target/classes/application.yaml:18:    driver-class-name: org.postgresql.Driver
+apps/life-tracker/target/classes/application.yaml:50:      ddl-auto: validate
+apps/life-tracker/target/classes/application.yaml:60:  flyway:
+apps/life-tracker/target/classes/application.yaml:63:    locations: classpath:db/migration
+apps/life-tracker/target/classes/application.yaml:88:    org.flywaydb: INFO
+apps/life-tracker/target/classes/application-k8s.yml:7:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_db}
+apps/life-tracker/target/classes/application-k8s.yml:10:    driver-class-name: org.postgresql.Driver
+apps/life-tracker/target/classes/application-k8s.yml:25:      ddl-auto: none  # Flyway handles schema
+apps/life-tracker/target/classes/application-k8s.yml:29:  # Flyway enabled for schema migrations
+apps/life-tracker/target/classes/application-k8s.yml:30:  flyway:
+apps/life-tracker/target/classes/application-k8s.yml:33:    locations: classpath:db/migration
+apps/life-tracker/pom.xml:35:            <groupId>org.postgresql</groupId>
+apps/life-tracker/pom.xml:36:            <artifactId>postgresql</artifactId>
+apps/life-tracker/pom.xml:40:            <groupId>org.flywaydb</groupId>
+apps/life-tracker/pom.xml:41:            <artifactId>flyway-core</artifactId>
+apps/life-tracker/pom.xml:44:            <groupId>org.flywaydb</groupId>
+apps/life-tracker/pom.xml:45:            <artifactId>flyway-database-postgresql</artifactId>
+apps/life-tracker/pom.xml:67:            <artifactId>postgresql</artifactId>
+apps/life-tracker/src/test/resources/application-test.yml:10:      ddl-auto: create-drop
+apps/life-tracker/src/test/resources/application-test.yml:13:  flyway:
+apps/life-tracker/src/test/java/org/jarvis/lifetracker/LifeTrackerIntegrationTest.java:41:    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
+apps/life-tracker/src/test/java/org/jarvis/lifetracker/LifeTrackerIntegrationTest.java:48:        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+apps/life-tracker/src/test/java/org/jarvis/lifetracker/LifeTrackerIntegrationTest.java:49:        registry.add("spring.datasource.username", postgres::getUsername);
+apps/life-tracker/src/test/java/org/jarvis/lifetracker/LifeTrackerIntegrationTest.java:50:        registry.add("spring.datasource.password", postgres::getPassword);
+apps/life-tracker/src/test/java/org/jarvis/lifetracker/LifeTrackerIntegrationTest.java:51:        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+apps/life-tracker/src/test/java/org/jarvis/lifetracker/LifeTrackerIntegrationTest.java:52:        registry.add("spring.flyway.enabled", () -> "false");
+apps/life-tracker/src/main/resources/application-docker.yml:6:    url: jdbc:postgresql://postgres:5432/jarvis_db
+apps/life-tracker/src/main/resources/application-docker.yml:37:      ddl-auto: validate
+apps/life-tracker/src/main/resources/application-docker.yml:39:  flyway:
+apps/life-tracker/src/main/resources/application.yaml:15:    url: jdbc:postgresql://localhost:5432/jarvis_db
+apps/life-tracker/src/main/resources/application.yaml:18:    driver-class-name: org.postgresql.Driver
+apps/life-tracker/src/main/resources/application.yaml:50:      ddl-auto: validate
+apps/life-tracker/src/main/resources/application.yaml:60:  flyway:
+apps/life-tracker/src/main/resources/application.yaml:63:    locations: classpath:db/migration
+apps/life-tracker/src/main/resources/application.yaml:88:    org.flywaydb: INFO
+apps/life-tracker/src/main/resources/application-k8s.yml:7:    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_db}
+apps/life-tracker/src/main/resources/application-k8s.yml:10:    driver-class-name: org.postgresql.Driver
+apps/life-tracker/src/main/resources/application-k8s.yml:25:      ddl-auto: none  # Flyway handles schema
+apps/life-tracker/src/main/resources/application-k8s.yml:29:  # Flyway enabled for schema migrations
+apps/life-tracker/src/main/resources/application-k8s.yml:30:  flyway:
+apps/life-tracker/src/main/resources/application-k8s.yml:33:    locations: classpath:db/migration
+./apps/life-tracker/src/main/resources/db/migration/V1__initial_schema.sql
+./apps/life-tracker/src/main/resources/db/migration/V2__add_indexes.sql
+./apps/life-tracker/src/main/resources/db/migration/V3__change_amount_to_decimal.sql
+./apps/life-tracker/target/classes/db/migration/V1__initial_schema.sql
+./apps/life-tracker/target/classes/db/migration/V2__add_indexes.sql
+./apps/life-tracker/target/classes/db/migration/V3__change_amount_to_decimal.sql
+./apps/planner-service/src/main/resources/db/migration/V1__init_planner_schema.sql
+./apps/planner-service/src/main/resources/db/migration/V2__add_indexes.sql
+./apps/planner-service/src/main/resources/db/migration/V3__change_amount_to_decimal.sql
+./apps/planner-service/target/classes/db/migration/V1__init_planner_schema.sql
+./apps/planner-service/target/classes/db/migration/V2__add_indexes.sql
+./apps/planner-service/target/classes/db/migration/V3__change_amount_to_decimal.sql
+./apps/security-service/src/main/resources/db/migration/V1__create_users_table.sql
+./apps/security-service/target/classes/db/migration/V1__create_users_table.sql
+./apps/user-profile/src/main/resources/db/migration/V1__create_user_profile_tables.sql
+./apps/user-profile/src/main/resources/db/migration/V2__add_deadline_column.sql
+./apps/user-profile/src/main/resources/db/migration/V3__add_personality_tables.sql
+./apps/user-profile/target/classes/db/migration/V1__create_user_profile_tables.sql
+./apps/user-profile/target/classes/db/migration/V2__add_deadline_column.sql
+./apps/user-profile/target/classes/db/migration/V3__add_personality_tables.sql

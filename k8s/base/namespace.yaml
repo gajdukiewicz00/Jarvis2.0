@@ -1,0 +1,12 @@
+# =============================================================================
+# Jarvis 2.0 - Kubernetes Namespace
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jarvis
+  labels:
+    app.kubernetes.io/name: jarvis
+    app.kubernetes.io/part-of: jarvis
+    app.kubernetes.io/version: "2.0"
+

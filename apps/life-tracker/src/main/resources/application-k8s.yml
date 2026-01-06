@@ -1,0 +1,82 @@
+# =============================================================================
+# Jarvis 2.0 - Life Tracker - Kubernetes Profile
+# =============================================================================
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/jarvis_db}
+    username: ${SPRING_DATASOURCE_USERNAME:jarvis}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1200000
+      keepalive-time: 300000
+      validation-timeout: 5000
+      connection-test-query: SELECT 1
+      initialization-fail-timeout: -1
+      pool-name: life-tracker-k8s-pool
+
+  jpa:
+    hibernate:
+      ddl-auto: none  # Flyway handles schema
+    show-sql: false
+    open-in-view: false
+
+  # Flyway enabled for schema migrations
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    schemas: public
+
+  # Kafka producer для событий
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
+# Kafka topics
+jarvis:
+  kafka:
+    topics:
+      expenses: ${KAFKA_TOPIC_EXPENSES:jarvis.events.expenses}
+      time-tracking: ${KAFKA_TOPIC_TIME_TRACKING:jarvis.events.time-tracking}
+      calendar: ${KAFKA_TOPIC_CALENDAR:jarvis.events.calendar}
+  features:
+    kafka-events: ${FEATURE_KAFKA_EVENTS:false}
+
+# Actuator для K8s probes
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    db:
+      enabled: true
+    kafka:
+      enabled: false  # Kafka отключена в dev - не падать при недоступности
+
+logging:
+  level:
+    org.jarvis.lifetracker: INFO
+    org.apache.kafka: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+

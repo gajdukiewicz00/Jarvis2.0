@@ -1,0 +1,161 @@
+# =============================================================================
+# Jarvis 2.0 - PostgreSQL StatefulSet (Prod-like Profile - Primary + Replica)
+# =============================================================================
+# Для prod-like среды: primary + streaming replica
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: jarvis
+  labels:
+    app: postgres
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: jarvis
+    profile: prod-like
+spec:
+  serviceName: postgres-headless
+  replicas: 2  # 1 primary + 1 replica
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: jarvis
+    spec:
+      initContainers:
+        # Init container для определения роли (primary/replica)
+        - name: init-postgres
+          image: postgres:16-alpine
+          command:
+            - bash
+            - -c
+            - |
+              set -ex
+              # Определяем порядковый номер пода
+              [[ $(hostname) =~ -([0-9]+)$ ]] || exit 1
+              ordinal=${BASH_REMATCH[1]}
+              
+              if [[ $ordinal -eq 0 ]]; then
+                echo "primary" > /etc/postgres-role/role
+                echo "This is PRIMARY"
+              else
+                echo "replica" > /etc/postgres-role/role
+                echo "This is REPLICA"
+              fi
+          volumeMounts:
+            - name: postgres-role
+              mountPath: /etc/postgres-role
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              value: "jarvis"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # Replication settings
+            - name: POSTGRES_REPLICATION_USER
+              value: "replicator"
+            - name: POSTGRES_REPLICATION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              set -ex
+              ROLE=$(cat /etc/postgres-role/role)
+              
+              if [[ "$ROLE" == "primary" ]]; then
+                # Primary: запускаем как обычно
+                docker-entrypoint.sh postgres \
+                  -c wal_level=replica \
+                  -c max_wal_senders=3 \
+                  -c max_replication_slots=3 \
+                  -c hot_standby=on
+              else
+                # Replica: ждём primary и делаем pg_basebackup
+                until pg_isready -h postgres-0.postgres-headless -U $POSTGRES_USER; do
+                  echo "Waiting for primary..."
+                  sleep 2
+                done
+                
+                if [ ! -s "$PGDATA/PG_VERSION" ]; then
+                  pg_basebackup -h postgres-0.postgres-headless -U $POSTGRES_USER \
+                    -D $PGDATA -Fp -Xs -P -R
+                fi
+                
+                postgres -c hot_standby=on
+              fi
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+            - name: postgres-role
+              mountPath: /etc/postgres-role
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - jarvis
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - jarvis
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+        - name: postgres-role
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+

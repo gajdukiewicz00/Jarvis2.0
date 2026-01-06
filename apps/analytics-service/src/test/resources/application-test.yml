@@ -1,0 +1,16 @@
+# Test profile configuration for analytics-service
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+jarvis:
+  life-tracker:
+    url: http://localhost:8085
+
+logging:
+  level:
+    org.jarvis: DEBUG
+    feign: DEBUG
+

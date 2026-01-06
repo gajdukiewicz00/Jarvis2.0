@@ -1,0 +1,49 @@
+# =============================================================================
+# LLM Service - Docker/Kubernetes Profile
+# =============================================================================
+spring:
+  application:
+    name: llm-service
+
+# LLM Server connection
+llm:
+  base-url: ${LLM_SERVER_URL:http://llm-server:5000}
+  timeouts:
+    connect-ms: ${LLM_CONNECT_TIMEOUT_MS:5000}
+    read-ms: ${LLM_READ_TIMEOUT_MS:600000}  # 10 min for long generations
+  health:
+    timeouts:
+      connect-ms: ${LLM_HEALTH_CONNECT_TIMEOUT_MS:2000}
+      read-ms: ${LLM_HEALTH_READ_TIMEOUT_MS:5000}
+  budget:
+    system-prompt: ${LLM_BUDGET_SYSTEM:500}
+    memory-context: ${LLM_BUDGET_MEMORY:600}
+    history: ${LLM_BUDGET_HISTORY:1400}
+    total: ${LLM_BUDGET_TOTAL:3500}
+
+# Long-term memory integration
+memory:
+  enabled: ${MEMORY_ENABLED:true}
+  service:
+    url: ${MEMORY_SERVICE_URL:http://memory-service:8093}
+    enabled: ${MEMORY_SERVICE_ENABLED:true}
+  search:
+    top-k: ${MEMORY_TOPK:5}
+    max-tokens: ${MEMORY_MAX_TOKENS:600}
+
+# External services
+services:
+  user-profile:
+    base-url: ${USER_PROFILE_URL:http://user-profile:8089}
+    enabled: ${USER_PROFILE_ENABLED:false}
+    timeouts:
+      connect-ms: 3000
+      read-ms: 5000
+  pc-control:
+    base-url: ${PC_CONTROL_URL:http://pc-control:8084}
+    enabled: ${PC_CONTROL_ENABLED:false}
+
+logging:
+  level:
+    org.jarvis.llm: ${LOG_LEVEL:INFO}
+    org.jarvis.llm.client: INFO

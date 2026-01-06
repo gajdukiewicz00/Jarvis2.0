@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Jarvis Logs
+Comment=View Jarvis Kubernetes service logs and status
+Exec=gnome-terminal --title="Jarvis Logs" -- bash -c "cd /home/kwaqa/IdeaProjects/Jarvis2.0 && ./jarvis-logs.sh; exec bash"
+Icon=/home/kwaqa/IdeaProjects/Jarvis2.0/icons/jarvis-icon.png
+Terminal=false
+Categories=Utility;Development;System;
+StartupNotify=true
+Keywords=jarvis;logs;kubernetes;k8s;debug;monitoring;

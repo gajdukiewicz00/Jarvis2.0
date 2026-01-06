@@ -1,0 +1,7 @@
+# Development profile for voice-gateway
+# Activate with: SPRING_PROFILES_ACTIVE=dev
+
+logging:
+  level:
+    org.jarvis.voicegateway: DEBUG
+

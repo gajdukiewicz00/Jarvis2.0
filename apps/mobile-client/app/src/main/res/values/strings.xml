@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">Jarvis Voice Assistant</string>
+    <string name="status_ready">Ready</string>
+    <string name="status_listening">Listening...</string>
+    <string name="status_processing">Processing...</string>
+    <string name="status_error">Error</string>
+
+    <!-- Buttons -->
+    <string name="button_speak">Speak</string>
+    <string name="button_stop">Stop</string>
+    <string name="button_settings">Settings</string>
+
+    <!-- Messages -->
+    <string name="message_connecting">Connecting to server...</string>
+    <string name="message_connected">Connected</string>
+    <string name="message_disconnected">Disconnected</string>
+    <string name="error_connection">Connection error: %s</string>
+    <string name="error_server">Server error: %s</string>
+    <string name="error_no_permission">Microphone permission required</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_server_url">Server URL</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_cancel">Cancel</string>
+
+    <!-- Languages -->
+    <string name="language_english">English</string>
+    <string name="language_polish">Polski</string>
+    <string name="language_russian">Русский</string>
+</resources>

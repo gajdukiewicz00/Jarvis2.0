@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+<?import javafx.scene.text.Text?>
+
+<BorderPane xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" 
+            fx:controller="org.jarvis.desktop.controller.LoginController"
+            prefHeight="500.0" prefWidth="600.0" styleClass="login-container"
+            stylesheets="@../css/login.css">
+    
+    <!-- Header -->
+    <top>
+        <VBox alignment="CENTER" spacing="10" styleClass="login-header">
+            <padding>
+                <Insets top="40" bottom="20"/>
+            </padding>
+            <Text text="JARVIS 2.0" styleClass="login-title">
+                <font>
+                    <Font name="System Bold" size="36"/>
+                </font>
+            </Text>
+            <Text text="Умный персональный ассистент" styleClass="login-subtitle">
+                <font>
+                    <Font size="14"/>
+                </font>
+            </Text>
+        </VBox>
+    </top>
+    
+    <!-- Center - Login/Register Form -->
+    <center>
+        <VBox alignment="CENTER" spacing="20" styleClass="login-form-container">
+            <padding>
+                <Insets left="80" right="80" top="20" bottom="20"/>
+            </padding>
+            
+            <!-- Tab Pane for Login/Register -->
+            <TabPane fx:id="tabPane" tabClosingPolicy="UNAVAILABLE">
+                
+                <!-- Login Tab -->
+                <Tab text="Вход">
+                    <VBox spacing="15" alignment="CENTER">
+                        <padding>
+                            <Insets top="20" bottom="20" left="40" right="40"/>
+                        </padding>
+                        
+                        <VBox spacing="5">
+                            <Label text="Имя пользователя:" styleClass="form-label"/>
+                            <TextField fx:id="loginUsername" promptText="Введите имя пользователя" 
+                                      styleClass="form-input" prefWidth="300"/>
+                        </VBox>
+                        
+                        <VBox spacing="5">
+                            <Label text="Пароль:" styleClass="form-label"/>
+                            <PasswordField fx:id="loginPassword" promptText="Введите пароль" 
+                                          styleClass="form-input" prefWidth="300"/>
+                        </VBox>
+                        
+                        <Label fx:id="loginError" styleClass="error-label" visible="false" 
+                               textFill="red" wrapText="true"/>
+                        
+                        <Button fx:id="loginButton" text="Войти" onAction="#handleLogin" 
+                                styleClass="primary-button" prefWidth="300" prefHeight="40">
+                            <font>
+                                <Font size="14" name="System Bold"/>
+                            </font>
+                        </Button>
+                    </VBox>
+                </Tab>
+                
+                <!-- Register Tab -->
+                <Tab text="Регистрация">
+                    <VBox spacing="15" alignment="CENTER">
+                        <padding>
+                            <Insets top="20" bottom="20" left="40" right="40"/>
+                        </padding>
+                        
+                        <VBox spacing="5">
+                            <Label text="Имя пользователя:" styleClass="form-label"/>
+                            <TextField fx:id="registerUsername" promptText="Выберите имя пользователя" 
+                                      styleClass="form-input" prefWidth="300"/>
+                        </VBox>
+                        
+                        <VBox spacing="5">
+                            <Label text="Пароль:" styleClass="form-label"/>
+                            <PasswordField fx:id="registerPassword" promptText="Введите пароль" 
+                                          styleClass="form-input" prefWidth="300"/>
+                        </VBox>
+                        
+                        <VBox spacing="5">
+                            <Label text="Подтверждение пароля:" styleClass="form-label"/>
+                            <PasswordField fx:id="registerPasswordConfirm" promptText="Повторите пароль" 
+                                          styleClass="form-input" prefWidth="300"/>
+                        </VBox>
+                        
+                        <Label fx:id="registerError" styleClass="error-label" visible="false" 
+                               textFill="red" wrapText="true"/>
+                        
+                        <Button fx:id="registerButton" text="Зарегистрироваться" onAction="#handleRegister" 
+                                styleClass="primary-button" prefWidth="300" prefHeight="40">
+                            <font>
+                                <Font size="14" name="System Bold"/>
+                            </font>
+                        </Button>
+                    </VBox>
+                </Tab>
+            </TabPane>
+        </VBox>
+    </center>
+    
+    <!-- Footer -->
+    <bottom>
+        <HBox alignment="CENTER" styleClass="login-footer">
+            <padding>
+                <Insets top="10" bottom="20"/>
+            </padding>
+            <Text text="© 2024 Jarvis AI Assistant" styleClass="footer-text">
+                <font>
+                    <Font size="11"/>
+                </font>
+            </Text>
+        </HBox>
+    </bottom>
+</BorderPane>

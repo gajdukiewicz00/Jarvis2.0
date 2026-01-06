@@ -1,0 +1,18 @@
+security:
+  # Command whitelist - only these actions are allowed
+  allowed-actions:
+    - VOLUME_UP
+    - VOLUME_DOWN
+    - VOLUME_MUTE
+    - LAUNCH_APP
+    - MEDIA_CONTROL
+    - TIMER_START
+    - TIMER_STOP
+  
+  # Blocked dangerous actions (for documentation)
+  # These are NOT allowed:
+  # - SHUTDOWN
+  # - REBOOT
+  # - DELETE_FILES
+  # - INSTALL_APP
+  # - MODIFY_SYSTEM

@@ -1,0 +1,138 @@
+# =============================================================================
+# Jarvis 2.0 - Smart Home Service (Dev Profile)
+# =============================================================================
+# IoT device control via MQTT
+# RabbitMQ consumer для smart-home.commands
+# Kafka producer для событий
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-home-service
+  namespace: jarvis
+  labels:
+    app: smart-home-service
+    app.kubernetes.io/name: smart-home-service
+    app.kubernetes.io/part-of: jarvis
+    tier: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smart-home-service
+  template:
+    metadata:
+      labels:
+        app: smart-home-service
+        app.kubernetes.io/name: smart-home-service
+        app.kubernetes.io/part-of: jarvis
+        tier: backend
+    spec:
+      containers:
+        - name: smart-home-service
+          image: jarvis/smart-home-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8086
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: SPRING_PROFILES_ACTIVE
+            # MQTT (Mosquitto) - пока оставляем внешним
+            - name: MQTT_BROKER_URL
+              value: "tcp://mosquitto.jarvis.svc.cluster.local:1883"
+            # RabbitMQ
+            - name: SPRING_RABBITMQ_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: RABBITMQ_HOST
+            - name: SPRING_RABBITMQ_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: RABBITMQ_PORT
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_RABBITMQ_USERNAME
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_RABBITMQ_PASSWORD
+            - name: SPRING_RABBITMQ_VIRTUAL_HOST
+              value: "jarvis"
+            # Queue
+            - name: RABBITMQ_QUEUE_SMART_HOME
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: RABBITMQ_QUEUE_SMART_HOME
+            # Kafka
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: KAFKA_BOOTSTRAP_SERVERS
+            - name: KAFKA_TOPIC_SMART_HOME
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: KAFKA_TOPIC_SMART_HOME
+            # Feature flag
+            - name: FEATURE_RABBITMQ_SMART_HOME
+              valueFrom:
+                configMapKeyRef:
+                  name: jarvis-config
+                  key: FEATURE_RABBITMQ_SMART_HOME
+            # Security
+            - name: SECURITY_ALLOWED_ACTIONS
+              value: "TURN_ON,TURN_OFF,DIM,BRIGHTEN,SET_COLOR,SET_TEMPERATURE,LOCK,UNLOCK"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8086
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8086
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smart-home-service
+  namespace: jarvis
+  labels:
+    app: smart-home-service
+    app.kubernetes.io/name: smart-home-service
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8086
+      targetPort: 8086
+      protocol: TCP
+      name: http
+  selector:
+    app: smart-home-service
+

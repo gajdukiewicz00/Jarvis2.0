@@ -1,0 +1,15 @@
+== BUILD HEALTH QUICK ==
+--- building apps/analytics-service ---
+--- building apps/api-gateway ---
+--- building apps/assistant-core ---
+--- building apps/desktop-client-javafx ---
+--- building apps/life-tracker ---
+--- building apps/llm-service ---
+--- building apps/nlp-service ---
+--- building apps/orchestrator ---
+--- building apps/pc-control ---
+--- building apps/planner-service ---
+--- building apps/security-service ---
+--- building apps/smart-home-service ---
+--- building apps/user-profile ---
+--- building apps/voice-gateway ---

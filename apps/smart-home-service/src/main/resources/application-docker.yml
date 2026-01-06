@@ -1,0 +1,17 @@
+# Docker profile for smart-home-service
+# Activate with: SPRING_PROFILES_ACTIVE=docker
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+security:
+  allowed-actions: TURN_ON,TURN_OFF,DIM,BRIGHTEN,SET_COLOR,SET_TEMPERATURE,LOCK,UNLOCK
+
+mqtt:
+  broker-url: tcp://mosquitto:1883  # Docker service name
+
+

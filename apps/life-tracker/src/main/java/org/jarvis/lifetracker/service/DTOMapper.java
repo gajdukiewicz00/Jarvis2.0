@@ -1,0 +1,52 @@
+package org.jarvis.lifetracker.service;
+
+import org.jarvis.lifetracker.domain.CalendarEvent;
+import org.jarvis.lifetracker.domain.Expense;
+import org.jarvis.lifetracker.domain.TimeRecord;
+import org.jarvis.lifetracker.dto.CalendarEventDTO;
+import org.jarvis.lifetracker.dto.ExpenseDTO;
+import org.jarvis.lifetracker.dto.TimeRecordDTO;
+import org.springframework.stereotype.Service;
+
+/**
+ * Maps between domain entities and DTOs
+ */
+@Service
+public class DTOMapper {
+
+    public ExpenseDTO toDTO(Expense entity) {
+        if (entity == null)
+            return null;
+        return new ExpenseDTO(
+                entity.getId(),
+                entity.getAmount(),
+                entity.getCurrency(),
+                entity.getCategory(),
+                entity.getDescription(),
+                entity.getDate());
+    }
+
+    public TimeRecordDTO toDTO(TimeRecord entity) {
+        if (entity == null)
+            return null;
+        return new TimeRecordDTO(
+                entity.getId(),
+                entity.getActivity(),
+                entity.getCategory(),
+                entity.getStartTime(),
+                entity.getEndTime(),
+                entity.getDurationSeconds());
+    }
+
+    public CalendarEventDTO toDTO(CalendarEvent entity) {
+        if (entity == null)
+            return null;
+        return new CalendarEventDTO(
+                entity.getId(),
+                entity.getTitle(),
+                entity.getDescription(),
+                entity.getStartTime(),
+                entity.getEndTime(),
+                entity.isAllDay());
+    }
+}

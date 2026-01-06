@@ -1,0 +1,88 @@
+# PC Control Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pc-control
+  namespace: jarvis
+  labels:
+    app: pc-control
+    app.kubernetes.io/name: pc-control
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pc-control
+  template:
+    metadata:
+      labels:
+        app: pc-control
+    spec:
+      containers:
+        - name: pc-control
+          image: jarvis/pc-control:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8084
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "kubernetes"
+            - name: PULSE_SERVER
+              value: "unix:/run/user/1000/pulse/native"
+            - name: DISPLAY
+              value: ":0"
+          volumeMounts:
+            - name: pulse-socket
+              mountPath: /run/user/1000/pulse
+            - name: x11-socket
+              mountPath: /tmp/.X11-unix
+          securityContext:
+            privileged: true
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8084
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8084
+            initialDelaySeconds: 30
+            periodSeconds: 5
+      volumes:
+        - name: pulse-socket
+          hostPath:
+            path: /run/user/1000/pulse
+            type: Directory
+        - name: x11-socket
+          hostPath:
+            path: /tmp/.X11-unix
+            type: Directory
+      # Run on host for audio/display access
+      hostNetwork: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pc-control
+  namespace: jarvis
+  labels:
+    app: pc-control
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8084
+      targetPort: 8084
+      name: http
+  selector:
+    app: pc-control
+

@@ -1,0 +1,28 @@
+# Docker profile for api-gateway
+# Activate with: SPRING_PROFILES_ACTIVE=docker
+
+services:
+  voice-gateway:
+    url: http://voice-gateway:8081
+  nlp-service:
+    url: http://nlp-service:8082
+  orchestrator:
+    url: http://orchestrator:8083
+  pc-control:
+    url: http://pc-control:8084
+  life-tracker:
+    url: http://life-tracker:8085
+  smart-home:
+    url: http://smart-home-service:8086
+  analytics:
+    url: http://analytics-service:8087
+  security:
+    url: http://security-service:8088
+  llm:
+    url: http://llm-service:8091
+
+# CORS configuration for Docker environment
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:8080
+  allowed-methods: GET,POST,PUT,DELETE,PATCH,OPTIONS
+  allowed-headers: "*"

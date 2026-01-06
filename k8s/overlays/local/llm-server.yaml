@@ -1,0 +1,153 @@
+# =============================================================================
+# LLM Server Deployment - GPU-enabled (RTX 5070, 12GB VRAM)
+# =============================================================================
+# Runs llama.cpp backend by default for optimal VRAM usage
+# Model: h2ogpt-7b-chat-q4_k_m.gguf (Q4_K_M quantization)
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-server
+  namespace: jarvis
+  labels:
+    app: llm-server
+    app.kubernetes.io/name: llm-server
+    app.kubernetes.io/component: inference
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # GPU resources can't be shared during rolling update
+  selector:
+    matchLabels:
+      app: llm-server
+  template:
+    metadata:
+      labels:
+        app: llm-server
+        app.kubernetes.io/name: llm-server
+    spec:
+      # GPU scheduling (Stage: perf/hardware)
+      # Tolerations for GPU nodes (if cluster uses taints)
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: llm-server
+          image: jarvis/llm-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+              name: http
+          env:
+            # Backend selection (llamacpp = GGUF, lighter on VRAM)
+            - name: LLM_BACKEND
+              value: "llamacpp"
+            - name: DEVICE
+              value: "cuda"
+            # Explicit GPU flags (Stage: perf/hardware)
+            - name: LLM_DEVICE
+              value: "gpu"
+            - name: ENABLE_GPU
+              value: "true"
+            # Model paths
+            - name: MODEL_PATH
+              value: "/models/h2ogpt-4096-llama2-7b-chat"
+            - name: GGUF_MODEL_PATH
+              value: "/models/h2ogpt-7b-chat-q4_k_m.gguf"
+            # llama.cpp settings for 12GB VRAM
+            - name: N_GPU_LAYERS
+              value: "35"  # Safe default, ~8GB VRAM usage
+            - name: N_CTX
+              value: "4096"
+            - name: N_BATCH
+              value: "512"
+            # Generation settings
+            - name: MAX_NEW_TOKENS
+              value: "700"
+            - name: MAX_GENERATION_SECONDS
+              value: "120"
+            - name: TEMPERATURE
+              value: "0.7"
+            # Performance
+            - name: ENABLE_STREAMING
+              value: "true"
+            - name: ENABLE_WARMUP
+              value: "true"
+            # Logging
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: VERBOSE_LLAMACPP
+              value: "false"
+          resources:
+            requests:
+              cpu: "2"
+              memory: "8Gi"
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "8"
+              memory: "14Gi"
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: llm-models
+              mountPath: /models
+              readOnly: true
+          # Startup probe - model loading can take 2-5 minutes
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30  # 5 minutes max
+          # Readiness - only ready when model is loaded
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Liveness - check if server is responding
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: llm-models
+          persistentVolumeClaim:
+            claimName: llm-models-pvc
+      # Prefer nodes with GPU
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu.present
+                    operator: In
+                    values:
+                      - "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-server
+  namespace: jarvis
+  labels:
+    app: llm-server
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-server
+  ports:
+    - name: http
+      port: 5000
+      targetPort: 5000
+

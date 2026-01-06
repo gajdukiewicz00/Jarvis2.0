@@ -1,0 +1,241 @@
+# =============================================================================
+# Jarvis 2.0 - RabbitMQ ConfigMap (Dev Profile)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-config
+  namespace: jarvis
+  labels:
+    app: rabbitmq
+    app.kubernetes.io/name: rabbitmq-config
+    app.kubernetes.io/part-of: jarvis
+data:
+  # ==========================================================================
+  # RabbitMQ Configuration
+  # ==========================================================================
+  10-defaults.conf: |
+    ## Jarvis 2.0 RabbitMQ Configuration (Dev)
+    
+    ## Networking
+    listeners.tcp.default = 5672
+    management.tcp.port = 15672
+    
+    ## Memory
+    vm_memory_high_watermark.relative = 0.7
+    vm_memory_high_watermark_paging_ratio = 0.5
+    
+    ## Disk
+    disk_free_limit.absolute = 1GB
+    
+    ## Logging
+    log.console = true
+    log.console.level = info
+    
+    ## Default vhost
+    default_vhost = jarvis
+    
+    ## Management - загружаем definitions из смонтированного ConfigMap
+    management.load_definitions = /etc/rabbitmq/conf.d/definitions.json
+
+  # ==========================================================================
+  # Definitions (Exchanges, Queues, Bindings)
+  # ==========================================================================
+  # ==========================================================================
+  # Definitions (Users, Exchanges, Queues, Bindings)
+  # ВАЖНО: Пользователь jarvis создаётся здесь с plaintext паролем (для dev).
+  # В production используйте hashed password или внешний secrets manager.
+  # ==========================================================================
+  definitions.json: |
+    {
+      "vhosts": [
+        {"name": "jarvis"}
+      ],
+      "users": [
+        {
+          "name": "jarvis",
+          "password": "rabbitmq-k8s-password-change-me",
+          "tags": "administrator"
+        }
+      ],
+      "permissions": [
+        {
+          "user": "jarvis",
+          "vhost": "jarvis",
+          "configure": ".*",
+          "write": ".*",
+          "read": ".*"
+        }
+      ],
+      "exchanges": [
+        {
+          "name": "jarvis.commands",
+          "vhost": "jarvis",
+          "type": "topic",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "jarvis.rpc",
+          "vhost": "jarvis",
+          "type": "direct",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "jarvis.events",
+          "vhost": "jarvis",
+          "type": "topic",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "jarvis.dlx",
+          "vhost": "jarvis",
+          "type": "topic",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        }
+      ],
+      "queues": [
+        {
+          "name": "pc-control.commands",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {
+            "x-dead-letter-exchange": "jarvis.dlx",
+            "x-dead-letter-routing-key": "dlq.pc-control"
+          }
+        },
+        {
+          "name": "smart-home.commands",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {
+            "x-dead-letter-exchange": "jarvis.dlx",
+            "x-dead-letter-routing-key": "dlq.smart-home"
+          }
+        },
+        {
+          "name": "voice.commands",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {
+            "x-dead-letter-exchange": "jarvis.dlx",
+            "x-dead-letter-routing-key": "dlq.voice"
+          }
+        },
+        {
+          "name": "assistant-core.commands",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {
+            "x-dead-letter-exchange": "jarvis.dlx",
+            "x-dead-letter-routing-key": "dlq.assistant"
+          }
+        },
+        {
+          "name": "dlq.pc-control",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "dlq.smart-home",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "dlq.voice",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        },
+        {
+          "name": "dlq.assistant",
+          "vhost": "jarvis",
+          "durable": true,
+          "auto_delete": false,
+          "arguments": {}
+        }
+      ],
+      "bindings": [
+        {
+          "source": "jarvis.commands",
+          "vhost": "jarvis",
+          "destination": "pc-control.commands",
+          "destination_type": "queue",
+          "routing_key": "pc.control.#",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.commands",
+          "vhost": "jarvis",
+          "destination": "smart-home.commands",
+          "destination_type": "queue",
+          "routing_key": "smarthome.#",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.commands",
+          "vhost": "jarvis",
+          "destination": "voice.commands",
+          "destination_type": "queue",
+          "routing_key": "voice.#",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.commands",
+          "vhost": "jarvis",
+          "destination": "assistant-core.commands",
+          "destination_type": "queue",
+          "routing_key": "assistant.#",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.dlx",
+          "vhost": "jarvis",
+          "destination": "dlq.pc-control",
+          "destination_type": "queue",
+          "routing_key": "dlq.pc-control",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.dlx",
+          "vhost": "jarvis",
+          "destination": "dlq.smart-home",
+          "destination_type": "queue",
+          "routing_key": "dlq.smart-home",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.dlx",
+          "vhost": "jarvis",
+          "destination": "dlq.voice",
+          "destination_type": "queue",
+          "routing_key": "dlq.voice",
+          "arguments": {}
+        },
+        {
+          "source": "jarvis.dlx",
+          "vhost": "jarvis",
+          "destination": "dlq.assistant",
+          "destination_type": "queue",
+          "routing_key": "dlq.assistant",
+          "arguments": {}
+        }
+      ]
+    }
+

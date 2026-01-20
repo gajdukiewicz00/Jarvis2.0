@@ -27,7 +27,7 @@
 ### 4. Стандартные домены
 - ✅ `api.jarvis.local` — API Gateway
 - ✅ `voice.jarvis.local` — Voice Gateway
-- ✅ Launcher добавляет их в `/etc/hosts` (127.0.0.1)
+- ✅ Скрипт добавляет их в `/etc/hosts` (IP хоста)
 
 ### 5. UI не отключает SSL verification
 - ✅ Desktop client использует HTTPS БЕЗ `-k` / `trust-all`
@@ -58,22 +58,22 @@ Backend Services (ClusterIP, HTTP)
 
 ### 1. Генерация CA и certs
 
-**Скрипт:** `scripts/generate-tls-ca.sh`
+**Скрипт:** `scripts/product/jarvis-generate-certs.sh`
 
 ```bash
 #!/bin/bash
 # Генерирует:
-# - CA private key: ~/.jarvis/ca/jarvis-ca.key
-# - CA certificate: ~/.jarvis/ca/jarvis-ca.crt
-# - Server private key: ~/.jarvis/ca/jarvis-server.key
-# - Server certificate: ~/.jarvis/ca/jarvis-server.crt (CN=api.jarvis.local, SAN=voice.jarvis.local)
+# - CA private key: ~/.jarvis/tls/jarvis-ca.key
+# - CA certificate: ~/.jarvis/tls/jarvis-ca.crt
+# - Server private key: ~/.jarvis/tls/jarvis.key
+# - Server certificate: ~/.jarvis/tls/jarvis.crt (CN=api.jarvis.local, SAN=voice.jarvis.local)
 ```
 
 ### 2. Установка CA в trust store
 
 ```bash
 # Копировать CA в trust store
-sudo cp ~/.jarvis/ca/jarvis-ca.crt /usr/local/share/ca-certificates/jarvis-ca.crt
+sudo cp ~/.jarvis/tls/jarvis-ca.crt /usr/local/share/ca-certificates/jarvis-ca.crt
 sudo update-ca-certificates
 ```
 
@@ -81,8 +81,7 @@ sudo update-ca-certificates
 
 ```bash
 # Добавить в /etc/hosts (требует sudo)
-echo "127.0.0.1 api.jarvis.local" | sudo tee -a /etc/hosts
-echo "127.0.0.1 voice.jarvis.local" | sudo tee -a /etc/hosts
+sudo ./scripts/product/jarvis-setup-hosts.sh
 ```
 
 ### 4. Kubernetes Secret
@@ -188,8 +187,8 @@ echo | openssl s_client -connect api.jarvis.local:443 \
 ## 📋 DoD (Iteration 7) - Чёткие критерии
 
 ### 1. Домены настроены
-- ✅ `api.jarvis.local` добавлен в `/etc/hosts` (127.0.0.1)
-- ✅ `voice.jarvis.local` добавлен в `/etc/hosts` (127.0.0.1)
+- ✅ `api.jarvis.local` добавлен в `/etc/hosts` (IP хоста)
+- ✅ `voice.jarvis.local` добавлен в `/etc/hosts` (IP хоста)
 - ✅ Проверка: `grep "jarvis.local" /etc/hosts` показывает оба домена
 
 ### 2. TLS Secret в Kubernetes
@@ -239,4 +238,3 @@ echo | openssl s_client -connect api.jarvis.local:443 \
 - [ ] HTTP → HTTPS redirect работает
 - [ ] Desktop client НЕ отключает SSL verification
 - [ ] HTTP только для readiness/liveness внутри кластера
-

@@ -1,26 +1,27 @@
 # =============================================================================
 # Jarvis LLM Server - Multi-backend (Transformers + llama.cpp)
-# Supports: NVIDIA CUDA 12.8, RTX 5070 (12GB VRAM)
+# Supports: NVIDIA CUDA 12.4, RTX 5070 (12GB VRAM)
 # =============================================================================
-FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 WORKDIR /app
 
 # Build arguments
 ARG INSTALL_LLAMACPP=true
-ARG CUDA_VERSION=cu128
+ARG CUDA_VERSION=cu124
+ENV CUDA_VERSION=cu124
 
 # System dependencies + Python 3.10
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip python3-dev \
-    curl build-essential cmake \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install PyTorch with CUDA 12.8
+# Install PyTorch with CUDA 12.4
 RUN python3 -m pip install -U pip && \
     python3 -m pip install --no-cache-dir \
       --index-url https://download.pytorch.org/whl/${CUDA_VERSION} \
-      torch==2.7.1+${CUDA_VERSION}
+      torch==2.6.0+${CUDA_VERSION}
 
 # Sanity check: print torch version and CUDA availability
 # NOTE: cuda.is_available() returns False during build (no GPU access)
@@ -31,15 +32,15 @@ RUN python3 -c "import torch; print('torch version:', torch.__version__); print(
 COPY requirements.txt .
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
-# Conditionally install llama-cpp-python with CUDA support
+# Install llama-cpp-python with CUDA wheel (no source build)
 RUN if [ "$INSTALL_LLAMACPP" = "true" ]; then \
-    echo "Installing llama-cpp-python with CUDA support..." && \
-    CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 \
-    python3 -m pip install --no-cache-dir llama-cpp-python==0.3.4 \
-      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/${CUDA_VERSION}; \
-    else \
+    echo "Installing llama-cpp-python CUDA wheel (cu124)" && \
+    python3 -m pip install --no-cache-dir \
+      llama-cpp-python==0.3.4 \
+      --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 ; \
+  else \
     echo "Skipping llama-cpp-python installation"; \
-    fi
+  fi
 
 # Copy application
 COPY app/ ./app/

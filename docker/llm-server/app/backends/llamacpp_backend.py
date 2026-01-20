@@ -37,7 +37,7 @@ class LlamaCppBackend(LLMBackend):
         if not LLAMA_CPP_AVAILABLE:
             raise ImportError(
                 "llama-cpp-python is not installed. "
-                "Install with: pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu128"
+                "Install with: pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124"
             )
         
         self.model_path = model_path
@@ -213,6 +213,5 @@ class LlamaCppBackend(LLMBackend):
             self._model_info = {}
         
         logger.info("Model unloaded")
-
 
 

@@ -5,10 +5,12 @@
 # =============================================================================
 # Wrapper for JavaFX launcher JAR.
 # Ensures proper Java environment and logging.
-# Used by .desktop file to launch Jarvis without terminal.
+# Used by desktop entry to launch Jarvis without terminal.
 # =============================================================================
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Lock file to prevent double launch
 JARVIS_HOME="${HOME}/.jarvis"
@@ -46,6 +48,17 @@ log "Jarvis Launcher start requested"
 log "User: $(whoami)"
 log "Home: ${HOME}"
 log "PWD: $(pwd)"
+
+# Avoid spawning multiple launcher instances
+LAUNCHER_PID_FILE="${JARVIS_HOME}/run/launcher.pid"
+if [[ -f "${LAUNCHER_PID_FILE}" ]]; then
+    existing_pid="$(cat "${LAUNCHER_PID_FILE}" 2>/dev/null || true)"
+    if [[ -n "${existing_pid}" ]] && kill -0 "${existing_pid}" >/dev/null 2>&1; then
+        log "Launcher already running (PID: ${existing_pid})"
+        exit 0
+    fi
+    rm -f "${LAUNCHER_PID_FILE}" >/dev/null 2>&1 || true
+fi
 
 # 1) Find Java
 JAVA_BIN="${JAVA_BIN:-}"
@@ -89,21 +102,18 @@ if [[ -f "${JARVIS_APP}/launcher.jar" ]]; then
     log "Using product install: ${JAR}"
 elif [[ -f "${JARVIS_APP}/bin/jarvis-launcher.sh" ]]; then
     # If wrapper is in product install, use repo from there
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     if [[ "$SCRIPT_DIR" == "${JARVIS_APP}/bin"* ]]; then
         REPO_ROOT="${JARVIS_APP}"
         JAR="${JARVIS_APP}/launcher.jar"
         log "Using product install (via wrapper): ${JAR}"
     else
         # Development mode: find repo root from script location
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
         JAR="${REPO_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
         log "Using development mode: ${JAR}"
     fi
 else
     # Development mode: find repo root from script location
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
     JAR="${REPO_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
     log "Using development mode: ${JAR}"
@@ -111,24 +121,124 @@ fi
 
 # 3) Check if JAR exists
 if [[ ! -f "$JAR" ]]; then
-    log "ERROR: Launcher JAR not found at $JAR"
-    notify "Не найден Launcher JAR:\n$JAR\n\nДля разработки: собери проект:\nmvn -pl apps/launcher-javafx -DskipTests clean package\n\nДля продукта: установи в ~/.jarvis/app/"
-    exit 1
+    log "Launcher JAR not found at $JAR, attempting build..."
+    if command -v mvn >/dev/null 2>&1 && [[ -n "${REPO_ROOT}" ]] && [[ -f "${REPO_ROOT}/pom.xml" ]]; then
+        (cd "${REPO_ROOT}" && mvn -pl apps/launcher-javafx -DskipTests clean package >/dev/null 2>&1) || true
+    fi
+    if [[ ! -f "$JAR" ]]; then
+        log "ERROR: Launcher JAR not found at $JAR"
+        notify "Не найден Launcher JAR:\n$JAR\n\nДля разработки: собери проект:\nmvn -pl apps/launcher-javafx -DskipTests clean package\n\nДля продукта: установи в ~/.jarvis/app/"
+        exit 1
+    fi
 fi
 
 log "Launcher JAR: ${JAR}"
-log "Project root: ${REPO_ROOT}"
+log "Install root: ${REPO_ROOT}"
+
+# Resolve project root for backend scripts (prefer repo with sources)
+is_valid_repo_root() {
+    local root="$1"
+    [[ -f "${root}/pom.xml" ]] && [[ -d "${root}/apps" ]] && [[ -f "${root}/jarvis-launch.sh" ]]
+}
+
+PROJECT_ROOT="${JARVIS_PROJECT_ROOT:-}"
+if [[ -n "${PROJECT_ROOT}" ]] && ! is_valid_repo_root "${PROJECT_ROOT}"; then
+    PROJECT_ROOT=""
+fi
+if [[ -z "${PROJECT_ROOT}" ]] && is_valid_repo_root "${REPO_ROOT}"; then
+    PROJECT_ROOT="${REPO_ROOT}"
+fi
+if [[ -z "${PROJECT_ROOT}" ]]; then
+    for candidate in \
+        "${HOME}/IdeaProjects/Jarvis2.0" \
+        "${HOME}/Projects/Jarvis2.0" \
+        "${HOME}/Jarvis2.0"; do
+        if is_valid_repo_root "${candidate}"; then
+            PROJECT_ROOT="${candidate}"
+            break
+        fi
+    done
+fi
+if [[ -z "${PROJECT_ROOT}" ]]; then
+    PROJECT_ROOT="${REPO_ROOT}"
+fi
+
+# Ensure local Java truststore exists (no sudo needed)
+ensure_java_truststore() {
+    local tls_dir="${HOME}/.jarvis/tls"
+    local ca_cert="${tls_dir}/jarvis-ca.crt"
+    local jks="${tls_dir}/jarvis-cacerts.jks"
+    local pass="${JARVIS_JAVA_TRUSTSTORE_PASSWORD:-changeit}"
+
+    if [[ -f "${jks}" ]]; then
+        return 0
+    fi
+    if [[ ! -f "${ca_cert}" ]]; then
+        return 0
+    fi
+    if ! command -v keytool >/dev/null 2>&1; then
+        log "WARNING: keytool not found; cannot create Java truststore"
+        return 0
+    fi
+    keytool -importcert -noprompt \
+        -alias jarvis-ca \
+        -file "${ca_cert}" \
+        -keystore "${jks}" \
+        -storepass "${pass}" >/dev/null 2>&1 || true
+    chmod 600 "${jks}" 2>/dev/null || true
+    log "Java truststore created: ${jks}"
+}
+
+ensure_java_truststore || true
+
+# If repo has a newer launcher JAR, sync it into product install for one-click stability
+REPO_LAUNCHER_JAR="${PROJECT_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
+if [[ -f "${REPO_LAUNCHER_JAR}" ]]; then
+    mkdir -p "${JARVIS_APP}"
+    if [[ ! -f "${JARVIS_APP}/launcher.jar" || "${REPO_LAUNCHER_JAR}" -nt "${JARVIS_APP}/launcher.jar" ]]; then
+        cp "${REPO_LAUNCHER_JAR}" "${JARVIS_APP}/launcher.jar" 2>/dev/null || true
+        log "Updated product launcher JAR from repo: ${REPO_LAUNCHER_JAR}"
+        JAR="${JARVIS_APP}/launcher.jar"
+    fi
+fi
 
 # 4) Set environment for launcher
-export JARVIS_PROJECT_ROOT="${REPO_ROOT}"
+log "Resolved project root: ${PROJECT_ROOT}"
+export JARVIS_PROJECT_ROOT="${PROJECT_ROOT}"
 export JARVIS_LOG_DIR="${LOG_DIR}"
+export JARVIS_AUTO_START="${JARVIS_AUTO_START:-true}"
+export JARVIS_AUTO_BOOTSTRAP="${JARVIS_AUTO_BOOTSTRAP:-true}"
+export JARVIS_AUTO_INSTALL_DEPS="${JARVIS_AUTO_INSTALL_DEPS:-true}"
+if [[ -n "${JARVIS_ENABLE_LLM:-}" ]]; then
+    export JARVIS_ENABLE_LLM
+fi
+if [[ -n "${JARVIS_ENABLE_MEMORY:-}" ]]; then
+    export JARVIS_ENABLE_MEMORY
+fi
+if [[ -n "${JARVIS_ENABLE_GPU:-}" ]]; then
+    export JARVIS_ENABLE_GPU
+fi
+export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
+export JARVIS_USE_TLS="${JARVIS_USE_TLS:-true}"
+
+# Prefer local k3s kubeconfig for diagnostics and helper commands
+if [[ -f "${HOME}/.jarvis/kubeconfig" ]]; then
+    export KUBECONFIG="${HOME}/.jarvis/kubeconfig"
+fi
+
+# Java trust store (used by launcher and desktop)
+JARVIS_TRUSTSTORE="${HOME}/.jarvis/tls/jarvis-cacerts.jks"
+if [[ -f "${JARVIS_TRUSTSTORE}" ]]; then
+    export JARVIS_JAVA_TRUSTSTORE="${JARVIS_TRUSTSTORE}"
+    export JARVIS_JAVA_TRUSTSTORE_PASSWORD="${JARVIS_JAVA_TRUSTSTORE_PASSWORD:-changeit}"
+fi
 
 # 5) Launch JavaFX application (detached, no terminal)
 log "Starting launcher..."
 
 # Determine logback config path
-if [[ -f "${REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
-    LOGBACK_CONFIG="${REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml"
+if [[ -f "${PROJECT_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
+    LOGBACK_CONFIG="${PROJECT_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml"
 elif [[ -f "${JARVIS_APP}/config/logback.xml" ]]; then
     LOGBACK_CONFIG="${JARVIS_APP}/config/logback.xml"
 else
@@ -137,14 +247,21 @@ else
 fi
 
 # Launch with nohup (detached from terminal)
+JAVA_SSL_OPTS=()
+if [[ -n "${JARVIS_JAVA_TRUSTSTORE:-}" ]]; then
+    JAVA_SSL_OPTS+=("-Djavax.net.ssl.trustStore=${JARVIS_JAVA_TRUSTSTORE}")
+    JAVA_SSL_OPTS+=("-Djavax.net.ssl.trustStorePassword=${JARVIS_JAVA_TRUSTSTORE_PASSWORD:-changeit}")
+fi
 if [[ -n "$LOGBACK_CONFIG" ]]; then
     nohup "${JAVA_BIN}" \
+        "${JAVA_SSL_OPTS[@]}" \
         -Dlogback.configurationFile="${LOGBACK_CONFIG}" \
         -Dfile.encoding=UTF-8 \
         -jar "$JAR" \
         >> "${LOG}" 2>&1 &
 else
     nohup "${JAVA_BIN}" \
+        "${JAVA_SSL_OPTS[@]}" \
         -Dfile.encoding=UTF-8 \
         -jar "$JAR" \
         >> "${LOG}" 2>&1 &

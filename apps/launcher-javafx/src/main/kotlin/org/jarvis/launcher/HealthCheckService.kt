@@ -3,10 +3,17 @@ package org.jarvis.launcher
 import org.slf4j.LoggerFactory
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.io.FileInputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.Files
+import java.nio.file.Paths
+import java.security.KeyStore
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManagerFactory
 
 /**
  * Health check service for Jarvis backend services.
@@ -35,12 +42,23 @@ class HealthCheckService(
     private val consecutiveSuccess = AtomicInteger(0)
     private val consecutiveFailures = AtomicInteger(0)
     private val runningCheck = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var llmEnabled = false
+    @Volatile private var memoryEnabled = false
+    @Volatile private var voiceEnabled = true
+    @Volatile private var cachedTruststorePath: String? = null
+    @Volatile private var cachedSslSocketFactory: javax.net.ssl.SSLSocketFactory? = null
     
     // Required services (core)
     private val requiredServices = listOf("api-gateway", "security-service")
     
     // Optional services (for DEGRADED status)
     private val optionalServices = listOf("voice-gateway", "llm-service", "memory-service")
+
+    fun updateFlags(llmEnabled: Boolean, memoryEnabled: Boolean, voiceEnabled: Boolean = true) {
+        this.llmEnabled = llmEnabled
+        this.memoryEnabled = memoryEnabled
+        this.voiceEnabled = voiceEnabled
+    }
     
     /**
      * Service health status with detailed information.
@@ -240,7 +258,7 @@ class HealthCheckService(
         return try {
             // Iteration 1.5 (Stage 7): Support HTTPS for api.jarvis.local
             val healthUrl = "$apiBaseUrl/actuator/health"
-            val connection = URL(healthUrl).openConnection() as HttpURLConnection
+            val connection = openConnection(URL(healthUrl))
             connection.connectTimeout = 3000
             connection.readTimeout = 3000
             connection.requestMethod = "GET"
@@ -272,11 +290,15 @@ class HealthCheckService(
                 )
             }
         } catch (e: javax.net.ssl.SSLException) {
-            // SSL/TLS error - might be trust store issue
+            val msg = e.message?.take(120) ?: "SSL error"
+            val isTrust = msg.contains("PKIX", ignoreCase = true) ||
+                msg.contains("certificate_unknown", ignoreCase = true) ||
+                msg.contains("unable to find valid certification path", ignoreCase = true)
             ServiceHealthStatus.ServiceCheck(
                 name = "api-gateway",
-                status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                message = "SSL error: ${e.message?.take(50)} (check CA trust store)"
+                status = if (isTrust) ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN
+                else ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                message = if (isTrust) "TLS trust missing - click Fix TLS" else "SSL error: ${msg.take(50)}"
             )
         } catch (e: java.net.ConnectException) {
             ServiceHealthStatus.ServiceCheck(
@@ -298,7 +320,7 @@ class HealthCheckService(
         return try {
             // Try through gateway first
             val healthUrl = "$apiBaseUrl/actuator/health"
-            val connection = URL(healthUrl).openConnection() as HttpURLConnection
+            val connection = openConnection(URL(healthUrl))
             connection.connectTimeout = 3000
             connection.readTimeout = 3000
             connection.requestMethod = "GET"
@@ -334,10 +356,15 @@ class HealthCheckService(
                 )
             }
         } catch (e: javax.net.ssl.SSLException) {
+            val msg = e.message?.take(120) ?: "SSL error"
+            val isTrust = msg.contains("PKIX", ignoreCase = true) ||
+                msg.contains("certificate_unknown", ignoreCase = true) ||
+                msg.contains("unable to find valid certification path", ignoreCase = true)
             ServiceHealthStatus.ServiceCheck(
                 name = "security-service",
-                status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                message = "SSL error: ${e.message?.take(50)} (check CA trust store)"
+                status = if (isTrust) ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN
+                else ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                message = if (isTrust) "TLS trust missing - click Fix TLS" else "SSL error: ${msg.take(50)}"
             )
         } catch (e: Exception) {
             ServiceHealthStatus.ServiceCheck(
@@ -350,8 +377,6 @@ class HealthCheckService(
     
     private fun checkVoiceGateway(optional: Boolean): ServiceHealthStatus.ServiceCheck {
         // Voice gateway is optional, check if disabled by flag
-        val voiceEnabled = System.getenv("ENABLE_VOICE")?.toBoolean() ?: true  // Default enabled
-        
         if (!voiceEnabled) {
             return ServiceHealthStatus.ServiceCheck(
                 name = "voice-gateway",
@@ -372,8 +397,6 @@ class HealthCheckService(
     
     private fun checkLlmService(optional: Boolean): ServiceHealthStatus.ServiceCheck {
         // LLM service is optional, check if disabled by flag
-        val llmEnabled = System.getenv("ENABLE_LLM")?.toBoolean() ?: false  // Default disabled
-        
         if (!llmEnabled) {
             return ServiceHealthStatus.ServiceCheck(
                 name = "llm-service",
@@ -387,8 +410,7 @@ class HealthCheckService(
         return try {
             // LLM service health endpoint via API Gateway
             val healthUrl = "$apiBaseUrl/actuator/health"
-            val url = URL(healthUrl)
-            val connection = url.openConnection() as HttpURLConnection
+            val connection = openConnection(URL(healthUrl))
             
             connection.requestMethod = "GET"
             connection.connectTimeout = 3000
@@ -452,8 +474,6 @@ class HealthCheckService(
     
     private fun checkMemoryService(optional: Boolean): ServiceHealthStatus.ServiceCheck {
         // Memory service is optional, check if disabled by flag
-        val memoryEnabled = System.getenv("ENABLE_MEMORY")?.toBoolean() ?: false  // Default disabled
-        
         if (!memoryEnabled) {
             return ServiceHealthStatus.ServiceCheck(
                 name = "memory-service",
@@ -467,8 +487,7 @@ class HealthCheckService(
         return try {
             // Memory service health endpoint: /actuator/health (Spring Boot) or /memory/health
             val healthUrl = "$apiBaseUrl/actuator/health"  // Try via API Gateway first
-            val url = URL(healthUrl)
-            val connection = url.openConnection() as HttpURLConnection
+            val connection = openConnection(URL(healthUrl))
             
             connection.requestMethod = "GET"
             connection.connectTimeout = 3000
@@ -564,5 +583,51 @@ class HealthCheckService(
     fun getCurrentStatus(): ServiceHealthStatus? {
         return currentStatus.get()
     }
-}
 
+    private fun openConnection(url: URL): HttpURLConnection {
+        val connection = url.openConnection() as HttpURLConnection
+        if (connection is HttpsURLConnection) {
+            val socketFactory = resolveSslSocketFactory()
+            if (socketFactory != null) {
+                connection.sslSocketFactory = socketFactory
+            }
+        }
+        return connection
+    }
+
+    private fun resolveSslSocketFactory(): javax.net.ssl.SSLSocketFactory? {
+        val truststorePath = resolveTruststorePath() ?: return null
+        if (truststorePath == cachedTruststorePath && cachedSslSocketFactory != null) {
+            return cachedSslSocketFactory
+        }
+        return try {
+            val pass = System.getenv("JARVIS_JAVA_TRUSTSTORE_PASSWORD") ?: "changeit"
+            val keyStore = KeyStore.getInstance(KeyStore.getDefaultType())
+            FileInputStream(truststorePath).use { input ->
+                keyStore.load(input, pass.toCharArray())
+            }
+            val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            tmf.init(keyStore)
+            val sslContext = SSLContext.getInstance("TLS")
+            sslContext.init(null, tmf.trustManagers, null)
+            cachedTruststorePath = truststorePath
+            cachedSslSocketFactory = sslContext.socketFactory
+            cachedSslSocketFactory
+        } catch (e: Exception) {
+            logger.warn("Failed to load truststore at $truststorePath", e)
+            null
+        }
+    }
+
+    private fun resolveTruststorePath(): String? {
+        val envPath = System.getenv("JARVIS_JAVA_TRUSTSTORE")
+        if (!envPath.isNullOrBlank() && Files.exists(Paths.get(envPath))) {
+            return envPath
+        }
+        val userPath = Paths.get(System.getProperty("user.home"), ".jarvis", "tls", "jarvis-cacerts.jks")
+        if (Files.exists(userPath)) {
+            return userPath.toString()
+        }
+        return null
+    }
+}

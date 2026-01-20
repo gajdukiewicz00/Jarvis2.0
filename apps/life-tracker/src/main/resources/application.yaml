@@ -12,9 +12,9 @@ spring:
       - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
   
   datasource:
-    url: jdbc:postgresql://localhost:5432/jarvis_db
-    username: jarvis
-    password: ${DB_PASSWORD:}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       # Pool Size - оптимально для микросервиса

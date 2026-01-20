@@ -95,9 +95,10 @@ public class DailyPlanGenerator {
         dto.setCategory(task.getCategory());
         dto.setPriority(task.getPriority());
         dto.setStatus(task.getStatus());
-        dto.setDeadline(task.getDeadline());
+        dto.setDueDate(task.getDueDate());
         dto.setEstimatedDuration(task.getEstimatedDuration());
         dto.setCreatedAt(task.getCreatedAt());
+        dto.setUpdatedAt(task.getUpdatedAt());
         dto.setCompletedAt(task.getCompletedAt());
         return dto;
     }

@@ -119,13 +119,6 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <manifestEntries>
-                                        <Implementation-Version>${project.version}</Implementation-Version>
-                                    </manifestEntries>
-                                </transformer>
-                            </transformers>
                         </configuration>
                     </execution>
                 </executions>
@@ -133,4 +126,3 @@
         </plugins>
     </build>
 </project>
-

@@ -34,7 +34,7 @@ public final class JarvisServicePorts {
     public static final int PC_CONTROL = 8084;
     
     /** Security Service - JWT auth */
-    public static final int SECURITY_SERVICE = 8085;
+    public static final int SECURITY_SERVICE = 8088;
     
     /** Smart Home Service - IoT */
     public static final int SMART_HOME_SERVICE = 8086;
@@ -43,7 +43,7 @@ public final class JarvisServicePorts {
     public static final int ANALYTICS_SERVICE = 8087;
     
     /** Life Tracker - Time/expense tracking */
-    public static final int LIFE_TRACKER = 8088;
+    public static final int LIFE_TRACKER = 8085;
     
     /** User Profile - User preferences */
     public static final int USER_PROFILE = 8089;
@@ -82,4 +82,3 @@ public final class JarvisServicePorts {
     /** RabbitMQ Management UI */
     public static final int RABBITMQ_MANAGEMENT = 15672;
 }
-

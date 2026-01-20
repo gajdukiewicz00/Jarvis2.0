@@ -29,8 +29,6 @@ spec:
             - secretRef:
                 name: jarvis-secrets
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "k8s"
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_user_profile"
           resources:

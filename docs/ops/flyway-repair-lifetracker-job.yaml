@@ -1,0 +1,46 @@
+# Example: Flyway repair job for life-tracker.
+# Create the migrations configmap locally before applying this job:
+#
+# kubectl -n jarvis create configmap flyway-lifetracker-migrations \
+#   --from-file=apps/life-tracker/src/main/resources/db/migration
+#
+# Then apply this job, wait for completion, and restart life-tracker.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: flyway-repair-lifetracker
+  namespace: jarvis
+  labels:
+    app: flyway-repair-lifetracker
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: flyway-repair-lifetracker
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: flyway
+          image: flyway/flyway:10
+          args: ["-connectRetries=10", "repair"]
+          env:
+            - name: FLYWAY_URL
+              value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_db"
+            - name: FLYWAY_USER
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_USER
+            - name: FLYWAY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: migrations
+              mountPath: /flyway/sql
+      volumes:
+        - name: migrations
+          configMap:
+            name: flyway-lifetracker-migrations

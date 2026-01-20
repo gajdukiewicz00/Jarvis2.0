@@ -8,6 +8,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "tasks")
@@ -40,9 +42,24 @@ public class Task {
     @Enumerated(EnumType.STRING)
     @Column(length = 50)
     private TaskStatus status = TaskStatus.TODO;
-    
-    private Instant deadline;
-    
+
+    @Column(name = "deadline")
+    private Instant dueDate;
+
+    @Convert(converter = TaskTagsConverter.class)
+    @Column(name = "tags")
+    private List<String> tags = new ArrayList<>();
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private TaskSource source = TaskSource.MANUAL;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
+    @Column(name = "updated_by")
+    private String updatedBy;
+
     @Column(name = "estimated_duration")
     private Integer estimatedDuration; // minutes
     

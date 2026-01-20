@@ -4,10 +4,13 @@ import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
+import java.nio.channels.FileChannel
+import java.nio.channels.FileLock
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.attribute.PosixFilePermission
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -21,10 +24,16 @@ class ProcessRunner(
     private val logFile: Path,
     private val onOutput: (String) -> Unit
 ) {
+    companion object {
+        private val startGuard = AtomicBoolean(false)
+    }
+
     private val logger = LoggerFactory.getLogger(ProcessRunner::class.java)
     private val processRef = AtomicReference<Process?>(null)
     private val isRunning = AtomicBoolean(false)
     private var tempLockScript: Path? = null
+    private var backendLockChannel: FileChannel? = null
+    private var backendLock: FileLock? = null
     
     /**
      * Start a process (e.g., jarvis-launch.sh).
@@ -37,9 +46,14 @@ class ProcessRunner(
         envVars: Map<String, String> = emptyMap(),
         workingDir: Path? = null
     ): CompletableFuture<Int> {
-        if (isRunning.get()) {
+        if (!isRunning.compareAndSet(false, true)) {
             logger.warn("Process already running, ignoring start request")
             return CompletableFuture.completedFuture(0)
+        }
+        if (!startGuard.compareAndSet(false, true)) {
+            logger.warn("Start already in progress, skipping")
+            isRunning.set(false)
+            return CompletableFuture.completedFuture(1)
         }
         
         val future = CompletableFuture<Int>()
@@ -54,8 +68,28 @@ class ProcessRunner(
             // Acquire lock to prevent concurrent backend starts
             val lockFile = JarvisPaths.run.resolve("backend.lock")
             Files.createDirectories(lockFile.parent)
+            backendLockChannel = FileChannel.open(
+                lockFile,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE
+            )
+            backendLock = try {
+                backendLockChannel?.tryLock()
+            } catch (e: java.nio.channels.OverlappingFileLockException) {
+                null
+            }
+            if (backendLock == null) {
+                logger.warn("Backend lock is already held, skipping start")
+                onOutput("ERROR: Backend already starting (lock held)")
+                backendLockChannel?.close()
+                backendLockChannel = null
+                isRunning.set(false)
+                startGuard.set(false)
+                future.complete(1)
+                return future
+            }
             
-                // Create lock script wrapper
+            // Create lock script wrapper
                 val lockFileStr = lockFile.toString()
                 val scriptPathStr = scriptPath.toString()
                 val lockScript = """
@@ -118,7 +152,6 @@ class ProcessRunner(
                 
                 val process = processBuilder.start()
                 processRef.set(process)
-                isRunning.set(true)
                 
                 // Write PID to file
                 val pidFile = JarvisPaths.backendPid
@@ -150,6 +183,7 @@ class ProcessRunner(
                         val exitCode = process.waitFor()
                         isRunning.set(false)
                         processRef.set(null)
+                        startGuard.set(false)
                         
                         // Clean up PID file
                         try {
@@ -160,6 +194,7 @@ class ProcessRunner(
                         
                         logger.info("Process finished with exit code: $exitCode")
                         future.complete(exitCode)
+                        releaseBackendLock()
                     }
                 }.start()
                 
@@ -172,6 +207,7 @@ class ProcessRunner(
         } catch (e: Exception) {
             logger.error("Failed to start process: ${scriptPath}", e)
             isRunning.set(false)
+            startGuard.set(false)
             // Clean up temp lock script on error
             tempLockScript?.let {
                 try {
@@ -180,10 +216,28 @@ class ProcessRunner(
                     // Ignore
                 }
             }
+            releaseBackendLock()
             future.completeExceptionally(e)
         }
         
         return future
+    }
+
+    private fun releaseBackendLock() {
+        try {
+            backendLock?.release()
+        } catch (e: Exception) {
+            logger.debug("Failed to release backend lock", e)
+        } finally {
+            backendLock = null
+        }
+        try {
+            backendLockChannel?.close()
+        } catch (e: Exception) {
+            logger.debug("Failed to close backend lock channel", e)
+        } finally {
+            backendLockChannel = null
+        }
     }
     
     /**
@@ -210,6 +264,7 @@ class ProcessRunner(
             
             isRunning.set(false)
             processRef.set(null)
+            startGuard.set(false)
             
             // Clean up PID file
             try {
@@ -219,9 +274,12 @@ class ProcessRunner(
             }
             
             logger.info("Process stopped")
+            releaseBackendLock()
             return true
         } catch (e: Exception) {
             logger.error("Error stopping process", e)
+            startGuard.set(false)
+            releaseBackendLock()
             return false
         }
     }

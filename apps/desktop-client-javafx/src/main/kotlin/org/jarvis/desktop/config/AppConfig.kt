@@ -5,11 +5,11 @@ package org.jarvis.desktop.config
  *
  * The API Gateway base URL can be overridden with:
  * - JARVIS_API_BASE_URL (preferred)
- * - API_URL (exported by jarvis-launch.sh after detecting NodePort/port-forward)
+ * - API_URL (debug/port-forward)
  * WebSocket URLs are derived automatically to stay in sync with the REST base.
  */
 object AppConfig {
-    private const val DEFAULT_API_GATEWAY = "http://localhost:8080"
+    private const val DEFAULT_API_GATEWAY = "https://api.jarvis.local"
 
     val apiGatewayBaseUrl: String by lazy {
         val env = System.getenv("JARVIS_API_BASE_URL")
@@ -17,7 +17,9 @@ object AppConfig {
         val baseUrl = (env?.takeIf { it.isNotBlank() } ?: DEFAULT_API_GATEWAY).trimEnd('/')
         
         // Fail-fast: запрет "полу-TLS" режима
-        val useTls = System.getenv("JARVIS_USE_TLS")?.toBoolean() ?: false
+        val useTlsEnv = System.getenv("JARVIS_USE_TLS")?.toBoolean()
+        val inferredTls = baseUrl.startsWith("https://") || baseUrl.contains("jarvis.local")
+        val useTls = useTlsEnv ?: inferredTls
         val hasJarvisDomain = baseUrl.contains("jarvis.local")
         
         if (useTls && !baseUrl.startsWith("https://")) {
@@ -127,4 +129,3 @@ object VoiceConfig {
         System.getenv("JARVIS_VOICE_WAKE_WORD_DELAY_MS")?.toLongOrNull() ?: 300L
     }
 }
-

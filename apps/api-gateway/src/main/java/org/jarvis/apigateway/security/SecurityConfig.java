@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -59,10 +60,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     log.info("🔧 SecurityConfig: Configuring authorization rules...");
                     auth
+                            .requestMatchers(new InternalToolRequestMatcher()).permitAll()
                             // Public endpoints - no authentication required
                             .requestMatchers("/auth/**").permitAll() // Login, register, refresh - NO AUTH REQUIRED
-                            .requestMatchers("/api/v1/**").permitAll() // Allow all /api/v1/** endpoints (temporary for
-                                                                       // development)
                             .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                             .requestMatchers("/internal/**").permitAll() // Internal service-to-service endpoints
                             .requestMatchers("/actuator/**").permitAll() // Health checks
@@ -79,6 +79,20 @@ public class SecurityConfig {
 
         log.info("🔧 SecurityConfig: SecurityFilterChain configured successfully");
         return http.build();
+    }
+
+    private static final class InternalToolRequestMatcher implements RequestMatcher {
+        private static final String TOOL_PATH_PREFIX = "/api/v1/tools/";
+
+        @Override
+        public boolean matches(jakarta.servlet.http.HttpServletRequest request) {
+            String path = request.getRequestURI();
+            if (!path.startsWith(TOOL_PATH_PREFIX)) {
+                return false;
+            }
+            String forwardedFor = request.getHeader("X-Forwarded-For");
+            return forwardedFor == null || forwardedFor.isBlank();
+        }
     }
 
     /**

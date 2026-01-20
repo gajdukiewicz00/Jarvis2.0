@@ -30,15 +30,19 @@ else
     echo -e "${GREEN}✓${NC} kubectl установлен"
 fi
 
-# === minikube ===
-if command -v minikube &> /dev/null; then
-    echo -e "${GREEN}✓${NC} minikube уже установлен: $(minikube version --short 2>/dev/null || minikube version | head -1)"
+# === k3s ===
+if command -v k3s &> /dev/null; then
+    echo -e "${GREEN}✓${NC} k3s уже установлен: $(k3s --version | head -1)"
 else
-    echo -e "${YELLOW}⏳${NC} Устанавливаю minikube..."
-    curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-    chmod +x minikube-linux-amd64
-    sudo mv minikube-linux-amd64 /usr/local/bin/minikube
-    echo -e "${GREEN}✓${NC} minikube установлен"
+    echo ""
+    read -p "Установить k3s (рекомендуется)? [y/N] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}⏳${NC} Устанавливаю k3s..."
+        curl -sfL https://get.k3s.io | sh -
+        echo -e "${GREEN}✓${NC} k3s установлен"
+        echo -e "${YELLOW}⚠️${NC} Добавь пользователя в группу 'k3s' или используй sudo для kubectl"
+    fi
 fi
 
 # === helm (опционально) ===
@@ -98,15 +102,14 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║         📋 QUICK START GUIDE          ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}1.${NC} Запусти minikube:"
-echo "   minikube start --memory=8192 --cpus=4"
+echo -e "${GREEN}1.${NC} Убедись, что k3s запущен:"
+echo "   sudo systemctl status k3s"
 echo ""
 echo -e "${GREEN}2.${NC} Запусти Jarvis:"
-echo "   ./jarvis-k8s-launch.sh"
+echo "   ./jarvis-launch.sh"
 echo ""
-echo -e "${GREEN}3.${NC} Или кликни на иконку 'Jarvis K8s' в меню приложений"
+echo -e "${GREEN}3.${NC} Или кликни на иконку 'Jarvis 2.0' в меню приложений"
 echo ""
 echo -e "${YELLOW}💡${NC} Для добавления в /etc/hosts:"
-echo "   echo '127.0.0.1 jarvis.local' | sudo tee -a /etc/hosts"
+echo "   sudo ./scripts/product/jarvis-setup-hosts.sh"
 echo ""
-

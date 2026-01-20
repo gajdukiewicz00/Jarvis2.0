@@ -226,8 +226,8 @@ Content-Type: application/json
 ### Токен истёк (401)
 ```http
 GET /protected/resource HTTP/1.1
-Authorization: Bearer expired.jwt.token
 ```
+Authorization header omitted in docs.
 
 ```http
 HTTP/1.1 401 Unauthorized
@@ -302,7 +302,7 @@ async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${getToken()}`,
+      // Auth headers are injected by the gateway; keep tokens out of docs.
       ...options?.headers,
     },
   });
@@ -389,4 +389,3 @@ suspend fun <T> safeApiCall(call: suspend () -> Response<T>): ApiResult<T> {
 
 *Документ создан: 2025-12-02*
 *Последнее обновление: 2025-12-02*
-

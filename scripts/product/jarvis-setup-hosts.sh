@@ -13,32 +13,37 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-# Get minikube IP or use localhost
-MINIKUBE_IP=""
-if command -v minikube >/dev/null 2>&1; then
-    MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "")
+# Resolve host IP for ingress (override with JARVIS_HOST_IP)
+HOST_IP="${JARVIS_HOST_IP:-}"
+
+if [[ -z "${KUBECONFIG:-}" && -r /etc/rancher/k3s/k3s.yaml ]]; then
+    export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
 fi
 
-if [ -z "$MINIKUBE_IP" ]; then
-    # Fallback: try to get ingress IP from kubectl
-    if command -v kubectl >/dev/null 2>&1; then
-        INGRESS_IP=$(kubectl get ingress -n jarvis jarvis-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-        if [ -n "$INGRESS_IP" ]; then
-            MINIKUBE_IP="$INGRESS_IP"
-        else
-            # Last resort: use localhost (for port-forward scenarios)
-            MINIKUBE_IP="127.0.0.1"
-        fi
-    else
-        MINIKUBE_IP="127.0.0.1"
+if [ -z "$HOST_IP" ] && command -v kubectl >/dev/null 2>&1; then
+    # Try ingress-nginx LoadBalancer IP
+    HOST_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller \
+        -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    if [ -z "$HOST_IP" ]; then
+        # Fallback: node internal IP
+        HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "")
     fi
+fi
+
+if [ -z "$HOST_IP" ]; then
+    # Fallback: first host IP
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "")
+fi
+
+if [ -z "$HOST_IP" ]; then
+    HOST_IP="127.0.0.1"
 fi
 
 echo "=========================================="
 echo "Jarvis 2.0 - /etc/hosts Setup"
 echo "=========================================="
 echo ""
-echo "Target IP: $MINIKUBE_IP"
+echo "Target IP: $HOST_IP"
 echo "Domains: api.jarvis.local, voice.jarvis.local"
 echo ""
 
@@ -53,11 +58,11 @@ fi
 if grep -q "api.jarvis.local" /etc/hosts && grep -q "voice.jarvis.local" /etc/hosts; then
     # Check if IP matches
     EXISTING_IP=$(grep "api.jarvis.local" /etc/hosts | awk '{print $1}' | head -1)
-    if [ "$EXISTING_IP" = "$MINIKUBE_IP" ]; then
+    if [ "$EXISTING_IP" = "$HOST_IP" ]; then
         echo -e "${GREEN}✅ Entries already exist with correct IP${NC}"
         exit 0
     else
-        echo -e "${YELLOW}⚠️  Entries exist but IP differs ($EXISTING_IP vs $MINIKUBE_IP)${NC}"
+        echo -e "${YELLOW}⚠️  Entries exist but IP differs ($EXISTING_IP vs $HOST_IP)${NC}"
         echo "Removing old entries..."
         sed -i '/api\.jarvis\.local/d' /etc/hosts
         sed -i '/voice\.jarvis\.local/d' /etc/hosts
@@ -66,8 +71,8 @@ fi
 
 # Add entries
 echo "Adding entries to /etc/hosts..."
-echo "$MINIKUBE_IP api.jarvis.local" >> /etc/hosts
-echo "$MINIKUBE_IP voice.jarvis.local" >> /etc/hosts
+echo "$HOST_IP api.jarvis.local" >> /etc/hosts
+echo "$HOST_IP voice.jarvis.local" >> /etc/hosts
 
 echo ""
 echo -e "${GREEN}✅ Entries added successfully${NC}"

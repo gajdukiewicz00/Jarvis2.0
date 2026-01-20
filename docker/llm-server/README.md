@@ -71,7 +71,7 @@ Health check endpoint.
 pip install -r requirements.txt
 
 # Set model path
-export MODEL_PATH=/home/kwaqa/models/h2ogpt-4096-llama2-7b-chat
+export MODEL_PATH=~/.jarvis/models/h2ogpt-4096-llama2-7b-chat
 
 # Run server
 uvicorn app.main:app --host 0.0.0.0 --port 5000
@@ -85,7 +85,7 @@ docker build -t jarvis-llm-server .
 
 # Run
 docker run -p 5000:5000 \
-  -v /home/kwaqa/models/h2ogpt-4096-llama2-7b-chat:/models:ro \
+  -v ~/.jarvis/models/h2ogpt-4096-llama2-7b-chat:/models:ro \
   jarvis-llm-server
 ```
 

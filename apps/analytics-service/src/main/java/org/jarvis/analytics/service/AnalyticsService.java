@@ -27,16 +27,19 @@ public class AnalyticsService {
     public List<ExpenseSummaryDTO> getExpensesByMonth(LocalDate from, LocalDate to) {
         log.info("Aggregating expenses by month (from: {}, to: {})", from, to);
         List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        expenses = expenses.stream()
+                .filter(this::isExpense)
+                .collect(Collectors.toList());
 
         // Filter by date range if provided
         if (from != null || to != null) {
             expenses = expenses.stream()
-                    .filter(e -> isWithinDateRange(e.getDate(), from, to))
+                    .filter(e -> isWithinDateRange(e.getOccurredAt(), from, to))
                     .collect(Collectors.toList());
         }
 
         Map<String, List<ExpenseDTO>> byMonth = expenses.stream()
-                .collect(Collectors.groupingBy(expense -> expense.getDate().format(MONTH_FORMATTER)));
+                .collect(Collectors.groupingBy(expense -> expense.getOccurredAt().format(MONTH_FORMATTER)));
 
         return byMonth.entrySet().stream()
                 .map(entry -> {
@@ -60,11 +63,14 @@ public class AnalyticsService {
     public List<ExpenseSummaryDTO> getExpensesByCategory(LocalDate from, LocalDate to) {
         log.info("Aggregating expenses by category (from: {}, to: {})", from, to);
         List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        expenses = expenses.stream()
+                .filter(this::isExpense)
+                .collect(Collectors.toList());
 
         // Filter by date range if provided
         if (from != null || to != null) {
             expenses = expenses.stream()
-                    .filter(e -> isWithinDateRange(e.getDate(), from, to))
+                    .filter(e -> isWithinDateRange(e.getOccurredAt(), from, to))
                     .collect(Collectors.toList());
         }
 
@@ -122,15 +128,18 @@ public class AnalyticsService {
         // Simplified: group by ISO week
         DateTimeFormatter weekFormatter = DateTimeFormatter.ofPattern("yyyy-'W'ww");
         List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        expenses = expenses.stream()
+                .filter(this::isExpense)
+                .collect(Collectors.toList());
 
         if (from != null || to != null) {
             expenses = expenses.stream()
-                    .filter(e -> isWithinDateRange(e.getDate(), from, to))
+                    .filter(e -> isWithinDateRange(e.getOccurredAt(), from, to))
                     .collect(Collectors.toList());
         }
 
         Map<String, List<ExpenseDTO>> byWeek = expenses.stream()
-                .collect(Collectors.groupingBy(expense -> expense.getDate().format(weekFormatter)));
+                .collect(Collectors.groupingBy(expense -> expense.getOccurredAt().format(weekFormatter)));
 
         return byWeek.entrySet().stream()
                 .map(entry -> {
@@ -149,15 +158,18 @@ public class AnalyticsService {
     private List<ExpenseSummaryDTO> getExpensesByYear(LocalDate from, LocalDate to) {
         DateTimeFormatter yearFormatter = DateTimeFormatter.ofPattern("yyyy");
         List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        expenses = expenses.stream()
+                .filter(this::isExpense)
+                .collect(Collectors.toList());
 
         if (from != null || to != null) {
             expenses = expenses.stream()
-                    .filter(e -> isWithinDateRange(e.getDate(), from, to))
+                    .filter(e -> isWithinDateRange(e.getOccurredAt(), from, to))
                     .collect(Collectors.toList());
         }
 
         Map<String, List<ExpenseDTO>> byYear = expenses.stream()
-                .collect(Collectors.groupingBy(expense -> expense.getDate().format(yearFormatter)));
+                .collect(Collectors.groupingBy(expense -> expense.getOccurredAt().format(yearFormatter)));
 
         return byYear.entrySet().stream()
                 .map(entry -> {
@@ -180,6 +192,11 @@ public class AnalyticsService {
         if (to != null && date.isAfter(to))
             return false;
         return true;
+    }
+
+    private boolean isExpense(ExpenseDTO expense) {
+        String type = expense.getType();
+        return type == null || "EXPENSE".equalsIgnoreCase(type);
     }
 
     /**

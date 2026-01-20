@@ -29,10 +29,18 @@ spec:
             - secretRef:
                 name: jarvis-secrets
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "k8s"
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_db"
+              value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_db?currentSchema=planner"
+            - name: SPRING_FLYWAY_TABLE
+              value: "flyway_schema_history_planner"
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: "planner"
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: "planner"
+            - name: SPRING_FLYWAY_CREATE_SCHEMAS
+              value: "true"
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
+              value: "planner"
           resources:
             limits:
               memory: "512Mi"
@@ -68,4 +76,3 @@ spec:
       name: http
   selector:
     app: planner-service
-

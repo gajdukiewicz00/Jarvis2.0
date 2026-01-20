@@ -115,17 +115,11 @@ Client → API Gateway (validate JWT locally) → Downstream Services (trusted)
 - **Schema**: Each service has its own schema for isolation
 - **Migrations**: Flyway for version-controlled schema changes
 
-## Development vs Production
+## Production (k3s)
 
-### Local Development
-- Services run on localhost with dedicated ports
-- PostgreSQL on localhost:5432
-- JWT secret: default (change in production)
-
-### Docker Deployment
-- Services use docker-compose networking (service names as hostnames)
-- Model volumes: voice-gateway mounts Vosk model
-- Environment variables: JWT_SECRET, database credentials
+- Services run in namespace `jarvis` and communicate via service DNS
+- TLS terminates at ingress-nginx; internal traffic is HTTP
+- Secrets are injected via Kubernetes Secret (`jarvis-secrets`)
 
 ## Security
 

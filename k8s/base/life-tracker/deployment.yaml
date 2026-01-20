@@ -29,8 +29,6 @@ spec:
             - secretRef:
                 name: jarvis-secrets
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "k8s"
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_db"
           resources:
@@ -43,13 +41,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 8088
+              port: 8085
             initialDelaySeconds: 60
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 8088
+              port: 8085
             initialDelaySeconds: 30
             periodSeconds: 5
 ---
@@ -63,9 +61,8 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 8088
-      targetPort: 8088
+    - port: 8085
+      targetPort: 8085
       name: http
   selector:
     app: life-tracker
-

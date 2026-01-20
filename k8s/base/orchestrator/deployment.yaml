@@ -25,17 +25,6 @@ spec:
           ports:
             - containerPort: 8083
               name: http
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "kubernetes"
-            - name: NLP_SERVICE_URL
-              value: "http://nlp-service.jarvis.svc.cluster.local:8082"
-            - name: PC_CONTROL_URL
-              value: "http://pc-control.jarvis.svc.cluster.local:8084"
-            - name: SMART_HOME_URL
-              value: "http://smart-home-service.jarvis.svc.cluster.local:8086"
-            - name: LLM_SERVICE_URL
-              value: "http://llm-service.jarvis.svc.cluster.local:8091"
           resources:
             limits:
               memory: "512Mi"
@@ -71,4 +60,3 @@ spec:
       name: http
   selector:
     app: orchestrator
-

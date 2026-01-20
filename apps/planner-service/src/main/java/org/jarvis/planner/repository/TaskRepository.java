@@ -14,13 +14,13 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     
     List<Task> findByUserIdAndStatus(String userId, TaskStatus status);
     
-    List<Task> findByUserIdOrderByPriorityDescDeadlineAsc(String userId);
+    List<Task> findByUserIdOrderByPriorityDescDueDateAsc(String userId);
     
     @Query("SELECT t FROM Task t WHERE t.userId = :userId AND t.status != 'DONE' AND t.status != 'CANCELLED' " +
-           "ORDER BY t.priority DESC, t.deadline ASC NULLS LAST")
+           "ORDER BY t.priority DESC, t.dueDate ASC NULLS LAST")
     List<Task> findActiveTasks(String userId);
     
-    @Query("SELECT t FROM Task t WHERE t.userId = :userId AND t.deadline BETWEEN :start AND :end " +
+    @Query("SELECT t FROM Task t WHERE t.userId = :userId AND t.dueDate BETWEEN :start AND :end " +
            "AND t.status != 'DONE' AND t.status != 'CANCELLED'")
     List<Task> findTasksWithDeadlineBetween(String userId, Instant start, Instant end);
     

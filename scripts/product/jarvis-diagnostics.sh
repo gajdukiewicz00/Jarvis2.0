@@ -37,7 +37,13 @@ Java Version: $(java -version 2>&1 | head -1 || echo "ERROR")
 
 === Kubernetes ===
 kubectl: $(which kubectl 2>/dev/null || echo "NOT FOUND")
-minikube: $(which minikube 2>/dev/null || echo "NOT FOUND")
+k3s: $(which k3s 2>/dev/null || echo "NOT FOUND")
+Ingress class: $(kubectl get ingressclass nginx -o name 2>/dev/null || echo "NOT FOUND")
+
+=== TLS ===
+TLS dir: ${JARVIS_HOME}/tls
+CA cert: ${JARVIS_HOME}/tls/jarvis-ca.crt
+Server cert: ${JARVIS_HOME}/tls/jarvis.crt
 
 === Directories ===
 Logs: ${JARVIS_HOME}/logs
@@ -84,4 +90,3 @@ else
         read -p "Press Enter to continue..."
     fi
 fi
-

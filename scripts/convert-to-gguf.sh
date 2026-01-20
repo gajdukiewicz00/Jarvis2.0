@@ -95,9 +95,9 @@ echo ""
 echo -e "${GREEN}=== Conversion complete! ===${NC}"
 ls -lh "$OUTPUT_PATH"
 echo ""
-echo "To use with Jarvis, update docker-compose.yml or .env:"
-echo "  LLM_BACKEND=llamacpp"
-echo "  GGUF_MODEL_PATH=/models/$(basename $OUTPUT_PATH)"
-
+echo "To use with Jarvis:"
+echo "  1) Copy model to ~/.jarvis/models"
+echo "  2) Set env if needed: LLM_BACKEND=llamacpp"
+echo "  3) Ensure GGUF_MODEL_PATH points to /models/$(basename $OUTPUT_PATH)"
 
 

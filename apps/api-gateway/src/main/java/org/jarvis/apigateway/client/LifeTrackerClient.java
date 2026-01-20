@@ -33,4 +33,48 @@ public interface LifeTrackerClient {
 
     @GetMapping("/api/v1/life/calendar/events")
     ResponseEntity<List<Map<String, Object>>> getEvents();
+
+    // Tool API - Calendar
+    @PostMapping("/api/v1/tools/calendar/create")
+    ResponseEntity<Map<String, Object>> toolCreateEvent(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @RequestBody Map<String, Object> payload);
+
+    @PostMapping("/api/v1/tools/calendar/move")
+    ResponseEntity<Map<String, Object>> toolMoveEvent(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
+            @RequestBody Map<String, Object> payload);
+
+    @PostMapping("/api/v1/tools/calendar/list")
+    ResponseEntity<List<Map<String, Object>>> toolListEvents(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> payload);
+
+    @PostMapping("/api/v1/tools/calendar/free-slot")
+    ResponseEntity<Map<String, Object>> toolFindFreeSlot(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> payload);
+
+    // Tool API - Finance (read-only)
+    @PostMapping("/api/v1/tools/finance/transactions")
+    ResponseEntity<List<Map<String, Object>>> toolListTransactions(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> payload);
+
+    @PostMapping("/api/v1/tools/finance/summary")
+    ResponseEntity<Map<String, Object>> toolSummarizeMonth(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> payload);
+
+    @PostMapping("/api/v1/tools/finance/analysis")
+    ResponseEntity<Map<String, Object>> toolAnalyzeSpending(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> payload);
+
+    @PostMapping("/api/v1/tools/finance/budget-status")
+    ResponseEntity<Map<String, Object>> toolBudgetStatus(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody Map<String, Object> payload);
 }

@@ -43,8 +43,8 @@ Comprehensive guide for using the h2oGPT-7B LLM integration in Jarvis 2.0.
 
 ```bash
 # Create models directory
-mkdir -p /home/kwaqa/models
-cd /home/kwaqa/models
+mkdir -p ~/.jarvis/models
+cd ~/.jarvis/models
 
 # Download from HuggingFace
 git lfs install
@@ -59,16 +59,17 @@ ls h2ogpt-4096-llama2-7b-chat/
 
 ```bash
 # From Jarvis2.0 root directory
-cd /home/kwaqa/IdeaProjects/Jarvis2.0
+cd /path/to/Jarvis2.0
 
-# Start LLM services
-docker-compose up -d llm-server llm-service
+# Start LLM services in Kubernetes
+ENABLE_LLM=true ./jarvis-launch.sh
 
 # Monitor logs
-docker-compose logs -f llm-server
+kubectl logs -f deployment/llm-server -n jarvis
 # Wait for: "Model loaded successfully!" (30-60 seconds)
 
 # Verify health
+kubectl -n jarvis port-forward svc/llm-server 5000:5000
 curl http://localhost:5000/health
 # Expected: {"status":"healthy","model_loaded":true}
 ```
@@ -108,8 +109,8 @@ Process chat request with conversation history.
 
 **Example:**
 ```bash
-curl -X POST http://localhost:8080/api/v1/llm/chat \
-  -H "Authorization: Bearer $TOKEN" \
+# Auth headers are injected by the gateway; keep tokens out of docs.
+curl -X POST https://api.jarvis.local/api/v1/llm/chat \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "test-session",
@@ -124,8 +125,9 @@ curl -X POST http://localhost:8080/api/v1/llm/chat \
 Clear conversation history for a session.
 
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/llm/session/test-session \
-  -H "Authorization: Bearer $TOKEN"
+# Auth headers are injected by the gateway; keep tokens out of docs.
+curl -X DELETE https://api.jarvis.local/api/v1/llm/session/test-session \
+  -H "Content-Type: application/json"
 ```
 
 #### GET /api/v1/llm/health
@@ -133,7 +135,7 @@ curl -X DELETE http://localhost:8080/api/v1/llm/session/test-session \
 Check LLM service and server health.
 
 ```bash
-curl http://localhost:8080/api/v1/llm/health
+curl https://api.jarvis.local/api/v1/llm/health
 ```
 
 **Response:**
@@ -153,7 +155,7 @@ STOMP WebSocket endpoint for real-time chat.
 **JavaScript Example:**
 ```javascript
 // Connect
-const socket = new SockJS('http://localhost:8080/ws/jarvis-llm');
+const socket = new SockJS('https://api.jarvis.local/ws/jarvis-llm');
 const stompClient = Stomp.over(socket);
 
 stompClient.connect({}, function(frame) {
@@ -319,11 +321,11 @@ Future enhancement: Orchestrator can route complex queries to LLM while keeping 
 
 **Check logs:**
 ```bash
-docker-compose logs llm-server
+kubectl logs -f deployment/llm-server -n jarvis
 ```
 
 **Common issues:**
-- Model path incorrect: Verify `/home/kwaqa/models/h2ogpt-4096-llama2-7b-chat` exists
+- Model path incorrect: Verify `~/.jarvis/models/h2ogpt-4096-llama2-7b-chat` exists
 - Out of memory: Increase Docker memory limit (need 8GB+)
 - Missing model files: Re-download model from HuggingFace
 
@@ -341,7 +343,7 @@ docker-compose logs llm-server
 curl http://localhost:5000/health
 
 # Check llm-service logs
-docker-compose logs llm-service
+kubectl logs -f deployment/llm-service -n jarvis
 ```
 
 **WebSocket fails:**
@@ -359,16 +361,17 @@ llm:
 
 **Clear sessions:**
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/llm/session/old-session \
-  -H "Authorization: Bearer $TOKEN"
+# Auth headers are injected by the gateway; keep tokens out of docs.
+curl -X DELETE https://api.jarvis.local/api/v1/llm/session/old-session \
+  -H "Content-Type: application/json"
 ```
 
 ## Examples
 
 ### Simple Q&A
 ```bash
-curl -X POST http://localhost:8080/api/v1/llm/chat \
-  -H "Authorization: Bearer $TOKEN" \
+# Auth headers are injected by the gateway; keep tokens out of docs.
+curl -X POST https://api.jarvis.local/api/v1/llm/chat \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "qa-test",
@@ -379,8 +382,7 @@ curl -X POST http://localhost:8080/api/v1/llm/chat \
 ### Multi-turn Conversation
 ```bash
 # Turn 1
-curl -X POST http://localhost:8080/api/v1/llm/chat \
-  -H "Authorization: Bearer $TOKEN" \
+curl -X POST https://api.jarvis.local/api/v1/llm/chat \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "conv-123",
@@ -390,8 +392,7 @@ curl -X POST http://localhost:8080/api/v1/llm/chat \
   }'
 
 # Turn 2 (remembers context)
-curl -X POST http://localhost:8080/api/v1/llm/chat \
-  -H "Authorization: Bearer $TOKEN" \
+curl -X POST https://api.jarvis.local/api/v1/llm/chat \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "conv-123",
@@ -403,8 +404,8 @@ curl -X POST http://localhost:8080/api/v1/llm/chat \
 
 ### Task Execution
 ```bash
-curl -X POST http://localhost:8080/api/v1/llm/chat \
-  -H "Authorization: Bearer $TOKEN" \
+# Auth headers are injected by the gateway; keep tokens out of docs.
+curl -X POST https://api.jarvis.local/api/v1/llm/chat \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "task-123",

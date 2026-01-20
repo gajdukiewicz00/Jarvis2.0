@@ -37,6 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class LifeTrackerIntegrationTest {
 
+    private static final String USER_ID = "test-user";
+
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
             .withDatabaseName("jarvis_db_test")
@@ -78,7 +80,8 @@ class LifeTrackerIntegrationTest {
     @Test
     @DisplayName("GET /api/v1/life/finance/expenses - returns empty list when no expenses")
     void getExpenses_emptyList() throws Exception {
-        mockMvc.perform(get("/api/v1/life/finance/expenses"))
+        mockMvc.perform(get("/api/v1/life/finance/expenses")
+                        .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$", hasSize(0)));
@@ -93,11 +96,13 @@ class LifeTrackerIntegrationTest {
         expense.setCurrency("EUR");
         expense.setCategory("FOOD");
         expense.setDescription("Lunch");
-        expense.setDate(LocalDateTime.now());
+        expense.setUserId(USER_ID);
+        expense.setOccurredAt(LocalDateTime.now());
         expenseRepository.save(expense);
 
         // When/Then
-        mockMvc.perform(get("/api/v1/life/finance/expenses"))
+        mockMvc.perform(get("/api/v1/life/finance/expenses")
+                        .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].amount", is(25.50)))
@@ -120,6 +125,7 @@ class LifeTrackerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/life/finance/expense")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Id", USER_ID)
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.amount", is(100.50)))
@@ -145,6 +151,7 @@ class LifeTrackerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/life/finance/expense")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Id", USER_ID)
                         .content(requestBody))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.currency", is("EUR")));
@@ -157,7 +164,8 @@ class LifeTrackerIntegrationTest {
     @Test
     @DisplayName("GET /api/v1/life/time/records - returns empty list when no records")
     void getTimeRecords_emptyList() throws Exception {
-        mockMvc.perform(get("/api/v1/life/time/records"))
+        mockMvc.perform(get("/api/v1/life/time/records")
+                        .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$", hasSize(0)));
@@ -168,6 +176,7 @@ class LifeTrackerIntegrationTest {
     void getTimeRecords_returnsList() throws Exception {
         // Given
         TimeRecord record = new TimeRecord();
+        record.setUserId(USER_ID);
         record.setActivity("Coding");
         record.setStartTime(LocalDateTime.of(2025, 12, 2, 9, 0));
         record.setEndTime(LocalDateTime.of(2025, 12, 2, 12, 0));
@@ -175,7 +184,8 @@ class LifeTrackerIntegrationTest {
         timeRecordRepository.save(record);
 
         // When/Then
-        mockMvc.perform(get("/api/v1/life/time/records"))
+        mockMvc.perform(get("/api/v1/life/time/records")
+                        .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].activity", is("Coding")))
@@ -189,7 +199,8 @@ class LifeTrackerIntegrationTest {
     @Test
     @DisplayName("GET /api/v1/life/calendar/events - returns empty list when no events")
     void getCalendarEvents_emptyList() throws Exception {
-        mockMvc.perform(get("/api/v1/life/calendar/events"))
+        mockMvc.perform(get("/api/v1/life/calendar/events")
+                        .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$", hasSize(0)));
@@ -200,6 +211,7 @@ class LifeTrackerIntegrationTest {
     void getCalendarEvents_returnsList() throws Exception {
         // Given
         CalendarEvent event = new CalendarEvent();
+        event.setUserId(USER_ID);
         event.setTitle("Meeting");
         event.setStartTime(LocalDateTime.of(2025, 12, 2, 14, 0));
         event.setEndTime(LocalDateTime.of(2025, 12, 2, 15, 0));
@@ -207,7 +219,8 @@ class LifeTrackerIntegrationTest {
         calendarEventRepository.save(event);
 
         // When/Then
-        mockMvc.perform(get("/api/v1/life/calendar/events"))
+        mockMvc.perform(get("/api/v1/life/calendar/events")
+                        .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].title", is("Meeting")))
@@ -226,4 +239,3 @@ class LifeTrackerIntegrationTest {
                 .andExpect(jsonPath("$.status", is("UP")));
     }
 }
-

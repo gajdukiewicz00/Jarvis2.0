@@ -1,0 +1,69 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: pc-control
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
+    virtual-host: ${SPRING_RABBITMQ_VIRTUAL_HOST:jarvis}
+    listener:
+      simple:
+        acknowledge-mode: manual
+        prefetch: 1
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+jarvis:
+  rabbitmq:
+    queue: ${RABBITMQ_QUEUE_PC_CONTROL:pc-control.commands}
+  kafka:
+    topic: ${KAFKA_TOPIC_PC_CONTROL:jarvis.events.pc-control}
+  features:
+    rabbitmq-enabled: ${FEATURE_RABBITMQ_PC_CONTROL:false}
+    kafka-enabled: ${FEATURE_KAFKA_PC_CONTROL:false}
+
+pc-control:
+  stub-mode: ${PC_CONTROL_STUB_MODE:true}
+
+security:
+  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:VOLUME_UP,VOLUME_DOWN,VOLUME_MUTE,LAUNCH_APP,MEDIA_CONTROL,TIMER_START,TIMER_STOP}
+
+# Actuator endpoints
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    rabbit:
+      enabled: false
+    kafka:
+      enabled: false
+
+logging:
+  level:
+    org.jarvis.pccontrol: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"

@@ -29,8 +29,6 @@ spec:
             - secretRef:
                 name: jarvis-secrets
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "k8s"
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_security"
           resources:
@@ -66,7 +64,5 @@ spec:
     - port: 8088
       targetPort: 8088
       name: http
-      name: http
   selector:
     app: security-service
-

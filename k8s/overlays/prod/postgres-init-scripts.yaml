@@ -1,0 +1,36 @@
+# =============================================================================
+# PostgreSQL pgvector Init Scripts (Optional LLM/Memory stack)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: jarvis
+data:
+  01-init-databases.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "=== Jarvis pgvector PostgreSQL Initialization ==="
+
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+      SELECT 'CREATE DATABASE jarvis_memory'
+      WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'jarvis_memory')\\gexec
+      GRANT ALL PRIVILEGES ON DATABASE jarvis_memory TO "$POSTGRES_USER";
+    EOSQL
+
+    echo "=== Database creation complete ==="
+
+  02-pgvector-setup.sql: |
+    \\c jarvis_memory;
+
+    CREATE EXTENSION IF NOT EXISTS vector;
+
+    DO $$
+    BEGIN
+        IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+            RAISE NOTICE 'pgvector extension enabled successfully';
+        ELSE
+            RAISE EXCEPTION 'pgvector extension failed to enable';
+        END IF;
+    END $$;

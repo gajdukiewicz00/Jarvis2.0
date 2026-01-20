@@ -162,7 +162,7 @@ while true; do
             ;;
         p|P)
             echo -e "${CYAN}📜 Логи postgres:${NC}"
-            kubectl logs -f deployment/postgres -n $NAMESPACE --tail=100 2>/dev/null || {
+            kubectl logs -f statefulset/postgres -n $NAMESPACE --tail=100 2>/dev/null || {
                 echo -e "${RED}Не удалось получить логи${NC}"
             }
             ;;

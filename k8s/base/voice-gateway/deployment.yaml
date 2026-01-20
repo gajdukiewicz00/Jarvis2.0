@@ -25,14 +25,9 @@ spec:
           ports:
             - containerPort: 8081
               name: http
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "kubernetes"
-            - name: ORCHESTRATOR_URL
-              value: "http://orchestrator.jarvis.svc.cluster.local:8083"
           volumeMounts:
             - name: vosk-models
-              mountPath: /app/models
+              mountPath: /models
               readOnly: true
           resources:
             limits:
@@ -56,8 +51,8 @@ spec:
       volumes:
         - name: vosk-models
           hostPath:
-            path: /home/kwaqa/IdeaProjects/Jarvis2.0/models
-            type: Directory
+            path: __JARVIS_MODELS_PATH__
+            type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
@@ -74,4 +69,3 @@ spec:
       name: http
   selector:
     app: voice-gateway
-

@@ -102,29 +102,27 @@ All 11 modules compile successfully:
   - **Devices** - Smart home device control (API connected)
   - **PC Control** - App launch, volume, timer (API connected)
   - **Life** - Expense & time tracking (API connected)
-  - **Settings** - Placeholder
-- **API Client:** HTTP client → `http://localhost:8080/api/v1`
+- **Settings** - Placeholder
+- **API Client:** HTTPS → `https://api.jarvis.local/api/v1`
 
 ### Mobile Client (Android)
 - **Tech:** Kotlin, Android Gradle
 - **Features:**
   - `MainActivity` with "Speak" button
   - `AudioStreamer` - Records audio, streams to voice-gateway
-- **Endpoint:** `POST http://<SERVER>:8080/api/v1/voice/transcribe/stream`
+- **Endpoint:** `POST https://api.jarvis.local/api/v1/voice/transcribe/stream`
 
 ## Infrastructure
 
-### Docker Compose
-- All 11 microservices + Mosquitto MQTT broker + PostgreSQL 15
-- PostgreSQL 15 (port 5432) - Used by life-tracker
-- Volumes: Postgres data, MQTT persistence
-- Audio/Display: PulseAudio, X11 sockets mounted for pc-control
+### Kubernetes (prod-only)
+- Single namespace: `jarvis`
+- Ingress: `api.jarvis.local`, `voice.jarvis.local` (HTTPS/WSS)
+- PostgreSQL + Mosquitto as ClusterIP services
 
 ### Build Files
 - Root: `pom.xml` (parent)
 - Each service: `pom.xml` + `Dockerfile`
 - Mobile: `settings.gradle.kts`, `app/build.gradle.kts`
-- Root: `docker-compose.yml`
 
 ## OpenAPI Specifications
 - `docs/openapi/voice-gateway.yaml`
@@ -140,4 +138,4 @@ All 11 modules compile successfully:
 ✅ **Maven Build:** All modules compile (`mvn clean package -DskipTests`)  
 ✅ **No Syntax Errors:** No `...` placeholders or incomplete code  
 ✅ **Dockerfiles:** Present for each service  
-✅ **docker-compose.yml:** Complete with all services + Postgres + Mosquitto
+✅ **K8s manifests:** `k8s/base` + `k8s/overlays/prod`

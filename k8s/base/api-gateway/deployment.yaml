@@ -28,34 +28,6 @@ spec:
           envFrom:
             - secretRef:
                 name: jarvis-secrets
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "k8s"
-            # Service URLs
-            - name: SERVICES_VOICE_GATEWAY_URL
-              value: "http://voice-gateway.jarvis.svc.cluster.local:8081"
-            - name: SERVICES_NLP_URL
-              value: "http://nlp-service.jarvis.svc.cluster.local:8082"
-            - name: SERVICES_ORCHESTRATOR_URL
-              value: "http://orchestrator.jarvis.svc.cluster.local:8083"
-            - name: SERVICES_PC_CONTROL_URL
-              value: "http://pc-control.jarvis.svc.cluster.local:8084"
-            - name: SERVICES_SECURITY_URL
-              value: "http://security-service.jarvis.svc.cluster.local:8088"
-            - name: SERVICES_SMART_HOME_URL
-              value: "http://smart-home-service.jarvis.svc.cluster.local:8086"
-            - name: SERVICES_ANALYTICS_URL
-              value: "http://analytics-service.jarvis.svc.cluster.local:8087"
-            - name: SERVICES_LIFE_TRACKER_URL
-              value: "http://life-tracker.jarvis.svc.cluster.local:8088"
-            - name: SERVICES_USER_PROFILE_URL
-              value: "http://user-profile.jarvis.svc.cluster.local:8089"
-            - name: SERVICES_LLM_URL
-              value: "http://llm-service.jarvis.svc.cluster.local:8091"
-            - name: SERVICES_PLANNER_URL
-              value: "http://planner-service.jarvis.svc.cluster.local:8092"
-            - name: SERVICES_MEMORY_URL
-              value: "http://memory-service.jarvis.svc.cluster.local:8093"
           resources:
             limits:
               memory: "512Mi"
@@ -84,12 +56,10 @@ metadata:
   labels:
     app: api-gateway
 spec:
-  type: NodePort
+  type: ClusterIP
   ports:
     - port: 8080
       targetPort: 8080
-      nodePort: 30080
       name: http
   selector:
     app: api-gateway
-

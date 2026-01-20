@@ -60,9 +60,9 @@ public class LlmEnhancementService {
     public String parseNaturalLanguageTask(String userId, String naturalLanguage) {
         log.info("Parsing NL task for user: {}: {}", userId, naturalLanguage);
         
-        // TODO: Use LLM to extract: title, category, priority, deadline from natural language
+        // TODO: Use LLM to extract: title, category, priority, dueDate from natural language
         // Example: "Напомни позвонить маме завтра в 15:00" 
-        //   → Task(title="Позвонить маме", deadline="tomorrow 15:00", category=CALLS)
+        //   → Task(title="Позвонить маме", dueDate="tomorrow 15:00", category=CALLS)
         
         return "Task будет создана из: " + naturalLanguage;
     }

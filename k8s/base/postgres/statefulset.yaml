@@ -27,20 +27,26 @@ spec:
               name: postgres
           env:
             - name: POSTGRES_DB
-              valueFrom:
-                secretKeyRef:
-                  name: db-credentials
-                  key: postgres-db
+              value: "jarvis"
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: db-credentials
-                  key: postgres-user
+                  name: jarvis-secrets
+                  key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: db-credentials
-                  key: postgres-password
+                  name: jarvis-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_USER
+            - name: PGDATABASE
+              value: "jarvis"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
@@ -57,20 +63,12 @@ spec:
             exec:
               command:
                 - pg_isready
-                - -U
-                - jarvis
-                - -d
-                - jarvis
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             exec:
               command:
                 - pg_isready
-                - -U
-                - jarvis
-                - -d
-                - jarvis
             initialDelaySeconds: 5
             periodSeconds: 5
       volumes:
@@ -133,4 +131,3 @@ data:
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "jarvis_memory" <<-EOSQL
       CREATE EXTENSION IF NOT EXISTS vector;
     EOSQL
-

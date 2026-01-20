@@ -6,6 +6,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# CUDA version pin (kept for consistency across AI containers)
+ARG CUDA_VERSION=cu124
+ENV CUDA_VERSION=cu124
+
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -36,6 +40,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5001/health || exit 1
 
 CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5001"]
-
 
 

@@ -32,7 +32,7 @@ spring:
 # Life-tracker URL
 jarvis:
   life-tracker:
-    url: ${LIFE_TRACKER_URL:http://localhost:8085}
+    url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
 
 # Actuator endpoints
 management:

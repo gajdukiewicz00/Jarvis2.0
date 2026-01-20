@@ -10,10 +10,8 @@ namespace: jarvis
 
 resources:
   - namespace.yaml
-  - postgres-init-configmap.yaml
 
 # Common labels applied to all resources
 commonLabels:
   app.kubernetes.io/part-of: jarvis
   app.kubernetes.io/managed-by: kustomize
-

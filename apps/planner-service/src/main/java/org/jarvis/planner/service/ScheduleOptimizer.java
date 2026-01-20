@@ -28,11 +28,11 @@ public class ScheduleOptimizer {
         
         List<Task> activeTasks = taskRepository.findActiveTasks(userId);
         
-        // Sort by priority and deadline
+        // Sort by priority and due date
         List<Task> sortedTasks = activeTasks.stream()
             .sorted(Comparator
                 .comparing(Task::getPriority, Comparator.reverseOrder())
-                .thenComparing(Task::getDeadline, Comparator.nullsLast(Comparator.naturalOrder())))
+                .thenComparing(Task::getDueDate, Comparator.nullsLast(Comparator.naturalOrder())))
             .collect(Collectors.toList());
         
         // Distribute across days

@@ -25,9 +25,6 @@ spec:
           ports:
             - containerPort: 8082
               name: http
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "kubernetes"
           resources:
             limits:
               memory: "512Mi"
@@ -63,4 +60,3 @@ spec:
       name: http
   selector:
     app: nlp-service
-

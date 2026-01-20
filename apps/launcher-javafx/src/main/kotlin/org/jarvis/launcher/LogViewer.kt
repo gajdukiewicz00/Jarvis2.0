@@ -136,7 +136,9 @@ class LogViewer {
                         logTextArea.positionCaret(logTextArea.text.length)
                     }
                     
-                    statusLabel.text = "Loaded ${recentLines.size} lines (${lines.size} total, secrets masked)"
+                    val fileName = file.fileName.toString()
+                    val runLabel = if (fileName == "backend-launch.log") "current run" else "launcher"
+                    statusLabel.text = "Viewing $fileName ($runLabel), loaded ${recentLines.size} lines (${lines.size} total, secrets masked)"
                 }
                 
                 lastFileSize.set(Files.size(file))
@@ -172,4 +174,3 @@ class LogViewer {
         executor.shutdown()
     }
 }
-

@@ -25,11 +25,9 @@ spec:
           ports:
             - containerPort: 8086
               name: http
-          env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "kubernetes"
-            - name: MQTT_BROKER_URL
-              value: "tcp://mosquitto.jarvis.svc.cluster.local:1883"
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
           resources:
             limits:
               memory: "256Mi"
@@ -65,4 +63,3 @@ spec:
       name: http
   selector:
     app: smart-home-service
-

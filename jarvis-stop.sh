@@ -1,13 +1,35 @@
 #!/usr/bin/env bash
 
 # =============================================================================
-# Jarvis 2.0 - Kubernetes Stop Script
+# Jarvis 2.0 - Kubernetes Stop Script (prod-only)
 # =============================================================================
-# Останавливает все ресурсы Jarvis в Kubernetes
+# Stops all Jarvis resources in the jarvis namespace.
 # =============================================================================
 
-PROJECT_DIR="/home/kwaqa/IdeaProjects/Jarvis2.0"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${SCRIPT_DIR}"
+K8S_DIR="${PROJECT_DIR}/k8s"
 NAMESPACE="jarvis"
+
+YES=false
+PURGE=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y)
+            YES=true
+            ;;
+        --purge)
+            PURGE=true
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--yes] [--purge]"
+            exit 0
+            ;;
+    esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -27,51 +49,42 @@ if ! command -v kubectl &> /dev/null; then
     exit 1
 fi
 
-# Останавливаем port-forward процессы
+# Останавливаем port-forward процессы (debug)
 echo -e "${YELLOW}⏳${NC} Останавливаю port-forward..."
 pkill -f "kubectl port-forward.*jarvis" 2>/dev/null || true
 echo -e "${GREEN}✓${NC} Port-forward остановлен"
 
-# Показываем текущее состояние
 echo ""
-echo -e "${BLUE}📊 Текущие ресурсы в namespace $NAMESPACE:${NC}"
-kubectl get all -n $NAMESPACE --no-headers 2>/dev/null | head -20
-
-echo ""
-read -p "Удалить все ресурсы Jarvis? [y/N] " -n 1 -r
-echo ""
-
-if [[ $REPLY =~ ^[Yy]$ ]]; then
+if [[ "$YES" != "true" ]]; then
+    read -p "Удалить все ресурсы Jarvis в namespace '${NAMESPACE}'? [y/N] " -n 1 -r
     echo ""
-    echo -e "${YELLOW}⏳${NC} Удаляю микросервисы..."
-    kubectl delete -f "$PROJECT_DIR/k8s/dev/services/" --ignore-not-found 2>/dev/null || true
-    kubectl delete -f "$PROJECT_DIR/k8s/dev/ingress.yaml" --ignore-not-found 2>/dev/null || true
-
-    echo -e "${YELLOW}⏳${NC} Удаляю Kafka..."
-    kubectl delete -f "$PROJECT_DIR/k8s/dev/kafka/" --ignore-not-found 2>/dev/null || true
-
-    echo -e "${YELLOW}⏳${NC} Удаляю RabbitMQ..."
-    kubectl delete -f "$PROJECT_DIR/k8s/dev/rabbitmq/" --ignore-not-found 2>/dev/null || true
-
-    echo -e "${YELLOW}⏳${NC} Удаляю PostgreSQL..."
-    kubectl delete -f "$PROJECT_DIR/k8s/dev/postgres/" --ignore-not-found 2>/dev/null || true
-
-    echo ""
-    read -p "Удалить также базовые ресурсы (secrets, configmaps)? [y/N] " -n 1 -r
-    echo ""
-
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        kubectl delete -f "$PROJECT_DIR/k8s/base/" --ignore-not-found 2>/dev/null || true
-        echo -e "${GREEN}✓${NC} Базовые ресурсы удалены"
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}ℹ️${NC}  Отменено. Ресурсы не удалены."
+        exit 0
     fi
+fi
 
-    echo ""
-    echo -e "${GREEN}✓${NC} Все ресурсы Jarvis удалены"
+# Delete overlay resources
+if [ -d "${K8S_DIR}/overlays/prod" ]; then
+    echo -e "${YELLOW}⏳${NC} Удаляю ресурсы (kustomize overlay)..."
+    kubectl delete -k "${K8S_DIR}/overlays/prod" --ignore-not-found=true >/dev/null 2>&1 || true
 else
-    echo -e "${BLUE}ℹ️${NC}  Отменено. Ресурсы не удалены."
+    echo -e "${YELLOW}⚠️${NC} Overlay not found: ${K8S_DIR}/overlays/prod"
+fi
+
+# Scale down any remaining deployments/statefulsets
+kubectl scale deployment --all --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+kubectl scale statefulset --all --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+
+echo -e "${GREEN}✓${NC} Jarvis workloads stopped"
+
+if [[ "$PURGE" == "true" ]]; then
+    echo -e "${YELLOW}⏳${NC} Purge: удаляю namespace ${NAMESPACE}..."
+    kubectl delete namespace "${NAMESPACE}" --ignore-not-found=true >/dev/null 2>&1 || true
+    echo -e "${GREEN}✓${NC} Namespace удален"
+else
+    echo -e "${BLUE}ℹ️${NC} Secrets и namespace сохранены"
 fi
 
 echo ""
 echo -e "${YELLOW}💡${NC} Для запуска снова: ./jarvis-launch.sh"
-echo -e "${YELLOW}💡${NC} Или кликни на иконку 'Jarvis 2.0' в меню приложений"
-

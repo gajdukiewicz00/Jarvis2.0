@@ -19,73 +19,73 @@ Jarvis 2.0 is a comprehensive AI-powered personal assistant system featuring:
 
 ---
 
+## ✅ Status
+
+See `docs/STATUS.md`.
+
+---
+
 ## 🏗️ Architecture
 
 ### Microservices (14 services)
 
 | Service | Port | Namespace | Description |
 |---------|------|-----------|-------------|
-| **api-gateway** | 8080 | jarvis-core | Main API Gateway (routing, JWT) |
-| **voice-gateway** | 8081 | jarvis-core | Voice input/output (STT/TTS) |
-| **nlp-service** | 8082 | jarvis-core | NLP processing |
-| **orchestrator** | 8083 | jarvis-core | Command routing |
-| **pc-control** | 8084 | jarvis-core | System control |
-| **security-service** | 8085 | jarvis-core | JWT authentication |
-| **smart-home-service** | 8086 | jarvis-iot | IoT integration |
-| **analytics-service** | 8087 | jarvis-core | Data analysis |
-| **life-tracker** | 8088 | jarvis-core | Time/expense tracking |
-| **user-profile** | 8089 | jarvis-core | User preferences |
-| **llm-service** | 8091 | jarvis-llm | LLM API wrapper |
-| **planner-service** | 8092 | jarvis-core | Tasks & reminders |
-| **memory-service** | 8093 | jarvis-llm | Long-term memory (RAG) |
-| **llm-server** | 5000 | jarvis-llm | h2oGPT Python server (GPU) |
-| **embedding-service** | 5001 | jarvis-llm | Text embeddings (CPU) |
+| **api-gateway** | 8080 | jarvis | Main API Gateway (routing, JWT) |
+| **voice-gateway** | 8081 | jarvis | Voice input/output (STT/TTS) |
+| **nlp-service** | 8082 | jarvis | NLP processing |
+| **orchestrator** | 8083 | jarvis | Command routing |
+| **pc-control** | 8084 | jarvis | System control |
+| **security-service** | 8088 | jarvis | JWT authentication |
+| **smart-home-service** | 8086 | jarvis | IoT integration |
+| **analytics-service** | 8087 | jarvis | Data analysis |
+| **life-tracker** | 8085 | jarvis | Time/expense tracking |
+| **user-profile** | 8089 | jarvis | User preferences |
+| **llm-service** | 8091 | jarvis | LLM API wrapper |
+| **planner-service** | 8092 | jarvis | Tasks & reminders |
+| **memory-service** | 8093 | jarvis | Long-term memory (RAG) |
+| **llm-server** | 5000 | jarvis | h2oGPT Python server (GPU) |
+| **embedding-service** | 5001 | jarvis | Text embeddings (CPU) |
 
 ### Infrastructure
 
 | Component | Port | Namespace |
 |-----------|------|-----------|
-| PostgreSQL + pgvector | 5432 | jarvis-data |
-| Mosquitto MQTT | 1883 | jarvis-iot |
+| PostgreSQL + pgvector | 5432 | jarvis |
+| Mosquitto MQTT | 1883 | jarvis |
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (UI-first)
 
-### Prerequisites
+1. Запусти **Jarvis** из меню приложений (desktop icon).
+2. Нажми **Start All** в Launcher.
+3. Если потребуется доступ администратора — появится GUI-подтверждение (pkexec).
+4. Дождись статуса **READY/DEGRADED**, затем нажми **Start Desktop**.
 
-- **Minikube** (local Kubernetes)
-- **kubectl**
-- **Java 21** (OpenJDK)
-- **Maven 3.8+**
-- **Docker**
-- **NVIDIA GPU** (optional, for LLM acceleration)
+### Desktop launcher
 
-### One-Command Deploy
+Installer создает один launcher-файл: `~/.local/share/applications/jarvis.desktop` (Name: Jarvis, Exec: `~/.jarvis/app/bin/jarvis-launcher.sh`). Инсталлятор чистит дубли в стандартных путях, runtime Launcher не создает и не изменяет `.desktop`.
 
-```bash
-# Deploy everything to Kubernetes
-./scripts/deploy.sh
-```
-
-This will:
-1. Start Minikube (if not running)
-2. Build all Docker images
-3. Deploy to Kubernetes
-4. Wait for services to be ready
-5. Show access URLs
+Если вдруг нужна ручная чистка, удали `*jarvis*.desktop` из:
+`~/.local/share/applications`, `~/.config/autostart`, `/usr/share/applications`, `/usr/local/share/applications`,
+`/var/lib/snapd/desktop/applications`, `~/.local/share/flatpak/exports/share/applications`.
 
 ### Access
 
-After deployment:
 ```
-API Gateway: http://<minikube-ip>:30080
+API Gateway: https://api.jarvis.local
+Voice Gateway: wss://voice.jarvis.local
 ```
 
-### Stop
+## 🧯 Troubleshooting (CLI, optional)
+
+Если UI недоступен, можно использовать скрипты напрямую:
 
 ```bash
-./scripts/stop.sh
+./jarvis-launch.sh
+./jarvis-stop.sh
+./jarvis-logs.sh
 ```
 
 ---
@@ -108,16 +108,11 @@ Jarvis2.0/
 │   └── embedding-service/     # Sentence transformers
 │
 ├── k8s/                       # Kubernetes manifests
-│   ├── namespaces/            # Namespace definitions
 │   ├── base/                  # Base deployments
-│   ├── overlays/              # Environment overlays
-│   │   └── dev/               # Development (Minikube)
-│   ├── secrets/               # Secrets (JWT, DB)
-│   └── ingress/               # Ingress with TLS
+│   └── overlays/              # Environment overlays
+│       └── prod/              # Production (k3s + ingress-nginx)
 │
-├── models/                    # ML models (not in git)
-│   ├── vosk-model-small-ru-0.22/
-│   └── README.md
+├── models/                    # Legacy local models (not in git)
 │
 ├── scripts/
 │   ├── deploy.sh              # One-click deploy
@@ -131,6 +126,8 @@ Jarvis2.0/
 
 ---
 
+**Models:** place Vosk/LLM models in `~/.jarvis/models` (not tracked in git).
+
 ## 🛠️ Development
 
 ### Build
@@ -143,32 +140,10 @@ mvn clean package -DskipTests
 mvn clean package -pl apps/llm-service -am -DskipTests
 ```
 
-### Run Locally (dev profile)
+### Runtime
 
-```bash
-# Start PostgreSQL
-docker run -d --name postgres -p 5432:5432 \
-  -e POSTGRES_USER=jarvis -e POSTGRES_PASSWORD=jarvis123 \
-  pgvector/pgvector:pg16
-
-# Run service
-cd apps/api-gateway
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
-```
-
-### Kubernetes Development
-
-```bash
-# Build images in Minikube context
-eval $(minikube docker-env)
-./scripts/build-images.sh
-
-# Apply changes
-kubectl apply -k k8s/overlays/dev/
-
-# Watch pods
-kubectl get pods -A -l app.kubernetes.io/part-of=jarvis -w
-```
+This repo is **prod-only**. Primary path is the Launcher UI.
+CLI scripts are for troubleshooting or automation.
 
 ---
 
@@ -183,22 +158,14 @@ kubectl get pods -A -l app.kubernetes.io/part-of=jarvis -w
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Kubernetes Secrets (local only)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `JWT_SECRET` | (change!) | JWT signing key |
-| `DB_PASSWORD` | jarvis123 | PostgreSQL password |
-| `LLM_BACKEND` | transformers | LLM backend (transformers/llamacpp) |
-| `MAX_NEW_TOKENS` | 512 | Max LLM output tokens |
+Secrets are stored **locally only** in `~/.jarvis/secrets/secrets.env` and applied during launch.
+No secrets are committed to git.
 
-### Kubernetes Secrets
+### Optional flags
 
-Located in `k8s/secrets/`:
-- `jwt-secret.yaml` - JWT signing key
-- `db-credentials.yaml` - Database credentials
-
-**⚠️ Change these for production!**
+LLM and Memory are optional; they must not block core readiness.
 
 ---
 
@@ -233,12 +200,12 @@ Located in `k8s/secrets/`:
 ### GPU Requirements
 
 - NVIDIA GPU with 12GB+ VRAM
-- CUDA 12.8+
+- CUDA 12.4+ (driver 580+ OK)
 - nvidia-container-toolkit
 
 ### Models
 
-Place models in `/home/kwaqa/models/`:
+Place models in `~/.jarvis/models/`:
 - `h2ogpt-4096-llama2-7b-chat/` (HF format)
 - `h2ogpt-7b-chat-q4_k_m.gguf` (GGUF for llama.cpp)
 
@@ -249,19 +216,19 @@ Place models in `/home/kwaqa/models/`:
 ### Check pod status
 ```bash
 kubectl get pods -A -l app.kubernetes.io/part-of=jarvis
-kubectl logs -f deployment/api-gateway -n jarvis-core
+kubectl logs -f deployment/api-gateway -n jarvis
 ```
 
 ### LLM not loading
 ```bash
-kubectl logs -f deployment/llm-server -n jarvis-llm
-kubectl exec -it deployment/llm-server -n jarvis-llm -- nvidia-smi
+kubectl logs -f deployment/llm-server -n jarvis
+kubectl exec -it deployment/llm-server -n jarvis -- nvidia-smi
 ```
 
 ### Database issues
 ```bash
-kubectl logs -f statefulset/postgres -n jarvis-data
-kubectl exec -it postgres-0 -n jarvis-data -- psql -U jarvis
+kubectl logs -f statefulset/postgres -n jarvis
+kubectl exec -it postgres-0 -n jarvis -- psql -U jarvis
 ```
 
 ---
@@ -278,4 +245,4 @@ Private/Personal use.
 
 ---
 
-**🚀 Deploy with one command: `./scripts/deploy.sh`**
+**🚀 Deploy with one command: `./jarvis-launch.sh`**

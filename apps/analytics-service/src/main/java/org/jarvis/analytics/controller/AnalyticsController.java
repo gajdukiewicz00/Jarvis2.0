@@ -45,12 +45,16 @@ public class AnalyticsController {
         try {
             List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
             if (expenses != null && !expenses.isEmpty()) {
-                BigDecimal totalExpenses = expenses.stream()
+                List<ExpenseDTO> filtered = expenses.stream()
+                        .filter(expense -> expense.getType() == null
+                                || "EXPENSE".equalsIgnoreCase(expense.getType()))
+                        .toList();
+                BigDecimal totalExpenses = filtered.stream()
                         .map(ExpenseDTO::getAmount)
                         .filter(amount -> amount != null)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
                 builder.totalExpenses(totalExpenses);
-                builder.expenseCount(expenses.size());
+                builder.expenseCount(filtered.size());
             } else {
                 builder.totalExpenses(BigDecimal.ZERO);
                 builder.expenseCount(0);

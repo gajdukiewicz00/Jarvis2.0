@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ExpenseDTO {
     private Long id;
+    private String userId;
 
     @JsonSerialize(using = ToStringSerializer.class)
     private BigDecimal amount; // Changed from Double
@@ -22,7 +23,9 @@ public class ExpenseDTO {
     private String currency;
     private String category;
     private String description;
+    private String type;
+    private String merchant;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime date;
+    private LocalDateTime occurredAt;
 }

@@ -69,12 +69,26 @@ cp "$LAUNCHER_JAR" "${RELEASE_DIR}/launcher.jar"
 cp "$DESKTOP_JAR" "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar"
 echo "  ✅ JARs copied"
 
+# Copy core launch scripts
+echo "Copying core launch scripts..."
+cp "${REPO_ROOT}/jarvis-launch.sh" "${RELEASE_DIR}/"
+cp "${REPO_ROOT}/jarvis-stop.sh" "${RELEASE_DIR}/"
+cp "${REPO_ROOT}/jarvis-logs.sh" "${RELEASE_DIR}/"
+chmod +x "${RELEASE_DIR}/jarvis-launch.sh" "${RELEASE_DIR}/jarvis-stop.sh" "${RELEASE_DIR}/jarvis-logs.sh"
+echo "  ✅ Core scripts copied"
+
 # Copy install scripts
 echo "Copying install scripts..."
 mkdir -p "${RELEASE_DIR}/bin"
 cp "${SCRIPT_DIR}/jarvis-launcher.sh" "${RELEASE_DIR}/bin/"
 cp "${SCRIPT_DIR}/jarvis-stop.sh" "${RELEASE_DIR}/bin/"
 cp "${SCRIPT_DIR}/jarvis-diagnostics.sh" "${RELEASE_DIR}/bin/"
+cp "${SCRIPT_DIR}/jarvis-generate-certs.sh" "${RELEASE_DIR}/bin/"
+cp "${SCRIPT_DIR}/jarvis-install-tls.sh" "${RELEASE_DIR}/bin/"
+cp "${SCRIPT_DIR}/jarvis-setup-hosts.sh" "${RELEASE_DIR}/bin/"
+cp "${SCRIPT_DIR}/jarvis-secrets-apply.sh" "${RELEASE_DIR}/bin/"
+cp "${SCRIPT_DIR}/jarvis-system-setup.sh" "${RELEASE_DIR}/bin/"
+cp "${REPO_ROOT}/scripts/verify-prod.sh" "${RELEASE_DIR}/bin/"
 chmod +x "${RELEASE_DIR}/bin"/*.sh
 echo "  ✅ Install scripts copied"
 
@@ -216,13 +230,20 @@ if [[ "$INSTALL_TYPE" == "upgrade" ]]; then
 else
     echo "  Backup path: none (fresh install)"
 fi
-echo "  Desktop entry: ${JARVIS_DESKTOP}/jarvis-launcher.desktop"
+echo "  Desktop entry: ${JARVIS_DESKTOP}/jarvis.desktop"
 echo "  Install log: ${INSTALL_LOG}"
 echo ""
 
 # Copy files
 echo "Installing files..."
 cp "${RELEASE_DIR}/launcher.jar" "${JARVIS_APP}/"
+if [[ -f "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" ]]; then
+    cp "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" "${JARVIS_APP}/"
+fi
+cp "${RELEASE_DIR}/jarvis-launch.sh" "${JARVIS_APP}/"
+cp "${RELEASE_DIR}/jarvis-stop.sh" "${JARVIS_APP}/"
+cp "${RELEASE_DIR}/jarvis-logs.sh" "${JARVIS_APP}/"
+chmod +x "${JARVIS_APP}/jarvis-launch.sh" "${JARVIS_APP}/jarvis-stop.sh" "${JARVIS_APP}/jarvis-logs.sh"
 cp -r "${RELEASE_DIR}/bin"/* "${JARVIS_BIN}/"
 if [[ -d "${RELEASE_DIR}/config" ]]; then
     cp -r "${RELEASE_DIR}/config" "${JARVIS_APP}/"
@@ -238,55 +259,210 @@ cp "${RELEASE_DIR}/VERSION" "${JARVIS_APP}/"
 echo "${RELEASE_DIR}" > "${JARVIS_APP}/RELEASE_SOURCE"
 echo "  ✅ Release source recorded: ${JARVIS_APP}/RELEASE_SOURCE"
 
-# Stage 15: Create desktop file with polished metadata
-DESKTOP_FILE="${JARVIS_DESKTOP}/jarvis-launcher.desktop"
-ICON_PATH="\$HOME/.jarvis/app/assets/icons/jarvis.png"
-cat > "$DESKTOP_FILE" <<EOF
+# Stage 15: Desktop entry install/cleanup (install-only, idempotent)
+install_desktop_entry() {
+    local desktop_dir="${JARVIS_DESKTOP}"
+    local desktop_file="${desktop_dir}/jarvis.desktop"
+    local icon_path="${JARVIS_APP}/assets/icons/jarvis.png"
+    local logs_dir="${JARVIS_HOME}/logs"
+    local system_db_update=false
+    local removed_any=false
+    local updated_any=false
+    local -a user_dirs=(
+        "${HOME}/.local/share/applications"
+        "${HOME}/.config/autostart"
+        "${HOME}/.local/share/flatpak/exports/share/applications"
+    )
+    local -a system_dirs=(
+        "/usr/share/applications"
+        "/usr/local/share/applications"
+        "/var/lib/snapd/desktop/applications"
+        "/var/lib/flatpak/exports/share/applications"
+    )
+
+    desktop_log() {
+        echo "  $*"
+        echo "$*" >> "${INSTALL_LOG}" 2>/dev/null || true
+    }
+
+    desktop_entry_content() {
+        cat <<EOF
 [Desktop Entry]
 Type=Application
-Name=Jarvis 2.0
-Comment=Local AI launcher for Jarvis stack
-Exec=/usr/bin/env bash -lc "\$HOME/.jarvis/app/bin/jarvis-launcher.sh"
-Icon=${ICON_PATH}
+Name=Jarvis
+Comment=Jarvis launcher (local AI stack)
+Exec=${JARVIS_APP}/bin/jarvis-launcher.sh
+Icon=${icon_path}
 Path=${JARVIS_APP}
 Terminal=false
-Categories=Utility;Development;
+Categories=Utility;AI;
 Keywords=Jarvis;AI;Launcher;
 StartupNotify=true
+StartupWMClass=jarvis-launcher
 
 Actions=Start;Stop;Logs;Diagnostics;
 
 [Desktop Action Start]
 Name=Start Jarvis
-Exec=/usr/bin/env bash -lc "\$HOME/.jarvis/app/bin/jarvis-launcher.sh"
-Icon=${ICON_PATH}
+Exec=${JARVIS_APP}/bin/jarvis-launcher.sh
+Icon=${icon_path}
 Terminal=false
 
 [Desktop Action Stop]
 Name=Stop Jarvis
-Exec=/usr/bin/env bash -lc "\$HOME/.jarvis/app/bin/jarvis-stop.sh"
-Icon=${ICON_PATH}
+Exec=${JARVIS_APP}/bin/jarvis-stop.sh
+Icon=${icon_path}
 Terminal=false
 
 [Desktop Action Logs]
 Name=View Logs
-Exec=/usr/bin/env bash -lc "xdg-open \$HOME/.jarvis/logs"
-Icon=${ICON_PATH}
+Exec=xdg-open ${logs_dir}
+Icon=${icon_path}
 Terminal=false
 
 [Desktop Action Diagnostics]
 Name=Diagnostics
-Exec=/usr/bin/env bash -lc "\$HOME/.jarvis/app/bin/jarvis-diagnostics.sh"
-Icon=${ICON_PATH}
+Exec=${JARVIS_APP}/bin/jarvis-diagnostics.sh
+Icon=${icon_path}
 Terminal=false
 EOF
+    }
 
-chmod +x "$DESKTOP_FILE"
+    local pkexec_available=false
+    if command -v pkexec >/dev/null 2>&1; then
+        pkexec_available=true
+    fi
 
-# Update desktop database
-if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database "${JARVIS_DESKTOP}" 2>/dev/null || true
-fi
+    mkdir -p "${desktop_dir}"
+
+    desktop_log "Desktop cleanup: scanning for legacy entries..."
+    for dir in "${user_dirs[@]}"; do
+        if [[ -d "${dir}" ]]; then
+            while IFS= read -r -d '' candidate; do
+                if [[ "${candidate}" == "${desktop_file}" ]]; then
+                    continue
+                fi
+                rm -f "${candidate}" 2>/dev/null || true
+                desktop_log "Removed user entry: ${candidate}"
+                removed_any=true
+            done < <(find "${dir}" -maxdepth 1 -type f -iname "*jarvis*.desktop" -print0 2>/dev/null || true)
+        fi
+    done
+
+    local -a system_candidates=()
+    for dir in "${system_dirs[@]}"; do
+        if [[ -d "${dir}" ]]; then
+            while IFS= read -r -d '' candidate; do
+                system_candidates+=("${candidate}")
+            done < <(find "${dir}" -maxdepth 1 -type f -iname "*jarvis*.desktop" -print0 2>/dev/null || true)
+        fi
+    done
+
+    if (( ${#system_candidates[@]} > 0 )); then
+        if [[ "${EUID}" -eq 0 ]]; then
+            for candidate in "${system_candidates[@]}"; do
+                rm -f "${candidate}" 2>/dev/null || true
+                desktop_log "Removed system entry: ${candidate}"
+                removed_any=true
+                system_db_update=true
+            done
+        elif [[ "${pkexec_available}" == "true" ]]; then
+            if pkexec /usr/bin/env rm -f -- "${system_candidates[@]}" >/dev/null 2>&1; then
+                for candidate in "${system_candidates[@]}"; do
+                    desktop_log "Removed system entry: ${candidate}"
+                    removed_any=true
+                    system_db_update=true
+                done
+            else
+                for candidate in "${system_candidates[@]}"; do
+                    desktop_log "Skipped system entry (pkexec canceled or failed): ${candidate}"
+                done
+            fi
+        else
+            for candidate in "${system_candidates[@]}"; do
+                desktop_log "Skipped system entry (pkexec unavailable): ${candidate}"
+            done
+        fi
+    fi
+
+    if [[ -f "${desktop_file}" ]]; then
+        if command -v sha256sum >/dev/null 2>&1; then
+            local expected_checksum existing_checksum
+            expected_checksum="$(desktop_entry_content | sha256sum | awk '{print $1}')"
+            existing_checksum="$(sha256sum "${desktop_file}" | awk '{print $1}')"
+            if [[ "${expected_checksum}" != "${existing_checksum}" ]]; then
+                desktop_entry_content > "${desktop_file}"
+                chmod 644 "${desktop_file}"
+                desktop_log "Updated desktop entry: ${desktop_file}"
+                updated_any=true
+            else
+                desktop_log "Desktop entry up-to-date: ${desktop_file}"
+            fi
+        else
+            if command -v mktemp >/dev/null 2>&1 && command -v cmp >/dev/null 2>&1; then
+                local tmp_file
+                tmp_file="$(mktemp)"
+                desktop_entry_content > "${tmp_file}"
+                if cmp -s "${tmp_file}" "${desktop_file}"; then
+                    desktop_log "Desktop entry up-to-date: ${desktop_file}"
+                    rm -f "${tmp_file}"
+                else
+                    mv "${tmp_file}" "${desktop_file}"
+                    chmod 644 "${desktop_file}"
+                    desktop_log "Updated desktop entry: ${desktop_file}"
+                    updated_any=true
+                fi
+            else
+                desktop_log "Desktop entry exists (checksum skipped): ${desktop_file}"
+            fi
+        fi
+    else
+        desktop_entry_content > "${desktop_file}"
+        chmod 644 "${desktop_file}"
+        desktop_log "Created desktop entry: ${desktop_file}"
+        updated_any=true
+    fi
+
+    if [[ "${removed_any}" == "true" || "${updated_any}" == "true" ]]; then
+        if command -v update-desktop-database >/dev/null 2>&1; then
+            update-desktop-database "${desktop_dir}" 2>/dev/null || true
+            desktop_log "Updated desktop database: ${desktop_dir}"
+            if [[ "${system_db_update}" == "true" ]]; then
+                if [[ "${EUID}" -eq 0 ]]; then
+                    update-desktop-database /usr/share/applications 2>/dev/null || true
+                    update-desktop-database /usr/local/share/applications 2>/dev/null || true
+                elif command -v pkexec >/dev/null 2>&1; then
+                    pkexec /usr/bin/env update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+                    pkexec /usr/bin/env update-desktop-database /usr/local/share/applications >/dev/null 2>&1 || true
+                else
+                    desktop_log "Skipped system desktop database update (pkexec unavailable)"
+                fi
+            fi
+        fi
+
+        if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+            if [[ -d "${HOME}/.local/share/icons/hicolor" ]]; then
+                gtk-update-icon-cache -f -t "${HOME}/.local/share/icons/hicolor" >/dev/null 2>&1 || true
+            fi
+            if [[ -d "${HOME}/.icons/hicolor" ]]; then
+                gtk-update-icon-cache -f -t "${HOME}/.icons/hicolor" >/dev/null 2>&1 || true
+            fi
+            if [[ "${system_db_update}" == "true" && -d "/usr/share/icons/hicolor" ]]; then
+                if [[ "${EUID}" -eq 0 ]]; then
+                    gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+                elif command -v pkexec >/dev/null 2>&1; then
+                    pkexec /usr/bin/env gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+                fi
+            fi
+        fi
+
+        if command -v xdg-desktop-menu >/dev/null 2>&1; then
+            xdg-desktop-menu forceupdate >/dev/null 2>&1 || true
+        fi
+    fi
+}
+
+install_desktop_entry
 
 # Log installation (detailed log)
 {
@@ -324,11 +500,11 @@ if [[ "$INSTALL_TYPE" == "upgrade" ]]; then
     echo "  Previous version: $OLD_VERSION"
     echo "  Backup location: ${JARVIS_APP}/backup/${OLD_VERSION}"
 fi
-echo "  Desktop entry: ${JARVIS_DESKTOP}/jarvis-launcher.desktop"
+echo "  Desktop entry: ${JARVIS_DESKTOP}/jarvis.desktop"
 echo "  Install log: ${INSTALL_LOG}"
 echo ""
 echo "You can now:"
-echo "  1. Find 'Jarvis 2.0' in your application menu"
+echo "  1. Find 'Jarvis' in your application menu"
 echo "  2. Click to launch"
 echo ""
 INSTALL_EOF
@@ -384,7 +560,7 @@ The install script automatically:
 - Detects existing installation
 - Creates backup in \`~/.jarvis/app/backup/<old-version>/\`
 - Installs new version
-- Updates desktop file
+- Creates \`~/.local/share/applications/jarvis.desktop\` once (idempotent)
 
 ## Uninstall
 
@@ -455,4 +631,3 @@ echo "To verify integrity:"
 echo "  cd ${RELEASE_NAME}"
 echo "  sha256sum -c SHA256SUMS"
 echo ""
-

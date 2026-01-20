@@ -2,7 +2,7 @@ package org.jarvis.pccontrol.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.pccontrol.service.SystemControlService;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,11 +11,11 @@ import org.springframework.stereotype.Service;
  * Использует pactl, playerctl, xdotool, notify-send и другие утилиты Linux
  * для управления системой. Требует наличия X11 и PulseAudio.
  * 
- * НЕ активируется в профиле "k8s" - там используется StubSystemControlService.
+ * Используется, когда pc-control.stub-mode=false.
  */
 @Slf4j
 @Service
-@Profile("!k8s") // Не активировать в Kubernetes - там нет X11/Pulse
+@ConditionalOnProperty(name = "pc-control.stub-mode", havingValue = "false", matchIfMissing = true)
 public class LinuxSystemControlService implements SystemControlService {
 
     @Override

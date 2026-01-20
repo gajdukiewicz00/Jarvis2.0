@@ -1,6 +1,4 @@
 package org.jarvis.lifetracker.repository;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
 
 import org.jarvis.lifetracker.domain.Expense;
 import org.junit.jupiter.api.Test;
@@ -17,6 +15,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @DataJpaTest
 class ExpenseRepositoryTest {
 
+    private static final String USER_ID = "test-user";
+
     @Autowired
     private TestEntityManager entityManager;
 
@@ -31,7 +31,8 @@ class ExpenseRepositoryTest {
         expense.setCurrency("EUR");
         expense.setCategory("Food");
         expense.setDescription("Grocery shopping");
-        expense.setDate(LocalDateTime.now());
+        expense.setUserId(USER_ID);
+        expense.setOccurredAt(LocalDateTime.now());
 
         // When
         Expense saved = expenseRepository.save(expense);
@@ -99,7 +100,8 @@ class ExpenseRepositoryTest {
         // Given
         Expense expense = new Expense();
         expense.setAmount(new BigDecimal("10.00"));
-        expense.setDate(LocalDateTime.now());
+        expense.setUserId(USER_ID);
+        expense.setOccurredAt(LocalDateTime.now());
         // category, description, currency can be null
 
         // When
@@ -116,7 +118,8 @@ class ExpenseRepositoryTest {
         expense.setCurrency("EUR");
         expense.setCategory(category);
         expense.setDescription("Test expense");
-        expense.setDate(LocalDateTime.now());
+        expense.setUserId(USER_ID);
+        expense.setOccurredAt(LocalDateTime.now());
         return expense;
     }
 }

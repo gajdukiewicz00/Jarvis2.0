@@ -19,11 +19,18 @@ public class DTOMapper {
             return null;
         return new ExpenseDTO(
                 entity.getId(),
+                entity.getUserId(),
                 entity.getAmount(),
                 entity.getCurrency(),
                 entity.getCategory(),
                 entity.getDescription(),
-                entity.getDate());
+                entity.getType(),
+                entity.getMerchant(),
+                entity.getPaymentMethod(),
+                entity.getOccurredAt(),
+                entity.getSource(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt());
     }
 
     public TimeRecordDTO toDTO(TimeRecord entity) {
@@ -43,10 +50,18 @@ public class DTOMapper {
             return null;
         return new CalendarEventDTO(
                 entity.getId(),
+                entity.getUserId(),
                 entity.getTitle(),
                 entity.getDescription(),
                 entity.getStartTime(),
                 entity.getEndTime(),
-                entity.isAllDay());
+                entity.isAllDay(),
+                entity.getLocation(),
+                entity.getRecurrenceRule(),
+                entity.getRecurrenceUntil(),
+                entity.getTimezone(),
+                entity.getSource(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt());
     }
 }

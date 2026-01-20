@@ -19,8 +19,8 @@ spring:
 jarvis:
   vosk:
     enabled: ${JARVIS_VOSK_ENABLED:true}
-    model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:vosk-model-small-ru-0.22}
-    model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:vosk-model-small-en-us-0.15}
+    model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:/models/vosk-model-small-ru-0.22}
+    model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:/models/vosk-model-small-en-us-0.15}
     default-language: ${JARVIS_VOSK_DEFAULT_LANGUAGE:ru-RU}
     sample-rate: ${JARVIS_VOSK_SAMPLE_RATE:16000}
   orchestrator:
@@ -43,4 +43,3 @@ logging:
   level:
     org.jarvis.voicegateway: INFO
     org.vosk: INFO
-

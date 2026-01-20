@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.jarvis.lifetracker.domain.EntrySource;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Data
@@ -12,6 +14,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class CalendarEventDTO {
     private Long id;
+    private String userId;
     private String title;
     private String description;
 
@@ -22,4 +25,11 @@ public class CalendarEventDTO {
     private LocalDateTime endTime;
 
     private boolean allDay;
+    private String location;
+    private String recurrenceRule;
+    private LocalDateTime recurrenceUntil;
+    private String timezone;
+    private EntrySource source;
+    private Instant createdAt;
+    private Instant updatedAt;
 }

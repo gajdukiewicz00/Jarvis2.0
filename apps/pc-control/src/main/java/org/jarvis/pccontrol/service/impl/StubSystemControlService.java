@@ -3,7 +3,7 @@ package org.jarvis.pccontrol.service.impl;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.pccontrol.service.SystemControlService;
 import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,11 +13,11 @@ import org.springframework.stereotype.Service;
  * но реально не выполняются. Это позволяет сервису стабильно работать
  * в контейнерной среде без падений.
  * 
- * Активируется при профиле "k8s".
+ * Активируется при pc-control.stub-mode=true.
  */
 @Slf4j
 @Service
-@Profile("k8s")
+@ConditionalOnProperty(name = "pc-control.stub-mode", havingValue = "true")
 @Primary // Переопределяет LinuxSystemControlService когда активен профиль k8s
 public class StubSystemControlService implements SystemControlService {
 

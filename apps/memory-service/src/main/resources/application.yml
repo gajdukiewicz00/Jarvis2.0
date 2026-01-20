@@ -6,9 +6,9 @@ spring:
     name: memory-service
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/jarvis_memory}
-    username: ${SPRING_DATASOURCE_USERNAME:jarvis}
-    password: ${SPRING_DATASOURCE_PASSWORD:}
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -28,7 +28,7 @@ spring:
 # Memory service configuration
 memory:
   embedding:
-    service-url: ${EMBEDDING_SERVICE_URL:http://localhost:5001}
+    service-url: ${EMBEDDING_SERVICE_URL:http://embedding-service:5001}
     dimension: 384  # multilingual-e5-small
     timeout-ms: 30000
   
@@ -57,6 +57,5 @@ logging:
   level:
     org.jarvis.memory: INFO
     org.hibernate.SQL: WARN
-
 
 

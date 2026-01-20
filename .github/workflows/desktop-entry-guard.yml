@@ -1,0 +1,23 @@
+name: Desktop Entry Guard
+
+on:
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "apps/**"
+      - "src/**"
+      - ".github/workflows/**"
+  push:
+    paths:
+      - "scripts/**"
+      - "apps/**"
+      - "src/**"
+      - ".github/workflows/**"
+
+jobs:
+  desktop-entry-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Desktop entry guard
+        run: scripts/ci/check-desktop-entry.sh

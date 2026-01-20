@@ -14,10 +14,10 @@ spring:
 jarvis:
   llm:
     # IMPORTANT: Must be true for LLM to work!
-    enabled: ${JARVIS_LLM_ENABLED:true}
+    enabled: ${JARVIS_LLM_ENABLED:false}
 
 llm:
-  base-url: ${LLM_SERVER_URL:http://localhost:5000}
+  base-url: ${LLM_SERVER_URL:http://llm-server:5000}
   # Timeouts for chat requests (CPU inference can take 60-120+ seconds)
   timeouts:
     connect-ms: ${LLM_CONNECT_TIMEOUT_MS:5000}
@@ -47,10 +47,10 @@ llm:
 
 # Long-term memory integration
 memory:
-  enabled: ${MEMORY_ENABLED:true}
+  enabled: ${MEMORY_ENABLED:false}
   service:
-    url: ${MEMORY_SERVICE_URL:http://localhost:8093}
-    enabled: ${MEMORY_SERVICE_ENABLED:true}
+    url: ${MEMORY_SERVICE_URL:http://memory-service:8093}
+    enabled: ${MEMORY_SERVICE_ENABLED:false}
   search:
     top-k: ${MEMORY_TOPK:5}
     max-tokens: ${MEMORY_MAX_TOKENS:600}
@@ -58,7 +58,7 @@ memory:
 # External services
 services:
   user-profile:
-    base-url: ${USER_PROFILE_URL:http://localhost:8089}
+    base-url: ${USER_PROFILE_URL:http://user-profile:8089}
     enabled: ${USER_PROFILE_ENABLED:false}  # Optional, disabled by default for standalone testing
     timeouts:
       connect-ms: ${USER_PROFILE_CONNECT_TIMEOUT_MS:3000}

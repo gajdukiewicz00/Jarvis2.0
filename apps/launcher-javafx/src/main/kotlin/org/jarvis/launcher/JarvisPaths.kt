@@ -17,12 +17,16 @@ object JarvisPaths {
     val logs: Path = jarvisRoot.resolve("logs")
     val run: Path = jarvisRoot.resolve("run")
     val data: Path = jarvisRoot.resolve("data")
+    val config: Path = jarvisRoot.resolve("config")
     
     // Log files
     val launcherLog: Path = logs.resolve("launcher.log")
     val backendLaunchLog: Path = logs.resolve("backend-launch.log")
     val desktopLog: Path = logs.resolve("desktop.log")
     val installLog: Path = logs.resolve("install.log")  // Stage 12
+
+    // Config files
+    val launcherConfig: Path = config.resolve("launcher.properties")
     
     // PID/lock files
     val backendPid: Path = run.resolve("backend.pid")
@@ -37,7 +41,7 @@ object JarvisPaths {
      * Called on launcher startup.
      */
     fun ensureDirectories() {
-        listOf(logs, run, data).forEach { dir ->
+        listOf(logs, run, data, config).forEach { dir ->
             if (!Files.exists(dir)) {
                 Files.createDirectories(dir)
             }
@@ -48,25 +52,30 @@ object JarvisPaths {
      * Get project root directory (where jarvis-launch.sh is located).
      */
     fun getProjectRoot(): Path {
+        fun isValidProjectRoot(path: Path): Boolean {
+            return Files.exists(path.resolve("jarvis-launch.sh")) &&
+                Files.exists(path.resolve("pom.xml")) &&
+                Files.isDirectory(path.resolve("apps"))
+        }
+
         // Try environment variable first (set by launcher or user)
         val envRoot = System.getenv("JARVIS_PROJECT_ROOT")
         if (envRoot != null) {
             val root = Paths.get(envRoot)
-            if (Files.exists(root.resolve("jarvis-launch.sh"))) {
+            if (isValidProjectRoot(root)) {
                 return root
             }
         }
         
         // Try to find project root by looking for jarvis-launch.sh
         val currentDir = Paths.get(System.getProperty("user.dir"))
-        val launchScript = currentDir.resolve("jarvis-launch.sh")
-        if (Files.exists(launchScript) && Files.isExecutable(launchScript)) {
+        if (isValidProjectRoot(currentDir)) {
             return currentDir
         }
         
         // Fallback: assume we're in apps/launcher-javafx, go up 2 levels
         val assumedRoot = currentDir.parent?.parent
-        if (assumedRoot != null && Files.exists(assumedRoot.resolve("jarvis-launch.sh"))) {
+        if (assumedRoot != null && isValidProjectRoot(assumedRoot)) {
             return assumedRoot
         }
         
@@ -79,7 +88,7 @@ object JarvisPaths {
         )
         
         for (path in commonPaths) {
-            if (Files.exists(path.resolve("jarvis-launch.sh"))) {
+            if (isValidProjectRoot(path)) {
                 return path
             }
         }
@@ -106,56 +115,57 @@ object JarvisPaths {
      * Get path to desktop-client JAR.
      */
     fun getDesktopJar(): Path {
+        val appDir = jarvisRoot.resolve("app")
+        if (Files.exists(appDir)) {
+            try {
+                Files.newDirectoryStream(appDir, "desktop-client-javafx-*.jar").use { stream ->
+                    val iterator = stream.iterator()
+                    if (iterator.hasNext()) {
+                        return iterator.next()
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore and fall back to repo path
+            }
+        }
         return getProjectRoot().resolve("apps/desktop-client-javafx/target/desktop-client-javafx-0.1.0-SNAPSHOT.jar")
     }
     
     /**
      * Get API Gateway base URL for health checks.
-     * Stage 8: Ingress/HTTPS as default, NodePort/port-forward as fallback.
-     * 
+     * Prod-first: HTTPS ingress is the default.
+     *
      * Priority:
      * 1. Environment variable (JARVIS_API_BASE_URL or API_URL)
-     * 2. TLS/Ingress detection (JARVIS_USE_TLS or ingress with api.jarvis.local)
-     * 3. Fallback to NodePort/port-forward (legacy)
+     * 2. Last run summary (~/.jarvis/run/last-run.json)
+     * 3. Default HTTPS ingress (https://api.jarvis.local)
      */
     fun getApiGatewayUrl(): String {
-        // Try environment variable first
-        val envUrl = System.getenv("JARVIS_API_BASE_URL") 
+        val envUrl = System.getenv("JARVIS_API_BASE_URL")
             ?: System.getenv("API_URL")
-        if (envUrl != null && envUrl.isNotBlank()) {
+        if (!envUrl.isNullOrBlank()) {
             val url = envUrl.trimEnd('/')
-            // Auto-detect TLS: if domain contains jarvis.local, use HTTPS
-            if (url.contains("jarvis.local") && !url.startsWith("http")) {
-                return "https://$url"
+            return if (url.contains("jarvis.local") && !url.startsWith("http")) {
+                "https://$url"
+            } else {
+                url
             }
-            return url
         }
-        
-        // Stage 8: Check if TLS/Ingress is active
-        val useTls = System.getenv("JARVIS_USE_TLS")?.toBoolean() ?: false
-        if (useTls) {
-            return "https://api.jarvis.local"
-        }
-        
-        // Stage 8: Try to detect ingress (best-effort, may not work if kubectl unavailable)
-        try {
-            val process = ProcessBuilder("kubectl", "get", "ingress", "jarvis-ingress", "-n", "jarvis", "-o", "jsonpath={.spec.rules[*].host}")
-                .redirectErrorStream(true)
-                .start()
-            val exitCode = process.waitFor()
-            if (exitCode == 0) {
-                val output = process.inputStream.bufferedReader().readText().trim()
-                if (output.contains("api.jarvis.local")) {
-                    // Ingress exists with api.jarvis.local -> use HTTPS
-                    return "https://api.jarvis.local"
+
+        val runSummary = run.resolve("last-run.json")
+        if (Files.exists(runSummary)) {
+            try {
+                val content = Files.readString(runSummary)
+                val match = Regex("\"apiUrl\"\\s*:\\s*\"([^\"]+)\"").find(content)
+                val apiUrl = match?.groups?.get(1)?.value
+                if (!apiUrl.isNullOrBlank()) {
+                    return apiUrl.trimEnd('/')
                 }
+            } catch (e: Exception) {
+                // Ignore malformed summary
             }
-        } catch (e: Exception) {
-            // kubectl not available or error - fall through to fallback
         }
-        
-        // Fallback: legacy NodePort/port-forward (for backward compatibility)
-        return "http://localhost:8080"
+
+        return "https://api.jarvis.local"
     }
 }
-

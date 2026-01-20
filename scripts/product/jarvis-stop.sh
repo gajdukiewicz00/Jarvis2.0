@@ -86,14 +86,17 @@ fi
 
 # Try to call jarvis-stop.sh if exists (for full cleanup)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="${JARVIS_PROJECT_ROOT:-}"
+if [[ -z "${REPO_ROOT}" ]]; then
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+fi
 STOP_SCRIPT="${REPO_ROOT}/jarvis-stop.sh"
 
 if [[ -f "$STOP_SCRIPT" ]] && [[ -x "$STOP_SCRIPT" ]]; then
     log "Running full stop script: $STOP_SCRIPT"
     cd "$REPO_ROOT"
-    # Run non-interactively (auto-confirm if needed)
-    echo "y" | timeout 30 "$STOP_SCRIPT" >> "${LOG}" 2>&1 || {
+    # Run non-interactively
+    timeout 30 "$STOP_SCRIPT" --yes >> "${LOG}" 2>&1 || {
         log "Stop script returned non-zero or timed out (may be expected if nothing to stop)"
     }
     STOPPED_SOMETHING=true

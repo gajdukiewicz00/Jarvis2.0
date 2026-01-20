@@ -1,0 +1,49 @@
+# =============================================================================
+# Jarvis 2.0 - Production Overlay (Kubernetes)
+# =============================================================================
+# Configures:
+# - Base services (from k8s/base)
+# - Optional LLM/Memory stack (enabled via flags in jarvis-launch.sh)
+# - hostPath volumes for local model storage (prod-only, single-node)
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis
+
+resources:
+  # Base namespace + shared init config
+  - ../../base
+
+  # Data layer
+  - ../../base/postgres/statefulset.yaml
+
+  # Core services
+  - ../../base/api-gateway/deployment.yaml
+  - ../../base/security-service/deployment.yaml
+  - ../../base/voice-gateway/deployment.yaml
+  - ../../base/nlp-service/deployment.yaml
+  - ../../base/orchestrator/deployment.yaml
+  - ../../base/pc-control/deployment.yaml
+  - ../../base/life-tracker/deployment.yaml
+  - ../../base/analytics-service/deployment.yaml
+  - ../../base/planner-service/deployment.yaml
+  - ../../base/user-profile/deployment.yaml
+  - ../../base/smart-home-service/deployment.yaml
+
+  # Infra
+  - ../../base/mosquitto/deployment.yaml
+
+  # Ingress (HTTPS front door)
+  - ../../base/ingress.yaml
+
+  # Model storage (hostPath)
+  - pv-models.yaml
+  # LLM/Memory stack - условно включается через ENABLE_LLM/ENABLE_MEMORY флаги
+  # По умолчанию отключены (optional)
+  # - postgres-init-scripts.yaml  # Включается только если ENABLE_MEMORY=true
+  # - postgres-pgvector.yaml       # Включается только если ENABLE_MEMORY=true
+  # - embedding-service.yaml  # Включается только если ENABLE_LLM=true
+  # - memory-service.yaml     # Включается только если ENABLE_MEMORY=true
+  # - llm-server.yaml         # Включается только если ENABLE_LLM=true
+  # - llm-service.yaml        # Включается только если ENABLE_LLM=true

@@ -48,12 +48,13 @@ public class JwtFilter extends OncePerRequestFilter {
             "/auth/health",
             "/api/security/auth/login",
             "/api/security/auth/register",
-            "/api/v1/", // Allow all /api/v1/** endpoints (temporary for development)
             "/actuator/", // All actuator endpoints
             "/internal/", // Internal service-to-service communication (PC control)
             "/ws/", // WebSocket endpoints (PC control handshake)
             "/health",
             "/favicon.ico");
+    private static final String TOOL_PATH_PREFIX = "/api/v1/tools/";
+    private static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
 
     /**
      * Check if the request path is whitelisted (public endpoint)
@@ -64,12 +65,16 @@ public class JwtFilter extends OncePerRequestFilter {
         // Check whitelist patterns
         boolean whitelisted = WHITELIST.stream().anyMatch(path::startsWith);
 
-        // Also allow any path that starts with /api/v1 (even if duplicated)
-        if (!whitelisted && path.startsWith("/api/v1")) {
-            whitelisted = true;
-        }
-
         return whitelisted;
+    }
+
+    private boolean isInternalToolRequest(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (!path.startsWith(TOOL_PATH_PREFIX)) {
+            return false;
+        }
+        String forwardedFor = request.getHeader(FORWARDED_FOR_HEADER);
+        return forwardedFor == null || forwardedFor.isBlank();
     }
 
     @Override
@@ -81,6 +86,12 @@ public class JwtFilter extends OncePerRequestFilter {
         // JWT disabled - skip validation entirely
         if (!jwtEnabled) {
             log.trace("JwtFilter: JWT disabled, passing through");
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (isInternalToolRequest(request)) {
+            log.trace("JwtFilter: Internal tool request bypassing JWT");
             filterChain.doFilter(request, response);
             return;
         }

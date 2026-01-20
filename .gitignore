@@ -49,3 +49,11 @@ models/
 !.env.example
 *.key
 *.pem
+*.crt
+secrets/
+!secrets/.gitkeep
+!secrets/*.example.env
+secrets*.yaml
+!secrets*.example.yaml
+~/.jarvis/secrets/
+~/.jarvis/tls/

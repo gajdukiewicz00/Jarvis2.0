@@ -25,20 +25,12 @@ spec:
           ports:
             - containerPort: 8084
               name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "kubernetes"
-            - name: PULSE_SERVER
-              value: "unix:/run/user/1000/pulse/native"
-            - name: DISPLAY
-              value: ":0"
-          volumeMounts:
-            - name: pulse-socket
-              mountPath: /run/user/1000/pulse
-            - name: x11-socket
-              mountPath: /tmp/.X11-unix
-          securityContext:
-            privileged: true
+            - name: PC_CONTROL_STUB_MODE
+              value: "true"
           resources:
             limits:
               memory: "256Mi"
@@ -58,17 +50,6 @@ spec:
               port: 8084
             initialDelaySeconds: 30
             periodSeconds: 5
-      volumes:
-        - name: pulse-socket
-          hostPath:
-            path: /run/user/1000/pulse
-            type: Directory
-        - name: x11-socket
-          hostPath:
-            path: /tmp/.X11-unix
-            type: Directory
-      # Run on host for audio/display access
-      hostNetwork: false
 ---
 apiVersion: v1
 kind: Service
@@ -85,4 +66,3 @@ spec:
       name: http
   selector:
     app: pc-control
-

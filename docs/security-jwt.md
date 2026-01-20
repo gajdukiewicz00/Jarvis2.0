@@ -31,7 +31,7 @@ Jarvis 2.0 использует JWT (JSON Web Tokens) для stateless ауте�
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `JWT_SECRET` | jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm | Секретный ключ (мин. 256 бит) |
+| `JWT_SECRET` | (set locally) | Секретный ключ (мин. 256 бит) |
 | `jwt.enabled` | true | Включить JWT валидацию |
 
 ### application.yaml (api-gateway)
@@ -39,7 +39,7 @@ Jarvis 2.0 использует JWT (JSON Web Tokens) для stateless ауте�
 ```yaml
 jwt:
   enabled: true
-  secret: ${JWT_SECRET:jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm}
+  secret: ${JWT_SECRET}
   expiration: 86400000  # 24 hours (ms)
   issuer: jarvis
 ```
@@ -49,19 +49,10 @@ jwt:
 ```yaml
 jarvis:
   jwt:
-    secret: ${JWT_SECRET:jarvis-secret-key-change-in-production-min-256-bits-long-for-HS256-algorithm}
+    secret: ${JWT_SECRET}
     access-expiration: 3600000    # 1 hour (prod)
     refresh-expiration: 604800000 # 7 days
     issuer: jarvis
-```
-
-### Dev Profile (24-hour tokens)
-
-```yaml
-# application-dev.yml
-jarvis:
-  jwt:
-    access-expiration: 86400000  # 24 hours for development
 ```
 
 ---
@@ -314,4 +305,3 @@ cors:
 
 *Документ создан: 2025-12-02*
 *Последнее обновление: 2025-12-02*
-

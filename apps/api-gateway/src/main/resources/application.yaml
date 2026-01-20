@@ -113,9 +113,8 @@ jwt:
 cors:
   enabled: true
   allowed-origins:
-    - http://localhost:*
-    - http://192.168.*.*:*
-    - https://*.jarvis.app
+    - https://api.jarvis.local
+    - https://voice.jarvis.local
   allowed-methods:
     - GET
     - POST

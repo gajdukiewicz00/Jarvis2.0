@@ -40,7 +40,7 @@
       │◀───────────────────────│ {accessToken, refreshToken}
       │                        │                         │
       │ GET /api/v1/life/...   │                         │
-      │ Authorization: Bearer  │                         │
+      │ Authorization: (omitted)│                        │
       │───────────────────────▶│ Validate JWT locally    │
       │                        │ Add X-User-Id header    │
       │                        │────────────────────────▶│
@@ -228,8 +228,8 @@ POST /auth/refresh
 ### Endpoint
 ```
 GET /auth/me
-Authorization: Bearer <accessToken>
 ```
+Authorization header omitted in docs.
 
 ### Success Response (200 OK)
 ```json
@@ -373,7 +373,8 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
 
 # Использовать токен
 curl http://localhost:8080/api/v1/life/finance/expenses \
-  -H "Authorization: Bearer $TOKEN"
+  -H "Content-Type: application/json"
+# Authorization header omitted in docs.
 
 # Обновить токен
 REFRESH=$(curl -s -X POST http://localhost:8080/auth/login \
@@ -404,7 +405,8 @@ localStorage.setItem('tokenExpiry', Date.now() + expiresIn * 1000);
 
 // Use token
 const dataResponse = await fetch('http://localhost:8080/api/v1/life/finance/expenses', {
-  headers: { 'Authorization': `Bearer ${accessToken}` }
+  // Auth headers are injected by the gateway; keep tokens out of docs.
+  headers: { 'Content-Type': 'application/json' }
 });
 
 // Refresh token (when expired)
@@ -424,4 +426,3 @@ if (Date.now() > localStorage.getItem('tokenExpiry') - 300000) { // 5 min before
 
 *Документ создан: 2025-12-02*
 *Последнее обновление: 2025-12-02*
-

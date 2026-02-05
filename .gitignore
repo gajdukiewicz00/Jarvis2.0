@@ -57,3 +57,10 @@ secrets*.yaml
 !secrets*.example.yaml
 ~/.jarvis/secrets/
 ~/.jarvis/tls/
+
+# Local runtime state
+data/
+**/data/
+postgres/
+**/postgres/
+*postgres-backup*

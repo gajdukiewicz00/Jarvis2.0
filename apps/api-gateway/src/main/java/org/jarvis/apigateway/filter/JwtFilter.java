@@ -40,41 +40,13 @@ public class JwtFilter extends OncePerRequestFilter {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    // Public endpoints that don't require JWT
-    private static final List<String> WHITELIST = List.of(
-            "/auth/login",
-            "/auth/register",
-            "/auth/refresh",
-            "/auth/health",
-            "/api/security/auth/login",
-            "/api/security/auth/register",
-            "/actuator/", // All actuator endpoints
-            "/internal/", // Internal service-to-service communication (PC control)
-            "/ws/", // WebSocket endpoints (PC control handshake)
-            "/health",
-            "/favicon.ico");
-    private static final String TOOL_PATH_PREFIX = "/api/v1/tools/";
-    private static final String FORWARDED_FOR_HEADER = "X-Forwarded-For";
+    private static final List<String> HEALTH_PATHS = List.of(
+            "/actuator/health",
+            "/actuator/health/");
 
-    /**
-     * Check if the request path is whitelisted (public endpoint)
-     */
-    private boolean isWhitelisted(HttpServletRequest request) {
+    private boolean isHealthRequest(HttpServletRequest request) {
         String path = request.getRequestURI();
-
-        // Check whitelist patterns
-        boolean whitelisted = WHITELIST.stream().anyMatch(path::startsWith);
-
-        return whitelisted;
-    }
-
-    private boolean isInternalToolRequest(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        if (!path.startsWith(TOOL_PATH_PREFIX)) {
-            return false;
-        }
-        String forwardedFor = request.getHeader(FORWARDED_FOR_HEADER);
-        return forwardedFor == null || forwardedFor.isBlank();
+        return HEALTH_PATHS.stream().anyMatch(path::startsWith);
     }
 
     @Override
@@ -90,18 +62,8 @@ public class JwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (isInternalToolRequest(request)) {
-            log.trace("JwtFilter: Internal tool request bypassing JWT");
+        if (isHealthRequest(request)) {
             filterChain.doFilter(request, response);
-            return;
-        }
-
-        // Check if path is whitelisted (public endpoint) - MUST be first check
-        if (isWhitelisted(request)) {
-            // Add default user headers for whitelisted requests (for development)
-            HttpServletRequest wrappedRequest = wrapRequestWithUserHeaders(request, "dev-user", "dev-user", "USER");
-            log.trace("JwtFilter: Whitelisted path {}", path);
-            filterChain.doFilter(wrappedRequest, response);
             return;
         }
 
@@ -134,7 +96,7 @@ public class JwtFilter extends OncePerRequestFilter {
             // Extract user info from JWT
             String userId = claims.getSubject();
             String username = (String) claims.get("username");
-            String role = claims.get("role") != null ? claims.get("role").toString() : "USER";
+            String role = extractRoles(claims);
 
             // Add user info to request attributes
             request.setAttribute("userId", userId);
@@ -239,5 +201,32 @@ public class JwtFilter extends OncePerRequestFilter {
                 return super.getHeaders(name);
             }
         };
+    }
+
+    private String extractRoles(Claims claims) {
+        Object rolesClaim = claims.get("roles");
+        if (rolesClaim instanceof Collection<?> roleList) {
+            String joined = roleList.stream()
+                    .filter(Objects::nonNull)
+                    .map(Object::toString)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .distinct()
+                    .reduce((a, b) -> a + "," + b)
+                    .orElse("");
+            if (!joined.isEmpty()) {
+                return joined;
+            }
+        } else if (rolesClaim instanceof String rolesString) {
+            String trimmed = rolesString.trim();
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        Object role = claims.get("role");
+        if (role != null && !role.toString().isBlank()) {
+            return role.toString();
+        }
+        return "USER";
     }
 }

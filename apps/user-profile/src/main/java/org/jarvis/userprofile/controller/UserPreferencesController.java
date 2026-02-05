@@ -4,8 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.userprofile.dto.UserPreferencesDto;
 import org.jarvis.userprofile.service.UserPreferencesService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * REST controller for user preferences
@@ -23,14 +27,19 @@ public class UserPreferencesController {
      */
     @GetMapping("/{userId}")
     public ResponseEntity<UserPreferencesDto> getPreferences(@PathVariable String userId) {
-        log.info("GET preferences for user: {}", userId);
+        String authUser = requireUserId();
+        if (!authUser.equals(userId)) {
+            log.warn("Ignoring path userId {} (using authenticated user {})", userId, authUser);
+        }
+        String effectiveUserId = authUser;
+        log.info("GET preferences for user: {}", effectiveUserId);
         
-        return preferencesService.getPreferences(userId)
+        return preferencesService.getPreferences(effectiveUserId)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> {
                     // Auto-create default preferences if not found
-                    log.info("Preferences not found, creating defaults for: {}", userId);
-                    UserPreferencesDto defaults = preferencesService.createDefaultPreferences(userId);
+                    log.info("Preferences not found, creating defaults for: {}", effectiveUserId);
+                    UserPreferencesDto defaults = preferencesService.createDefaultPreferences(effectiveUserId);
                     return ResponseEntity.ok(defaults);
                 });
     }
@@ -42,11 +51,9 @@ public class UserPreferencesController {
     public ResponseEntity<UserPreferencesDto> createOrUpdatePreferences(
             @RequestBody UserPreferencesDto dto
     ) {
-        log.info("POST preferences for user: {}", dto.getUserId());
-        
-        if (dto.getUserId() == null || dto.getUserId().isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
+        String authUser = requireUserId();
+        dto.setUserId(authUser);
+        log.info("POST preferences for user: {}", authUser);
         
         UserPreferencesDto saved = preferencesService.createOrUpdatePreferences(dto);
         return ResponseEntity.ok(saved);
@@ -60,9 +67,13 @@ public class UserPreferencesController {
             @PathVariable String userId,
             @RequestBody UserPreferencesDto dto
     ) {
-        log.info("PUT preferences for user: {}", userId);
-        
-        dto.setUserId(userId);
+        String authUser = requireUserId();
+        if (!authUser.equals(userId)) {
+            log.warn("Ignoring path userId {} (using authenticated user {})", userId, authUser);
+        }
+        log.info("PUT preferences for user: {}", authUser);
+
+        dto.setUserId(authUser);
         UserPreferencesDto updated = preferencesService.createOrUpdatePreferences(dto);
         return ResponseEntity.ok(updated);
     }
@@ -72,8 +83,12 @@ public class UserPreferencesController {
      */
     @DeleteMapping("/{userId}")
     public ResponseEntity<Void> deletePreferences(@PathVariable String userId) {
-        log.info("DELETE preferences for user: {}", userId);
-        preferencesService.deletePreferences(userId);
+        String authUser = requireUserId();
+        if (!authUser.equals(userId)) {
+            log.warn("Ignoring path userId {} (using authenticated user {})", userId, authUser);
+        }
+        log.info("DELETE preferences for user: {}", authUser);
+        preferencesService.deletePreferences(authUser);
         return ResponseEntity.noContent().build();
     }
     
@@ -83,5 +98,13 @@ public class UserPreferencesController {
     @GetMapping("/health")
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("OK");
+    }
+
+    private String requireUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
+        }
+        return authentication.getName();
     }
 }

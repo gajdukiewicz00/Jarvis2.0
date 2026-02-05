@@ -38,6 +38,9 @@ spec:
           ports:
             - containerPort: 8093
               name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
           env:
             # Database connection
             - name: SPRING_DATASOURCE_URL
@@ -104,4 +107,3 @@ spec:
     - name: http
       port: 8093
       targetPort: 8093
-

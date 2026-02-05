@@ -37,7 +37,6 @@ public class LlmService {
     private final PersonalizedPromptBuilder promptBuilder;
     private final EmotionSelector emotionSelector;
     private final RussianLanguageEnforcer languageEnforcer;
-    private final org.jarvis.llm.client.PcControlClient pcControlClient;
     
     // Long-term memory integration
     private final MemoryClient memoryClient;
@@ -352,15 +351,6 @@ public class LlmService {
      */
     public boolean isAvailable() {
         return llmClient.isHealthy();
-    }
-
-    // File operations exposed for LLM or other services
-    public List<String> listFiles(String path) {
-        return pcControlClient.listFiles(path);
-    }
-
-    public String readFile(String path) {
-        return pcControlClient.readFile(path);
     }
 
     private String extractUserId(String sessionId) {

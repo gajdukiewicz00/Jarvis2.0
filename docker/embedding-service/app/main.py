@@ -86,14 +86,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Add CORS middleware (explicit allowlist only)
+allowed_origins = [origin for origin in config.CORS_ALLOWED_ORIGINS if origin != "*"]
+if allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -208,6 +210,5 @@ async def clear_cache():
 async def get_stats():
     """Get service statistics"""
     return embedder.get_stats()
-
 
 

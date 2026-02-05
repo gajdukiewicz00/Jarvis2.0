@@ -1,6 +1,9 @@
 package org.jarvis.llm.client;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.security.GatewayAuthFilter;
+import org.jarvis.common.security.ServiceJwtProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
@@ -20,13 +23,20 @@ public class MemoryClient {
     private final RestTemplate restTemplate;
     private final String memoryServiceUrl;
     private final boolean enabled;
+    private final ServiceJwtProvider serviceJwtProvider;
+    private final String serviceName;
 
     public MemoryClient(
+            @Qualifier("restTemplate") RestTemplate restTemplate,
             @Value("${memory.service.url:http://localhost:8093}") String memoryServiceUrl,
-            @Value("${memory.service.enabled:true}") boolean enabled) {
-        this.restTemplate = new RestTemplate();
+            @Value("${memory.service.enabled:true}") boolean enabled,
+            ServiceJwtProvider serviceJwtProvider,
+            @Value("${spring.application.name:llm-service}") String serviceName) {
+        this.restTemplate = restTemplate;
         this.memoryServiceUrl = memoryServiceUrl;
         this.enabled = enabled;
+        this.serviceJwtProvider = serviceJwtProvider;
+        this.serviceName = serviceName;
         
         log.info("MemoryClient initialized: url={}, enabled={}", memoryServiceUrl, enabled);
     }
@@ -51,7 +61,6 @@ public class MemoryClient {
 
         try {
             Map<String, Object> requestBody = Map.of(
-                    "userId", userId,
                     "query", query,
                     "topK", topK,
                     "maxTokens", maxTokens,
@@ -61,6 +70,8 @@ public class MemoryClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Correlation-ID", correlationId);
+            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
@@ -100,7 +111,6 @@ public class MemoryClient {
 
         try {
             Map<String, Object> requestBody = Map.of(
-                    "userId", userId,
                     "sessionId", sessionId,
                     "messages", List.of(
                             Map.of("role", "user", "content", userMessage),
@@ -112,6 +122,8 @@ public class MemoryClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Correlation-ID", correlationId);
+            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
 
@@ -135,7 +147,13 @@ public class MemoryClient {
 
         try {
             String url = memoryServiceUrl + "/memory/health";
-            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    Map.class);
             return response.getStatusCode().is2xxSuccessful() 
                     && response.getBody() != null 
                     && "healthy".equals(response.getBody().get("status"));
@@ -160,6 +178,3 @@ public class MemoryClient {
         public double similarity;
     }
 }
-
-
-

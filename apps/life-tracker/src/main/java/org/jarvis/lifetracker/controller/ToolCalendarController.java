@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +38,7 @@ public class ToolCalendarController {
             @RequestAttribute("toolUserId") String userId,
             @Valid @RequestBody CreateEventToolRequest request) {
 
+        requireConfirmation(request.getConfirmed());
         String requestHash = toolRequestService.hashRequest(request);
         Optional<CalendarEventDTO> cached = toolRequestService.loadCachedResponse(
                 idempotencyKey, "create_event", userId, requestHash, CalendarEventDTO.class);
@@ -68,6 +70,7 @@ public class ToolCalendarController {
             @RequestAttribute("toolUserId") String userId,
             @Valid @RequestBody MoveEventToolRequest request) {
 
+        requireConfirmation(request.getConfirmed());
         String requestHash = toolRequestService.hashRequest(request);
         Optional<CalendarEventDTO> cached = toolRequestService.loadCachedResponse(
                 idempotencyKey, "move_event", userId, requestHash, CalendarEventDTO.class);
@@ -104,5 +107,11 @@ public class ToolCalendarController {
                 request.getDurationMinutes(),
                 workHours);
         return ResponseEntity.ok(slot);
+    }
+
+    private void requireConfirmation(Boolean confirmed) {
+        if (!Boolean.TRUE.equals(confirmed)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "confirmation_required");
+        }
     }
 }

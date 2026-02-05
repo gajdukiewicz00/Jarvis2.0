@@ -9,6 +9,14 @@ spring:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
       - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
       - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 3000
+            readTimeout: 10000
+            loggerLevel: BASIC
 
 # Service URLs (in-cluster defaults)
 jarvis:

@@ -28,8 +28,14 @@ class Config:
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # CORS (comma-separated list, no wildcard)
+    CORS_ALLOWED_ORIGINS = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+
 
 config = Config()
-
 
 

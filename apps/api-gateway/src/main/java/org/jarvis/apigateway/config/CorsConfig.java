@@ -5,10 +5,11 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * CORS Configuration for API Gateway.
@@ -20,11 +21,10 @@ import java.util.List;
 @Configuration
 public class CorsConfig {
 
-    @Value("${cors.enabled:true}")
+    @Value("${cors.enabled:false}")
     private boolean corsEnabled;
 
-    // Default: разрешаем localhost и локальную сеть
-    @Value("#{'${cors.allowed-origins:http://localhost:*,http://127.0.0.1:*}'.split(',')}")
+    @Value("#{'${cors.allowed-origins:}'.split(',')}")
     private List<String> allowedOrigins;
 
     // Default: стандартные HTTP методы
@@ -35,20 +35,34 @@ public class CorsConfig {
     @Value("#{'${cors.allowed-headers:*}'.split(',')}")
     private List<String> allowedHeaders;
 
-    @Value("${cors.allow-credentials:true}")
+    @Value("${cors.allow-credentials:false}")
     private boolean allowCredentials;
 
     @Bean
-    public CorsFilter corsFilter() {
+    public CorsConfigurationSource corsConfigurationSource() {
         if (!corsEnabled) {
             log.info("CORS is disabled");
-            return new CorsFilter(new UrlBasedCorsConfigurationSource());
+            return new UrlBasedCorsConfigurationSource();
         }
 
-        log.info("CORS is enabled with origins: {}", allowedOrigins);
+        List<String> normalizedOrigins = allowedOrigins.stream()
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .collect(Collectors.toList());
+
+        if (normalizedOrigins.isEmpty()) {
+            log.warn("CORS enabled but no allowed origins configured");
+            return new UrlBasedCorsConfigurationSource();
+        }
+
+        if (allowCredentials && normalizedOrigins.stream().anyMatch(origin -> "*".equals(origin))) {
+            throw new IllegalStateException("CORS misconfiguration: allowCredentials=true with wildcard origins");
+        }
+
+        log.info("CORS is enabled with origins: {}", normalizedOrigins);
 
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(allowedOrigins);
+        config.setAllowedOriginPatterns(normalizedOrigins);
         config.setAllowedMethods(allowedMethods);
         config.setAllowedHeaders(allowedHeaders);
         config.setAllowCredentials(allowCredentials);
@@ -57,6 +71,6 @@ public class CorsConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
 
-        return new CorsFilter(source);
+        return source;
     }
 }

@@ -1,5 +1,6 @@
 package org.jarvis.memory.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -18,7 +19,7 @@ public class SummarizeRequest {
     @NotBlank(message = "sessionId is required")
     private String sessionId;
 
-    @NotBlank(message = "userId is required")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String userId;
 
     /**
@@ -27,6 +28,5 @@ public class SummarizeRequest {
     @Builder.Default
     private boolean forceRegenerate = false;
 }
-
 
 

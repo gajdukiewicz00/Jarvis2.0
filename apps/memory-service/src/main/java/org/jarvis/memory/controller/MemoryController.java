@@ -6,8 +6,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.memory.dto.*;
 import org.jarvis.memory.service.EmbeddingClient;
 import org.jarvis.memory.service.MemoryService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.UUID;
@@ -34,10 +38,12 @@ public class MemoryController {
             @Valid @RequestBody IngestRequest request,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
         
+        String userId = requireUserId();
+        request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
         
         log.info("[{}] POST /memory/ingest: userId={}, sessionId={}, messages={}",
-                corrId, request.getUserId(), request.getSessionId(), request.getMessages().size());
+                corrId, userId, request.getSessionId(), request.getMessages().size());
         
         long startTime = System.currentTimeMillis();
         
@@ -62,10 +68,12 @@ public class MemoryController {
             @Valid @RequestBody IngestRequest request,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
         
+        String userId = requireUserId();
+        request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
         
         log.info("[{}] POST /memory/ingest/async: userId={}, sessionId={}",
-                corrId, request.getUserId(), request.getSessionId());
+                corrId, userId, request.getSessionId());
         
         memoryService.ingestAsync(request, corrId);
         
@@ -85,10 +93,12 @@ public class MemoryController {
             @Valid @RequestBody SearchRequest request,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
         
+        String userId = requireUserId();
+        request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
         
         log.info("[{}] POST /memory/search: userId={}, query='{}', topK={}",
-                corrId, request.getUserId(), 
+                corrId, userId,
                 request.getQuery().substring(0, Math.min(50, request.getQuery().length())),
                 request.getTopK());
         
@@ -107,10 +117,12 @@ public class MemoryController {
             @Valid @RequestBody SummarizeRequest request,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
         
+        String userId = requireUserId();
+        request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
         
         log.info("[{}] POST /memory/summarize-session: sessionId={}, userId={}",
-                corrId, request.getSessionId(), request.getUserId());
+                corrId, request.getSessionId(), userId);
         
         long startTime = System.currentTimeMillis();
         
@@ -139,7 +151,14 @@ public class MemoryController {
                 "embeddingService", embeddingHealthy ? "up" : "down"
         ));
     }
-}
 
+    private String requireUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
+        }
+        return authentication.getName();
+    }
+}
 
 

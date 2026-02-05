@@ -1,14 +1,21 @@
 package org.jarvis.llm.client;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.security.GatewayAuthFilter;
+import org.jarvis.common.security.ServiceJwtProvider;
 import org.jarvis.llm.dto.UserPreferencesDto;
 import org.jarvis.llm.model.CommunicationStyle;
 import org.jarvis.llm.model.Emotion;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.List;
 
 /**
  * Client for user-profile service.
@@ -23,15 +30,21 @@ public class UserProfileClient {
     private final RestTemplate restTemplate;
     private final String userProfileUrl;
     private final boolean enabled;
+    private final ServiceJwtProvider serviceJwtProvider;
+    private final String serviceName;
 
     public UserProfileClient(
             @Qualifier("userProfileRestTemplate") RestTemplate restTemplate,
             @Value("${services.user-profile.base-url:http://localhost:8089}") String userProfileUrl,
-            @Value("${services.user-profile.enabled:true}") boolean enabled
+            @Value("${services.user-profile.enabled:true}") boolean enabled,
+            ServiceJwtProvider serviceJwtProvider,
+            @Value("${spring.application.name:llm-service}") String serviceName
     ) {
         this.restTemplate = restTemplate;
         this.userProfileUrl = userProfileUrl;
         this.enabled = enabled;
+        this.serviceJwtProvider = serviceJwtProvider;
+        this.serviceName = serviceName;
         
         if (!enabled) {
             log.info("📋 UserProfileClient: DISABLED - will use default preferences");
@@ -65,10 +78,14 @@ public class UserProfileClient {
             String url = userProfileUrl + "/api/v1/profile/preferences/" + userId;
             log.debug("[{}] Fetching preferences from: {}", correlationId, url);
 
-            ResponseEntity<UserPreferencesDto> response = restTemplate.getForEntity(
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
+            ResponseEntity<UserPreferencesDto> response = restTemplate.exchange(
                     url,
-                    UserPreferencesDto.class
-            );
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    UserPreferencesDto.class);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 long elapsed = System.currentTimeMillis() - startTime;

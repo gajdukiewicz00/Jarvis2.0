@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -49,15 +51,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 // Validate token locally (no network call)
                 Claims claims = jwtUtil.validateToken(token);
-                String username = claims.getSubject();
+                String userId = claims.getSubject();
+                String username = claims.get("username", String.class);
 
-                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                    // Extract roles from claims (if present)
-                    List<SimpleGrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
+                if (userId != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    List<SimpleGrantedAuthority> authorities = extractAuthorities(claims);
 
                     // Create Spring Security authentication token
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            username,
+                            userId,
                             null,
                             authorities);
 
@@ -65,10 +67,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authToken);
 
                     // Add user context as request attributes for downstream services
-                    request.setAttribute("userId", username);
-                    request.setAttribute("username", username);
+                    request.setAttribute("userId", userId);
+                    if (username != null) {
+                        request.setAttribute("username", username);
+                    }
 
-                    log.debug("JWT authenticated user: {}", username);
+                    log.debug("JWT authenticated user: {}", userId);
                 }
             } catch (ExpiredJwtException e) {
                 // Expected case - token expired, log at debug level
@@ -82,5 +86,41 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private List<SimpleGrantedAuthority> extractAuthorities(Claims claims) {
+        List<String> roles = new ArrayList<>();
+        Object rolesClaim = claims.get("roles");
+        if (rolesClaim instanceof String rolesString) {
+            for (String role : rolesString.split(",")) {
+                String trimmed = role.trim();
+                if (!trimmed.isEmpty()) {
+                    roles.add(trimmed);
+                }
+            }
+        } else if (rolesClaim instanceof Collection<?> roleList) {
+            for (Object role : roleList) {
+                if (role != null) {
+                    String trimmed = role.toString().trim();
+                    if (!trimmed.isEmpty()) {
+                        roles.add(trimmed);
+                    }
+                }
+            }
+        }
+
+        String role = claims.get("role", String.class);
+        if (role != null && !role.isBlank()) {
+            roles.add(role.trim());
+        }
+
+        if (roles.isEmpty()) {
+            roles.add("USER");
+        }
+
+        return roles.stream()
+                .distinct()
+                .map(SimpleGrantedAuthority::new)
+                .toList();
     }
 }

@@ -4,6 +4,8 @@ import jakarta.websocket.ContainerProvider;
 import jakarta.websocket.WebSocketContainer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -14,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Simple reverse proxy WebSocket handler that forwards /ws/voice from API Gateway
@@ -45,6 +48,7 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
         String targetUrl = toWsUrl(voiceGatewayUrl) + "/ws/voice";
         WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
         headers.putAll(clientSession.getHandshakeHeaders());
+        applyUserHeaders(headers);
 
         log.info("🔀 Voice WS proxy: {} -> {}", clientSession.getId(), targetUrl);
         try {
@@ -106,6 +110,20 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
         return httpUrl.replaceFirst("^http", "ws").replaceAll("/$", "");
     }
 
+    private void applyUserHeaders(WebSocketHttpHeaders headers) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return;
+        }
+        headers.set("X-User-Id", authentication.getName());
+        String roles = authentication.getAuthorities().stream()
+                .map(auth -> auth.getAuthority())
+                .collect(Collectors.joining(","));
+        if (!roles.isBlank()) {
+            headers.set("X-User-Roles", roles);
+        }
+    }
+
     private record ProxySession(WebSocketSession client, WebSocketSession backend) {
     }
 
@@ -149,4 +167,3 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
         }
     }
 }
-

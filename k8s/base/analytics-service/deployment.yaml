@@ -25,6 +25,9 @@ spec:
           ports:
             - containerPort: 8087
               name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
           resources:
             limits:
               memory: "512Mi"

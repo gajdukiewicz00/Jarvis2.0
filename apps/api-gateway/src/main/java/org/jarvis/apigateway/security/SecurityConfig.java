@@ -8,14 +8,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.util.matcher.RequestMatcher;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * Security configuration for API Gateway (production mode).
@@ -24,26 +21,13 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 @Slf4j
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @RequiredArgsConstructor
 @Profile("!dev")
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtFilter jwtFilter;
-
-    /**
-     * Ignore security filter chain entirely for internal, actuator and websocket paths.
-     * This makes sure the handshake for PC Control is not intercepted by auth filters.
-     */
-    @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        return web -> web.ignoring().requestMatchers(
-                "/ws/**",
-                "/internal/**",
-                "/actuator/**",
-                "/health",
-                "/favicon.ico");
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -54,25 +38,18 @@ public class SecurityConfig {
 
         http
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> {
                     log.info("🔧 SecurityConfig: Configuring authorization rules...");
                     auth
-                            .requestMatchers(new InternalToolRequestMatcher()).permitAll()
-                            // Public endpoints - no authentication required
-                            .requestMatchers("/auth/**").permitAll() // Login, register, refresh - NO AUTH REQUIRED
-                            .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
-                            .requestMatchers("/internal/**").permitAll() // Internal service-to-service endpoints
-                            .requestMatchers("/actuator/**").permitAll() // Health checks
-                            .requestMatchers("/public/**").permitAll() // Public resources
+                            .requestMatchers("/actuator/health").permitAll()
                             // All other endpoints require authentication
                             .anyRequest().authenticated();
-                    log.info("🔧 SecurityConfig: Authorization rules configured - /auth/** is permitAll()");
+                    log.info("🔧 SecurityConfig: Authorization rules configured - /actuator/health is permitAll()");
                 })
                 // IMPORTANT: Filters are added AFTER authorizeHttpRequests
-                // JwtFilter checks whitelist internally and should allow /auth/** requests
                 .addFilterBefore(jwtFilter,
                         org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -81,33 +58,4 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private static final class InternalToolRequestMatcher implements RequestMatcher {
-        private static final String TOOL_PATH_PREFIX = "/api/v1/tools/";
-
-        @Override
-        public boolean matches(jakarta.servlet.http.HttpServletRequest request) {
-            String path = request.getRequestURI();
-            if (!path.startsWith(TOOL_PATH_PREFIX)) {
-                return false;
-            }
-            String forwardedFor = request.getHeader("X-Forwarded-For");
-            return forwardedFor == null || forwardedFor.isBlank();
-        }
-    }
-
-    /**
-     * Open CORS configuration for PC control REST + WebSocket handshake.
-     */
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOriginPattern("*");
-        configuration.addAllowedHeader("*");
-        configuration.addAllowedMethod("*");
-        configuration.setAllowCredentials(false);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
 }

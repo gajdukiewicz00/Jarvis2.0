@@ -109,9 +109,18 @@ run_privileged() {
         "$@"
         return $?
     fi
-    if [[ -t 0 ]] && command -v sudo >/dev/null 2>&1; then
-        sudo "$@"
-        return $?
+    if command -v sudo >/dev/null 2>&1; then
+        if sudo -n true >/dev/null 2>&1; then
+            sudo -n "$@"
+            return $?
+        fi
+        if [[ -t 0 ]]; then
+            sudo "$@"
+            return $?
+        fi
+    fi
+    if [[ "${JARVIS_NONINTERACTIVE:-}" == "true" || "${JARVIS_NONINTERACTIVE:-}" == "1" ]]; then
+        fail "Privileged operation requires sudo or pkexec. Run in an interactive terminal or unset JARVIS_NONINTERACTIVE: $*"
     fi
     if command -v pkexec >/dev/null 2>&1; then
         pkexec /usr/bin/env "$@"
@@ -131,20 +140,18 @@ is_k3s_context() {
 
 ensure_kubeconfig() {
     if [[ -z "${KUBECONFIG:-}" ]] && [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
-        local ctx
-        ctx=$(kubectl config current-context 2>/dev/null || true)
-        if [[ -z "${ctx}" || "${ctx}" == *"k3s"* ]]; then
-            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-        fi
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        info "Using k3s kubeconfig: ${KUBECONFIG}"
     fi
 }
 
 ensure_cluster() {
-    if kubectl cluster-info >/dev/null 2>&1; then
+    local timeout="5s"
+    if kubectl cluster-info --request-timeout="${timeout}" >/dev/null 2>&1; then
         return 0
     fi
 
-    if command -v systemctl >/dev/null 2>&1; then
+    if is_k3s_context && command -v systemctl >/dev/null 2>&1; then
         if systemctl list-unit-files | grep -q '^k3s.service'; then
             info "Starting k3s service..."
             run_privileged systemctl start k3s || true
@@ -152,8 +159,19 @@ ensure_cluster() {
         fi
     fi
 
-    if ! kubectl cluster-info >/dev/null 2>&1; then
-        fail "Kubernetes cluster not доступен. Установи k3s: curl -sfL https://get.k3s.io | sh -"
+    if ! kubectl cluster-info --request-timeout="${timeout}" >/dev/null 2>&1; then
+        local ctx
+        ctx=$(kubectl config current-context 2>/dev/null || true)
+        if [[ -z "${ctx}" ]]; then
+            ctx="(none)"
+        fi
+        if [[ "${ctx}" == *"minikube"* ]]; then
+            fail "Kubernetes cluster not available for context '${ctx}'. Run: minikube start"
+        fi
+        if is_k3s_context; then
+            fail "Kubernetes cluster not available for k3s context. Install/start k3s: curl -sfL https://get.k3s.io | sh -"
+        fi
+        fail "Kubernetes cluster not available for context '${ctx}'. Start your cluster or set KUBECONFIG."
     fi
 }
 
@@ -425,7 +443,7 @@ fi
 
 ensure_disk_space() {
     local usage
-    usage="$(df -P / | awk 'NR==2 {gsub(/%/,\"\",$5); print $5}')"
+    usage="$(df -P / | awk 'NR==2 {gsub(/%/, "", $5); print $5}')"
     if [[ -n "${usage}" && "${usage}" -ge 95 ]]; then
         warn "Root filesystem is ${usage}% full; attempting cleanup..."
         if [[ -x "${PROJECT_DIR}/scripts/product/jarvis-disk-cleanup.sh" ]]; then
@@ -433,7 +451,7 @@ ensure_disk_space() {
         else
             warn "Cleanup script missing: ${PROJECT_DIR}/scripts/product/jarvis-disk-cleanup.sh"
         fi
-        usage="$(df -P / | awk 'NR==2 {gsub(/%/,\"\",$5); print $5}')"
+        usage="$(df -P / | awk 'NR==2 {gsub(/%/, "", $5); print $5}')"
         if [[ -n "${usage}" && "${usage}" -ge 95 ]]; then
             fail "Disk still ${usage}% full. Free space on / and retry."
         fi

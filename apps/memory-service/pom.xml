@@ -15,10 +15,21 @@
     <description>Long-term memory service with pgvector for semantic search</description>
 
     <dependencies>
+        <!-- Jarvis Common (security, utilities) -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>jarvis-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -110,6 +121,5 @@
         </plugins>
     </build>
 </project>
-
 
 

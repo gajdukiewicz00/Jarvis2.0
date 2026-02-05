@@ -78,11 +78,12 @@ generate_secrets_file() {
     mkdir -p "$(dirname "${SECRETS_FILE}")"
     umask 077
 
-    local db_password rabbit_password rabbit_cookie jwt_secret enc_key
+    local db_password rabbit_password rabbit_cookie jwt_secret service_jwt_secret enc_key
     db_password="$(openssl rand -base64 32 | tr -d '\n')"
     rabbit_password="$(openssl rand -base64 32 | tr -d '\n')"
     rabbit_cookie="$(openssl rand -base64 32 | tr -d '\n')"
     jwt_secret="$(openssl rand -base64 32 | tr -d '\n')"
+    service_jwt_secret="$(openssl rand -base64 32 | tr -d '\n')"
     enc_key="$(openssl rand -base64 32 | tr -d '\n')"
 
     cat > "${SECRETS_FILE}" <<EOF
@@ -100,6 +101,7 @@ SPRING_RABBITMQ_USERNAME=jarvis
 SPRING_RABBITMQ_PASSWORD=${rabbit_password}
 
 JWT_SECRET=${jwt_secret}
+SERVICE_JWT_SECRET=${service_jwt_secret}
 ENCRYPTION_KEY=${enc_key}
 EOF
 
@@ -178,6 +180,7 @@ REQUIRED_KEYS=(
     "SPRING_RABBITMQ_USERNAME"
     "SPRING_RABBITMQ_PASSWORD"
     "JWT_SECRET"
+    "SERVICE_JWT_SECRET"
 )
 
 while IFS='=' read -r key value || [[ -n "$key" ]]; do

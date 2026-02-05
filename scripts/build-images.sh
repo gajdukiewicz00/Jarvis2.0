@@ -31,6 +31,7 @@ NC='\033[0m'
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "\033[0;31m[ERROR]${NC} $1"; }
 
 ensure_buildx() {
     if docker buildx version >/dev/null 2>&1; then
@@ -150,6 +151,11 @@ log_success "All images built successfully!"
 
 # Import into k3s containerd (optional)
 if [ "$IMPORT_TO_K3S" = "true" ] && command -v k3s >/dev/null 2>&1; then
+    if ! sudo -n true 2>/dev/null; then
+        log_warn "k3s import requires passwordless sudo for: $(command -v k3s)"
+        log_warn "Configure NOPASSWD in /etc/sudoers.d/jarvis-automation or run with --no-import"
+        exit 1
+    fi
     log_info "Importing images into k3s containerd..."
     IMAGE_LIST=(
         "jarvis/api-gateway:latest"
@@ -171,9 +177,23 @@ if [ "$IMPORT_TO_K3S" = "true" ] && command -v k3s >/dev/null 2>&1; then
 
     TAR_PATH=$(mktemp -t jarvis-images-XXXXXX.tar)
     docker save -o "$TAR_PATH" "${IMAGE_LIST[@]}" >/dev/null
-    sudo k3s ctr images import "$TAR_PATH" >/dev/null
+    sudo -n k3s ctr -n k8s.io images import "$TAR_PATH" >/dev/null
+    if ! sudo -n k3s ctr -n k8s.io images list | grep -q 'jarvis/'; then
+        rm -f "$TAR_PATH"
+        log_error "k3s import finished but jarvis images not found in containerd"
+        exit 1
+    fi
     rm -f "$TAR_PATH"
     log_success "Images imported into k3s"
+    if [[ "${JARVIS_ROLLOUT_RESTART_AFTER_IMPORT:-false}" == "true" ]]; then
+        KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/k3s.yaml}" \
+            kubectl -n jarvis rollout restart deploy >/dev/null 2>&1 || true
+        log_info "Rollout restart triggered for jarvis deployments"
+    else
+        log_info "Tip: set JARVIS_ROLLOUT_RESTART_AFTER_IMPORT=true to restart deployments"
+    fi
+elif [ "$IMPORT_TO_K3S" = "true" ]; then
+    log_warn "Skipping k3s import (k3s not found in PATH). Use --no-import to silence."
 else
-    log_warn "Skipping k3s import (use --no-import or install k3s)"
+    log_warn "Skipping k3s import (explicit --no-import)"
 fi

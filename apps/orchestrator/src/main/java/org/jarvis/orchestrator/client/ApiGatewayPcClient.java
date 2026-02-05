@@ -1,5 +1,6 @@
 package org.jarvis.orchestrator.client;
 
+import org.jarvis.orchestrator.config.ServiceAuthFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,7 +12,10 @@ import java.util.Map;
  * Client for API Gateway internal PC Control endpoint.
  * Sends PC actions to be relayed via WebSocket to Desktop clients.
  */
-@FeignClient(name = "api-gateway-pc", url = "${jarvis.api-gateway.url:http://api-gateway:8080}")
+@FeignClient(
+        name = "api-gateway-pc",
+        url = "${jarvis.api-gateway.url:http://api-gateway:8080}",
+        configuration = ServiceAuthFeignConfig.class)
 public interface ApiGatewayPcClient {
 
     /**

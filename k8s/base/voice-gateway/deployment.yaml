@@ -25,6 +25,9 @@ spec:
           ports:
             - containerPort: 8081
               name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
           volumeMounts:
             - name: vosk-models
               mountPath: /models

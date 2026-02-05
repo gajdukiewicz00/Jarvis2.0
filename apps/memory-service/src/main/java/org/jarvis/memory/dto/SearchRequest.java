@@ -1,5 +1,6 @@
 package org.jarvis.memory.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -17,7 +18,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class SearchRequest {
 
-    @NotBlank(message = "userId is required")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String userId;
 
     @NotBlank(message = "query is required")
@@ -47,6 +48,5 @@ public class SearchRequest {
     @Builder.Default
     private double minSimilarity = 0.5;
 }
-
 
 

@@ -5,6 +5,11 @@ import org.jarvis.pccontrol.service.SystemControlService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
+
 /**
  * Linux implementation of SystemControlService.
  * 
@@ -18,11 +23,28 @@ import org.springframework.stereotype.Service;
 @ConditionalOnProperty(name = "pc-control.stub-mode", havingValue = "false", matchIfMissing = true)
 public class LinuxSystemControlService implements SystemControlService {
 
+    private static final Pattern HOTKEY_PATTERN = Pattern.compile("^[A-Za-z0-9+_\\-]{1,64}$");
+
+    private static final Map<String, List<String>> APP_COMMANDS = Map.ofEntries(
+            Map.entry("browser", List.of("xdg-open", "https://google.com")),
+            Map.entry("chrome", List.of("xdg-open", "https://google.com")),
+            Map.entry("firefox", List.of("xdg-open", "https://google.com")),
+            Map.entry("youtube", List.of("xdg-open", "https://youtube.com")),
+            Map.entry("spotify", List.of("spotify")),
+            Map.entry("ide", List.of("code")),
+            Map.entry("vscode", List.of("code")),
+            Map.entry("code", List.of("code")),
+            Map.entry("calculator", List.of("gnome-calculator")),
+            Map.entry("calc", List.of("gnome-calculator")),
+            Map.entry("terminal", List.of("gnome-terminal")),
+            Map.entry("telegram", List.of("telegram-desktop"))
+    );
+
     @Override
     public void changeVolume(int deltaPercent, String direction) throws Exception {
         int delta = Math.max(1, Math.min(100, deltaPercent));
         String sign = "+".equals(direction) ? "+" : "-";
-        String cmd = "pactl set-sink-volume @DEFAULT_SINK@ " + sign + delta + "%";
+        List<String> cmd = List.of("pactl", "set-sink-volume", "@DEFAULT_SINK@", sign + delta + "%");
         log.info("🔊 Executing volume change: {}", cmd);
         execWithFallback(cmd, "Volume change");
     }
@@ -30,49 +52,49 @@ public class LinuxSystemControlService implements SystemControlService {
     @Override
     public void setVolume(int percent) throws Exception {
         int level = Math.max(0, Math.min(100, percent));
-        String cmd = "pactl set-sink-volume @DEFAULT_SINK@ " + level + "%";
+        List<String> cmd = List.of("pactl", "set-sink-volume", "@DEFAULT_SINK@", level + "%");
         log.info("🔊 Setting volume to {}%: {}", level, cmd);
         execWithFallback(cmd, "Set volume");
     }
 
     @Override
     public void mute() throws Exception {
-        String cmd = "pactl set-sink-mute @DEFAULT_SINK@ 1";
+        List<String> cmd = List.of("pactl", "set-sink-mute", "@DEFAULT_SINK@", "1");
         log.info("🔇 Executing mute");
         execWithFallback(cmd, "Mute");
     }
 
     @Override
     public void unmute() throws Exception {
-        String cmd = "pactl set-sink-mute @DEFAULT_SINK@ 0";
+        List<String> cmd = List.of("pactl", "set-sink-mute", "@DEFAULT_SINK@", "0");
         log.info("🔊 Executing unmute");
         execWithFallback(cmd, "Unmute");
     }
 
     @Override
     public void playPause() throws Exception {
-        String cmd = "playerctl play-pause";
+        List<String> cmd = List.of("playerctl", "play-pause");
         log.info("⏯️ Executing play/pause");
         execPlayerctl(cmd, "Play/Pause");
     }
 
     @Override
     public void pause() throws Exception {
-        String cmd = "playerctl pause";
+        List<String> cmd = List.of("playerctl", "pause");
         log.info("⏸️ Executing pause");
         execPlayerctl(cmd, "Pause");
     }
 
     @Override
     public void next() throws Exception {
-        String cmd = "playerctl next";
+        List<String> cmd = List.of("playerctl", "next");
         log.info("⏭️ Executing next track");
         execPlayerctl(cmd, "Next");
     }
 
     @Override
     public void prev() throws Exception {
-        String cmd = "playerctl previous";
+        List<String> cmd = List.of("playerctl", "previous");
         log.info("⏮️ Executing previous track");
         execPlayerctl(cmd, "Previous");
     }
@@ -81,7 +103,7 @@ public class LinuxSystemControlService implements SystemControlService {
     public void beep() {
         try {
             execWithFallback(
-                    "bash -lc 'paplay /usr/share/sounds/freedesktop/stereo/bell.oga 2>/dev/null || printf \"\\a\"'",
+                    List.of("paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"),
                     "Beep");
         } catch (Exception e) {
             log.debug("beep fallback: {}", e.getMessage());
@@ -91,32 +113,23 @@ public class LinuxSystemControlService implements SystemControlService {
 
     @Override
     public void openApp(String appName) throws Exception {
-        String cmd = switch (appName.toLowerCase()) {
-            case "browser", "chrome", "firefox" -> "xdg-open https://google.com";
-            case "youtube" -> "xdg-open https://youtube.com";
-            case "spotify" -> "spotify";
-            case "ide", "vscode", "code" -> "code";
-            case "calculator", "calc" -> "gnome-calculator";
-            case "terminal" -> "gnome-terminal";
-            case "telegram" -> "telegram-desktop";
-            default -> "xdg-open " + appName;
-        };
+        List<String> cmd = resolveAppCommand(appName);
         log.info("🚀 Opening app: {} with command: {}", appName, cmd);
-        // Run in background
-        new ProcessBuilder("bash", "-lc", "nohup " + cmd + " >/dev/null 2>&1 &").start();
+        startProcess(cmd);
     }
 
     @Override
     public void executeHotkey(String keyCombination) throws Exception {
         // e.g. "Alt+Tab", "Control+c"
-        String cmd = "xdotool key " + keyCombination;
+        validateHotkey(keyCombination);
+        List<String> cmd = List.of("xdotool", "key", keyCombination);
         log.info("⌨️ Executing hotkey: {}", keyCombination);
         execWithFallback(cmd, "Hotkey");
     }
 
     @Override
     public void sendNotification(String title, String message) throws Exception {
-        String cmd = "notify-send " + shellQuote(title) + " " + shellQuote(message);
+        List<String> cmd = List.of("notify-send", title, message);
         log.info("📢 Sending notification: {} - {}", title, message);
         execWithFallback(cmd, "Notification");
     }
@@ -125,9 +138,9 @@ public class LinuxSystemControlService implements SystemControlService {
      * Execute command with graceful error handling.
      * Logs warning instead of throwing for non-critical failures.
      */
-    private void execWithFallback(String cmd, String operation) throws Exception {
+    private void execWithFallback(List<String> cmd, String operation) throws Exception {
         try {
-            Process p = new ProcessBuilder("bash", "-lc", cmd).redirectErrorStream(true).start();
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             int code = p.waitFor();
             if (code != 0) {
                 log.warn("⚠️ {} command returned non-zero exit code: {} for cmd: {}", operation, code, cmd);
@@ -145,9 +158,9 @@ public class LinuxSystemControlService implements SystemControlService {
      * Execute playerctl command with special handling for "No players found" case.
      * This is a common edge case that should not crash the service.
      */
-    private void execPlayerctl(String cmd, String operation) throws Exception {
+    private void execPlayerctl(List<String> cmd, String operation) throws Exception {
         try {
-            ProcessBuilder pb = new ProcessBuilder("bash", "-lc", cmd);
+            ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
@@ -171,10 +184,28 @@ public class LinuxSystemControlService implements SystemControlService {
         }
     }
 
-    private static String shellQuote(String value) {
-        if (value == null || value.isEmpty()) {
-            return "''";
+    private static void startProcess(List<String> cmd) throws Exception {
+        new ProcessBuilder(cmd).start();
+    }
+
+    private static void validateHotkey(String keyCombination) {
+        if (keyCombination == null || keyCombination.isBlank()) {
+            throw new IllegalArgumentException("Hotkey is required");
         }
-        return "'" + value.replace("'", "'\"'\"'") + "'";
+        if (!HOTKEY_PATTERN.matcher(keyCombination).matches()) {
+            throw new IllegalArgumentException("Invalid hotkey format");
+        }
+    }
+
+    private static List<String> resolveAppCommand(String appName) {
+        if (appName == null || appName.isBlank()) {
+            throw new IllegalArgumentException("App name is required");
+        }
+        String key = appName.toLowerCase(Locale.ROOT).trim();
+        List<String> cmd = APP_COMMANDS.get(key);
+        if (cmd == null) {
+            throw new IllegalArgumentException("Unsupported app: " + appName);
+        }
+        return cmd;
     }
 }

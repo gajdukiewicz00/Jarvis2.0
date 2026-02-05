@@ -41,6 +41,8 @@ jarvis:
 
 pc-control:
   stub-mode: ${PC_CONTROL_STUB_MODE:true}
+  file-root: ${PC_CONTROL_FILE_ROOT:/var/jarvis/shared}
+  file-extensions: ${PC_CONTROL_FILE_EXTENSIONS:txt,log,md,json,yml,yaml,csv}
 
 security:
   allowed-actions: ${SECURITY_ALLOWED_ACTIONS:VOLUME_UP,VOLUME_DOWN,VOLUME_MUTE,LAUNCH_APP,MEDIA_CONTROL,TIMER_START,TIMER_STOP}

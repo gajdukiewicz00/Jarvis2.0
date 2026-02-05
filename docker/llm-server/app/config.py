@@ -52,6 +52,13 @@ class Config:
     # Logging
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     VERBOSE_LLAMACPP: bool = os.getenv("VERBOSE_LLAMACPP", "false").lower() == "true"
+
+    # CORS (comma-separated list, no wildcard)
+    CORS_ALLOWED_ORIGINS = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
     
     @classmethod
     def get_effective_device(cls) -> str:
@@ -82,6 +89,9 @@ class Config:
         # Validate quantization
         if cls.LLM_QUANT not in ["none", "4bit", "8bit"]:
             raise ValueError(f"Invalid LLM_QUANT: {cls.LLM_QUANT}. Must be 'none', '4bit', or '8bit'")
+
+        if "*" in cls.CORS_ALLOWED_ORIGINS:
+            raise ValueError("CORS_ALLOWED_ORIGINS cannot include '*'")
         
         logger.info("Configuration validated successfully")
     

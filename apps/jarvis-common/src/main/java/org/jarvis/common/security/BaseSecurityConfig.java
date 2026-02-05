@@ -26,7 +26,7 @@ public abstract class BaseSecurityConfig {
      * Override this method to customize security rules.
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, ServiceJwtFilter serviceJwtFilter) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .formLogin(form -> form.disable())
@@ -36,7 +36,8 @@ public abstract class BaseSecurityConfig {
                 .requestMatchers(getPublicEndpoints()).permitAll()
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(createGatewayAuthFilter(), UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(serviceJwtFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterAfter(createGatewayAuthFilter(), ServiceJwtFilter.class);
         
         configureAdditionalSecurity(http);
         
@@ -49,7 +50,6 @@ public abstract class BaseSecurityConfig {
      */
     protected String[] getPublicEndpoints() {
         return new String[]{
-            "/actuator/**",
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info"
@@ -72,4 +72,3 @@ public abstract class BaseSecurityConfig {
         // Default: no additional configuration
     }
 }
-

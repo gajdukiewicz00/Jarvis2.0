@@ -2,6 +2,7 @@ package org.jarvis.voicegateway.client.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.security.ServiceJwtProvider;
 import org.jarvis.voicegateway.client.OrchestratorClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -19,7 +21,11 @@ public class RestOrchestratorClient implements OrchestratorClient {
     @Value("${jarvis.orchestrator.url:http://orchestrator:8083}")
     private String orchestratorUrl;
 
+    @Value("${spring.application.name:voice-gateway}")
+    private String serviceName;
+
     private final RestClient.Builder restClientBuilder;
+    private final ServiceJwtProvider serviceJwtProvider;
 
     @Override
     public void sendCommand(String text) {
@@ -28,6 +34,7 @@ public class RestOrchestratorClient implements OrchestratorClient {
             restClientBuilder.build()
                     .post()
                     .uri(orchestratorUrl + "/api/v1/orchestrator/execute")
+                    .header("Authorization", "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("text", text))
                     .retrieve()
@@ -72,6 +79,7 @@ public class RestOrchestratorClient implements OrchestratorClient {
             String response = restClientBuilder.build()
                     .post()
                     .uri(orchestratorUrl + "/api/v1/orchestrator/execute")
+                    .header("Authorization", "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody)
                     .retrieve()

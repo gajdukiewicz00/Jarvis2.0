@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.apigateway.websocket.PcControlWebSocketHandler;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -18,6 +19,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/internal/pc-control")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('SVC_INTERNAL')")
 public class PcControlInternalController {
 
     private final PcControlWebSocketHandler webSocketHandler;

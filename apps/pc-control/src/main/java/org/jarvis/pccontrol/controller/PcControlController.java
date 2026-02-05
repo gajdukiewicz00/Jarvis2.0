@@ -75,6 +75,8 @@ public class PcControlController {
 
         } catch (NumberFormatException e) {
             return badRequest("INVALID_PARAMETER", "Invalid number format: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return badRequest("INVALID_PARAMETER", e.getMessage());
         } catch (Exception e) {
             log.error("Action execution failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().body(Map.of(
@@ -217,7 +219,20 @@ public class PcControlController {
 
         if ("timer".equals(command)) {
             String args = request.parameters().getOrDefault("args", "0");
-            int seconds = Integer.parseInt(args.replaceAll("[^0-9]", ""));
+            String digits = args.replaceAll("[^0-9]", "");
+            if (digits.isBlank()) {
+                return Map.of(
+                        "success", false,
+                        "error", "INVALID_PARAMETER",
+                        "message", "Timer duration is required");
+            }
+            int seconds = Integer.parseInt(digits);
+            if (seconds < 1 || seconds > 86400) {
+                return Map.of(
+                        "success", false,
+                        "error", "INVALID_PARAMETER",
+                        "message", "Timer duration must be between 1 and 86400 seconds");
+            }
 
             // Start timer in background thread
             new Thread(() -> {

@@ -1,5 +1,6 @@
 package org.jarvis.memory.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.AllArgsConstructor;
@@ -19,7 +20,7 @@ import java.util.Map;
 @AllArgsConstructor
 public class IngestRequest {
 
-    @NotBlank(message = "userId is required")
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private String userId;
 
     @NotBlank(message = "sessionId is required")
@@ -53,6 +54,5 @@ public class IngestRequest {
         private Map<String, Object> metadata;
     }
 }
-
 
 

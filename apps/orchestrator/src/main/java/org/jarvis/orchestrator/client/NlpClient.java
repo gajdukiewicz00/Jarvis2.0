@@ -1,12 +1,16 @@
 package org.jarvis.orchestrator.client;
 
+import org.jarvis.orchestrator.config.ServiceAuthFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.Map;
 
-@FeignClient(name = "nlp-service", url = "${jarvis.nlp.url:http://localhost:8082}")
+@FeignClient(
+        name = "nlp-service",
+        url = "${jarvis.nlp.url:http://localhost:8082}",
+        configuration = ServiceAuthFeignConfig.class)
 public interface NlpClient {
 
     @PostMapping("/api/v1/nlp/analyze")

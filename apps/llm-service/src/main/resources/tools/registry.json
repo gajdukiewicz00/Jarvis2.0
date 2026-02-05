@@ -59,6 +59,7 @@
   {
     "name": "create_event",
     "description": "Create a calendar event for the user.",
+    "requires_confirmation": true,
     "input_schema": {
       "type": "object",
       "properties": {
@@ -70,7 +71,8 @@
         "location": { "type": "string" },
         "timezone": { "type": "string" },
         "recurrenceRule": { "type": "string" },
-        "recurrenceUntil": { "type": "string", "format": "date-time" }
+        "recurrenceUntil": { "type": "string", "format": "date-time" },
+        "confirmed": { "type": "boolean" }
       },
       "required": ["title", "startTime", "endTime"]
     }
@@ -78,12 +80,14 @@
   {
     "name": "move_event",
     "description": "Move an existing event to a new time.",
+    "requires_confirmation": true,
     "input_schema": {
       "type": "object",
       "properties": {
         "eventId": { "type": "integer" },
         "newStartTime": { "type": "string", "format": "date-time" },
-        "newEndTime": { "type": "string", "format": "date-time" }
+        "newEndTime": { "type": "string", "format": "date-time" },
+        "confirmed": { "type": "boolean" }
       },
       "required": ["eventId", "newStartTime", "newEndTime"]
     }

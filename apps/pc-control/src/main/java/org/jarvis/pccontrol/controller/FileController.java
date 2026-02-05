@@ -21,6 +21,12 @@ public class FileController {
     public ResponseEntity<List<String>> listFiles(@RequestParam String path) {
         try {
             return ResponseEntity.ok(fileService.listFiles(path));
+        } catch (SecurityException e) {
+            log.warn("Forbidden file listing for path: {}", path);
+            return ResponseEntity.status(403).build();
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad file listing request for path {}: {}", path, e.getMessage());
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             log.error("Error listing files in path: {}", path, e);
             return ResponseEntity.badRequest().build();
@@ -31,6 +37,12 @@ public class FileController {
     public ResponseEntity<String> readFile(@RequestParam String path) {
         try {
             return ResponseEntity.ok(fileService.readFile(path));
+        } catch (SecurityException e) {
+            log.warn("Forbidden file read for path: {}", path);
+            return ResponseEntity.status(403).body("Access denied");
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad file read request for path {}: {}", path, e.getMessage());
+            return ResponseEntity.badRequest().body("Error reading file: " + e.getMessage());
         } catch (Exception e) {
             log.error("Error reading file: {}", path, e);
             return ResponseEntity.badRequest().body("Error reading file: " + e.getMessage());
@@ -41,6 +53,12 @@ public class FileController {
     public ResponseEntity<Map<String, Object>> getFileInfo(@RequestParam String path) {
         try {
             return ResponseEntity.ok(fileService.getFileInfo(path));
+        } catch (SecurityException e) {
+            log.warn("Forbidden file info for path: {}", path);
+            return ResponseEntity.status(403).build();
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad file info request for path {}: {}", path, e.getMessage());
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             log.error("Error getting file info: {}", path, e);
             return ResponseEntity.badRequest().build();

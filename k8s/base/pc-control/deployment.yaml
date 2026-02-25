@@ -18,10 +18,18 @@ spec:
       labels:
         app: pc-control
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: pc-control
-          image: jarvis/pc-control:latest
+          image: jarvis/pc-control:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8084
               name: http

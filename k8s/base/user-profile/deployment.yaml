@@ -18,10 +18,18 @@ spec:
       labels:
         app: user-profile
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: user-profile
-          image: jarvis/user-profile:latest
+          image: jarvis/user-profile:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8089
               name: http

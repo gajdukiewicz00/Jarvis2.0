@@ -18,10 +18,18 @@ spec:
       labels:
         app: orchestrator
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: orchestrator
-          image: jarvis/orchestrator:latest
+          image: jarvis/orchestrator:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8083
               name: http

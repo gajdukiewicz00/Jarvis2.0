@@ -26,6 +26,9 @@ spec:
         app: llm-server
         app.kubernetes.io/name: llm-server
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       # GPU scheduling (Stage: perf/hardware)
       # Tolerations for GPU nodes (if cluster uses taints)
       tolerations:
@@ -34,8 +37,13 @@ spec:
           effect: NoSchedule
       containers:
         - name: llm-server
-          image: jarvis/llm-server:latest
+          image: jarvis/llm-server:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 5000
               name: http

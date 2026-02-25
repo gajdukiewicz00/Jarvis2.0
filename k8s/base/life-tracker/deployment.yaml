@@ -18,10 +18,18 @@ spec:
       labels:
         app: life-tracker
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: life-tracker
-          image: jarvis/life-tracker:latest
+          image: jarvis/life-tracker:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8085
               name: http

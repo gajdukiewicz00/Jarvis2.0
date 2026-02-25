@@ -18,10 +18,18 @@ spec:
       labels:
         app: security-service
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: security-service
-          image: jarvis/security-service:latest
+          image: jarvis/security-service:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8088
               name: http

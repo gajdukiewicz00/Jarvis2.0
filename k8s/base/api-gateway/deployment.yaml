@@ -18,10 +18,18 @@ spec:
       labels:
         app: api-gateway
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: api-gateway
-          image: jarvis/api-gateway:latest
+          image: jarvis/api-gateway:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8080
               name: http

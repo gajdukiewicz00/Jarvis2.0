@@ -38,7 +38,7 @@ spec:
               echo "PostgreSQL is ready!"
       containers:
         - name: assistant-core
-          image: jarvis/assistant-core:latest
+          image: jarvis/assistant-core:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8090

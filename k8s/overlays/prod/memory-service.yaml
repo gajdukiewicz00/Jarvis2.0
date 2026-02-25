@@ -28,13 +28,21 @@ spec:
         app: memory-service
         app.kubernetes.io/name: memory-service
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       # Memory service is optional - no blocking init containers
       # If postgres-pgvector is not available, service will start and handle connection errors gracefully
       # initContainers removed to allow graceful degradation
       containers:
         - name: memory-service
-          image: jarvis/memory-service:latest
+          image: jarvis/memory-service:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8093
               name: http

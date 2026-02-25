@@ -18,10 +18,18 @@ spec:
       labels:
         app: nlp-service
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: nlp-service
-          image: jarvis/nlp-service:latest
+          image: jarvis/nlp-service:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8082
               name: http

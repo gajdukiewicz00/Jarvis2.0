@@ -18,10 +18,18 @@ spec:
       labels:
         app: planner-service
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: planner-service
-          image: jarvis/planner-service:latest
+          image: jarvis/planner-service:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8092
               name: http

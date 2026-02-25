@@ -27,13 +27,21 @@ spec:
         app: llm-service
         app.kubernetes.io/name: llm-service
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       # LLM is optional - no blocking init containers
       # If llm-server is not available, service will start and return DEGRADED status
       # initContainers removed to allow graceful degradation
       containers:
         - name: llm-service
-          image: jarvis/llm-service:latest
+          image: jarvis/llm-service:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8091
               name: http

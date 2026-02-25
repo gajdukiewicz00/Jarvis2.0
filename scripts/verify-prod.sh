@@ -16,6 +16,7 @@ require_cmd() {
 }
 
 require_cmd rg
+require_cmd grep
 
 EXCLUDES=(
     "--glob" "!docs/legacy/**"
@@ -23,6 +24,7 @@ EXCLUDES=(
     "--glob" "!data/**"
     "--glob" "!target/**"
     "--glob" "!.git/**"
+    "--glob" "!apps/api-gateway/src/main/resources/application-dev.yaml"
 )
 
 fail_if_found() {
@@ -54,6 +56,12 @@ for d in "${PROJECT_ROOT}/k8s/legacy" "${PROJECT_ROOT}/k8s/overlays/local" "${PR
         exit 1
     fi
 done
+
+if grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${PROJECT_ROOT}/k8s" >/dev/null; then
+    echo "❌ Found ':latest' image tags in k8s manifests"
+    grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${PROJECT_ROOT}/k8s" | head -20
+    exit 1
+fi
 
 # Secrets/certs in repo
 if rg --files -g '*.key' -g '*.crt' -g '*.pem' "${PROJECT_ROOT}" "${EXCLUDES[@]}" >/dev/null; then

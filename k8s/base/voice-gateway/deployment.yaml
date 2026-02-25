@@ -18,10 +18,18 @@ spec:
       labels:
         app: voice-gateway
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: voice-gateway
-          image: jarvis/voice-gateway:latest
+          image: jarvis/voice-gateway:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8081
               name: http

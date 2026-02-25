@@ -18,10 +18,18 @@ spec:
       labels:
         app: smart-home-service
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: smart-home-service
-          image: jarvis/smart-home-service:latest
+          image: jarvis/smart-home-service:0.1.0-SNAPSHOT
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8086
               name: http

@@ -28,6 +28,7 @@ resources:
   - ../../base/life-tracker/deployment.yaml
   - ../../base/analytics-service/deployment.yaml
   - ../../base/planner-service/deployment.yaml
+  - ../../base/planner-service/networkpolicy.yaml
   - ../../base/user-profile/deployment.yaml
   - ../../base/smart-home-service/deployment.yaml
 

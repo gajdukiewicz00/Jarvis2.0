@@ -165,9 +165,6 @@ ensure_cluster() {
         if [[ -z "${ctx}" ]]; then
             ctx="(none)"
         fi
-        if [[ "${ctx}" == *"minikube"* ]]; then
-            fail "Kubernetes cluster not available for context '${ctx}'. Run: minikube start"
-        fi
         if is_k3s_context; then
             fail "Kubernetes cluster not available for k3s context. Install/start k3s: curl -sfL https://get.k3s.io | sh -"
         fi

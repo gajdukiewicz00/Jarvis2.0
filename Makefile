@@ -2,7 +2,7 @@
 # Jarvis 2.0 - Makefile (prod-only)
 # =============================================================================
 
-.PHONY: help build test clean launch stop logs install tls hosts secrets k8s-preflight
+.PHONY: help build test clean launch stop logs install tls hosts secrets k8s-preflight k8s-preflight-ci verify-prod
 
 .DEFAULT_GOAL := help
 
@@ -25,7 +25,9 @@ help:
 	@echo "║   make tls          - Install local CA to trust store         ║"
 	@echo "║   make hosts        - Update /etc/hosts                       ║"
 	@echo "║   make secrets      - Apply local secrets to Kubernetes       ║"
-	@echo "║   make k8s-preflight- Kustomize + server dry-run + image tags ║"
+	@echo "║   make verify-prod  - Verify runtime repo (prod-only rules)   ║"
+	@echo "║   make k8s-preflight- Kustomize + dry-run + image/auth checks ║"
+	@echo "║   make k8s-preflight-ci - Force toolchain container mode      ║"
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 
 build:
@@ -64,5 +66,11 @@ hosts:
 secrets:
 	./scripts/product/jarvis-secrets-apply.sh
 
+verify-prod:
+	./scripts/verify-prod.sh
+
 k8s-preflight:
 	./scripts/ci/k8s-preflight.sh
+
+k8s-preflight-ci:
+	CI=true K8S_PREFLIGHT_FORCE_CONTAINER=true ./scripts/ci/k8s-preflight.sh

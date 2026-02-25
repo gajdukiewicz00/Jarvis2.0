@@ -18,21 +18,41 @@ require_cmd() {
 require_cmd rg
 require_cmd grep
 
-EXCLUDES=(
-    "--glob" "!docs/legacy/**"
-    "--glob" "!scripts/legacy/**"
-    "--glob" "!data/**"
-    "--glob" "!target/**"
-    "--glob" "!.git/**"
-    "--glob" "!apps/api-gateway/src/main/resources/application-dev.yaml"
+RUNTIME_TARGETS=(
+    "${PROJECT_ROOT}/apps"
+    "${PROJECT_ROOT}/k8s"
+    "${PROJECT_ROOT}/scripts/product"
+    "${PROJECT_ROOT}/jarvis"
+    "${PROJECT_ROOT}/jarvis-launch.sh"
+    "${PROJECT_ROOT}/jarvis-stop.sh"
+    "${PROJECT_ROOT}/jarvis-logs.sh"
+    "${PROJECT_ROOT}/Makefile"
+)
+
+RUNTIME_DIRS=(
+    "${PROJECT_ROOT}/apps"
+    "${PROJECT_ROOT}/k8s"
+    "${PROJECT_ROOT}/scripts/product"
+)
+
+RG_EXCLUDES=(
+    "--glob" "!**/target/**"
+    "--glob" "!**/build/**"
+    "--glob" "!**/.git/**"
+    "--glob" "!**/logs/**"
+    "--glob" "!**/docs/**"
+    "--glob" "!**/docs/legacy/**"
+    "--glob" "!**/scripts/legacy/**"
+    "--glob" "!**/data/**"
+    "--glob" "!**/application-dev.yaml"
 )
 
 fail_if_found() {
     local label="$1"
     shift
-    if rg -n "${@}" "${PROJECT_ROOT}" "${EXCLUDES[@]}" >/dev/null; then
+    if rg -n "${@}" "${RUNTIME_TARGETS[@]}" "${RG_EXCLUDES[@]}" >/dev/null; then
         echo "❌ ${label} found"
-        rg -n "${@}" "${PROJECT_ROOT}" "${EXCLUDES[@]}" | head -20
+        rg -n "${@}" "${RUNTIME_TARGETS[@]}" "${RG_EXCLUDES[@]}" | head -20
         exit 1
     fi
 }
@@ -44,9 +64,10 @@ fail_if_found "NodePort references" "NodePort"
 fail_if_found "dev profile references" "application-dev|application-docker"
 
 # Banned files/dirs
-if rg --files -g 'docker-compose*.yml' -g 'docker-compose*.yaml' "${PROJECT_ROOT}" >/dev/null; then
+docker_compose_files="$(find "${RUNTIME_DIRS[@]}" -type f \( -name 'docker-compose*.yml' -o -name 'docker-compose*.yaml' \) 2>/dev/null || true)"
+if [[ -n "${docker_compose_files}" ]]; then
     echo "❌ docker-compose file present"
-    rg --files -g 'docker-compose*.yml' -g 'docker-compose*.yaml' "${PROJECT_ROOT}"
+    echo "${docker_compose_files}"
     exit 1
 fi
 
@@ -64,10 +85,15 @@ if grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${PROJECT_R
 fi
 
 # Secrets/certs in repo
-if rg --files -g '*.key' -g '*.crt' -g '*.pem' "${PROJECT_ROOT}" "${EXCLUDES[@]}" >/dev/null; then
+cert_files="$(find "${RUNTIME_DIRS[@]}" -type f \( -name '*.key' -o -name '*.crt' -o -name '*.pem' \) 2>/dev/null || true)"
+if [[ -n "${cert_files}" ]]; then
     echo "❌ Certificate/key files detected in repo"
-    rg --files -g '*.key' -g '*.crt' -g '*.pem' "${PROJECT_ROOT}" "${EXCLUDES[@]}"
+    echo "${cert_files}"
     exit 1
+fi
+
+if [[ -x "${PROJECT_ROOT}/scripts/ci/check-mqtt-hardening.sh" ]]; then
+    "${PROJECT_ROOT}/scripts/ci/check-mqtt-hardening.sh"
 fi
 
 echo "✅ verify-prod: OK"

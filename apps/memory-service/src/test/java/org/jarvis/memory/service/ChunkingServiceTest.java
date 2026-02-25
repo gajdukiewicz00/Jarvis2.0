@@ -97,7 +97,7 @@ class ChunkingServiceTest {
         // ~4 chars per token
         assertEquals(0, chunkingService.estimateTokens((String) null));
         assertEquals(0, chunkingService.estimateTokens(""));
-        assertEquals(2, chunkingService.estimateTokens("Привет")); // 12 chars / 4
+        assertEquals(1, chunkingService.estimateTokens("Привет")); // 6 chars / 4
         assertEquals(25, chunkingService.estimateTokens("a".repeat(100))); // 100 / 4
     }
 
@@ -127,6 +127,5 @@ class ChunkingServiceTest {
         }
     }
 }
-
 
 

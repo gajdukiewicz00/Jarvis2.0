@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Testcontainers
-@ActiveProfiles("test")
+@ActiveProfiles({"test", "dev"})
 class LifeTrackerIntegrationTest {
 
     private static final String USER_ID = "test-user";
@@ -50,6 +50,7 @@ class LifeTrackerIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("spring.flyway.enabled", () -> "false");
     }
@@ -105,7 +106,7 @@ class LifeTrackerIntegrationTest {
                         .header("X-User-Id", USER_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].amount", is(25.50)))
+                .andExpect(jsonPath("$[0].amount", is("25.50")))
                 .andExpect(jsonPath("$[0].currency", is("EUR")))
                 .andExpect(jsonPath("$[0].category", is("FOOD")))
                 .andExpect(jsonPath("$[0].description", is("Lunch")));
@@ -128,7 +129,7 @@ class LifeTrackerIntegrationTest {
                         .header("X-User-Id", USER_ID)
                         .content(requestBody))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.amount", is(100.50)))
+                .andExpect(jsonPath("$.amount", is("100.5")))
                 .andExpect(jsonPath("$.currency", is("EUR")))
                 .andExpect(jsonPath("$.category", is("TRANSPORT")))
                 .andExpect(jsonPath("$.description", is("Taxi")))

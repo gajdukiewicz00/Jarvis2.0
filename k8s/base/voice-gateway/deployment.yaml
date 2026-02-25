@@ -19,6 +19,10 @@ spec:
         app: voice-gateway
     spec:
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -27,19 +31,22 @@ spec:
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: vosk-models
+              mountPath: /models
+              readOnly: true
           ports:
             - containerPort: 8081
               name: http
           envFrom:
             - secretRef:
                 name: jarvis-secrets
-          volumeMounts:
-            - name: vosk-models
-              mountPath: /models
-              readOnly: true
           resources:
             limits:
               memory: "1Gi"
@@ -64,6 +71,8 @@ spec:
           hostPath:
             path: __JARVIS_MODELS_PATH__
             type: DirectoryOrCreate
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

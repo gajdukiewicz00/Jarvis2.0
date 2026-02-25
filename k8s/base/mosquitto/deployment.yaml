@@ -18,10 +18,23 @@ spec:
       labels:
         app: mosquitto
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1883
+        runAsGroup: 1883
+        fsGroup: 1883
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: mqtt-password-bootstrap
           image: eclipse-mosquitto:2
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -ec
@@ -44,6 +57,12 @@ spec:
         - name: mosquitto
           image: eclipse-mosquitto:2
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 1883
               name: mqtt

@@ -1,0 +1,5 @@
+gateway:
+  feign:
+    # Dev-only compatibility fallback for local calls without user headers.
+    # Ignored outside "dev" profile.
+    allow-default-user-fallback: true

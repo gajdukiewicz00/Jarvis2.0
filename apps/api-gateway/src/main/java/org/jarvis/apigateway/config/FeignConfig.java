@@ -4,8 +4,11 @@ import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -15,6 +18,15 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Slf4j
 @Configuration
 public class FeignConfig {
+
+    private final Environment environment;
+    private final boolean allowDefaultUserFallback;
+
+    public FeignConfig(Environment environment,
+                       @Value("${gateway.feign.allow-default-user-fallback:false}") boolean allowDefaultUserFallback) {
+        this.environment = environment;
+        this.allowDefaultUserFallback = allowDefaultUserFallback;
+    }
 
     @Bean
     public RequestInterceptor requestInterceptor() {
@@ -65,14 +77,18 @@ public class FeignConfig {
                     log.warn("FeignConfig: RequestContextHolder.getRequestAttributes() returned null");
                 }
 
-                // Always add default headers if none provided (for whitelisted requests)
-                if (!template.headers().containsKey("X-User-Id")) {
-                    log.warn("FeignConfig: No X-User-Id header found, adding defaults for whitelisted request");
+                // Dev-only fallback: explicit flag + dev profile are both required.
+                if (!template.headers().containsKey("X-User-Id") && shouldApplyDevFallback()) {
+                    log.warn("FeignConfig: No X-User-Id header found, adding dev fallback user");
                     template.header("X-User-Id", "dev-user");
                     template.header("X-Username", "dev-user");
                     template.header("X-User-Role", "USER");
                 }
             }
         };
+    }
+
+    boolean shouldApplyDevFallback() {
+        return allowDefaultUserFallback && environment.acceptsProfiles(Profiles.of("dev"));
     }
 }

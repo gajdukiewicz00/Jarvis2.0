@@ -1,9 +1,11 @@
 package org.jarvis.orchestrator.service.impl;
 
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.orchestrator.client.ApiGatewayPcClient;
 import org.jarvis.orchestrator.client.NlpClient;
 import org.jarvis.orchestrator.client.PcControlClient;
+import org.jarvis.orchestrator.config.OrchestratorExecutorProperties;
 import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
 import org.jarvis.orchestrator.phrases.Language;
 import org.jarvis.orchestrator.phrases.LanguageDetector;
@@ -18,6 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -58,20 +61,25 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
     private final AtomicReference<Instant> circuitOpenUntil = new AtomicReference<>(Instant.EPOCH);
 
-    // Executor for async LLM calls with timeout
-    private final ExecutorService llmExecutor = Executors.newCachedThreadPool();
+    // Executor for async LLM calls with timeout (bounded queue + explicit rejection policy)
+    private final ThreadPoolExecutor llmExecutor;
+    private final OrchestratorExecutorProperties executorProperties;
+    private final AtomicLong rejectedLlmTasks = new AtomicLong(0);
 
     public OrchestratorServiceImpl(
             NlpClient nlpClient,
             PcControlClient pcControlClient,
             ApiGatewayPcClient apiGatewayPcClient,
             JarvisPhraseProvider phraseProvider,
-            org.jarvis.orchestrator.client.LlmServiceClient llmClient) {
+            org.jarvis.orchestrator.client.LlmServiceClient llmClient,
+            OrchestratorExecutorProperties executorProperties) {
         this.nlpClient = nlpClient;
         this.pcControlClient = pcControlClient;
         this.apiGatewayPcClient = apiGatewayPcClient;
         this.phraseProvider = phraseProvider;
         this.llmClient = llmClient;
+        this.executorProperties = executorProperties;
+        this.llmExecutor = createLlmExecutor(executorProperties);
     }
 
     @Override
@@ -407,11 +415,90 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     truncate(response.reply(), 100), correlationId);
             return response.reply();
 
+        } catch (RejectedExecutionException e) {
+            recordFailure();
+            log.warn("🧠 LLM_REJECTED: executor overloaded, queueSize={}, activeThreads={}, rejectedCount={}, correlationId={}",
+                    llmExecutor.getQueue().size(),
+                    llmExecutor.getActiveCount(),
+                    rejectedLlmTasks.get(),
+                    correlationId);
+            return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
         } catch (Exception e) {
             log.error("🧠 LLM_ERROR: {}, correlationId={}", e.getMessage(), correlationId);
             recordFailure();
             return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
         }
+    }
+
+    private ThreadPoolExecutor createLlmExecutor(OrchestratorExecutorProperties properties) {
+        int corePoolSize = Math.max(1, properties.getCorePoolSize());
+        int maxPoolSize = Math.max(corePoolSize, properties.getMaxPoolSize());
+        int queueCapacity = Math.max(1, properties.getQueueCapacity());
+        int keepAliveSeconds = Math.max(1, properties.getKeepAliveSeconds());
+
+        ThreadFactory threadFactory = new ThreadFactory() {
+            private final AtomicInteger threadCounter = new AtomicInteger(1);
+
+            @Override
+            public Thread newThread(Runnable runnable) {
+                Thread thread = new Thread(runnable);
+                thread.setName("orchestrator-llm-" + threadCounter.getAndIncrement());
+                thread.setDaemon(false);
+                return thread;
+            }
+        };
+
+        RejectedExecutionHandler rejectionHandler = (runnable, executor) -> {
+            long rejected = rejectedLlmTasks.incrementAndGet();
+            log.warn("🧠 LLM_EXECUTOR_REJECT: active={}, pool={}, queue={}/{}, rejectedCount={}",
+                    executor.getActiveCount(),
+                    executor.getPoolSize(),
+                    executor.getQueue().size(),
+                    queueCapacity,
+                    rejected);
+            throw new RejectedExecutionException("LLM executor queue is full");
+        };
+
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                corePoolSize,
+                maxPoolSize,
+                keepAliveSeconds,
+                TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(queueCapacity),
+                threadFactory,
+                rejectionHandler);
+        executor.allowCoreThreadTimeOut(false);
+
+        log.info("🧠 LLM executor initialized: corePoolSize={}, maxPoolSize={}, queueCapacity={}, keepAliveSeconds={}",
+                corePoolSize, maxPoolSize, queueCapacity, keepAliveSeconds);
+        return executor;
+    }
+
+    @PreDestroy
+    void shutdownLlmExecutor() {
+        log.info("🧠 Shutting down LLM executor...");
+        llmExecutor.shutdown();
+        try {
+            boolean terminated = llmExecutor.awaitTermination(
+                    Math.max(1, executorProperties.getShutdownAwaitSeconds()),
+                    TimeUnit.SECONDS);
+            if (!terminated) {
+                log.warn("🧠 LLM executor did not stop in time, forcing shutdown");
+                llmExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("🧠 Interrupted while waiting for LLM executor shutdown, forcing shutdown");
+            llmExecutor.shutdownNow();
+        }
+    }
+
+    long getRejectedLlmTasksCount() {
+        return rejectedLlmTasks.get();
+    }
+
+    ThreadPoolExecutor getLlmExecutor() {
+        return llmExecutor;
     }
 
     /**

@@ -31,11 +31,19 @@ jarvis:
     # Timeout for LLM calls (seconds)
     timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
     # Circuit breaker configuration
-    circuit-breaker:
+  circuit-breaker:
       # Open circuit after N consecutive failures
       failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
       # Keep circuit open for N seconds before retrying
       reset-timeout-seconds: ${JARVIS_LLM_CB_RESET_SECONDS:60}
+
+orchestrator:
+  executor:
+    core-pool-size: ${ORCHESTRATOR_EXECUTOR_CORE_POOL_SIZE:2}
+    max-pool-size: ${ORCHESTRATOR_EXECUTOR_MAX_POOL_SIZE:4}
+    queue-capacity: ${ORCHESTRATOR_EXECUTOR_QUEUE_CAPACITY:32}
+    keep-alive-seconds: ${ORCHESTRATOR_EXECUTOR_KEEP_ALIVE_SECONDS:30}
+    shutdown-await-seconds: ${ORCHESTRATOR_EXECUTOR_SHUTDOWN_AWAIT_SECONDS:10}
 
 # API Gateway for PC Control WebSocket
 api-gateway:

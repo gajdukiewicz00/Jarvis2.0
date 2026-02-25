@@ -36,6 +36,19 @@ spec:
           envFrom:
             - secretRef:
                 name: jarvis-secrets
+          env:
+            - name: MQTT_BROKER_URL
+              value: "tcp://mosquitto:1883"
+            - name: MQTT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: MQTT_USERNAME
+            - name: MQTT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: MQTT_PASSWORD
           resources:
             limits:
               memory: "256Mi"

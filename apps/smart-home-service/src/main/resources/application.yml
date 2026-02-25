@@ -27,10 +27,12 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-mqtt:
-  broker-url: ${MQTT_BROKER_URL:tcp://mosquitto:1883}
-
 jarvis:
+  mqtt:
+    broker-url: ${MQTT_BROKER_URL:tcp://mosquitto:1883}
+    client-id: ${MQTT_CLIENT_ID:jarvis-smart-home}
+    username: ${MQTT_USERNAME:}
+    password: ${MQTT_PASSWORD:}
   rabbitmq:
     queue: ${RABBITMQ_QUEUE_SMART_HOME:smart-home.commands}
   kafka:

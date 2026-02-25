@@ -78,10 +78,11 @@ generate_secrets_file() {
     mkdir -p "$(dirname "${SECRETS_FILE}")"
     umask 077
 
-    local db_password rabbit_password rabbit_cookie jwt_secret service_jwt_secret enc_key
+    local db_password rabbit_password rabbit_cookie mqtt_password jwt_secret service_jwt_secret enc_key
     db_password="$(openssl rand -base64 32 | tr -d '\n')"
     rabbit_password="$(openssl rand -base64 32 | tr -d '\n')"
     rabbit_cookie="$(openssl rand -base64 32 | tr -d '\n')"
+    mqtt_password="$(openssl rand -base64 32 | tr -d '\n')"
     jwt_secret="$(openssl rand -base64 32 | tr -d '\n')"
     service_jwt_secret="$(openssl rand -base64 32 | tr -d '\n')"
     enc_key="$(openssl rand -base64 32 | tr -d '\n')"
@@ -99,6 +100,8 @@ RABBITMQ_DEFAULT_PASS=${rabbit_password}
 RABBITMQ_ERLANG_COOKIE=${rabbit_cookie}
 SPRING_RABBITMQ_USERNAME=jarvis
 SPRING_RABBITMQ_PASSWORD=${rabbit_password}
+MQTT_USERNAME=jarvis_mqtt
+MQTT_PASSWORD=${mqtt_password}
 
 JWT_SECRET=${jwt_secret}
 SERVICE_JWT_SECRET=${service_jwt_secret}
@@ -179,6 +182,8 @@ REQUIRED_KEYS=(
     "RABBITMQ_ERLANG_COOKIE"
     "SPRING_RABBITMQ_USERNAME"
     "SPRING_RABBITMQ_PASSWORD"
+    "MQTT_USERNAME"
+    "MQTT_PASSWORD"
     "JWT_SECRET"
     "SERVICE_JWT_SECRET"
 )
@@ -260,6 +265,15 @@ if [[ $? -eq 0 ]]; then
         echo -e "${RED}❌ Secret verification failed${NC}"
         exit 1
     fi
+
+    echo ""
+    echo "Restarting workloads that consume rotated secrets..."
+    for deployment in mosquitto smart-home-service; do
+        if kubectl -n "$NAMESPACE" get deployment "$deployment" >/dev/null 2>&1; then
+            kubectl -n "$NAMESPACE" rollout restart deployment/"$deployment" >/dev/null 2>&1 || true
+            echo -e "  ${GRAY}↻${NC} restarted deployment/$deployment"
+        fi
+    done
 else
     echo -e "${RED}❌ Failed to apply secret${NC}"
     exit 1

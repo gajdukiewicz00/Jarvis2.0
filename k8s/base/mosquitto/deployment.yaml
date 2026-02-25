@@ -18,9 +18,32 @@ spec:
       labels:
         app: mosquitto
     spec:
+      initContainers:
+        - name: mqtt-password-bootstrap
+          image: eclipse-mosquitto:2
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -ec
+            - |
+              USERNAME="$(cat /run/mqtt-secret/username)"
+              PASSWORD="$(cat /run/mqtt-secret/password)"
+              if [ -z "${USERNAME}" ] || [ -z "${PASSWORD}" ]; then
+                echo "MQTT_USERNAME and MQTT_PASSWORD must be set in jarvis-secrets"
+                exit 1
+              fi
+              mosquitto_passwd -b -c /work/passwords "${USERNAME}" "${PASSWORD}"
+              chmod 600 /work/passwords
+          volumeMounts:
+            - name: mosquitto-passwd
+              mountPath: /work
+            - name: mqtt-credentials
+              mountPath: /run/mqtt-secret
+              readOnly: true
       containers:
         - name: mosquitto
           image: eclipse-mosquitto:2
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1883
               name: mqtt
@@ -33,6 +56,9 @@ spec:
               mountPath: /mosquitto/data
             - name: log
               mountPath: /mosquitto/log
+            - name: mosquitto-passwd
+              mountPath: /mosquitto/config/auth
+              readOnly: true
           resources:
             limits:
               memory: "128Mi"
@@ -44,6 +70,16 @@ spec:
         - name: config
           configMap:
             name: mosquitto-config
+        - name: mqtt-credentials
+          secret:
+            secretName: jarvis-secrets
+            items:
+              - key: MQTT_USERNAME
+                path: username
+              - key: MQTT_PASSWORD
+                path: password
+        - name: mosquitto-passwd
+          emptyDir: {}
         - name: data
           emptyDir: {}
         - name: log
@@ -76,15 +112,20 @@ metadata:
 data:
   mosquitto.conf: |
     listener 1883
-    allow_anonymous true
+    allow_anonymous false
+    password_file /mosquitto/config/auth/passwords
+    acl_file /mosquitto/config/aclfile
     
     listener 9001
     protocol websockets
-    allow_anonymous true
+    allow_anonymous false
+    password_file /mosquitto/config/auth/passwords
+    acl_file /mosquitto/config/aclfile
     
     persistence true
     persistence_location /mosquitto/data/
     
     log_dest stdout
     log_type all
-
+  aclfile: |
+    topic readwrite jarvis/#

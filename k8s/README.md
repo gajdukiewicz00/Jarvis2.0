@@ -32,3 +32,4 @@ Models are mounted from `~/.jarvis/models` on the host.
 - Namespace: `jarvis`
 - Ingress: `k8s/base/ingress.yaml` (api.jarvis.local, voice.jarvis.local)
 - Secrets are local and applied with `scripts/product/jarvis-secrets-apply.sh`
+- `jarvis-secrets` must include `MQTT_USERNAME` and `MQTT_PASSWORD` for Mosquitto auth

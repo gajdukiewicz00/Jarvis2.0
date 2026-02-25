@@ -15,11 +15,17 @@ import org.springframework.messaging.MessageHandler;
 @Configuration
 public class MqttConfig {
 
-    @Value("${jarvis.mqtt.broker-url:tcp://localhost:1883}")
+    @Value("${jarvis.mqtt.broker-url:${mqtt.broker-url:tcp://localhost:1883}}")
     private String brokerUrl;
 
-    @Value("${jarvis.mqtt.client-id:jarvis-smart-home}")
+    @Value("${jarvis.mqtt.client-id:${mqtt.client-id:jarvis-smart-home}}")
     private String clientId;
+
+    @Value("${jarvis.mqtt.username:${MQTT_USERNAME:}}")
+    private String username;
+
+    @Value("${jarvis.mqtt.password:${MQTT_PASSWORD:}}")
+    private String password;
 
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
@@ -27,6 +33,12 @@ public class MqttConfig {
         MqttConnectOptions options = new MqttConnectOptions();
         options.setServerURIs(new String[]{brokerUrl});
         options.setCleanSession(true);
+        if (username != null && !username.isBlank()) {
+            options.setUserName(username);
+        }
+        if (password != null && !password.isBlank()) {
+            options.setPassword(password.toCharArray());
+        }
         factory.setConnectionOptions(options);
         return factory;
     }

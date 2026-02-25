@@ -12,6 +12,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
+
 /**
  * Authentication service handling user registration, login, and token management.
  */
@@ -57,6 +59,27 @@ public class AuthService {
         log.info("User registered: {}", user.getUsername());
 
         return generateAuthResponse(user);
+    }
+
+    /**
+     * Create bootstrap admin user if it does not exist yet.
+     */
+    @Transactional
+    public void ensureBootstrapAdmin(String username, String rawPassword, String role) {
+        if (userRepository.existsByUsername(username)) {
+            log.info("Bootstrap admin already exists: {}", username);
+            return;
+        }
+
+        User user = User.builder()
+                .username(username)
+                .password(passwordEncoder.encode(rawPassword))
+                .role(role == null || role.isBlank() ? "ADMIN" : role.toUpperCase(Locale.ROOT))
+                .enabled(true)
+                .build();
+
+        userRepository.save(user);
+        log.warn("Bootstrap admin user created: {}", username);
     }
 
     /**

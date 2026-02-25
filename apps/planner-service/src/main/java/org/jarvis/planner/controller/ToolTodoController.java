@@ -93,7 +93,7 @@ public class ToolTodoController {
         task.setUpdatedBy("ai");
         task.setUserId(userId);
 
-        TaskDto updated = taskService.updateTask(request.getId(), task);
+        TaskDto updated = taskService.updateTask(request.getId(), userId, task);
         toolRequestService.storeResponse(idempotencyKey, "update_todo", userId, requestHash, updated);
 
         return ResponseEntity.ok(updated);
@@ -116,7 +116,7 @@ public class ToolTodoController {
             return ResponseEntity.ok(cached.get());
         }
 
-        TaskDto completed = taskService.completeTask(request.getId());
+        TaskDto completed = taskService.completeTask(request.getId(), userId);
         toolRequestService.storeResponse(idempotencyKey, "complete_todo", userId, requestHash, completed);
 
         return ResponseEntity.ok(completed);

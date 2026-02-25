@@ -7,6 +7,7 @@ import org.jarvis.planner.model.TaskStatus;
 import org.jarvis.planner.service.TaskService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,9 +25,10 @@ public class TaskController {
      */
     @GetMapping
     public ResponseEntity<List<TaskDto>> getTasks(
-            @RequestParam String userId,
+            Authentication authentication,
             @RequestParam(required = false) TaskStatus status
     ) {
+        String userId = authentication.getName();
         log.info("GET tasks for user: {}, status: {}", userId, status);
         List<TaskDto> tasks = taskService.getTasks(userId, status);
         return ResponseEntity.ok(tasks);
@@ -36,7 +38,9 @@ public class TaskController {
      * Create new task
      */
     @PostMapping
-    public ResponseEntity<TaskDto> createTask(@RequestBody TaskDto dto) {
+    public ResponseEntity<TaskDto> createTask(@RequestBody TaskDto dto, Authentication authentication) {
+        String userId = authentication.getName();
+        dto.setUserId(userId);
         log.info("POST task: {}", dto.getTitle());
         TaskDto created = taskService.createTask(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
@@ -48,10 +52,13 @@ public class TaskController {
     @PutMapping("/{id}")
     public ResponseEntity<TaskDto> updateTask(
             @PathVariable Long id,
-            @RequestBody TaskDto dto
+            @RequestBody TaskDto dto,
+            Authentication authentication
     ) {
+        String userId = authentication.getName();
+        dto.setUserId(userId);
         log.info("PUT task: {}", id);
-        TaskDto updated = taskService.updateTask(id, dto);
+        TaskDto updated = taskService.updateTask(id, userId, dto);
         return ResponseEntity.ok(updated);
     }
     
@@ -59,9 +66,10 @@ public class TaskController {
      * Delete task
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteTask(@PathVariable Long id, Authentication authentication) {
+        String userId = authentication.getName();
         log.info("DELETE task: {}", id);
-        taskService.deleteTask(id);
+        taskService.deleteTask(id, userId);
         return ResponseEntity.noContent().build();
     }
     
@@ -69,9 +77,10 @@ public class TaskController {
      * Mark task as complete
      */
     @PatchMapping("/{id}/complete")
-    public ResponseEntity<TaskDto> completeTask(@PathVariable Long id) {
+    public ResponseEntity<TaskDto> completeTask(@PathVariable Long id, Authentication authentication) {
+        String userId = authentication.getName();
         log.info("COMPLETE task: {}", id);
-        TaskDto completed = taskService.completeTask(id);
+        TaskDto completed = taskService.completeTask(id, userId);
         return ResponseEntity.ok(completed);
     }
 }

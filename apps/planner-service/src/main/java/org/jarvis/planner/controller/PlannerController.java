@@ -9,6 +9,7 @@ import org.jarvis.planner.service.WeeklyPlanGenerator;
 import org.jarvis.planner.service.RecommendationEngine;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -30,9 +31,10 @@ public class PlannerController {
      */
     @GetMapping("/daily")
     public ResponseEntity<DailyPlanDto> getDailyPlan(
-            @RequestParam String userId,
+            Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date
     ) {
+        String userId = authentication.getName();
         LocalDate planDate = date != null ? date : LocalDate.now();
         log.info("GET daily plan for user: {} on {}", userId, planDate);
         
@@ -44,7 +46,8 @@ public class PlannerController {
      * Get weekly plan
      */
     @GetMapping("/weekly")
-    public ResponseEntity<Map<String, Object>> getWeeklyPlan(@RequestParam String userId) {
+    public ResponseEntity<Map<String, Object>> getWeeklyPlan(Authentication authentication) {
+        String userId = authentication.getName();
         log.info("GET weekly plan for user: {}", userId);
         
         Map<String, Object> plan = weeklyPlanGenerator.generateWeeklyPlan(userId);
@@ -55,7 +58,8 @@ public class PlannerController {
      * Get recommendations
      */
     @GetMapping("/recommendations")
-    public ResponseEntity<List<RecommendationDto>> getRecommendations(@RequestParam String userId) {
+    public ResponseEntity<List<RecommendationDto>> getRecommendations(Authentication authentication) {
+        String userId = authentication.getName();
         log.info("GET recommendations for user: {}", userId);
         
         List<RecommendationDto> recommendations = recommendationEngine.generateRecommendations(userId);

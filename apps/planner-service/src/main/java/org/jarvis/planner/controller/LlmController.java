@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.planner.service.LlmEnhancementService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -24,10 +25,11 @@ public class LlmController {
      */
     @PostMapping("/generate-document")
     public ResponseEntity<Map<String, String>> generateDocument(
-            @RequestParam String userId,
+            Authentication authentication,
             @RequestParam String documentType,
             @RequestBody String context
     ) {
+        String userId = authentication.getName();
         log.info("Generating {} for user: {}", documentType, userId);
         
         String result = llmService.generateDocument(userId, documentType, context);
@@ -43,9 +45,10 @@ public class LlmController {
      */
     @PostMapping("/parse-task")
     public ResponseEntity<Map<String, String>> parseTask(
-            @RequestParam String userId,
+            Authentication authentication,
             @RequestBody String naturalLanguage
     ) {
+        String userId = authentication.getName();
         log.info("Parsing NL task for user: {}: {}", userId, naturalLanguage);
         
         String result = llmService.parseNaturalLanguageTask(userId, naturalLanguage);

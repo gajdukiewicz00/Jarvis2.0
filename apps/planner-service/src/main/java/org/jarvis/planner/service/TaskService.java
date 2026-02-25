@@ -3,6 +3,7 @@ package org.jarvis.planner.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.planner.dto.TaskDto;
+import org.jarvis.planner.exception.TaskNotFoundException;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskSource;
 import org.jarvis.planner.model.TaskStatus;
@@ -50,9 +51,9 @@ public class TaskService {
     }
     
     @Transactional
-    public TaskDto updateTask(Long id, TaskDto dto) {
-        Task task = taskRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Task not found: " + id));
+    public TaskDto updateTask(Long id, String userId, TaskDto dto) {
+        Task task = taskRepository.findByIdAndUserId(id, userId)
+            .orElseThrow(() -> new TaskNotFoundException(id, userId));
 
         if (dto.getTitle() != null) {
             task.setTitle(dto.getTitle());
@@ -80,8 +81,8 @@ public class TaskService {
         }
         if (dto.getUpdatedBy() != null) {
             task.setUpdatedBy(dto.getUpdatedBy());
-        } else if (dto.getUserId() != null) {
-            task.setUpdatedBy(dto.getUserId());
+        } else {
+            task.setUpdatedBy(userId);
         }
 
         if (dto.getStatus() == TaskStatus.DONE && task.getCompletedAt() == null) {
@@ -93,21 +94,25 @@ public class TaskService {
     }
     
     @Transactional
-    public void deleteTask(Long id) {
-        taskRepository.deleteById(id);
-        log.info("Deleted task: {}", id);
+    public void deleteTask(Long id, String userId) {
+        long deleted = taskRepository.deleteByIdAndUserId(id, userId);
+        if (deleted == 0) {
+            throw new TaskNotFoundException(id, userId);
+        }
+        log.info("Deleted task: {} for user: {}", id, userId);
     }
     
     @Transactional
-    public TaskDto completeTask(Long id) {
-        Task task = taskRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Task not found: " + id));
+    public TaskDto completeTask(Long id, String userId) {
+        Task task = taskRepository.findByIdAndUserId(id, userId)
+            .orElseThrow(() -> new TaskNotFoundException(id, userId));
         
         task.setStatus(TaskStatus.DONE);
         task.setCompletedAt(Instant.now());
+        task.setUpdatedBy(userId);
         
         Task saved = taskRepository.save(task);
-        log.info("Completed task: {}", id);
+        log.info("Completed task: {} for user: {}", id, userId);
         return toDto(saved);
     }
     

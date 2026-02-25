@@ -66,6 +66,11 @@ jarvis:
     access-expiration: 3600000    # 1 hour in prod
     refresh-expiration: 604800000 # 7 days
     issuer: jarvis
+  bootstrap-admin:
+    enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}
+    username: ${BOOTSTRAP_ADMIN_USERNAME:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+    role: ${BOOTSTRAP_ADMIN_ROLE:ADMIN}
 
 # Actuator endpoints
 management:

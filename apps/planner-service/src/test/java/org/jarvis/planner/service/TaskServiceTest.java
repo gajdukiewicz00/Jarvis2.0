@@ -1,6 +1,7 @@
 package org.jarvis.planner.service;
 
 import org.jarvis.planner.dto.TaskDto;
+import org.jarvis.planner.exception.TaskNotFoundException;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskCategory;
 import org.jarvis.planner.model.TaskPriority;
@@ -84,15 +85,25 @@ class TaskServiceTest {
     @Test
     void testCompleteTask() {
         // Given
-        when(taskRepository.findById(1L)).thenReturn(Optional.of(testTask));
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
         when(taskRepository.save(any(Task.class))).thenReturn(testTask);
         
         // When
-        TaskDto result = taskService.completeTask(1L);
+        TaskDto result = taskService.completeTask(1L, "testUser");
         
         // Then
         assertNotNull(result);
-        verify(taskRepository).findById(1L);
+        verify(taskRepository).findByIdAndUserId(1L, "testUser");
         verify(taskRepository).save(any(Task.class));
+    }
+
+    @Test
+    void testCompleteTask_ThrowsWhenTaskOwnedByAnotherUser() {
+        // Given
+        when(taskRepository.findByIdAndUserId(1L, "otherUser")).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThrows(TaskNotFoundException.class, () -> taskService.completeTask(1L, "otherUser"));
+        verify(taskRepository, never()).save(any(Task.class));
     }
 }

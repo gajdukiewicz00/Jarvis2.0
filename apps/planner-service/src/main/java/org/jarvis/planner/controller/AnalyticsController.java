@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.planner.service.HabitAnalyzer;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -23,7 +24,8 @@ public class AnalyticsController {
      * Get habit analysis
      */
     @GetMapping("/habits")
-    public ResponseEntity<Map<String, Object>> getHabits(@RequestParam String userId) {
+    public ResponseEntity<Map<String, Object>> getHabits(Authentication authentication) {
+        String userId = authentication.getName();
         log.info("GET habits analysis for user: {}", userId);
         
         Map<String, Object> analysis = habitAnalyzer.analyzeHabits(userId);
@@ -34,7 +36,8 @@ public class AnalyticsController {
      * Get insights and recommendations
      */
     @GetMapping("/insights")
-    public ResponseEntity<Map<String, Object>> getInsights(@RequestParam String userId) {
+    public ResponseEntity<Map<String, Object>> getInsights(Authentication authentication) {
+        String userId = authentication.getName();
         log.info("GET insights for user: {}", userId);
         
         Map<String, Object> insights = habitAnalyzer.analyzeHabits(userId);

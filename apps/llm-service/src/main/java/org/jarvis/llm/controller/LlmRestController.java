@@ -1,5 +1,6 @@
 package org.jarvis.llm.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.llm.dto.ChatRequestDto;
@@ -40,11 +41,16 @@ public class LlmRestController {
      */
     @PostMapping("/chat")
     public ResponseEntity<ChatResponseDto> chat(
-            @RequestBody ChatRequestDto request,
+            @Valid @RequestBody ChatRequestDto request,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
 
         if (correlationId == null) {
             correlationId = java.util.UUID.randomUUID().toString();
+        }
+
+        if (request == null || request.getMessages() == null || request.getMessages().isEmpty()) {
+            log.warn("Invalid chat request: missing messages, correlationId={}", correlationId);
+            return ResponseEntity.badRequest().build();
         }
 
         log.info("Received REST chat request for session: {}, correlationId: {}", request.getSessionId(),
@@ -53,6 +59,10 @@ public class LlmRestController {
         try {
             // Get last user message from request
             String userMessage = request.getMessages().get(request.getMessages().size() - 1).getContent();
+            if (userMessage == null || userMessage.isBlank()) {
+                log.warn("Invalid chat request: last user message is empty, correlationId={}", correlationId);
+                return ResponseEntity.badRequest().build();
+            }
 
             ChatResponseDto response = llmService.processMessage(
                     request.getSessionId(),

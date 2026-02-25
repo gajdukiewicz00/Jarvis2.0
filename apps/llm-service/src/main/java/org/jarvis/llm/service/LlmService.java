@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.llm.client.LlmClient;
 import org.jarvis.llm.client.MemoryClient;
 import org.jarvis.llm.client.UserProfileClient;
+import org.jarvis.llm.config.LlmBackgroundExecutor;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.DialogRequest;
@@ -37,6 +38,7 @@ public class LlmService {
     private final PersonalizedPromptBuilder promptBuilder;
     private final EmotionSelector emotionSelector;
     private final RussianLanguageEnforcer languageEnforcer;
+    private final LlmBackgroundExecutor backgroundExecutor;
     
     // Long-term memory integration
     private final MemoryClient memoryClient;
@@ -62,6 +64,13 @@ public class LlmService {
     public ChatResponseDto processMessage(String sessionId, String userMessage, String correlationId) {
         long startTime = System.currentTimeMillis();
         log.info("[{}] Processing message for session: {}", correlationId, sessionId);
+
+        if (sessionId == null || sessionId.isBlank()) {
+            throw new IllegalArgumentException("sessionId must not be blank");
+        }
+        if (userMessage == null || userMessage.isBlank()) {
+            throw new IllegalArgumentException("userMessage must not be blank");
+        }
 
         // Rate limiting
         String userId = extractUserId(sessionId);
@@ -143,7 +152,13 @@ public class LlmService {
         if (memoryEnabled) {
             final String finalUserMessage = userMessage;
             try {
-                memoryClient.ingestAsync(userId, sessionId, finalUserMessage, response.getReply(), correlationId);
+                backgroundExecutor.execute(() -> {
+                    try {
+                        memoryClient.ingestAsync(userId, sessionId, finalUserMessage, response.getReply(), correlationId);
+                    } catch (Exception e) {
+                        log.warn("[{}] Memory ingest task failed (non-fatal): {}", correlationId, e.getMessage());
+                    }
+                });
             } catch (Exception e) {
                 log.warn("[{}] Memory ingest failed (non-fatal): {}", correlationId, e.getMessage());
             }
@@ -354,6 +369,9 @@ public class LlmService {
     }
 
     private String extractUserId(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return "anonymous";
+        }
         // Simple extraction: everything before first '-' or entire string
         int dashIndex = sessionId.indexOf('-');
         if (dashIndex > 0) {

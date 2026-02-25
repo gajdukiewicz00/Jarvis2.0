@@ -1,5 +1,7 @@
 package org.jarvis.llm.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,7 +20,10 @@ public class ChatMessageDto {
         ASSISTANT
     }
     
+    @NotNull
     private Role role;
+
+    @NotBlank
     private String content;
     
     public ChatMessageDto(String role, String content) {

@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,26 +29,31 @@ public class LlmConversationMemory {
      * Add a message to session history
      */
     public void addMessage(String sessionId, ChatMessageDto message) {
-        List<ChatMessageDto> history = sessionHistory.computeIfAbsent(sessionId, k -> new ArrayList<>());
-        history.add(message);
-        
-        // Trim history if needed
-        if (history.size() > maxHistoryLength) {
-            // Keep system messages and trim oldest user/assistant messages
-            List<ChatMessageDto> systemMessages = history.stream()
-                .filter(m -> m.getRole() == ChatMessageDto.Role.SYSTEM)
-                .toList();
-            
-            List<ChatMessageDto> otherMessages = history.stream()
-                .filter(m -> m.getRole() != ChatMessageDto.Role.SYSTEM)
-                .skip(history.size() - maxHistoryLength + systemMessages.size())
-                .toList();
-            
-            List<ChatMessageDto> trimmed = new ArrayList<>(systemMessages);
-            trimmed.addAll(otherMessages);
-            sessionHistory.put(sessionId, trimmed);
-            
-            log.debug("Trimmed history for session {} to {} messages", sessionId, trimmed.size());
+        List<ChatMessageDto> history = sessionHistory.computeIfAbsent(
+                sessionId, key -> Collections.synchronizedList(new ArrayList<>()));
+        synchronized (history) {
+            history.add(message);
+
+            // Trim history if needed
+            if (history.size() > maxHistoryLength) {
+                List<ChatMessageDto> systemMessages = history.stream()
+                        .filter(m -> m.getRole() == ChatMessageDto.Role.SYSTEM)
+                        .toList();
+
+                int nonSystemLimit = Math.max(0, maxHistoryLength - systemMessages.size());
+                List<ChatMessageDto> otherMessages = history.stream()
+                        .filter(m -> m.getRole() != ChatMessageDto.Role.SYSTEM)
+                        .skip(Math.max(0, history.stream()
+                                .filter(m -> m.getRole() != ChatMessageDto.Role.SYSTEM)
+                                .count() - nonSystemLimit))
+                        .toList();
+
+                history.clear();
+                history.addAll(systemMessages);
+                history.addAll(otherMessages);
+
+                log.debug("Trimmed history for session {} to {} messages", sessionId, history.size());
+            }
         }
     }
     
@@ -55,7 +61,13 @@ public class LlmConversationMemory {
      * Get conversation history for a session
      */
     public List<ChatMessageDto> getHistory(String sessionId) {
-        return new ArrayList<>(sessionHistory.getOrDefault(sessionId, new ArrayList<>()));
+        List<ChatMessageDto> history = sessionHistory.get(sessionId);
+        if (history == null) {
+            return new ArrayList<>();
+        }
+        synchronized (history) {
+            return new ArrayList<>(history);
+        }
     }
     
     /**

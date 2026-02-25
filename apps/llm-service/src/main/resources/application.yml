@@ -44,6 +44,12 @@ llm:
     memory-context: ${LLM_BUDGET_MEMORY:600}
     history: ${LLM_BUDGET_HISTORY:1400}
     total: ${LLM_BUDGET_TOTAL:3500}
+  executor:
+    core-pool-size: ${LLM_EXECUTOR_CORE_POOL_SIZE:2}
+    max-pool-size: ${LLM_EXECUTOR_MAX_POOL_SIZE:4}
+    queue-capacity: ${LLM_EXECUTOR_QUEUE_CAPACITY:200}
+    keepalive-seconds: ${LLM_EXECUTOR_KEEPALIVE_SECONDS:60}
+    shutdown-timeout-seconds: ${LLM_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS:20}
 
 # Long-term memory integration
 memory:

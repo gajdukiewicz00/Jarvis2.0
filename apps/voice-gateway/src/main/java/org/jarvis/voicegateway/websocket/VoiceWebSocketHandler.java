@@ -41,7 +41,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
-    
+
     // Counter for audio chunk logging (to avoid spam)
     private final AtomicInteger chunkCounter = new AtomicInteger(0);
 
@@ -94,7 +94,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 if (ctx != null && correlationId != null) {
                     ctx.correlationId = correlationId; // Ensure it's set
                 }
-                log.info("⏹️ End-of-speech received, correlationId={}, session={}", 
+                log.info("⏹️ End-of-speech received, correlationId={}, session={}",
                         correlationId, session.getId());
                 finalizeRecognition(session);
             } else if ("TIMEOUT".equalsIgnoreCase(type)) {
@@ -107,15 +107,23 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 log.info("⏰ STT timeout received, sending timeout phrase, correlationId={}", correlationId);
                 handleSttTimeout(session, correlationId);
             }
-        } catch (Exception e) {
-            log.error("Error parsing text message", e);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            log.warn("Invalid WS payload, sessionId={}", session.getId(), e);
+            sendJsonMessage(session, Map.of("error", "invalid_payload"));
+        } catch (IllegalArgumentException e) {
+            log.warn("Bad WS input, sessionId={}", session.getId(), e);
+            sendJsonMessage(session, Map.of("error", "bad_request"));
+        } catch (RuntimeException e) {
+            log.error("Error parsing text message, sessionId={}", session.getId(), e);
+            sendJsonMessage(session, Map.of("error", "internal_error"));
         }
     }
 
     @Override
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
         SessionContext ctx = sessions.get(session.getId());
-        if (ctx == null) return;
+        if (ctx == null)
+            return;
 
         ByteBuffer buffer = message.getPayload();
         byte[] data = new byte[buffer.remaining()];
@@ -124,12 +132,13 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         // Log every 10th chunk to avoid spam
         int chunkNum = chunkCounter.incrementAndGet();
         if (chunkNum == 1 || chunkNum % 10 == 0) {
-            log.debug("📦 Audio chunk #{}: {} bytes, correlationId={}, session={}", 
+            log.debug("📦 Audio chunk #{}: {} bytes, correlationId={}, session={}",
                     chunkNum, data.length, ctx.correlationId, session.getId());
         }
 
         StreamingRecognitionSession recognitionSession = ctx.recognitionSession;
-        if (recognitionSession == null) return;
+        if (recognitionSession == null)
+            return;
 
         if (recognitionSession.acceptWaveForm(data, data.length)) {
             String result = recognitionSession.getResult();
@@ -165,7 +174,9 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     handleCommand(ctx, text);
                 }
             }
-        } catch (Exception e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            log.warn("Invalid recognition JSON, correlationId={}", ctx.correlationId, e);
+        } catch (RuntimeException e) {
             log.error("Error processing recognition result, correlationId={}", ctx.correlationId, e);
         }
     }
@@ -174,8 +185,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         // Auto-detect language from the transcript text (Cyrillic = Russian)
         String detectedLang = LanguageDetector.detect(text);
         // Use detected language, falling back to session language or default
-        String lang = detectedLang != null ? detectedLang : 
-                      (ctx.language != null ? ctx.language : defaultLanguage);
+        String lang = detectedLang != null ? detectedLang : (ctx.language != null ? ctx.language : defaultLanguage);
         String correlationId = ctx.correlationId != null ? ctx.correlationId : "no-correlation-id";
         String responseText = null;
         String action = "UNKNOWN";
@@ -190,43 +200,45 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     .sessionId(ctx.session.getId())
                     .correlationId(correlationId)
                     .build());
-            
+
             action = intent.getAction() != null ? intent.getAction() : "UNKNOWN";
             handled = intent.isHandled();
             responseText = intent.getResponse();
-            
+
             log.info("🔍 Intent detected: action={}, handled={}, params={}, correlationId={}",
                     action, handled, intent.getParameters(), correlationId);
 
-            // Always call orchestrator to get proper response (including for UNKNOWN/fallback)
-            // Orchestrator will handle: recognized intents → action + phrase, unknown → fallback phrase
+            // Always call orchestrator to get proper response (including for
+            // UNKNOWN/fallback)
+            // Orchestrator will handle: recognized intents → action + phrase, unknown →
+            // fallback phrase
             String orchestratorAction = (handled && !"UNKNOWN".equals(action)) ? action : "fallback";
             log.info("📤 Sending intent to orchestrator: action={}, params={}, correlationId={}",
                     orchestratorAction, intent.getParameters(), correlationId);
             try {
                 String orchestratorResponse = orchestratorClient.sendIntent(
-                        orchestratorAction, 
-                        intent.getParameters(), 
+                        orchestratorAction,
+                        intent.getParameters(),
                         lang,
                         correlationId,
-                        text);  // Pass original text for LLM fallback
+                        text); // Pass original text for LLM fallback
                 log.info("📥 Orchestrator response: '{}', correlationId={}", orchestratorResponse, correlationId);
-                
+
                 // Use orchestrator response if available
                 if (orchestratorResponse != null && !orchestratorResponse.isBlank()) {
                     responseText = orchestratorResponse;
                 }
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.error("❌ Failed to call orchestrator, correlationId={}, error={}", correlationId, e.getMessage());
                 // Don't override responseText - use intent's response as fallback
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("❌ Error in handleCommand, correlationId={}", correlationId, e);
-            responseText = lang.startsWith("ru") 
-                    ? "Произошла ошибка при обработке команды." 
+            responseText = lang.startsWith("ru")
+                    ? "Произошла ошибка при обработке команды."
                     : "An error occurred while processing the command.";
         }
-        
+
         if (responseText == null || responseText.isBlank()) {
             responseText = lang.startsWith("ru")
                     ? "Команда обработана."
@@ -241,7 +253,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     "handled", handled,
                     "text", responseText,
                     "correlationId", correlationId));
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to send RESPONSE message, correlationId={}", correlationId, e);
         }
 
@@ -259,8 +271,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 ctx.session.sendMessage(new BinaryMessage(audio));
                 log.debug("🔊 TTS audio sent, correlationId={}", correlationId);
             }
-        } catch (Exception e) {
-            log.error("Failed to synthesize/send TTS audio, correlationId={}", correlationId, e);
+        } catch (IOException e) {
+            log.error("Failed to send TTS audio over WS, correlationId={}", correlationId, e);
+        } catch (RuntimeException e) {
+            log.error("Failed to synthesize TTS audio, correlationId={}", correlationId, e);
         }
     }
 
@@ -286,8 +300,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
     private void updateLanguage(WebSocketSession session, String language) {
         SessionContext ctx = sessions.get(session.getId());
-        if (ctx == null) return;
-        if (language == null || language.isBlank()) return;
+        if (ctx == null)
+            return;
+        if (language == null || language.isBlank())
+            return;
 
         String normalized = language.toLowerCase();
         log.info("Updating session {} language to {}", session.getId(), normalized);
@@ -297,7 +313,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             }
             ctx.language = normalized;
             ctx.recognitionSession = createRecognitionSession(normalized);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to update language for session {}", session.getId(), e);
         }
     }
@@ -324,9 +340,9 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     private void handleSttTimeout(WebSocketSession session, String correlationId) {
         SessionContext ctx = sessions.get(session.getId());
         String lang = ctx != null && ctx.language != null ? ctx.language : defaultLanguage;
-        
+
         log.info("⏰ Generating STT timeout response, lang={}, correlationId={}", lang, correlationId);
-        
+
         // Get timeout phrase from orchestrator
         try {
             String timeoutResponse = orchestratorClient.sendIntent(
@@ -334,15 +350,15 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     java.util.Map.of(),
                     lang,
                     correlationId);
-            
+
             if (timeoutResponse == null || timeoutResponse.isBlank()) {
-                timeoutResponse = lang.startsWith("en") 
+                timeoutResponse = lang.startsWith("en")
                         ? "Sir, I couldn't hear you well."
                         : "Сэр, я вас плохо расслышал.";
             }
-            
+
             log.info("⏰ Timeout response: '{}', correlationId={}", timeoutResponse, correlationId);
-            
+
             // Send response to client
             sendJsonMessage(session, java.util.Map.of(
                     "type", "RESPONSE",
@@ -350,24 +366,27 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     "handled", true,
                     "text", timeoutResponse,
                     "correlationId", correlationId != null ? correlationId : ""));
-            
+
             // Synthesize and send TTS audio
             byte[] audio = ttsService.synthesize(timeoutResponse,
                     languageCode(lang),
                     voiceName(lang),
                     1.0,
                     0.0);
-            
+
             if (session.isOpen()) {
                 session.sendMessage(new BinaryMessage(audio));
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            log.error("Failed to send STT timeout audio over WS, correlationId={}", correlationId, e);
+        } catch (RuntimeException e) {
             log.error("Failed to handle STT timeout, correlationId={}", correlationId, e);
         }
     }
 
     private String languageCode(String lang) {
-        if (lang == null) return "ru-RU";
+        if (lang == null)
+            return "ru-RU";
         return lang.startsWith("en") ? "en-US" : "ru-RU";
     }
 

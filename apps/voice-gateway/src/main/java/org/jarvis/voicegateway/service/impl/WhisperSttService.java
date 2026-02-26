@@ -58,7 +58,11 @@ public class WhisperSttService implements SttService {
 
             context = whisper.init(path.toAbsolutePath());
             log.info("Whisper model loaded successfully from {}", path);
-        } catch (Exception e) {
+        } catch (IOException e) {
+            log.error("Failed to initialize Whisper due to IO error: {}. Whisper STT will not be available.",
+                    e.getMessage());
+            // Don't throw - allow service to start
+        } catch (RuntimeException e) {
             log.error("Failed to initialize Whisper: {}. Whisper STT will not be available.", e.getMessage());
             // Don't throw - allow service to start
         }
@@ -92,7 +96,7 @@ public class WhisperSttService implements SttService {
             }
             return text.toString().trim();
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Transcription error", e);
             return "";
         }

@@ -59,7 +59,7 @@ public class VoiceController {
             try {
                 orchestratorClient.sendCommand(transcribedText);
                 log.info("Forwarded to orchestrator: {}", transcribedText);
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.warn("Failed to forward to orchestrator: {}", e.getMessage());
             }
 
@@ -72,7 +72,12 @@ public class VoiceController {
             response.put("success", false);
             response.put("error", "Failed to read audio file: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
+            log.error("Transcription failed - invalid input", e);
+            response.put("success", false);
+            response.put("error", "Transcription failed: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        } catch (RuntimeException e) {
             log.error("Transcription failed", e);
             response.put("success", false);
             response.put("error", "Transcription failed: " + e.getMessage());

@@ -43,7 +43,10 @@ public class TtsController {
                     .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(audioData.length))
                     .body(audioData);
 
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
+            log.error("TTS synthesis failed due to invalid arguments", e);
+            return ResponseEntity.badRequest().body(null);
+        } catch (RuntimeException e) {
             log.error("TTS synthesis failed", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(null);

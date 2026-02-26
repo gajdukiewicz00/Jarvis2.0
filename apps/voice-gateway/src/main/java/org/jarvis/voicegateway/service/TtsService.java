@@ -64,7 +64,7 @@ public class TtsService {
         if (googleTtsAvailable) {
             try {
                 return synthesizeWithGoogle(text, languageCode, voiceName, speakingRate, pitch);
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.error("Google TTS failed, falling back to eSpeak: {}", e.getMessage());
                 return synthesizeWithEspeak(text, languageCode);
             }
@@ -141,9 +141,16 @@ public class TtsService {
 
             return audioData;
 
-        } catch (Exception e) {
+        } catch (IOException e) {
+            log.error("eSpeak TTS failed due to IO error: {}", e.getMessage());
+            throw new RuntimeException("TTS synthesis failed: IO error", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("eSpeak TTS process interrupted: {}", e.getMessage());
+            throw new RuntimeException("TTS synthesis failed: Interrupted", e);
+        } catch (RuntimeException e) {
             log.error("eSpeak TTS failed: {}", e.getMessage());
-            throw new RuntimeException("TTS synthesis failed", e);
+            throw e;
         }
     }
 }

@@ -91,7 +91,8 @@ public class VoskSttService implements SttService {
     }
 
     private Model loadModelIfPresent(String lang, Path path) {
-        if (path == null) return null;
+        if (path == null)
+            return null;
         if (!Files.exists(path)) {
             log.warn("Vosk model for {} not found at {}", lang, path.toAbsolutePath());
             return null;
@@ -99,7 +100,10 @@ public class VoskSttService implements SttService {
         try {
             log.info("Loading Vosk model for {} from {}", lang, path.toAbsolutePath());
             return new Model(path.toString());
-        } catch (Exception e) {
+        } catch (IOException e) {
+            log.error("Failed to load Vosk model for {} at {}: IO error", lang, path, e);
+            return null;
+        } catch (RuntimeException e) {
             log.error("Failed to load Vosk model for {} at {}", lang, path, e);
             return null;
         }
@@ -117,15 +121,18 @@ public class VoskSttService implements SttService {
     }
 
     private String normalizeLang(String lang) {
-        if (lang == null || lang.isEmpty()) return "ru";
+        if (lang == null || lang.isEmpty())
+            return "ru";
         return lang.toLowerCase(Locale.ROOT);
     }
 
     private String extractText(String resultJson) {
-        if (resultJson == null) return "";
+        if (resultJson == null)
+            return "";
         // resultJson format: {"text" : "hello world"}
         int idx = resultJson.indexOf("\"text\"");
-        if (idx < 0) return resultJson.trim();
+        if (idx < 0)
+            return resultJson.trim();
         int colon = resultJson.indexOf(':', idx);
         int quoteStart = resultJson.indexOf('"', colon + 1);
         int quoteEnd = resultJson.indexOf('"', quoteStart + 1);
@@ -169,4 +176,3 @@ public class VoskSttService implements SttService {
         }
     }
 }
-

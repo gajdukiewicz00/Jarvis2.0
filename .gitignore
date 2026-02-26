@@ -64,3 +64,4 @@ data/
 postgres/
 **/postgres/
 *postgres-backup*
+.mvn/

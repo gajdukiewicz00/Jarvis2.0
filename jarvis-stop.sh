@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}"
 K8S_DIR="${PROJECT_DIR}/k8s"
 NAMESPACE="jarvis"
+JARVIS_HOME="${HOME}/.jarvis"
 
 YES=false
 PURGE=false
@@ -67,7 +68,39 @@ fi
 # Delete overlay resources
 if [ -d "${K8S_DIR}/overlays/prod" ]; then
     echo -e "${YELLOW}⏳${NC} Удаляю ресурсы (kustomize overlay)..."
-    kubectl delete -k "${K8S_DIR}/overlays/prod" --ignore-not-found=true >/dev/null 2>&1 || true
+    MODELS_PATH="${JARVIS_HOME}/models"
+    MODELS_PATH_ENV_FILE="${K8S_DIR}/overlays/prod/models-path.env"
+    printf "JARVIS_MODELS_PATH=%s\n" "${MODELS_PATH}" > "${MODELS_PATH_ENV_FILE}"
+    kubectl kustomize --load-restrictor=LoadRestrictionsNone "${K8S_DIR}/overlays/prod" | \
+        awk '
+            function flush_doc() {
+                if (doc == "") {
+                    return
+                }
+                if (!is_namespace) {
+                    if (printed > 0) {
+                        printf("---\n")
+                    }
+                    printf("%s", doc)
+                    printed++
+                }
+                doc = ""
+                is_namespace = 0
+            }
+            /^---[[:space:]]*$/ {
+                flush_doc()
+                next
+            }
+            {
+                doc = doc $0 "\n"
+                if ($0 ~ /^kind:[[:space:]]*Namespace([[:space:]]*#.*)?$/) {
+                    is_namespace = 1
+                }
+            }
+            END {
+                flush_doc()
+            }
+        ' | kubectl delete -f - --ignore-not-found=true >/dev/null 2>&1 || true
 else
     echo -e "${YELLOW}⚠️${NC} Overlay not found: ${K8S_DIR}/overlays/prod"
 fi

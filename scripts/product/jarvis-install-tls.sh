@@ -147,3 +147,4 @@ echo "Verification:"
 echo "  openssl s_client -connect api.jarvis.local:443 -CAfile $TRUST_STORE < /dev/null 2>/dev/null | grep 'Verify return code'"
 echo "  Expected: Verify return code: 0 (ok)"
 echo ""
+

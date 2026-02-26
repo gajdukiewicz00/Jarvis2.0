@@ -78,9 +78,9 @@ for d in "${PROJECT_ROOT}/k8s/legacy" "${PROJECT_ROOT}/k8s/overlays/local" "${PR
     fi
 done
 
-if grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${PROJECT_ROOT}/k8s" >/dev/null; then
-    echo "❌ Found ':latest' image tags in k8s manifests"
-    grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${PROJECT_ROOT}/k8s" | head -20
+if rg -n ":latest|:0\\.1\\.0-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" "${PROJECT_ROOT}/k8s" >/dev/null; then
+    echo "❌ Found forbidden image tags (:latest or :0.1.0-SNAPSHOT) in runtime paths"
+    rg -n ":latest|:0\\.1\\.0-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" "${PROJECT_ROOT}/k8s" | head -20
     exit 1
 fi
 

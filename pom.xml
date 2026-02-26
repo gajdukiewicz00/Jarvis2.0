@@ -19,6 +19,13 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.checkstyle.plugin.version>3.3.1</maven.checkstyle.plugin.version>
+        <maven.pmd.plugin.version>3.22.0</maven.pmd.plugin.version>
+        <spotbugs.maven.plugin.version>4.8.6.6</spotbugs.maven.plugin.version>
+        <quality.includes>**/*.java</quality.includes>
+        <spotbugs.threshold>High</spotbugs.threshold>
+        <spotbugs.includeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-include-runtime.xml</spotbugs.includeFilterFile>
+        <spotbugs.excludeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-exclude-baseline.xml</spotbugs.excludeFilterFile>
     </properties>
 
     <modules>
@@ -54,5 +61,124 @@
         
         <!-- REMOVED: apps/assistant-core (legacy, functionality moved to llm-service + orchestrator) -->
     </modules>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${maven.checkstyle.plugin.version}</version>
+                    <configuration>
+                        <configLocation>${maven.multiModuleProjectDirectory}/config/quality/checkstyle-ci.xml</configLocation>
+                        <suppressionsLocation>${maven.multiModuleProjectDirectory}/config/quality/checkstyle-suppressions.xml</suppressionsLocation>
+                        <encoding>${project.build.sourceEncoding}</encoding>
+                        <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                        <consoleOutput>true</consoleOutput>
+                        <failsOnError>true</failsOnError>
+                        <failOnViolation>false</failOnViolation>
+                        <includes>${quality.includes}</includes>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-pmd-plugin</artifactId>
+                    <version>${maven.pmd.plugin.version}</version>
+                    <configuration>
+                        <rulesets>
+                            <ruleset>${maven.multiModuleProjectDirectory}/config/quality/pmd-ci.xml</ruleset>
+                        </rulesets>
+                        <includeTests>false</includeTests>
+                        <targetJdk>${java.version}</targetJdk>
+                        <failurePriority>3</failurePriority>
+                        <failOnViolation>false</failOnViolation>
+                        <includes>${quality.includes}</includes>
+                        <excludeFromFailureFile>${maven.multiModuleProjectDirectory}/config/quality/pmd-exclude-from-failure.properties</excludeFromFailureFile>
+                    </configuration>
+                </plugin>
+
+                <plugin>
+                    <groupId>com.github.spotbugs</groupId>
+                    <artifactId>spotbugs-maven-plugin</artifactId>
+                    <version>${spotbugs.maven.plugin.version}</version>
+                    <configuration>
+                        <effort>Max</effort>
+                        <threshold>High</threshold>
+                        <failOnError>true</failOnError>
+                        <includeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-include-runtime.xml</includeFilterFile>
+                        <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-exclude-baseline.xml</excludeFilterFile>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-pmd-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>ci-quality</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-checkstyle-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>quality-checkstyle</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-pmd-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>quality-pmd</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>pmd</goal>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>com.github.spotbugs</groupId>
+                        <artifactId>spotbugs-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>quality-spotbugs</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>check</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

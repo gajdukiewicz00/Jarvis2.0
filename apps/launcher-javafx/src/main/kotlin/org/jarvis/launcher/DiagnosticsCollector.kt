@@ -191,5 +191,12 @@ class DiagnosticsCollector {
             }
         }
     }
+
+    /**
+     * Shutdown the executor service.
+     */
+    fun shutdown() {
+        executor.shutdown()
+    }
 }
 

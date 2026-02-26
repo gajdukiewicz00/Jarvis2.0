@@ -5,8 +5,10 @@ import javax.sound.sampled.AudioSystem
 import javax.sound.sampled.DataLine
 import javax.sound.sampled.SourceDataLine
 import kotlin.concurrent.thread
+import org.slf4j.LoggerFactory
 
 class AudioPlayer {
+    private val logger = LoggerFactory.getLogger(AudioPlayer::class.java)
     
     var onPlaybackStarted: (() -> Unit)? = null
     var onPlaybackFinished: (() -> Unit)? = null
@@ -44,8 +46,7 @@ class AudioPlayer {
                 
                 println("🔊 TTS playback finished")
             } catch (e: Exception) {
-                System.err.println("Error playing audio: ${e.message}")
-                e.printStackTrace()
+                logger.error("Error playing audio: {}", e.message, e)
             } finally {
                 onPlaybackFinished?.invoke()
             }

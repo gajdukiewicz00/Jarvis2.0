@@ -115,6 +115,8 @@ class LauncherApplication : Application() {
             logger.info("Launcher closing...")
             healthCheckTask?.cancel(false)
             healthCheckExecutor.shutdown()
+            executor.shutdown()
+            diagnosticsCollector.shutdown()
             logViewer?.stop()
             
             // Stage 5: Cleanup desktop process

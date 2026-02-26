@@ -5,8 +5,10 @@ import javafx.scene.control.Label
 import javafx.scene.control.Tab
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
+import org.slf4j.LoggerFactory
 
 class DevicesTab(private val apiClient: ApiClient) {
+    private val logger = LoggerFactory.getLogger(DevicesTab::class.java)
     val tab = Tab("Devices")
     private val statusLabel = Label("")
 
@@ -26,7 +28,7 @@ class DevicesTab(private val apiClient: ApiClient) {
                 statusLabel.text = "✓ Light toggled successfully"
                 statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
             } catch (e: Exception) {
-                e.printStackTrace()
+                logger.error("Failed to toggle light: {}", e.message, e)
                 statusLabel.text = "✗ Error: ${e.message ?: "Failed to toggle light"}"
                 statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
             }

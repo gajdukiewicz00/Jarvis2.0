@@ -7,8 +7,12 @@ import android.media.MediaRecorder
 import java.io.OutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import android.util.Log
 
 class AudioStreamer(private val serverUrl: String) {
+    companion object {
+        private const val TAG = "AudioStreamer"
+    }
     private val sampleRate = 16000
     private val channelConfig = AudioFormat.CHANNEL_IN_MONO
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
@@ -44,7 +48,7 @@ class AudioStreamer(private val serverUrl: String) {
                 val responseCode = connection.responseCode
                 // Handle response if needed
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Audio streaming error", e)
             } finally {
                 recorder.stop()
                 recorder.release()

@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: smart-home-service
-          image: jarvis/smart-home-service:0.1.0-SNAPSHOT
+          image: jarvis/smart-home-service
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -64,6 +64,13 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "50m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

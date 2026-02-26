@@ -1,0 +1,48 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-verify-images
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Verify signed core images
+    policies.kyverno.io/category: Supply Chain Security
+spec:
+  validationFailureAction: Audit
+  background: false
+  failurePolicy: Ignore
+  rules:
+    - name: verify-core-image-signatures
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              selector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - api-gateway
+                      - orchestrator
+                      - security-service
+                      - voice-gateway
+                      - planner-service
+                      - life-tracker
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      verifyImages:
+        - imageReferences:
+            - "*"
+          mutateDigest: false
+          verifyDigest: false
+          required: true
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    issuer: https://token.actions.githubusercontent.com
+                    subjectRegExp: "^https://github.com/.+/.+/.github/workflows/.+@refs/tags/.+$"

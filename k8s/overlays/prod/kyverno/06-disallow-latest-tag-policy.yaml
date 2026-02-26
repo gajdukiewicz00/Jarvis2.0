@@ -1,0 +1,42 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-disallow-latest-tag
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Disallow latest image tag
+    policies.kyverno.io/category: Supply Chain Security
+spec:
+  validationFailureAction: Audit
+  background: true
+  failurePolicy: Ignore
+  rules:
+    - name: disallow-latest-tag-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SUPPLY_CHAIN_AUDIT: image tag ':latest' is forbidden in prod"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ contains(element.image, ':latest') }}"
+                    operator: Equals
+                    value: true
+          - list: "request.object.spec.initContainers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ contains(element.image, ':latest') }}"
+                    operator: Equals
+                    value: true

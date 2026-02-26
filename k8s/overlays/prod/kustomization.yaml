@@ -2,9 +2,9 @@
 # Jarvis 2.0 - Production Overlay (Kubernetes)
 # =============================================================================
 # Configures:
-# - Base services (from k8s/base)
+# - Base services (vendored under this overlay for kustomize root-restricted builds)
 # - Optional LLM/Memory stack (enabled via flags in jarvis-launch.sh)
-# - hostPath volumes for local model storage (prod-only, single-node)
+# - Persistent storage via PVCs (portable across nodes/clusters)
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -12,39 +12,86 @@ kind: Kustomization
 namespace: jarvis
 
 resources:
-  # Base namespace + shared init config
+  # Base workspace and core deployments
   - ../../base
 
-  # Data layer
-  - ../../base/postgres/statefulset.yaml
-
-  # Core services
-  - ../../base/api-gateway/deployment.yaml
-  - ../../base/security-service/deployment.yaml
-  - ../../base/voice-gateway/deployment.yaml
-  - ../../base/nlp-service/deployment.yaml
-  - ../../base/orchestrator/deployment.yaml
-  - ../../base/pc-control/deployment.yaml
-  - ../../base/life-tracker/deployment.yaml
-  - ../../base/analytics-service/deployment.yaml
-  - ../../base/planner-service/deployment.yaml
-  - ../../base/planner-service/networkpolicy.yaml
-  - ../../base/user-profile/deployment.yaml
-  - ../../base/smart-home-service/deployment.yaml
-
   # Infra
-  - ../../base/mosquitto/deployment.yaml
+  - priority-class-core.yaml
 
-  # Ingress (HTTPS front door)
-  - ../../base/ingress.yaml
+  # RBAC baseline (dedicated ServiceAccounts for core workloads)
+  - rbac-core-serviceaccounts.yaml
 
-  # Model storage (hostPath)
+  # Admission baseline (Kyverno)
+  - kyverno/01-runtime-hardening-policy.yaml
+  - kyverno/02-container-hardening-policy.yaml
+  - kyverno/03-host-isolation-policy.yaml
+  - kyverno/04-core-resources-policy.yaml
+  - kyverno/05-core-disallow-capabilities-policy.yaml
+  - kyverno/06-disallow-latest-tag-policy.yaml
+  - kyverno/07-verify-images-policy.yaml
+
+  # Network security baseline (default-deny + allowlist)
+  - networkpolicy-baseline.yaml
+  - networkpolicy-allowlist.yaml
+
+  # Model storage (PVC)
+  - pvc-vosk-models.yaml
   - pv-models.yaml
-  # LLM/Memory stack - условно включается через ENABLE_LLM/ENABLE_MEMORY флаги
-  # По умолчанию отключены (optional)
-  # - postgres-init-scripts.yaml  # Включается только если ENABLE_MEMORY=true
-  # - postgres-pgvector.yaml       # Включается только если ENABLE_MEMORY=true
-  # - embedding-service.yaml  # Включается только если ENABLE_LLM=true
-  # - memory-service.yaml     # Включается только если ENABLE_MEMORY=true
-  # - llm-server.yaml         # Включается только если ENABLE_LLM=true
-  # - llm-service.yaml        # Включается только если ENABLE_LLM=true
+  - pdb-core-services.yaml
+  # LLM/Memory stack (always defined; runtime scale controlled by launch flags)
+  - postgres-init-scripts.yaml
+  - postgres-pgvector.yaml
+  - embedding-service.yaml
+  - memory-service.yaml
+  - llm-server.yaml
+  - llm-service.yaml
+
+images:
+  - name: jarvis/api-gateway
+    newName: jarvis/api-gateway
+    newTag: local
+  - name: jarvis/security-service
+    newName: jarvis/security-service
+    newTag: local
+  - name: jarvis/life-tracker
+    newName: jarvis/life-tracker
+    newTag: local
+  - name: jarvis/analytics-service
+    newName: jarvis/analytics-service
+    newTag: local
+  - name: jarvis/voice-gateway
+    newName: jarvis/voice-gateway
+    newTag: local
+  - name: jarvis/pc-control
+    newName: jarvis/pc-control
+    newTag: local
+  - name: jarvis/smart-home-service
+    newName: jarvis/smart-home-service
+    newTag: local
+  - name: jarvis/nlp-service
+    newName: jarvis/nlp-service
+    newTag: local
+  - name: jarvis/orchestrator
+    newName: jarvis/orchestrator
+    newTag: local
+  - name: jarvis/user-profile
+    newName: jarvis/user-profile
+    newTag: local
+  - name: jarvis/planner-service
+    newName: jarvis/planner-service
+    newTag: local
+  - name: jarvis/llm-server
+    newName: jarvis/llm-server
+    newTag: local
+  - name: jarvis/llm-service
+    newName: jarvis/llm-service
+    newTag: local
+  - name: jarvis/embedding-service
+    newName: jarvis/embedding-service
+    newTag: local
+  - name: jarvis/memory-service
+    newName: jarvis/memory-service
+    newTag: local
+
+patches:
+  - path: ha-core-deployments.patch.yaml

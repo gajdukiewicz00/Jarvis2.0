@@ -14,7 +14,7 @@ metadata:
     app.kubernetes.io/name: llm-server
     app.kubernetes.io/component: inference
 spec:
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate  # GPU resources can't be shared during rolling update
   selector:
@@ -27,6 +27,10 @@ spec:
         app.kubernetes.io/name: llm-server
     spec:
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       # GPU scheduling (Stage: perf/hardware)
@@ -37,10 +41,11 @@ spec:
           effect: NoSchedule
       containers:
         - name: llm-server
-          image: jarvis/llm-server:0.1.0-SNAPSHOT
+          image: jarvis/llm-server
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -100,6 +105,10 @@ spec:
             - name: llm-models
               mountPath: /models
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: app-cache
+              mountPath: /app/.cache
           # Startup probe - model loading can take 2-5 minutes
           startupProbe:
             httpGet:
@@ -131,6 +140,10 @@ spec:
         - name: llm-models
           persistentVolumeClaim:
             claimName: llm-models-pvc
+        - name: tmp
+          emptyDir: {}
+        - name: app-cache
+          emptyDir: {}
       # Prefer nodes with GPU
       affinity:
         nodeAffinity:
@@ -158,4 +171,3 @@ spec:
     - name: http
       port: 5000
       targetPort: 5000
-

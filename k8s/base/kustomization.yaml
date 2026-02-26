@@ -10,8 +10,22 @@ namespace: jarvis
 
 resources:
   - namespace.yaml
+  - ingress.yaml
+  - api-gateway/deployment.yaml
+  - voice-gateway/deployment.yaml
+  - nlp-service/deployment.yaml
+  - orchestrator/deployment.yaml
+  - pc-control/deployment.yaml
+  - life-tracker/deployment.yaml
+  - analytics-service/deployment.yaml
+  - planner-service/deployment.yaml
+  - security-service/deployment.yaml
+  - user-profile/deployment.yaml
+  - smart-home-service/deployment.yaml
+  - mosquitto/deployment.yaml
+  - postgres/statefulset.yaml
 
-# Common labels applied to all resources
-commonLabels:
-  app.kubernetes.io/part-of: jarvis
-  app.kubernetes.io/managed-by: kustomize
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: jarvis
+      app.kubernetes.io/managed-by: kustomize

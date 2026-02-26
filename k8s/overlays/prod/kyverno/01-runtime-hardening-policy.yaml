@@ -1,0 +1,50 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-require-runtime-hardening
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Require pod runtime hardening
+    policies.kyverno.io/category: Pod Security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  failurePolicy: Fail
+  rules:
+    - name: require-run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: runAsNonRoot=true is required in prod"
+        pattern:
+          spec:
+            securityContext:
+              runAsNonRoot: true
+    - name: require-runtime-default-seccomp
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: seccompProfile.type=RuntimeDefault is required in prod"
+        pattern:
+          spec:
+            securityContext:
+              seccompProfile:
+                type: RuntimeDefault

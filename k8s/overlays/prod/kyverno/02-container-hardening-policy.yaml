@@ -1,0 +1,100 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-require-container-hardening
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Require container security hardening
+    policies.kyverno.io/category: Pod Security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  failurePolicy: Fail
+  rules:
+    - name: require-allow-privilege-escalation-false
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: allowPrivilegeEscalation=false is required for all containers in prod"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.allowPrivilegeEscalation || '' }}"
+                    operator: NotEquals
+                    value: false
+          - list: "request.object.spec.initContainers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.allowPrivilegeEscalation || '' }}"
+                    operator: NotEquals
+                    value: false
+    - name: disallow-privileged-containers
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: privileged containers are forbidden in prod"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.privileged || false }}"
+                    operator: Equals
+                    value: true
+          - list: "request.object.spec.initContainers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.privileged || false }}"
+                    operator: Equals
+                    value: true
+    - name: require-read-only-root-filesystem
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: readOnlyRootFilesystem=true is required in prod"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.readOnlyRootFilesystem || '' }}"
+                    operator: NotEquals
+                    value: true
+          - list: "request.object.spec.initContainers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.readOnlyRootFilesystem || '' }}"
+                    operator: NotEquals
+                    value: true

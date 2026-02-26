@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: pc-control
-          image: jarvis/pc-control:0.1.0-SNAPSHOT
+          image: jarvis/pc-control
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -54,6 +54,13 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "50m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8084
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

@@ -1,0 +1,38 @@
+# =============================================================================
+# Dev-only hostPath PVs for local single-node setups.
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: llm-models-pv
+  labels:
+    type: local
+    app: llm-server
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /tmp/jarvis-models
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: vosk-models-pv
+  labels:
+    type: local
+    app: voice-gateway
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  hostPath:
+    path: /tmp/jarvis-models
+    type: DirectoryOrCreate

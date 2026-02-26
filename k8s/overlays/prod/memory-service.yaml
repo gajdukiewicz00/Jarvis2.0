@@ -29,6 +29,10 @@ spec:
         app.kubernetes.io/name: memory-service
     spec:
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       # Memory service is optional - no blocking init containers
@@ -36,13 +40,17 @@ spec:
       # initContainers removed to allow graceful degradation
       containers:
         - name: memory-service
-          image: jarvis/memory-service:0.1.0-SNAPSHOT
+          image: jarvis/memory-service
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           ports:
             - containerPort: 8093
               name: http
@@ -99,6 +107,9 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

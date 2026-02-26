@@ -1,0 +1,7 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: jarvis-core-high
+value: 100000
+globalDefault: false
+description: "Priority class for Jarvis core workloads to protect them under node pressure."

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llm-models-pvc
+  namespace: jarvis
+spec:
+  storageClassName: manual
+  selector:
+    matchLabels:
+      type: local
+      app: llm-server
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vosk-models-pvc
+  namespace: jarvis
+spec:
+  storageClassName: manual
+  selector:
+    matchLabels:
+      type: local
+      app: voice-gateway

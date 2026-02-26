@@ -1,0 +1,93 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-disallow-capabilities
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Disallow capabilities add and require drop ALL for core
+    policies.kyverno.io/category: Pod Security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  failurePolicy: Fail
+  rules:
+    - name: disallow-capabilities-add-core
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              selector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - api-gateway
+                      - orchestrator
+                      - security-service
+                      - voice-gateway
+                      - planner-service
+                      - life-tracker
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: capabilities.add is forbidden for core workloads in prod"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.capabilities.add || `[]` }}"
+                    operator: NotEquals
+                    value: []
+          - list: "request.object.spec.initContainers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.securityContext.capabilities.add || `[]` }}"
+                    operator: NotEquals
+                    value: []
+    - name: require-capabilities-drop-all-core
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              selector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - api-gateway
+                      - orchestrator
+                      - security-service
+                      - voice-gateway
+                      - planner-service
+                      - life-tracker
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: capabilities.drop must include ALL for core workloads in prod"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: ALL
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.drop || `[]` }}"
+          - list: "request.object.spec.initContainers || []"
+            deny:
+              conditions:
+                any:
+                  - key: ALL
+                    operator: AnyNotIn
+                    value: "{{ element.securityContext.capabilities.drop || `[]` }}"

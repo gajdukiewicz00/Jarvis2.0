@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: security-service
-          image: jarvis/security-service:0.1.0-SNAPSHOT
+          image: jarvis/security-service
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -54,6 +54,13 @@ spec:
             requests:
               memory: "256Mi"
               cpu: "100m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8088
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness

@@ -1,0 +1,65 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+  namespace: jarvis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: api-gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: security-service-pdb
+  namespace: jarvis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: security-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: planner-service-pdb
+  namespace: jarvis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: planner-service
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: orchestrator-pdb
+  namespace: jarvis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: orchestrator
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: voice-gateway-pdb
+  namespace: jarvis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: voice-gateway
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: life-tracker-pdb
+  namespace: jarvis
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: life-tracker

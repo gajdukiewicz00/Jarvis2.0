@@ -1,0 +1,61 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-disallow-host-scope
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Disallow host-level escapes
+    policies.kyverno.io/category: Pod Security
+spec:
+  validationFailureAction: Enforce
+  background: true
+  failurePolicy: Fail
+  rules:
+    - name: disallow-host-network-pid-ipc
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: hostNetwork/hostPID/hostIPC are forbidden in prod"
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.hostNetwork || false }}"
+                operator: Equals
+                value: true
+              - key: "{{ request.object.spec.hostPID || false }}"
+                operator: Equals
+                value: true
+              - key: "{{ request.object.spec.hostIPC || false }}"
+                operator: Equals
+                value: true
+    - name: disallow-hostpath-volumes
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "SECURITY_HARD_FAIL: hostPath volumes are forbidden in prod"
+        foreach:
+          - list: "request.object.spec.volumes || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.hostPath || '' }}"
+                    operator: NotEquals
+                    value: ""

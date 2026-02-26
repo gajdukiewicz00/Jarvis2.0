@@ -1,0 +1,14 @@
+# =============================================================================
+# Jarvis 2.0 - Dev HostPath Overlay
+# =============================================================================
+# Dev-only overlay that reintroduces hostPath-backed model storage.
+# Production overlay intentionally avoids hostPath and uses PVCs only.
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis
+
+resources:
+  - ../../base
+  - pv-models-hostpath.yaml

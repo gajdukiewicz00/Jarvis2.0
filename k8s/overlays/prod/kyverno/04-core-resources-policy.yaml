@@ -1,0 +1,55 @@
+apiVersion: kyverno.io/v1
+kind: Policy # kyverno
+metadata:
+  name: kyverno-prod-core-require-resources
+  namespace: jarvis
+  annotations:
+    policies.kyverno.io/title: Core pods should define requests and limits
+    policies.kyverno.io/category: Reliability
+spec:
+  validationFailureAction: Audit
+  background: true
+  failurePolicy: Ignore
+  rules:
+    - name: require-core-cpu-memory-requests-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+              selector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - api-gateway
+                      - orchestrator
+                      - security-service
+                      - voice-gateway
+                      - planner-service
+                      - life-tracker
+      exclude:
+        any:
+          - resources:
+              selector:
+                matchLabels:
+                  security.jarvis.io/kyverno-exempt: "true"
+      validate:
+        message: "CORE_POLICY_AUDIT: core pods should define resources.requests/limits for cpu and memory"
+        foreach:
+          - list: "request.object.spec.containers || []"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.resources.requests.cpu || '' }}"
+                    operator: Equals
+                    value: ""
+                  - key: "{{ element.resources.requests.memory || '' }}"
+                    operator: Equals
+                    value: ""
+                  - key: "{{ element.resources.limits.cpu || '' }}"
+                    operator: Equals
+                    value: ""
+                  - key: "{{ element.resources.limits.memory || '' }}"
+                    operator: Equals
+                    value: ""

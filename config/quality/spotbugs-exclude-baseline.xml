@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <Match>
+        <Class name="org.jarvis.pccontrol.service.impl.LinuxSystemControlService"/>
+        <Bug pattern="DM_DEFAULT_ENCODING"/>
+    </Match>
+</FindBugsFilter>

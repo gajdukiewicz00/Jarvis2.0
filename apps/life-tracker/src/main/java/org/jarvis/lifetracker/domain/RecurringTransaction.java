@@ -40,7 +40,7 @@ public class RecurringTransaction {
     private String merchant;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 20)
+    @Column(name = "recurrence_interval", length = 20)
     private RecurringInterval interval = RecurringInterval.MONTHLY;
 
     @Column(name = "next_run")

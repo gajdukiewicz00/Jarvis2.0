@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.logging.LogSanitizer;
 import org.jarvis.llm.client.LlmClient;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatResponseDto;
@@ -38,7 +39,17 @@ public class LlmOrchestratorService {
     private final ToolSchemaRegistry toolSchemaRegistry;
     private final ObjectMapper objectMapper;
 
+    @Value("${logging.pii.enabled:true}")
+    private boolean piiLoggingEnabled = true;
+
+    @Value("${logging.pii.allowQuerySnippet:false}")
+    private boolean piiAllowQuerySnippet = false;
+
+    @Value("${logging.pii.querySnippetMaxLength:32}")
+    private int piiQuerySnippetMaxLength = 32;
+
     public OrchestrationResponse orchestrate(OrchestrationRequest request, String correlationId) {
+        LogSanitizer sanitizer = logSanitizer();
         String systemPrompt = buildSystemPrompt();
         String userMessage = buildUserMessage(request);
 
@@ -75,7 +86,10 @@ public class LlmOrchestratorService {
                 toolCall.setIdempotencyKey(buildIdempotencyKey(request.getUserId(), call.getName(), call.getArguments()));
                 toolCalls.add(toolCall);
                 log.info("[{}] AI_TOOL_PLANNED userId={} tool={} idempotencyKey={} outcome=planned",
-                        correlationId, request.getUserId(), toolCall.getName(), toolCall.getIdempotencyKey());
+                        correlationId,
+                        sanitizer.sanitizeId(request.getUserId()),
+                        toolCall.getName(),
+                        toolCall.getIdempotencyKey());
             }
         }
 
@@ -85,7 +99,9 @@ public class LlmOrchestratorService {
 
         if (toolCalls.isEmpty()) {
             log.info("[{}] AI_TOOL_PLAN_EMPTY userId={} outcome=empty explanation={}",
-                    correlationId, request.getUserId(), plan.getExplanation());
+                    correlationId,
+                    sanitizer.sanitizeId(request.getUserId()),
+                    plan.getExplanation());
         }
 
         return new OrchestrationResponse(
@@ -180,5 +196,9 @@ public class LlmOrchestratorService {
         } catch (Exception e) {
             return "idem-" + Integer.toHexString(payload.hashCode());
         }
+    }
+
+    private LogSanitizer logSanitizer() {
+        return new LogSanitizer(piiLoggingEnabled, piiAllowQuerySnippet, piiQuerySnippetMaxLength);
     }
 }

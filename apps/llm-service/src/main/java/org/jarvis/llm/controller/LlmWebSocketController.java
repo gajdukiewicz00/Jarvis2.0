@@ -2,12 +2,14 @@ package org.jarvis.llm.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.logging.LogSanitizer;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.WebSocketChatMessage;
 import org.jarvis.llm.dto.WebSocketChatResponse;
 import org.jarvis.llm.service.LlmService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 
 import java.time.Instant;
@@ -23,6 +25,15 @@ public class LlmWebSocketController {
     private final LlmService llmService;
     private final SimpMessagingTemplate messagingTemplate;
 
+    @Value("${logging.pii.enabled:true}")
+    private boolean piiLoggingEnabled = true;
+
+    @Value("${logging.pii.allowQuerySnippet:false}")
+    private boolean piiAllowQuerySnippet = false;
+
+    @Value("${logging.pii.querySnippetMaxLength:32}")
+    private int piiQuerySnippetMaxLength = 32;
+
     /**
      * Handle incoming chat messages from WebSocket
      * 
@@ -33,8 +44,9 @@ public class LlmWebSocketController {
     public void handleChatMessage(WebSocketChatMessage message) {
         String sessionId = message.getSessionId();
         String userMessage = message.getMessage();
+        LogSanitizer sanitizer = logSanitizer();
 
-        log.info("Received WebSocket message from session: {}", sessionId);
+        log.info("Received WebSocket message from session={}", sanitizer.sanitizeId(sessionId));
 
         try {
             // Process message with LLM
@@ -51,11 +63,14 @@ public class LlmWebSocketController {
             // Send response to specific session topic
             messagingTemplate.convertAndSend("/topic/llm-response/" + sessionId, response);
 
-            log.info("Sent response to session {}: {} chars in {}ms",
-                    sessionId, response.getReply().length(), response.getProcessingTimeMs());
+            log.info("Sent response to session={} (reply chars={}, {}ms)",
+                    sanitizer.sanitizeId(sessionId),
+                    response.getReply().length(),
+                    response.getProcessingTimeMs());
 
         } catch (Exception e) {
-            log.error("Error processing WebSocket message for session {}: {}", sessionId, e.getMessage(), e);
+            log.error("Error processing WebSocket message for session={}: {}",
+                    sanitizer.sanitizeId(sessionId), e.getMessage(), e);
 
             // Send error response
             WebSocketChatResponse errorResponse = new WebSocketChatResponse(
@@ -65,5 +80,9 @@ public class LlmWebSocketController {
                     0);
             messagingTemplate.convertAndSend("/topic/llm-response/" + sessionId, errorResponse);
         }
+    }
+
+    private LogSanitizer logSanitizer() {
+        return new LogSanitizer(piiLoggingEnabled, piiAllowQuerySnippet, piiQuerySnippetMaxLength);
     }
 }

@@ -54,8 +54,10 @@ management:
 
 # Logging
 logging:
+  pii:
+    enabled: ${LOG_PII_ENABLED:false}
+    allowQuerySnippet: ${LOG_PII_ALLOW_QUERY_SNIPPET:false}
+    querySnippetMaxLength: ${LOG_PII_QUERY_SNIPPET_MAX_LENGTH:32}
   level:
     org.jarvis.memory: INFO
     org.hibernate.SQL: WARN
-
-

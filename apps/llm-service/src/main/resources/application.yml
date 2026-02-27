@@ -27,8 +27,10 @@ llm:
     timeouts:
       connect-ms: ${LLM_HEALTH_CONNECT_TIMEOUT_MS:2000}
       read-ms: ${LLM_HEALTH_READ_TIMEOUT_MS:2000}
-  conversation:
-    max-history: 20
+  memory:
+    sessionTtl: ${LLM_MEMORY_SESSION_TTL:PT60M}
+    maxSessions: ${LLM_MEMORY_MAX_SESSIONS:10000}
+    maxMessagesPerSession: ${LLM_MEMORY_MAX_MESSAGES_PER_SESSION:100}
   system-prompt: >
     Ты - Jarvis, персональный AI-ассистент.
     ВАЖНО: Ты ВСЕГДА отвечаешь ТОЛЬКО на русском языке.
@@ -72,6 +74,10 @@ services:
 
 # Logging
 logging:
+  pii:
+    enabled: ${LOG_PII_ENABLED:false}
+    allowQuerySnippet: ${LOG_PII_ALLOW_QUERY_SNIPPET:false}
+    querySnippetMaxLength: ${LOG_PII_QUERY_SNIPPET_MAX_LENGTH:32}
   level:
     org.jarvis.llm: INFO
     org.jarvis.llm.config: INFO

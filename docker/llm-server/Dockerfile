@@ -10,12 +10,16 @@ WORKDIR /app
 ARG INSTALL_LLAMACPP=true
 ARG CUDA_VERSION=cu124
 ENV CUDA_VERSION=cu124
+ENV HF_HOME=/app/.cache/huggingface
 
 # System dependencies + Python 3.10
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip python3-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 10001 jarvis && \
+    useradd --system --uid 10001 --gid 10001 --home /app --shell /usr/sbin/nologin jarvis
 
 # Install PyTorch with CUDA 12.4
 RUN python3 -m pip install -U pip && \
@@ -44,6 +48,7 @@ RUN if [ "$INSTALL_LLAMACPP" = "true" ]; then \
 
 # Copy application
 COPY app/ ./app/
+RUN mkdir -p /app/.cache && chown -R 10001:10001 /app
 
 EXPOSE 5000
 
@@ -67,5 +72,7 @@ ENV N_BATCH=512
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
+
+USER 10001:10001
 
 CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]

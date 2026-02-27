@@ -27,6 +27,35 @@ ENABLE_GPU="${ENABLE_GPU:-true}"
 ENABLE_BUILD="${ENABLE_BUILD:-true}"
 ENABLE_PORT_FORWARD="${ENABLE_PORT_FORWARD:-false}"
 
+# Image configuration (single source of truth for build + deploy)
+IMAGE_REGISTRY="${IMAGE_REGISTRY:-}"
+IMAGE_REPO="${IMAGE_REPO:-jarvis}"
+IMAGE_TAG="${IMAGE_TAG:-local}"
+
+CORE_SERVICES=(
+    "api-gateway"
+    "security-service"
+    "life-tracker"
+    "analytics-service"
+    "voice-gateway"
+    "pc-control"
+    "smart-home-service"
+    "nlp-service"
+    "orchestrator"
+    "user-profile"
+    "planner-service"
+)
+
+LLM_SERVICES=(
+    "llm-server"
+    "llm-service"
+)
+
+MEMORY_SERVICES=(
+    "embedding-service"
+    "memory-service"
+)
+
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -88,6 +117,71 @@ warn() {
 
 info() {
     echo -e "${CYAN}[INFO]${NC} $*"
+}
+
+IMAGE_CONFIG_READY="false"
+IMAGE_BASE=""
+
+trim_slashes() {
+    local value="$1"
+    value="${value#/}"
+    value="${value%/}"
+    printf '%s' "${value}"
+}
+
+init_image_config() {
+    if [[ "${IMAGE_CONFIG_READY}" == "true" ]]; then
+        return 0
+    fi
+
+    local registry
+    local repo
+    registry="$(trim_slashes "${IMAGE_REGISTRY}")"
+    repo="$(trim_slashes "${IMAGE_REPO}")"
+
+    if [[ -z "${repo}" ]]; then
+        fail "IMAGE_REPO must not be empty"
+    fi
+    if [[ -z "${IMAGE_TAG}" ]]; then
+        fail "IMAGE_TAG must not be empty"
+    fi
+
+    if [[ -n "${registry}" ]]; then
+        IMAGE_BASE="${registry}/${repo}"
+    else
+        IMAGE_BASE="${repo}"
+    fi
+
+    IMAGE_CONFIG_READY="true"
+    info "Using image base '${IMAGE_BASE}' with tag '${IMAGE_TAG}'"
+}
+
+image_name() {
+    local service="$1"
+    init_image_config
+    printf '%s/%s' "${IMAGE_BASE}" "${service}"
+}
+
+image_ref() {
+    local service="$1"
+    printf '%s:%s' "$(image_name "${service}")" "${IMAGE_TAG}"
+}
+
+prepare_prod_overlay() {
+    local source_overlay="${K8S_DIR}/overlays/prod"
+    local rendered_overlay
+    rendered_overlay="$(mktemp -d -t jarvis-prod-overlay-XXXXXX)"
+    cp -R "${source_overlay}/." "${rendered_overlay}/"
+
+    local escaped_tag
+    local escaped_base
+    escaped_tag="$(printf '%s' "${IMAGE_TAG}" | sed 's/[\\/&]/\\&/g')"
+    escaped_base="$(printf '%s' "${IMAGE_BASE}" | sed 's/[\\/&]/\\&/g')"
+
+    sed -i -E "s#(^[[:space:]]*newName:[[:space:]]+)jarvis/#\\1${escaped_base}/#g" "${rendered_overlay}/kustomization.yaml"
+    sed -i -E "s#(^[[:space:]]*newTag:[[:space:]]+).*$#\\1${escaped_tag}#g" "${rendered_overlay}/kustomization.yaml"
+
+    printf '%s' "${rendered_overlay}"
 }
 
 rotate_backend_log() {
@@ -235,6 +329,8 @@ build_images() {
         return 0
     fi
 
+    init_image_config
+
     require_cmd docker
     require_cmd mvn
 
@@ -309,70 +405,45 @@ build_images() {
     info "Building Maven modules (skip tests)..."
     mvn -q -DskipTests package
 
-    local services=(
-        "api-gateway"
-        "security-service"
-        "life-tracker"
-        "analytics-service"
-        "voice-gateway"
-        "pc-control"
-        "smart-home-service"
-        "nlp-service"
-        "orchestrator"
-        "user-profile"
-        "planner-service"
-    )
-
-    for svc in "${services[@]}"; do
+    for svc in "${CORE_SERVICES[@]}"; do
         if [[ -f "${PROJECT_DIR}/apps/${svc}/Dockerfile" ]]; then
-            info "Building jarvis/${svc}..."
-            docker_build "jarvis/${svc}:latest" "${PROJECT_DIR}/apps/${svc}/Dockerfile" "${PROJECT_DIR}/apps/${svc}"
+            info "Building $(image_ref "${svc}")..."
+            docker_build "$(image_ref "${svc}")" "${PROJECT_DIR}/apps/${svc}/Dockerfile" "${PROJECT_DIR}/apps/${svc}"
         fi
     done
 
     if [[ "${ENABLE_LLM}" == "true" ]]; then
-        info "Building jarvis/llm-server..."
-        docker_build "jarvis/llm-server:latest" "${PROJECT_DIR}/docker/llm-server/Dockerfile" "${PROJECT_DIR}/docker/llm-server" \
+        info "Building $(image_ref "llm-server")..."
+        docker_build "$(image_ref "llm-server")" "${PROJECT_DIR}/docker/llm-server/Dockerfile" "${PROJECT_DIR}/docker/llm-server" \
             --build-arg INSTALL_LLAMACPP=true
-        info "Building jarvis/llm-service..."
-        docker_build "jarvis/llm-service:latest" "${PROJECT_DIR}/apps/llm-service/Dockerfile" "${PROJECT_DIR}/apps/llm-service"
+        info "Building $(image_ref "llm-service")..."
+        docker_build "$(image_ref "llm-service")" "${PROJECT_DIR}/apps/llm-service/Dockerfile" "${PROJECT_DIR}/apps/llm-service"
     fi
 
     if [[ "${ENABLE_MEMORY}" == "true" ]]; then
-        info "Building jarvis/embedding-service..."
-        docker_build "jarvis/embedding-service:latest" "${PROJECT_DIR}/docker/embedding-service/Dockerfile" "${PROJECT_DIR}/docker/embedding-service"
-        info "Building jarvis/memory-service..."
-        docker_build "jarvis/memory-service:latest" "${PROJECT_DIR}/apps/memory-service/Dockerfile" "${PROJECT_DIR}/apps/memory-service"
+        info "Building $(image_ref "embedding-service")..."
+        docker_build "$(image_ref "embedding-service")" "${PROJECT_DIR}/docker/embedding-service/Dockerfile" "${PROJECT_DIR}/docker/embedding-service"
+        info "Building $(image_ref "memory-service")..."
+        docker_build "$(image_ref "memory-service")" "${PROJECT_DIR}/apps/memory-service/Dockerfile" "${PROJECT_DIR}/apps/memory-service"
     fi
 
     if command -v k3s >/dev/null 2>&1 && is_k3s_context; then
         info "Importing images into k3s containerd..."
-        local images=(
-            "jarvis/api-gateway:latest"
-            "jarvis/security-service:latest"
-            "jarvis/life-tracker:latest"
-            "jarvis/analytics-service:latest"
-            "jarvis/voice-gateway:latest"
-            "jarvis/pc-control:latest"
-            "jarvis/smart-home-service:latest"
-            "jarvis/nlp-service:latest"
-            "jarvis/orchestrator:latest"
-            "jarvis/user-profile:latest"
-            "jarvis/planner-service:latest"
-        )
+        local images=()
+        for svc in "${CORE_SERVICES[@]}"; do
+            images+=("$(image_ref "${svc}")")
+        done
 
         if [[ "${ENABLE_LLM}" == "true" ]]; then
-            images+=(
-                "jarvis/llm-server:latest"
-                "jarvis/llm-service:latest"
-            )
+            for svc in "${LLM_SERVICES[@]}"; do
+                images+=("$(image_ref "${svc}")")
+            done
         fi
 
         if [[ "${ENABLE_MEMORY}" == "true" ]]; then
-            images+=(
-                "jarvis/embedding-service:latest"
-                "jarvis/memory-service:latest"
-            )
+            for svc in "${MEMORY_SERVICES[@]}"; do
+                images+=("$(image_ref "${svc}")")
+            done
         fi
 
         local tar_path
@@ -461,70 +532,45 @@ build_images
 
 info "Applying core manifests..."
 if [ -d "${K8S_DIR}/overlays/prod" ]; then
+    init_image_config
+    OVERLAY_PATH="$(prepare_prod_overlay)"
+    trap '[[ -n "${OVERLAY_PATH:-}" && -d "${OVERLAY_PATH}" ]] && rm -rf "${OVERLAY_PATH}"' EXIT
     MODELS_PATH="${JARVIS_HOME}/models"
-    kubectl kustomize --load-restrictor=LoadRestrictionsNone "${K8S_DIR}/overlays/prod" | \
-        sed "s|__JARVIS_MODELS_PATH__|${MODELS_PATH}|g" | \
+    MODELS_PATH_ENV_FILE="${OVERLAY_PATH}/models-path.env"
+    printf "JARVIS_MODELS_PATH=%s\n" "${MODELS_PATH}" > "${MODELS_PATH_ENV_FILE}"
+    kubectl kustomize --load-restrictor=LoadRestrictionsNone "${OVERLAY_PATH}" | \
         kubectl apply -f - >/dev/null
 else
     fail "Overlay not found: ${K8S_DIR}/overlays/prod"
 fi
 
-# Optional LLM/Memory
-if [[ "${ENABLE_LLM}" == "true" || "${ENABLE_MEMORY}" == "true" ]]; then
-    if [[ "${ENABLE_LLM}" == "true" ]]; then
-        if ! kubectl apply -f "${K8S_DIR}/overlays/prod/embedding-service.yaml" >/dev/null; then
-            warn "Failed to apply embedding-service (LLM optional)"
-            OPTIONAL_FAILED="true"
-        fi
-        if ! kubectl apply -f "${K8S_DIR}/overlays/prod/llm-server.yaml" >/dev/null; then
-            warn "Failed to apply llm-server (LLM optional)"
-            OPTIONAL_FAILED="true"
-        fi
-        if ! kubectl apply -f "${K8S_DIR}/overlays/prod/llm-service.yaml" >/dev/null; then
-            warn "Failed to apply llm-service (LLM optional)"
-            OPTIONAL_FAILED="true"
-        fi
+# Optional LLM/Memory runtime scaling
+if [[ "${ENABLE_LLM}" == "true" ]]; then
+    kubectl scale deployment llm-server llm-service --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+    kubectl scale deployment embedding-service --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
 
-        if [[ "${ENABLE_GPU}" != "true" ]]; then
-            kubectl set env deployment/llm-server -n "${NAMESPACE}" \
-                LLM_DEVICE=cpu ENABLE_GPU=false DEVICE=cpu >/dev/null 2>&1 || true
-            kubectl patch deploy llm-server -n "${NAMESPACE}" --type='json' \
-                -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu"},{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu"}]' >/dev/null 2>&1 || true
-        fi
-    fi
-
-    if [[ "${ENABLE_MEMORY}" == "true" ]]; then
-        if ! kubectl apply -f "${K8S_DIR}/overlays/prod/postgres-init-scripts.yaml" >/dev/null; then
-            warn "Failed to apply postgres-init scripts (Memory optional)"
-            OPTIONAL_FAILED="true"
-        fi
-        if ! kubectl apply -f "${K8S_DIR}/overlays/prod/postgres-pgvector.yaml" >/dev/null; then
-            warn "Failed to apply postgres-pgvector (Memory optional)"
-            OPTIONAL_FAILED="true"
-        fi
-        kubectl scale statefulset postgres-pgvector --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
-        if ! kubectl apply -f "${K8S_DIR}/overlays/prod/memory-service.yaml" >/dev/null; then
-            warn "Failed to apply memory-service (Memory optional)"
-            OPTIONAL_FAILED="true"
-        fi
-        kubectl scale deployment memory-service --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
-
-        # Memory requires embedding-service
-        if [[ "${ENABLE_LLM}" != "true" ]]; then
-            if ! kubectl apply -f "${K8S_DIR}/overlays/prod/embedding-service.yaml" >/dev/null; then
-                warn "Failed to apply embedding-service for Memory (optional)"
-                OPTIONAL_FAILED="true"
-            fi
-        fi
-    else
-        kubectl scale statefulset postgres-pgvector --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
-        kubectl scale deployment memory-service --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+    if [[ "${ENABLE_GPU}" != "true" ]]; then
+        kubectl set env deployment/llm-server -n "${NAMESPACE}" \
+            LLM_DEVICE=cpu ENABLE_GPU=false DEVICE=cpu >/dev/null 2>&1 || true
+        kubectl patch deploy llm-server -n "${NAMESPACE}" --type='json' \
+            -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources/limits/nvidia.com~1gpu"},{"op":"remove","path":"/spec/template/spec/containers/0/resources/requests/nvidia.com~1gpu"}]' >/dev/null 2>&1 || true
     fi
 else
-    # Ensure LLM/Memory stack is down when disabled
-    kubectl scale deployment llm-server llm-service embedding-service --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+    kubectl scale deployment llm-server llm-service --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+fi
+
+if [[ "${ENABLE_MEMORY}" == "true" ]]; then
+    kubectl scale statefulset postgres-pgvector --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+    kubectl scale deployment memory-service --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+    # Memory requires embedding-service even when LLM is disabled.
+    kubectl scale deployment embedding-service --replicas=1 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+else
     kubectl scale statefulset postgres-pgvector --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
     kubectl scale deployment memory-service --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+
+    if [[ "${ENABLE_LLM}" != "true" ]]; then
+        kubectl scale deployment embedding-service --replicas=0 -n "${NAMESPACE}" >/dev/null 2>&1 || true
+    fi
 fi
 
 # Wait for core services

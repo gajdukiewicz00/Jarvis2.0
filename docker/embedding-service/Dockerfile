@@ -9,11 +9,16 @@ WORKDIR /app
 # CUDA version pin (kept for consistency across AI containers)
 ARG CUDA_VERSION=cu124
 ENV CUDA_VERSION=cu124
+ENV HF_HOME=/app/.cache/huggingface
+ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence-transformers
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 10001 jarvis && \
+    useradd --system --uid 10001 --gid 10001 --home /app --shell /usr/sbin/nologin jarvis
 
 # Install Python dependencies
 COPY requirements.txt .
@@ -25,6 +30,7 @@ RUN python3 -c "from sentence_transformers import SentenceTransformer; SentenceT
 
 # Copy application
 COPY app/ ./app/
+RUN mkdir -p /app/.cache && chown -R 10001:10001 /app
 
 EXPOSE 5001
 
@@ -39,6 +45,7 @@ ENV LOG_LEVEL=INFO
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5001/health || exit 1
 
-CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5001"]
+USER 10001:10001
 
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5001"]
 

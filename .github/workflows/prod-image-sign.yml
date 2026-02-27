@@ -1,0 +1,68 @@
+name: prod-image-sign
+
+on:
+  workflow_dispatch:
+    inputs:
+      cosign_sign_mode:
+        description: "Cosign mode: keyless or key-pair"
+        required: false
+        default: "keyless"
+      core_image_digests:
+        description: "Digest refs to sign (newline/comma/space separated image@sha256)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "prod-*"
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  sign-core-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.7.0
+
+      - name: Resolve input digests
+        id: resolve
+        shell: bash
+        env:
+          COSIGN_CORE_IMAGES_SECRET: ${{ secrets.COSIGN_CORE_IMAGES }}
+        run: |
+          set -euo pipefail
+          INPUT_DIGESTS="${{ github.event.inputs.core_image_digests }}"
+          if [[ -n "${INPUT_DIGESTS//[[:space:]]/}" ]]; then
+            {
+              echo "COSIGN_CORE_IMAGES<<EOF"
+              echo "${INPUT_DIGESTS}"
+              echo "EOF"
+            } >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          if [[ -n "${COSIGN_CORE_IMAGES_SECRET//[[:space:]]/}" ]]; then
+            {
+              echo "COSIGN_CORE_IMAGES<<EOF"
+              echo "${COSIGN_CORE_IMAGES_SECRET}"
+              echo "EOF"
+            } >> "${GITHUB_ENV}"
+            exit 0
+          fi
+
+          echo "COSIGN_CORE_IMAGES=" >> "${GITHUB_ENV}"
+
+      - name: Sign core digests with cosign
+        shell: bash
+        env:
+          COSIGN_SIGN_MODE: ${{ github.event.inputs.cosign_sign_mode }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: ./scripts/ci/cosign-sign-core-images.sh

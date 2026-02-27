@@ -3,11 +3,13 @@ package org.jarvis.llm.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.logging.LogSanitizer;
 import org.jarvis.llm.dto.ChatRequestDto;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.DialogRequest;
 import org.jarvis.llm.dto.DialogResponse;
 import org.jarvis.llm.service.LlmService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +38,15 @@ public class LlmRestController {
 
     private final LlmService llmService;
 
+    @Value("${logging.pii.enabled:true}")
+    private boolean piiLoggingEnabled = true;
+
+    @Value("${logging.pii.allowQuerySnippet:false}")
+    private boolean piiAllowQuerySnippet = false;
+
+    @Value("${logging.pii.querySnippetMaxLength:32}")
+    private int piiQuerySnippetMaxLength = 32;
+
     /**
      * Process chat request
      */
@@ -53,7 +64,8 @@ public class LlmRestController {
             return ResponseEntity.badRequest().build();
         }
 
-        log.info("Received REST chat request for session: {}, correlationId: {}", request.getSessionId(),
+        log.info("Received REST chat request for session={}, correlationId={}",
+                logSanitizer().sanitizeId(request.getSessionId()),
                 correlationId);
 
         try {
@@ -109,9 +121,10 @@ public class LlmRestController {
         if (correlationId == null) {
             correlationId = java.util.UUID.randomUUID().toString();
         }
-        
+        LogSanitizer sanitizer = logSanitizer();
+
         log.info("📝 Dialog request: sessionId={}, mode={}, correlationId={}", 
-                request.getSessionId(), request.getMode(), correlationId);
+                sanitizer.sanitizeId(request.getSessionId()), request.getMode(), correlationId);
         
         try {
             DialogResponse response = llmService.processDialog(request, correlationId);
@@ -145,7 +158,7 @@ public class LlmRestController {
      */
     @DeleteMapping("/session/{sessionId}")
     public ResponseEntity<Void> clearSession(@PathVariable String sessionId) {
-        log.info("Clearing session: {}", sessionId);
+        log.info("Clearing session={}", logSanitizer().sanitizeId(sessionId));
         llmService.clearSession(sessionId);
         return ResponseEntity.ok().build();
     }
@@ -160,5 +173,9 @@ public class LlmRestController {
         return ResponseEntity.ok(Map.of(
                 "status", available ? "healthy" : "degraded",
                 "llm_server_available", available));
+    }
+
+    private LogSanitizer logSanitizer() {
+        return new LogSanitizer(piiLoggingEnabled, piiAllowQuerySnippet, piiQuerySnippetMaxLength);
     }
 }

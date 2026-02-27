@@ -1,5 +1,6 @@
 package org.jarvis.nlp.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jarvis.nlp.model.NlpResult;
 import org.jarvis.nlp.service.NlpService;
 import org.springframework.stereotype.Service;
@@ -11,6 +12,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
+@Slf4j
 public class RuleBasedNlpService implements NlpService {
 
     private static final int RXF = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
@@ -267,7 +269,8 @@ public class RuleBasedNlpService implements NlpService {
         if (m.matches()) {
             try {
                 return Integer.parseInt(token);
-            } catch (NumberFormatException ignore) {
+            } catch (NumberFormatException e) {
+                log.debug("Failed to parse numeric token '{}': {}", token, e.getMessage());
             }
         }
 

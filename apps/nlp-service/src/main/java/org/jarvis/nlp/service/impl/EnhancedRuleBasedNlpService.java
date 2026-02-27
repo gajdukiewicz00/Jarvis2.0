@@ -1,5 +1,6 @@
 package org.jarvis.nlp.service.impl;
 
+import lombok.extern.slf4j.Slf4j;
 import org.jarvis.nlp.model.EnhancedNlpResult;
 import org.jarvis.nlp.model.NlpResult;
 import org.jarvis.nlp.service.EnhancedNlpService;
@@ -15,6 +16,7 @@ import java.util.regex.Pattern;
  * Enhanced rule-based NLP service with confidence scoring.
  */
 @Service
+@Slf4j
 public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
 
     private static final int RXF = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
@@ -143,7 +145,8 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
         if (m.matches()) {
             try {
                 return Integer.parseInt(token);
-            } catch (NumberFormatException ignore) {
+            } catch (NumberFormatException e) {
+                log.debug("Failed to parse numeric token '{}': {}", token, e.getMessage());
             }
         }
 

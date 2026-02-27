@@ -3,9 +3,11 @@ package org.jarvis.memory.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.logging.LogSanitizer;
 import org.jarvis.memory.dto.*;
 import org.jarvis.memory.service.EmbeddingClient;
 import org.jarvis.memory.service.MemoryService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -28,6 +30,15 @@ public class MemoryController {
     private final MemoryService memoryService;
     private final EmbeddingClient embeddingClient;
 
+    @Value("${logging.pii.enabled:true}")
+    private boolean piiLoggingEnabled = true;
+
+    @Value("${logging.pii.allowQuerySnippet:false}")
+    private boolean piiAllowQuerySnippet = false;
+
+    @Value("${logging.pii.querySnippetMaxLength:32}")
+    private int piiQuerySnippetMaxLength = 32;
+
     /**
      * Ingest messages into memory
      * 
@@ -41,9 +52,13 @@ public class MemoryController {
         String userId = requireUserId();
         request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
+        LogSanitizer sanitizer = logSanitizer();
         
         log.info("[{}] POST /memory/ingest: userId={}, sessionId={}, messages={}",
-                corrId, userId, request.getSessionId(), request.getMessages().size());
+                corrId,
+                sanitizer.sanitizeId(userId),
+                sanitizer.sanitizeId(request.getSessionId()),
+                request.getMessages().size());
         
         long startTime = System.currentTimeMillis();
         
@@ -71,9 +86,12 @@ public class MemoryController {
         String userId = requireUserId();
         request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
+        LogSanitizer sanitizer = logSanitizer();
         
         log.info("[{}] POST /memory/ingest/async: userId={}, sessionId={}",
-                corrId, userId, request.getSessionId());
+                corrId,
+                sanitizer.sanitizeId(userId),
+                sanitizer.sanitizeId(request.getSessionId()));
         
         memoryService.ingestAsync(request, corrId);
         
@@ -96,10 +114,12 @@ public class MemoryController {
         String userId = requireUserId();
         request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
+        LogSanitizer sanitizer = logSanitizer();
         
         log.info("[{}] POST /memory/search: userId={}, query='{}', topK={}",
-                corrId, userId,
-                request.getQuery().substring(0, Math.min(50, request.getQuery().length())),
+                corrId,
+                sanitizer.sanitizeId(userId),
+                sanitizer.sanitizeText(request.getQuery()),
                 request.getTopK());
         
         SearchResponse response = memoryService.search(request, corrId);
@@ -120,9 +140,12 @@ public class MemoryController {
         String userId = requireUserId();
         request.setUserId(userId);
         String corrId = correlationId != null ? correlationId : UUID.randomUUID().toString().substring(0, 8);
+        LogSanitizer sanitizer = logSanitizer();
         
         log.info("[{}] POST /memory/summarize-session: sessionId={}, userId={}",
-                corrId, request.getSessionId(), userId);
+                corrId,
+                sanitizer.sanitizeId(request.getSessionId()),
+                sanitizer.sanitizeId(userId));
         
         long startTime = System.currentTimeMillis();
         
@@ -159,6 +182,8 @@ public class MemoryController {
         }
         return authentication.getName();
     }
+
+    private LogSanitizer logSanitizer() {
+        return new LogSanitizer(piiLoggingEnabled, piiAllowQuerySnippet, piiQuerySnippetMaxLength);
+    }
 }
-
-

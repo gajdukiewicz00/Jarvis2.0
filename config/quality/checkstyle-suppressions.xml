@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+<suppressions>
+    <suppress checks="IllegalCatch" files=".*JwtUtil\.java" lines="76"/>
+    <suppress checks="IllegalCatch" files=".*VoiceWebSocketProxyHandler\.java" lines="61"/>
+    <suppress checks="IllegalCatch" files=".*PcControlWebSocketHandler\.java" lines="53"/>
+    <suppress checks="IllegalCatch" files=".*JwtFilter\.java" lines="136"/>
+    <suppress checks="IllegalCatch" files=".*GlobalExceptionHandler\.java" lines="366"/>
+    <suppress checks="IllegalCatch" files=".*AuthProxyController\.java" lines="137"/>
+
+    <suppress checks="IllegalCatch" files=".*OrchestratorServiceImpl\.java" lines="310,343,352,426"/>
+
+    <suppress checks="IllegalCatch" files=".*FileController\.java" lines="30,46,62"/>
+    <suppress checks="IllegalCatch" files=".*PcControlController\.java" lines="91,252"/>
+    <suppress checks="IllegalCatch" files=".*TimerSchedulerService\.java" lines="68"/>
+    <suppress checks="IllegalCatch" files=".*LinuxSystemControlService\.java" lines="108,151,181"/>
+
+    <suppress checks="IllegalCatch" files=".*LifeTrackerClient\.java" lines="32"/>
+    <suppress checks="IllegalCatch" files=".*LlmServiceClient\.java" lines="36"/>
+    <suppress checks="IllegalCatch" files=".*AnalyticsClient\.java" lines="36"/>
+    <suppress checks="IllegalCatch" files=".*UserProfileClient\.java" lines="39"/>
+    <suppress checks="IllegalCatch" files=".*ReminderScheduler\.java" lines="38,47"/>
+    <suppress checks="IllegalCatch" files=".*AutoActionService\.java" lines="64,150"/>
+    <suppress checks="IllegalCatch" files=".*ToolRequestService\.java" lines="29"/>
+
+    <suppress checks="IllegalCatch" files=".*JwtService\.java" lines="113"/>
+    <suppress checks="IllegalCatch" files=".*AuthService\.java" lines="170"/>
+</suppressions>

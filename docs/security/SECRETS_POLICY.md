@@ -257,3 +257,4 @@ If you have secrets in git (e.g., `k8s/base/secrets.yaml`):
 - OpenSSL Random: `man openssl rand`
 - File Permissions: `man chmod`
 
+

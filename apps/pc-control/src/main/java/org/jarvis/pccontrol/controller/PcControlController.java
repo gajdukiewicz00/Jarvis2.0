@@ -3,6 +3,9 @@ package org.jarvis.pccontrol.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.pccontrol.service.SystemControlService;
+import org.jarvis.pccontrol.service.TimerLimitExceededException;
+import org.jarvis.pccontrol.service.TimerSchedulerService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +26,7 @@ import java.util.Map;
 public class PcControlController {
 
     private final SystemControlService systemControlService;
+    private final TimerSchedulerService timerSchedulerService;
 
     /**
      * Execute a PC control action.
@@ -75,6 +79,13 @@ public class PcControlController {
 
         } catch (NumberFormatException e) {
             return badRequest("INVALID_PARAMETER", "Invalid number format: " + e.getMessage());
+        } catch (TimerLimitExceededException e) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of(
+                    "success", false,
+                    "actionType", request.actionType(),
+                    "error", "TIMER_LIMIT_EXCEEDED",
+                    "message", e.getMessage(),
+                    "timestamp", LocalDateTime.now().toString()));
         } catch (IllegalArgumentException e) {
             return badRequest("INVALID_PARAMETER", e.getMessage());
         } catch (Exception e) {
@@ -234,24 +245,49 @@ public class PcControlController {
                         "message", "Timer duration must be between 1 and 86400 seconds");
             }
 
-            // Start timer in background thread
-            new Thread(() -> {
+            String timerId = timerSchedulerService.scheduleTimer(seconds, () -> {
                 try {
-                    Thread.sleep(seconds * 1000L);
                     systemControlService.sendNotification("Timer", "Time is up!");
                     systemControlService.beep();
                 } catch (Exception e) {
-                    log.error("Timer failed: {}", e.getMessage());
+                    throw new IllegalStateException("Timer callback failed", e);
                 }
-            }, "timer-" + seconds + "s").start();
+            });
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("success", true);
             result.put("actionType", "SYSTEM_COMMAND");
             result.put("command", "timer");
+            result.put("timerId", timerId);
             result.put("durationSeconds", seconds);
             result.put("timestamp", LocalDateTime.now().toString());
             result.put("message", "Timer started for " + seconds + " seconds");
+            return result;
+        }
+
+        if ("cancel_timer".equals(command)) {
+            String timerId = request.parameters().getOrDefault("timerId", request.parameters().getOrDefault("args", ""));
+            if (timerId.isBlank()) {
+                return Map.of(
+                        "success", false,
+                        "error", "INVALID_PARAMETER",
+                        "message", "Parameter 'timerId' is required");
+            }
+            boolean cancelled = timerSchedulerService.cancelTimer(timerId);
+            if (!cancelled) {
+                return Map.of(
+                        "success", false,
+                        "error", "TIMER_NOT_FOUND",
+                        "message", "Timer not found: " + timerId);
+            }
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("actionType", "SYSTEM_COMMAND");
+            result.put("command", "cancel_timer");
+            result.put("timerId", timerId);
+            result.put("timestamp", LocalDateTime.now().toString());
+            result.put("message", "Timer cancelled");
             return result;
         }
 
@@ -288,7 +324,7 @@ public class PcControlController {
                                 "type", "SYSTEM_COMMAND",
                                 "description", "Execute system command",
                                 "parameters", List.of(
-                                        Map.of("name", "command", "type", "string", "values", List.of("timer")),
+                                        Map.of("name", "command", "type", "string", "values", List.of("timer", "cancel_timer")),
                                         Map.of("name", "args", "type", "string", "description",
                                                 "Command arguments"))))));
     }

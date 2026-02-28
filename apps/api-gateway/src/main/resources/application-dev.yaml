@@ -3,3 +3,14 @@ gateway:
     # Dev-only compatibility fallback for local calls without user headers.
     # Ignored outside "dev" profile.
     allow-default-user-fallback: true
+
+# ──────────────────────────────────────────────────────────
+# Dev JWT: disabled, placeholder secret satisfies bean construction.
+# Canonical namespace (jarvis.jwt.*) — matches Phase 2 migration.
+# ──────────────────────────────────────────────────────────
+jarvis:
+  jwt:
+    enabled: false
+    # placeholder >= 32 bytes to satisfy HMAC-SHA key requirement
+    secret: "dev-placeholder-not-used-0123456789012345"
+    issuer: "jarvis"

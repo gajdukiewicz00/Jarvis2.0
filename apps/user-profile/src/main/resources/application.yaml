@@ -1,4 +1,6 @@
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: user-profile
   autoconfigure:
@@ -32,6 +34,7 @@ spring:
 
 server:
   port: 8089
+  shutdown: graceful
 
 logging:
   level:

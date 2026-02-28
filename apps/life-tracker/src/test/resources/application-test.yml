@@ -1,4 +1,8 @@
 # Test profile configuration
+service:
+  jwt:
+    required: false
+
 spring:
   autoconfigure:
     exclude:

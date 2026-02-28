@@ -1,7 +1,10 @@
 server:
   port: 8084
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: pc-control
   autoconfigure:
@@ -55,7 +58,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
       probes:
         enabled: true
   health:

@@ -1,4 +1,6 @@
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   config:
     import: optional:file:../shared-config/application-hikari.yml
   
@@ -34,6 +36,7 @@ spring:
 
 server:
   port: 8092
+  shutdown: graceful
 
 # External services
 services:

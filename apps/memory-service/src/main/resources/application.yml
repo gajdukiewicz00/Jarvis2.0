@@ -1,7 +1,10 @@
 server:
   port: 8093
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: memory-service
 
@@ -60,4 +63,6 @@ logging:
     querySnippetMaxLength: ${LOG_PII_QUERY_SNIPPET_MAX_LENGTH:32}
   level:
     org.jarvis.memory: INFO
-    org.hibernate.SQL: WARN
+    org.hibernate.SQL: TRACE
+    org.hibernate.type.descriptor.sql: TRACE
+    org.springframework.transaction: TRACE

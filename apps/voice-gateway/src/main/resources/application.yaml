@@ -1,7 +1,10 @@
 server:
   port: 8081
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   application:
     name: voice-gateway
   autoconfigure:

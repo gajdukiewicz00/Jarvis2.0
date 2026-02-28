@@ -3,6 +3,7 @@ package org.jarvis.lifetracker.tooling;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.jarvis.common.exception.IdempotencyConflictException;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;

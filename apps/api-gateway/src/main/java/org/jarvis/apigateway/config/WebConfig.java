@@ -3,6 +3,7 @@ package org.jarvis.apigateway.config;
 import lombok.RequiredArgsConstructor;
 import org.jarvis.apigateway.filter.RequestLoggingFilter;
 import org.jarvis.apigateway.interceptor.RateLimitInterceptor;
+import org.jarvis.apigateway.security.JwtAuthFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,8 +22,19 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/**");
     }
 
-    // JwtFilter is now registered through Spring Security filter chain, not here
-    // This prevents conflicts with Spring Security's authorization
+    // ──────────────────────────────────────────────────────────────────
+    // Prevent double servlet registration for JwtAuthFilter — it runs
+    // ONLY inside springSecurityFilterChain (added by SecurityConfig).
+    // Without this, @Component filters are auto-registered as servlet
+    // filters AND run inside springSecurityFilterChain — executing twice.
+    // ──────────────────────────────────────────────────────────────────
+
+    @Bean
+    public FilterRegistrationBean<JwtAuthFilter> jwtAuthFilterRegistration(JwtAuthFilter filter) {
+        FilterRegistrationBean<JwtAuthFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
 
     @Bean
     public FilterRegistrationBean<RequestLoggingFilter> loggingFilterRegistration(RequestLoggingFilter loggingFilter) {

@@ -65,3 +65,16 @@ postgres/
 **/postgres/
 *postgres-backup*
 .mvn/
+
+### Application logs ###
+**/logs/
+**/*.log
+
+### Agent workspace artifacts ###
+audit-logs/
+memory/
+MEMORY.md
+PHASE*_REPORT.log
+
+### Cursor / IDE workspace ###
+.cursor/

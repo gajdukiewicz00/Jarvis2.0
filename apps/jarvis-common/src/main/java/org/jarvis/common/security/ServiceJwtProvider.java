@@ -6,7 +6,6 @@ import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +15,11 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
-@Component
+/**
+ * Service-to-service JWT provider. Creates and validates internal JWT tokens.
+ *
+ * <p>Registered as a bean by {@link org.jarvis.common.JarvisCommonAutoConfiguration}.</p>
+ */
 public class ServiceJwtProvider {
 
     private final SecretKey key;

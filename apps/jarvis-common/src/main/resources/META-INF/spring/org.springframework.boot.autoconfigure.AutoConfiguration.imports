@@ -1,1 +1,2 @@
+org.jarvis.common.JarvisCommonAutoConfiguration
 org.jarvis.common.logging.PiiLoggingGuardAutoConfiguration

@@ -13,6 +13,9 @@ import java.util.Date;
 /**
  * JWT Utility for validating tokens in the API Gateway.
  * Mirrors the logic from security-service but focused on validation only.
+ * <p>
+ * Supports optional issuer enforcement via {@code jarvis.jwt.enforce-issuer=true}.
+ * When enabled, tokens with a mismatched or missing issuer are rejected.
  */
 @Slf4j
 @Component
@@ -20,25 +23,40 @@ public class JwtUtil {
 
     private final SecretKey secretKey;
     private final String issuer;
+    private final boolean enforceIssuer;
 
     public JwtUtil(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.issuer:jarvis}") String issuer) {
+            @Value("${jarvis.jwt.secret}") String secret,
+            @Value("${jarvis.jwt.issuer:jarvis}") String issuer,
+            @Value("${jarvis.jwt.enforce-issuer:false}") boolean enforceIssuer) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.issuer = issuer;
+        this.enforceIssuer = enforceIssuer;
+        if (enforceIssuer) {
+            log.info("JwtUtil: issuer enforcement ENABLED (expected issuer: {})", issuer);
+        }
     }
 
     /**
      * Validate JWT token and return claims if valid.
-     * 
+     * <p>
+     * If {@code jarvis.jwt.enforce-issuer=true}, the parser will require
+     * the token's issuer to match the configured issuer value.
+     *
      * @param token JWT token string
      * @return Claims from the token
      * @throws JwtException if token is invalid
      */
     public Claims validateToken(String token) {
         try {
-            return Jwts.parser()
-                    .verifyWith(secretKey)
+            JwtParserBuilder parserBuilder = Jwts.parser()
+                    .verifyWith(secretKey);
+
+            if (enforceIssuer) {
+                parserBuilder.requireIssuer(issuer);
+            }
+
+            return parserBuilder
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();

@@ -6,7 +6,9 @@ import org.jarvis.apigateway.client.OrchestratorClient;
 import org.jarvis.apigateway.controller.OrchestratorProxyController;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import jakarta.servlet.Filter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration;
@@ -19,6 +21,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -42,23 +46,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 SecurityFilterAutoConfiguration.class
         },
         properties = {
-        "jwt.enabled=true",
-        "jwt.secret=0123456789012345678901234567890123456789012345678901234567890123",
-        "jwt.issuer=jarvis",
-        "logging.level.org.jarvis.apigateway.security.JwtAuthenticationFilter=DEBUG"
+        "jarvis.jwt.enabled=true",
+        "jarvis.jwt.secret=0123456789012345678901234567890123456789012345678901234567890123",
+        "jarvis.jwt.issuer=jarvis",
+        "logging.level.org.jarvis.apigateway.security.JwtAuthFilter=DEBUG"
 })
-@AutoConfigureMockMvc
-@Import({ SecurityConfig.class, JwtAuthenticationFilter.class, JwtUtil.class })
+@AutoConfigureMockMvc(addFilters = false)
+@Import({ SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class })
 @ActiveProfiles("test")
 class JwtAuthenticationFilterIntegrationTest {
 
-    @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private WebApplicationContext context;
+
+    @Autowired
+    @Qualifier("springSecurityFilterChain")
+    private Filter springSecurityFilterChain;
 
     @MockBean
     private OrchestratorClient orchestratorClient;
 
-    @Value("${jwt.secret}")
+    @Value("${jarvis.jwt.secret}")
     private String jwtSecret;
 
     private SecretKey secretKey;
@@ -66,6 +76,9 @@ class JwtAuthenticationFilterIntegrationTest {
     @BeforeEach
     void setUp() {
         secretKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        mockMvc = MockMvcBuilders.webAppContextSetup(context)
+                .addFilter(springSecurityFilterChain)
+                .build();
     }
 
     @Test

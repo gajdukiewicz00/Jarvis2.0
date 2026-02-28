@@ -102,12 +102,15 @@ rate-limit:
   enabled: false
   max-requests-per-minute: 100
 
-# JWT (enabled for security)
-jwt:
-  enabled: true
-  secret: ${JWT_SECRET}
-  expiration: 86400000  # 24 hours
-  issuer: jarvis
+# ──────────────────────────────────────────────────────────
+# JWT Configuration (canonical namespace: jarvis.jwt.*)
+# ──────────────────────────────────────────────────────────
+jarvis:
+  jwt:
+    enabled: true
+    secret: ${JWT_SECRET}
+    expiration: 86400000  # 24 hours
+    issuer: jarvis
 
 # CORS
 cors:
@@ -129,6 +132,6 @@ cors:
 logging:
   level:
     org.jarvis.apigateway: INFO
-    org.jarvis.apigateway.filter.JwtFilter: INFO
+    org.jarvis.apigateway.security.JwtAuthFilter: INFO
     feign: WARN
     org.springframework.cloud.openfeign: WARN

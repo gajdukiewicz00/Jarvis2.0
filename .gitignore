@@ -71,9 +71,9 @@ postgres/
 **/*.log
 
 ### Agent workspace artifacts ###
-audit-logs/
-memory/
-MEMORY.md
+/audit-logs/
+/memory/
+/MEMORY.md
 PHASE*_REPORT.log
 
 ### Cursor / IDE workspace ###

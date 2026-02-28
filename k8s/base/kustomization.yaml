@@ -25,6 +25,30 @@ resources:
   - mosquitto/deployment.yaml
   - postgres/statefulset.yaml
 
+images:
+  - name: jarvis/api-gateway
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/voice-gateway
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/nlp-service
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/orchestrator
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/pc-control
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/life-tracker
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/analytics-service
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/planner-service
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/security-service
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/user-profile
+    newTag: 0.1.0-SNAPSHOT
+  - name: jarvis/smart-home-service
+    newTag: 0.1.0-SNAPSHOT
+
 labels:
   - pairs:
       app.kubernetes.io/part-of: jarvis

@@ -148,3 +148,4 @@ echo "  openssl s_client -connect api.jarvis.local:443 -CAfile $TRUST_STORE < /d
 echo "  Expected: Verify return code: 0 (ok)"
 echo ""
 
+

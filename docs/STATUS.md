@@ -2,6 +2,11 @@
 
 Current status: **ACCEPTED**
 
+> **⚠️ Note (2026-02-28):** This document contains historical git diffs referencing
+> `JwtFilter.java` and `JwtAuthenticationFilter.java` — both were merged into
+> `JwtAuthFilter.java` in Phase 3 (PR3.2). The diffs below reflect pre-Phase-3 state.
+> Current security architecture: see `docs/security-jwt.md`.
+
 ## Gates
 
 - `scripts/verify-ai.sh` must exit `0`.

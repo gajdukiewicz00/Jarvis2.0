@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.4</version>
+        <version>3.3.13</version>
         <relativePath/>
     </parent>
 
@@ -26,6 +26,11 @@
         <spotbugs.threshold>High</spotbugs.threshold>
         <spotbugs.includeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-include-runtime.xml</spotbugs.includeFilterFile>
         <spotbugs.excludeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-exclude-baseline.xml</spotbugs.excludeFilterFile>
+        <tomcat.version>10.1.52</tomcat.version>
+        <kafka.version>3.9.2</kafka.version>
+        <netty.version>4.1.131.Final</netty.version>
+        <commons-fileupload.version>1.6.0</commons-fileupload.version>
+        <log4j2.version>2.25.3</log4j2.version>
     </properties>
 
     <modules>
@@ -93,6 +98,35 @@
                 <version>2023.0.3</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-bom</artifactId>
+                <version>${log4j2.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>${tomcat.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>${kafka.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-fileupload</groupId>
+                <artifactId>commons-fileupload</artifactId>
+                <version>${commons-fileupload.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

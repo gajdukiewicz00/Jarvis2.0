@@ -3,6 +3,4 @@
         "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
         "https://checkstyle.org/dtds/suppressions_1_2.dtd">
 <suppressions>
-    <suppress checks="IllegalCatch" files=".*JwtService\.java" lines="113"/>
-    <suppress checks="IllegalCatch" files=".*AuthService\.java" lines="170"/>
 </suppressions>

@@ -110,7 +110,7 @@ public class JwtService {
         try {
             Claims claims = validateToken(token);
             return claims.getExpiration().before(new Date());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             return true;
         }
     }

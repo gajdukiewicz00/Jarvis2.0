@@ -167,7 +167,7 @@ public class AuthService {
                         "USER_NOT_FOUND", "User not found"));
         } catch (AuthenticationException e) {
             throw e;
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("Failed to extract user from token: {}", e.getMessage());
             throw new AuthenticationException("INVALID_TOKEN", "Invalid token");
         }

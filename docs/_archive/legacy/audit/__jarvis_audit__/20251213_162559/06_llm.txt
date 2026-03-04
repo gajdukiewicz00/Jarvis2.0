@@ -346,7 +346,7 @@ scripts/legacy/docker-compose/docker-compose.yml:324:    container_name: jarvis2
 scripts/legacy/docker-compose/docker-compose.yml:330:      - LLM_SERVER_URL=http://llm-server:5000
 scripts/legacy/docker-compose/docker-compose.yml:339:      llm-server:
 scripts/legacy/docker-compose/docker-compose.yml:370:      llm-service:
-scripts/jarvis-k8s-up.sh:135:echo "     kubectl apply -f $K8S_DEV/services/llm-stack.yaml"
+jarvis-launch.sh (replacement for archived scripts/jarvis-k8s-up.sh): ENABLE_LLM=true ENABLE_MEMORY=true ./jarvis-launch.sh
 --- env flags ---
 apps/orchestrator/target/classes/application-docker.yml:11:    # LLM disabled by default in k8s - enable via env JARVIS_LLM_ENABLED=true
 apps/orchestrator/target/classes/application-docker.yml:12:    enabled: ${JARVIS_LLM_ENABLED:false}

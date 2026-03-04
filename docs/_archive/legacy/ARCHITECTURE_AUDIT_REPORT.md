@@ -171,7 +171,7 @@ cp scripts/legacy/docker-compose/docker-compose.yml .
 
 ### Kubernetes (Minikube)
 
-**Статус:** ✅ Работает через `./scripts/deploy.sh`
+**Статус:** ✅ Работает через `./jarvis-launch.sh`
 
 **Процесс:**
 1. Запускает Minikube (если не запущен)
@@ -623,5 +623,4 @@ cp scripts/legacy/docker-compose/docker-compose.yml .
 
 **Отчет подготовлен:** 2025-01-27  
 **Следующий ревью:** После выполнения roadmap
-
 

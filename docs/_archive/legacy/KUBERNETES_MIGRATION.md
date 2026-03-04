@@ -148,7 +148,7 @@ spring:
 
 ```bash
 # 1. Генерируем self-signed сертификат
-./scripts/generate-certs.sh
+./scripts/product/jarvis-generate-certs.sh
 
 # 2. Добавляем в /etc/hosts
 echo "127.0.0.1 jarvis.local" | sudo tee -a /etc/hosts
@@ -170,7 +170,7 @@ docker-compose -f docker-compose-full.yml ps
 
 ```bash
 # 1. Генерируем сертификат
-./scripts/generate-certs.sh
+./scripts/product/jarvis-generate-certs.sh
 
 # 2. Применяем манифесты
 kubectl apply -f k8s/base/
@@ -414,4 +414,3 @@ curl -k https://jarvis.local/actuator/health
 | llm-service | 8091 | jarvis/llm-service | llm-service | ✅ | - | - |
 | planner-service | 8092 | jarvis/planner-service | planner-service | ✅ | - | - |
 | llm-server | 5000 | jarvis/llm-server | llm-server | N/A | - | - |
-

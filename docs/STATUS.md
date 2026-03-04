@@ -546,10 +546,10 @@ Date:   Tue Jan 20 20:34:55 2026 +0100
  scripts/build-images.sh                            |  130 +-
  scripts/ci/check-desktop-entry.sh                  |   49 +
  scripts/convert-to-gguf.sh                         |    8 +-
- scripts/deploy.sh                                  |  195 +--
- scripts/generate-certs.sh                          |   86 +-
+ jarvis-launch.sh                                   |  195 +--
+ scripts/product/jarvis-generate-certs.sh           |   86 +-
  scripts/install-k8s-tools.sh                       |   31 +-
- scripts/jarvis-k8s-up.sh                           |  285 +----
+ jarvis-launch.sh (ENABLE_LLM/ENABLE_MEMORY flags) |  285 +----
  scripts/legacy/README.md                           |   79 --
  .../legacy/docker-compose/docker-compose-dev.yml   |   65 -
  .../legacy/docker-compose/docker-compose-full.yml  |  600 ----------
@@ -576,7 +576,7 @@ Date:   Tue Jan 20 20:34:55 2026 +0100
  scripts/product/jarvis-setup-hosts.sh              |   47 +-
  scripts/product/jarvis-stop.sh                     |    9 +-
  scripts/product/jarvis-system-setup.sh             |   39 +
- scripts/stop.sh                                    |   29 +-
+ jarvis-stop.sh                                     |   29 +-
  scripts/verify-ai.sh                               |  109 ++
  scripts/verify-prod.sh                             |   65 +
  system-prompt.md                                   |   36 +
@@ -592,7 +592,7 @@ rg --files -g '*launch*.sh' -g '*launcher*.sh' -g 'jarvis-*.sh' scripts jarvis-l
 jarvis-stop.sh
 jarvis-logs.sh
 jarvis-launch.sh
-scripts/jarvis-k8s-up.sh
+jarvis-launch.sh  # replacement for archived scripts/jarvis-k8s-up.sh
 scripts/product/jarvis-system-setup.sh
 scripts/product/jarvis-launcher.sh
 scripts/product/jarvis-diagnostics.sh

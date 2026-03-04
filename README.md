@@ -114,9 +114,10 @@ Jarvis2.0/
 │
 ├── models/                    # Legacy local models (not in git)
 │
+├── jarvis-launch.sh           # Canonical backend launch
+├── jarvis-stop.sh             # Canonical backend stop
+├── jarvis-logs.sh             # Kubernetes logs viewer
 ├── scripts/
-│   ├── deploy.sh              # One-click deploy
-│   ├── stop.sh                # Stop all services
 │   └── build-images.sh        # Build Docker images
 │
 ├── docs/                      # Documentation

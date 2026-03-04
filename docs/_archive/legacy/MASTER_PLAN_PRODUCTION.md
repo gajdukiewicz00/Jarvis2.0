@@ -121,7 +121,7 @@ curl -i -X POST "http://localhost:8080/auth/login" \
   -d '{"username":"test","password":"test"}'  # должен быть 200 или 401, не 500
 
 # Legacy
-grep -r "dev\|legacy" jarvis-launch.sh scripts/deploy.sh  # не должно быть активных ссылок
+grep -r "dev\|legacy" jarvis-launch.sh  # не должно быть активных ссылок
 ```
 
 ---
@@ -461,4 +461,3 @@ kubectl -n jarvis get ingress
 - Каждая итерация должна быть проверяемой (команды verify)
 - После каждой итерации - коммит с описанием изменений
 - Документация обновляется по мере необходимости
-

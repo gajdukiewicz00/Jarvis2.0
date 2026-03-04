@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../prod
+
+patches:
+  - target:
+      group: kyverno.io
+      version: v1
+      kind: Policy
+      name: kyverno-prod-verify-images
+      namespace: jarvis
+    path: patches/verify-images-enforce.json
+  - path: patches/core-digest-exemptions.yaml

@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+  annotations:
+    security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+  labels:
+    security.jarvis.io/kyverno-exempt: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+      labels:
+        security.jarvis.io/kyverno-exempt: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis
+  annotations:
+    security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+  labels:
+    security.jarvis.io/kyverno-exempt: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+      labels:
+        security.jarvis.io/kyverno-exempt: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-service
+  namespace: jarvis
+  annotations:
+    security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+  labels:
+    security.jarvis.io/kyverno-exempt: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+      labels:
+        security.jarvis.io/kyverno-exempt: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis
+  annotations:
+    security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+  labels:
+    security.jarvis.io/kyverno-exempt: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+      labels:
+        security.jarvis.io/kyverno-exempt: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis
+  annotations:
+    security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+  labels:
+    security.jarvis.io/kyverno-exempt: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+      labels:
+        security.jarvis.io/kyverno-exempt: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-tracker
+  namespace: jarvis
+  annotations:
+    security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+  labels:
+    security.jarvis.io/kyverno-exempt: "true"
+spec:
+  template:
+    metadata:
+      annotations:
+        security.jarvis.io/kyverno-exempt-reason: "staging-digest-enforcement-transition"
+      labels:
+        security.jarvis.io/kyverno-exempt: "true"

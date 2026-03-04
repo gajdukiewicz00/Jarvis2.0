@@ -2,7 +2,7 @@
 # Jarvis 2.0 - Makefile (prod-only)
 # =============================================================================
 
-.PHONY: help build test clean launch stop logs install tls hosts secrets k8s-preflight k8s-preflight-ci verify-prod
+.PHONY: help build test clean launch stop logs install tls hosts secrets k8s-preflight k8s-preflight-ci k8s-preflight-staging k8s-preflight-staging-ci verify-prod
 
 .DEFAULT_GOAL := help
 
@@ -28,6 +28,8 @@ help:
 	@echo "║   make verify-prod  - Verify runtime repo (prod-only rules)   ║"
 	@echo "║   make k8s-preflight- Kustomize + dry-run + image/auth checks ║"
 	@echo "║   make k8s-preflight-ci - Force toolchain container mode      ║"
+	@echo "║   make k8s-preflight-staging - Staging overlay enforce checks ║"
+	@echo "║   make k8s-preflight-staging-ci - CI staging enforce mode     ║"
 	@echo "╚════════════════════════════════════════════════════════════════╝"
 
 build:
@@ -74,3 +76,9 @@ k8s-preflight:
 
 k8s-preflight-ci:
 	CI=true K8S_PREFLIGHT_FORCE_CONTAINER=true ./scripts/ci/k8s-preflight.sh
+
+k8s-preflight-staging:
+	./scripts/ci/k8s-preflight-staging.sh
+
+k8s-preflight-staging-ci:
+	CI=true K8S_PREFLIGHT_FORCE_CONTAINER=true K8S_PREFLIGHT_CORE_DIGEST_POLICY_MODE=enforce ./scripts/ci/k8s-preflight.sh ./k8s/overlays/staging

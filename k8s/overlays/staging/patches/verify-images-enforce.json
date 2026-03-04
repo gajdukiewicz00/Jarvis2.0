@@ -1,0 +1,17 @@
+[
+  {
+    "op": "replace",
+    "path": "/spec/validationFailureAction",
+    "value": "Enforce"
+  },
+  {
+    "op": "replace",
+    "path": "/spec/failurePolicy",
+    "value": "Fail"
+  },
+  {
+    "op": "replace",
+    "path": "/spec/rules/0/verifyImages/0/verifyDigest",
+    "value": true
+  }
+]

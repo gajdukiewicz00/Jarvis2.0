@@ -49,7 +49,7 @@ public class AuthProxyController implements org.springframework.beans.factory.In
         try {
             ResponseEntity<Map<String, Object>> response = authClient.register(request);
             log.info("✅ Registration successful for: {}", request.get("username"));
-            return response;
+            return sanitizeUpstreamResponse(response);
         } catch (FeignException e) {
             return handleFeignError(e, "register");
         }
@@ -63,7 +63,7 @@ public class AuthProxyController implements org.springframework.beans.factory.In
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, Object> request) {
         log.info("🔐 Proxying POST /auth/login for user: {}", request.get("username"));
         try {
-            return authClient.login(request);
+            return sanitizeUpstreamResponse(authClient.login(request));
         } catch (FeignException e) {
             return handleFeignError(e, "login");
         }
@@ -77,7 +77,7 @@ public class AuthProxyController implements org.springframework.beans.factory.In
     public ResponseEntity<Map<String, Object>> refresh(@RequestBody Map<String, Object> request) {
         log.info("🔄 Proxying POST /auth/refresh");
         try {
-            return authClient.refresh(request);
+            return sanitizeUpstreamResponse(authClient.refresh(request));
         } catch (FeignException e) {
             return handleFeignError(e, "refresh");
         }
@@ -92,10 +92,16 @@ public class AuthProxyController implements org.springframework.beans.factory.In
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         log.info("Proxying GET /auth/me");
         try {
-            return authClient.me(authorization);
+            return sanitizeUpstreamResponse(authClient.me(authorization));
         } catch (FeignException e) {
             return handleFeignError(e, "me");
         }
+    }
+
+    private ResponseEntity<Map<String, Object>> sanitizeUpstreamResponse(ResponseEntity<Map<String, Object>> upstream) {
+        return ResponseEntity.status(upstream.getStatusCode())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(upstream.getBody());
     }
 
     /**

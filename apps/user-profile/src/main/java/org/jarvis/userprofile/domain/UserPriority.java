@@ -21,20 +21,23 @@ public class UserPriority {
     @Column(nullable = false)
     private String userId;
 
-    @Column(nullable = false)
+    @Column(name = "category", nullable = false)
     private String name;
 
+    @Column(name = "priority_level", nullable = false)
     private Integer level; // 1 (High) to 5 (Low), for example
 
-    @Column(length = 1000)
+    @Column(name = "notes", length = 1000)
     private String description;
 
-    private LocalDateTime createdAt;
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (level == null) {
+            level = 3;
+        }
         updatedAt = LocalDateTime.now();
     }
 

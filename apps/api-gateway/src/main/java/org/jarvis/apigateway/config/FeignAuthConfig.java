@@ -4,6 +4,7 @@ import feign.RequestInterceptor;
 import org.jarvis.common.security.GatewayAuthFilter;
 import org.jarvis.common.security.ServiceJwtProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.core.Authentication;
@@ -17,6 +18,18 @@ import java.util.stream.Collectors;
 public class FeignAuthConfig {
 
     private static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
+
+    @Bean
+    @ConditionalOnMissingBean(ServiceJwtProvider.class)
+    public ServiceJwtProvider serviceJwtProvider(
+            @Value("${service.jwt.secret:}") String serviceSecret,
+            @Value("${jwt.secret:}") String jwtSecret,
+            @Value("${service.jwt.issuer:jarvis-internal}") String issuer,
+            @Value("${service.jwt.audience:jarvis-services}") String audience,
+            @Value("${service.jwt.ttl-seconds:300}") long ttlSeconds,
+            @Value("${service.jwt.required:true}") boolean required) {
+        return new ServiceJwtProvider(serviceSecret, jwtSecret, issuer, audience, ttlSeconds, required);
+    }
 
     @Bean
     public RequestInterceptor serviceAuthInterceptor(ServiceJwtProvider serviceJwtProvider,

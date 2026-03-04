@@ -38,7 +38,7 @@ public class LinuxFileService implements FileService {
     }
 
     @Override
-    public List<String> listFiles(String pathStr) throws Exception {
+    public List<String> listFiles(String pathStr) throws IOException {
         ensureRootExists();
         Path path = resolvePath(pathStr);
         if (!Files.exists(path)) {
@@ -58,7 +58,7 @@ public class LinuxFileService implements FileService {
     }
 
     @Override
-    public String readFile(String pathStr) throws Exception {
+    public String readFile(String pathStr) throws IOException {
         ensureRootExists();
         Path path = resolvePath(pathStr);
         if (!Files.exists(path)) {
@@ -78,7 +78,7 @@ public class LinuxFileService implements FileService {
     }
 
     @Override
-    public Map<String, Object> getFileInfo(String pathStr) throws Exception {
+    public Map<String, Object> getFileInfo(String pathStr) throws IOException {
         ensureRootExists();
         Path path = resolvePath(pathStr);
         if (!Files.exists(path)) {

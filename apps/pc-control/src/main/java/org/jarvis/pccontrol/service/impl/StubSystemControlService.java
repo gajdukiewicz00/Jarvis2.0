@@ -6,6 +6,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+
 /**
  * Stub implementation of SystemControlService for Kubernetes environment.
  * 
@@ -26,42 +28,42 @@ public class StubSystemControlService implements SystemControlService {
     }
 
     @Override
-    public void changeVolume(int deltaPercent, String direction) throws Exception {
+    public void changeVolume(int deltaPercent, String direction) throws IOException, InterruptedException {
         log.info("🔊 [STUB] Volume change requested: {}{}%", direction, deltaPercent);
     }
 
     @Override
-    public void setVolume(int percent) throws Exception {
+    public void setVolume(int percent) throws IOException, InterruptedException {
         log.info("🔊 [STUB] Set volume requested: {}%", percent);
     }
 
     @Override
-    public void mute() throws Exception {
+    public void mute() throws IOException, InterruptedException {
         log.info("🔇 [STUB] Mute requested");
     }
 
     @Override
-    public void unmute() throws Exception {
+    public void unmute() throws IOException, InterruptedException {
         log.info("🔊 [STUB] Unmute requested");
     }
 
     @Override
-    public void playPause() throws Exception {
+    public void playPause() throws IOException, InterruptedException {
         log.info("⏯️ [STUB] Play/Pause requested");
     }
 
     @Override
-    public void pause() throws Exception {
+    public void pause() throws IOException, InterruptedException {
         log.info("⏸️ [STUB] Pause requested");
     }
 
     @Override
-    public void next() throws Exception {
+    public void next() throws IOException, InterruptedException {
         log.info("⏭️ [STUB] Next track requested");
     }
 
     @Override
-    public void prev() throws Exception {
+    public void prev() throws IOException, InterruptedException {
         log.info("⏮️ [STUB] Previous track requested");
     }
 
@@ -71,17 +73,17 @@ public class StubSystemControlService implements SystemControlService {
     }
 
     @Override
-    public void openApp(String appName) throws Exception {
+    public void openApp(String appName) throws IOException {
         log.info("🚀 [STUB] Open app requested: {}", appName);
     }
 
     @Override
-    public void executeHotkey(String keyCombination) throws Exception {
+    public void executeHotkey(String keyCombination) throws IOException, InterruptedException {
         log.info("⌨️ [STUB] Hotkey requested: {}", keyCombination);
     }
 
     @Override
-    public void sendNotification(String title, String message) throws Exception {
+    public void sendNotification(String title, String message) throws IOException, InterruptedException {
         log.info("📢 [STUB] Notification requested - Title: '{}', Message: '{}'", title, message);
     }
 }

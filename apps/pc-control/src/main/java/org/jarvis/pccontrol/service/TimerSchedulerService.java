@@ -65,7 +65,7 @@ public class TimerSchedulerService {
         Runnable wrapped = () -> {
             try {
                 callback.run();
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.error("Timer callback failed: {}", e.getMessage(), e);
             } finally {
                 releaseTimer(timerId, entry);

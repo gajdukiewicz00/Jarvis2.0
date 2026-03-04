@@ -1,5 +1,7 @@
 package org.jarvis.pccontrol.service;
 
+import java.io.IOException;
+
 /**
  * System control service interface for PC operations.
  * Implementations handle volume, media, apps, and notifications.
@@ -7,30 +9,30 @@ package org.jarvis.pccontrol.service;
 public interface SystemControlService {
 
     // Volume control
-    void changeVolume(int deltaPercent, String direction) throws Exception;
+    void changeVolume(int deltaPercent, String direction) throws IOException, InterruptedException;
 
-    void setVolume(int percent) throws Exception;
+    void setVolume(int percent) throws IOException, InterruptedException;
 
-    void mute() throws Exception;
+    void mute() throws IOException, InterruptedException;
 
-    void unmute() throws Exception;
+    void unmute() throws IOException, InterruptedException;
 
     // Media control
-    void playPause() throws Exception;
+    void playPause() throws IOException, InterruptedException;
 
-    void pause() throws Exception;
+    void pause() throws IOException, InterruptedException;
 
-    void next() throws Exception;
+    void next() throws IOException, InterruptedException;
 
-    void prev() throws Exception;
+    void prev() throws IOException, InterruptedException;
 
     // App control
-    void openApp(String appName) throws Exception;
+    void openApp(String appName) throws IOException;
 
-    void executeHotkey(String keyCombination) throws Exception;
+    void executeHotkey(String keyCombination) throws IOException, InterruptedException;
 
     // Notifications
-    void sendNotification(String title, String message) throws Exception;
+    void sendNotification(String title, String message) throws IOException, InterruptedException;
 
     void beep();
 }

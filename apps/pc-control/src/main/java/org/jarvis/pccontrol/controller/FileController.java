@@ -6,6 +6,7 @@ import org.jarvis.pccontrol.service.FileService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -27,7 +28,7 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             log.warn("Bad file listing request for path {}: {}", path, e.getMessage());
             return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Error listing files in path: {}", path, e);
             return ResponseEntity.badRequest().build();
         }
@@ -43,7 +44,7 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             log.warn("Bad file read request for path {}: {}", path, e.getMessage());
             return ResponseEntity.badRequest().body("Error reading file: " + e.getMessage());
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Error reading file: {}", path, e);
             return ResponseEntity.badRequest().body("Error reading file: " + e.getMessage());
         }
@@ -59,7 +60,7 @@ public class FileController {
         } catch (IllegalArgumentException e) {
             log.warn("Bad file info request for path {}: {}", path, e.getMessage());
             return ResponseEntity.badRequest().build();
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Error getting file info: {}", path, e);
             return ResponseEntity.badRequest().build();
         }

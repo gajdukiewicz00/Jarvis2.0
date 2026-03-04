@@ -5,6 +5,7 @@ import org.jarvis.pccontrol.service.SystemControlService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,7 +42,7 @@ public class LinuxSystemControlService implements SystemControlService {
     );
 
     @Override
-    public void changeVolume(int deltaPercent, String direction) throws Exception {
+    public void changeVolume(int deltaPercent, String direction) throws IOException, InterruptedException {
         int delta = Math.max(1, Math.min(100, deltaPercent));
         String sign = "+".equals(direction) ? "+" : "-";
         List<String> cmd = List.of("pactl", "set-sink-volume", "@DEFAULT_SINK@", sign + delta + "%");
@@ -50,7 +51,7 @@ public class LinuxSystemControlService implements SystemControlService {
     }
 
     @Override
-    public void setVolume(int percent) throws Exception {
+    public void setVolume(int percent) throws IOException, InterruptedException {
         int level = Math.max(0, Math.min(100, percent));
         List<String> cmd = List.of("pactl", "set-sink-volume", "@DEFAULT_SINK@", level + "%");
         log.info("🔊 Setting volume to {}%: {}", level, cmd);
@@ -58,42 +59,42 @@ public class LinuxSystemControlService implements SystemControlService {
     }
 
     @Override
-    public void mute() throws Exception {
+    public void mute() throws IOException, InterruptedException {
         List<String> cmd = List.of("pactl", "set-sink-mute", "@DEFAULT_SINK@", "1");
         log.info("🔇 Executing mute");
         execWithFallback(cmd, "Mute");
     }
 
     @Override
-    public void unmute() throws Exception {
+    public void unmute() throws IOException, InterruptedException {
         List<String> cmd = List.of("pactl", "set-sink-mute", "@DEFAULT_SINK@", "0");
         log.info("🔊 Executing unmute");
         execWithFallback(cmd, "Unmute");
     }
 
     @Override
-    public void playPause() throws Exception {
+    public void playPause() throws IOException, InterruptedException {
         List<String> cmd = List.of("playerctl", "play-pause");
         log.info("⏯️ Executing play/pause");
         execPlayerctl(cmd, "Play/Pause");
     }
 
     @Override
-    public void pause() throws Exception {
+    public void pause() throws IOException, InterruptedException {
         List<String> cmd = List.of("playerctl", "pause");
         log.info("⏸️ Executing pause");
         execPlayerctl(cmd, "Pause");
     }
 
     @Override
-    public void next() throws Exception {
+    public void next() throws IOException, InterruptedException {
         List<String> cmd = List.of("playerctl", "next");
         log.info("⏭️ Executing next track");
         execPlayerctl(cmd, "Next");
     }
 
     @Override
-    public void prev() throws Exception {
+    public void prev() throws IOException, InterruptedException {
         List<String> cmd = List.of("playerctl", "previous");
         log.info("⏮️ Executing previous track");
         execPlayerctl(cmd, "Previous");
@@ -105,21 +106,24 @@ public class LinuxSystemControlService implements SystemControlService {
             execWithFallback(
                     List.of("paplay", "/usr/share/sounds/freedesktop/stereo/bell.oga"),
                     "Beep");
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.debug("beep fallback: {}", e.getMessage());
             System.out.print("\007");
         }
     }
 
     @Override
-    public void openApp(String appName) throws Exception {
+    public void openApp(String appName) throws IOException {
         List<String> cmd = resolveAppCommand(appName);
         log.info("🚀 Opening app: {} with command: {}", appName, cmd);
         startProcess(cmd);
     }
 
     @Override
-    public void executeHotkey(String keyCombination) throws Exception {
+    public void executeHotkey(String keyCombination) throws IOException, InterruptedException {
         // e.g. "Alt+Tab", "Control+c"
         validateHotkey(keyCombination);
         List<String> cmd = List.of("xdotool", "key", keyCombination);
@@ -128,7 +132,7 @@ public class LinuxSystemControlService implements SystemControlService {
     }
 
     @Override
-    public void sendNotification(String title, String message) throws Exception {
+    public void sendNotification(String title, String message) throws IOException, InterruptedException {
         List<String> cmd = List.of("notify-send", title, message);
         log.info("📢 Sending notification: {} - {}", title, message);
         execWithFallback(cmd, "Notification");
@@ -138,7 +142,7 @@ public class LinuxSystemControlService implements SystemControlService {
      * Execute command with graceful error handling.
      * Logs warning instead of throwing for non-critical failures.
      */
-    private void execWithFallback(List<String> cmd, String operation) throws Exception {
+    private void execWithFallback(List<String> cmd, String operation) throws IOException, InterruptedException {
         try {
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
             int code = p.waitFor();
@@ -148,7 +152,10 @@ public class LinuxSystemControlService implements SystemControlService {
             } else {
                 log.debug("✅ {} completed successfully", operation);
             }
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("❌ {} failed: {}", operation, e.getMessage());
             throw e;
         }
@@ -158,7 +165,7 @@ public class LinuxSystemControlService implements SystemControlService {
      * Execute playerctl command with special handling for "No players found" case.
      * This is a common edge case that should not crash the service.
      */
-    private void execPlayerctl(List<String> cmd, String operation) throws Exception {
+    private void execPlayerctl(List<String> cmd, String operation) throws IOException, InterruptedException {
         try {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.redirectErrorStream(true);
@@ -178,13 +185,16 @@ public class LinuxSystemControlService implements SystemControlService {
             } else {
                 log.debug("✅ {} completed successfully", operation);
             }
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("❌ {} failed: {}", operation, e.getMessage());
             // Don't throw for playerctl - just log the error
         }
     }
 
-    private static void startProcess(List<String> cmd) throws Exception {
+    private static void startProcess(List<String> cmd) throws IOException {
         new ProcessBuilder(cmd).start();
     }
 

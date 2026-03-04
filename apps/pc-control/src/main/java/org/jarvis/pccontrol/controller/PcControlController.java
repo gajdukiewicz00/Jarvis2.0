@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -88,7 +89,16 @@ public class PcControlController {
                     "timestamp", LocalDateTime.now().toString()));
         } catch (IllegalArgumentException e) {
             return badRequest("INVALID_PARAMETER", e.getMessage());
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Action execution interrupted: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "success", false,
+                    "actionType", request.actionType(),
+                    "error", "EXECUTION_FAILED",
+                    "message", "Failed to execute action: " + e.getMessage(),
+                    "timestamp", LocalDateTime.now().toString()));
+        } catch (IOException | RuntimeException e) {
             log.error("Action execution failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().body(Map.of(
                     "success", false,
@@ -99,7 +109,7 @@ public class PcControlController {
         }
     }
 
-    private Map<String, Object> handleMediaControl(ActionRequest request) throws Exception {
+    private Map<String, Object> handleMediaControl(ActionRequest request) throws IOException, InterruptedException {
         int delta = Integer.parseInt(request.parameters().getOrDefault("deltaPercent", "5"));
         String direction = request.parameters().getOrDefault("direction", "+");
 
@@ -114,7 +124,7 @@ public class PcControlController {
         return result;
     }
 
-    private Map<String, Object> handleOpenApp(ActionRequest request) throws Exception {
+    private Map<String, Object> handleOpenApp(ActionRequest request) throws IOException {
         String appName = request.parameters().get("appName");
         if (appName == null || appName.isBlank()) {
             return Map.of(
@@ -134,7 +144,7 @@ public class PcControlController {
         return result;
     }
 
-    private Map<String, Object> handleHotkey(ActionRequest request) throws Exception {
+    private Map<String, Object> handleHotkey(ActionRequest request) throws IOException, InterruptedException {
         String keyCombination = request.parameters().get("keyCombination");
         if (keyCombination == null || keyCombination.isBlank()) {
             return Map.of(
@@ -156,60 +166,60 @@ public class PcControlController {
 
     // ==================== Volume Control ====================
 
-    private Map<String, Object> handleVolumeUp(ActionRequest request) throws Exception {
+    private Map<String, Object> handleVolumeUp(ActionRequest request) throws IOException, InterruptedException {
         int delta = Integer.parseInt(request.parameters().getOrDefault("delta", "10"));
         systemControlService.changeVolume(delta, "+");
         return successResult("VOLUME_UP", "Volume increased by " + delta + "%");
     }
 
-    private Map<String, Object> handleVolumeDown(ActionRequest request) throws Exception {
+    private Map<String, Object> handleVolumeDown(ActionRequest request) throws IOException, InterruptedException {
         int delta = Integer.parseInt(request.parameters().getOrDefault("delta", "10"));
         systemControlService.changeVolume(delta, "-");
         return successResult("VOLUME_DOWN", "Volume decreased by " + delta + "%");
     }
 
-    private Map<String, Object> handleSetVolume(ActionRequest request) throws Exception {
+    private Map<String, Object> handleSetVolume(ActionRequest request) throws IOException, InterruptedException {
         int level = Integer.parseInt(request.parameters().getOrDefault("level", "100"));
         level = Math.max(0, Math.min(100, level)); // Clamp to 0-100%
         systemControlService.setVolume(level);
         return successResult("SET_VOLUME", "Volume set to " + level + "%");
     }
 
-    private Map<String, Object> handleMute() throws Exception {
+    private Map<String, Object> handleMute() throws IOException, InterruptedException {
         systemControlService.mute();
         return successResult("MUTE", "Sound muted");
     }
 
-    private Map<String, Object> handleUnmute() throws Exception {
+    private Map<String, Object> handleUnmute() throws IOException, InterruptedException {
         systemControlService.unmute();
         return successResult("UNMUTE", "Sound unmuted");
     }
 
     // ==================== Media Control ====================
 
-    private Map<String, Object> handlePlayPause() throws Exception {
+    private Map<String, Object> handlePlayPause() throws IOException, InterruptedException {
         systemControlService.playPause();
         return successResult("PLAY_PAUSE", "Playback toggled");
     }
 
-    private Map<String, Object> handlePause() throws Exception {
+    private Map<String, Object> handlePause() throws IOException, InterruptedException {
         systemControlService.pause();
         return successResult("PAUSE", "Playback paused");
     }
 
-    private Map<String, Object> handleNext() throws Exception {
+    private Map<String, Object> handleNext() throws IOException, InterruptedException {
         systemControlService.next();
         return successResult("NEXT", "Skipped to next track");
     }
 
-    private Map<String, Object> handlePrev() throws Exception {
+    private Map<String, Object> handlePrev() throws IOException, InterruptedException {
         systemControlService.prev();
         return successResult("PREV", "Returned to previous track");
     }
 
     // ==================== Notifications ====================
 
-    private Map<String, Object> handleNotify(ActionRequest request) throws Exception {
+    private Map<String, Object> handleNotify(ActionRequest request) throws IOException, InterruptedException {
         String title = request.parameters().getOrDefault("title", "Jarvis");
         String message = request.parameters().getOrDefault("message", "Notification");
         systemControlService.sendNotification(title, message);
@@ -249,7 +259,10 @@ public class PcControlController {
                 try {
                     systemControlService.sendNotification("Timer", "Time is up!");
                     systemControlService.beep();
-                } catch (Exception e) {
+                } catch (IOException | InterruptedException e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
                     throw new IllegalStateException("Timer callback failed", e);
                 }
             });

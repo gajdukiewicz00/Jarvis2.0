@@ -34,7 +34,7 @@ jarvis:
     # Timeout for LLM calls (seconds)
     timeout-seconds: ${JARVIS_LLM_TIMEOUT_SECONDS:10}
     # Circuit breaker configuration
-  circuit-breaker:
+    circuit-breaker:
       # Open circuit after N consecutive failures
       failure-threshold: ${JARVIS_LLM_CB_FAILURE_THRESHOLD:3}
       # Keep circuit open for N seconds before retrying

@@ -94,7 +94,7 @@ public class UserProfileClient {
                 return response.getBody();
             }
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             long elapsed = System.currentTimeMillis() - startTime;
             log.warn("[{}] ⚠ user-profile unavailable ({}ms): {} - using defaults for user: {}", 
                     correlationId, elapsed, e.getMessage(), userId);

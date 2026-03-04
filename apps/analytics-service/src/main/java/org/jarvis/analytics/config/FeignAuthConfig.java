@@ -143,7 +143,7 @@ public class FeignAuthConfig {
             return extractBearerValue(value);
         } catch (NoSuchMethodException ignored) {
             return null;
-        } catch (Exception ex) {
+        } catch (ReflectiveOperationException | SecurityException ex) {
             // Swallow quietly – lack of token should not break downstream calls
             return null;
         }
@@ -167,5 +167,4 @@ public class FeignAuthConfig {
         String getToken();
     }
 }
-
 

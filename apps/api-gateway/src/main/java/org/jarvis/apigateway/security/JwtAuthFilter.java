@@ -147,7 +147,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
                     "Invalid token format");
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("JwtAuthFilter: Unexpected JWT validation error: {}", e.getMessage(), e);
             sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, "JWT_ERROR",
                     "An error occurred validating the token");
@@ -253,4 +253,3 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         return roles.stream().distinct().toList();
     }
 }
-

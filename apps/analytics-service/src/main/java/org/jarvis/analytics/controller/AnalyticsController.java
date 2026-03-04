@@ -66,7 +66,7 @@ public class AnalyticsController {
             log.warn("Failed to fetch expenses from life-tracker [{}]: {}", 
                     e.status(), e.getMessage());
             builder.expensesError("Life-tracker service error: " + e.status());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Unexpected error fetching expenses: {}", e.getMessage());
             builder.expensesError("Unexpected error fetching expenses");
         }
@@ -91,7 +91,7 @@ public class AnalyticsController {
             log.warn("Failed to fetch time records from life-tracker [{}]: {}", 
                     e.status(), e.getMessage());
             builder.timeError("Life-tracker service error: " + e.status());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Unexpected error fetching time records: {}", e.getMessage());
             builder.timeError("Unexpected error fetching time records");
         }

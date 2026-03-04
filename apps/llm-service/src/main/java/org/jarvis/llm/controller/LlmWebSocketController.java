@@ -68,7 +68,7 @@ public class LlmWebSocketController {
                     response.getReply().length(),
                     response.getProcessingTimeMs());
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Error processing WebSocket message for session={}: {}",
                     sanitizer.sanitizeId(sessionId), e.getMessage(), e);
 

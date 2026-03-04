@@ -54,7 +54,7 @@ public class EmbeddingClient {
             log.debug("[{}] Embedding complete: dim={}", correlationId, response.embedding.size());
             return response.embedding;
             
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("[{}] Embedding failed: {}", correlationId, e.getMessage());
             throw new RuntimeException("Failed to get embedding: " + e.getMessage(), e);
         }
@@ -83,7 +83,7 @@ public class EmbeddingClient {
             log.debug("[{}] Batch embedding complete: {} embeddings", correlationId, response.embeddings.size());
             return response.embeddings;
             
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("[{}] Batch embedding failed: {}", correlationId, e.getMessage());
             throw new RuntimeException("Failed to get batch embeddings: " + e.getMessage(), e);
         }
@@ -103,7 +103,7 @@ public class EmbeddingClient {
             
             return response != null && "healthy".equals(response.get("status"));
             
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("Embedding service health check failed: {}", e.getMessage());
             return false;
         }
@@ -125,6 +125,5 @@ public class EmbeddingClient {
         public int processing_time_ms;
     }
 }
-
 
 

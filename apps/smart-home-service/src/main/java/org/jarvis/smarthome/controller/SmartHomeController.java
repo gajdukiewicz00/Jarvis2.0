@@ -60,7 +60,7 @@ public class SmartHomeController {
             
             return ResponseEntity.ok(response);
             
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to execute action for device {}: {}", deviceId, e.getMessage());
             
             Map<String, Object> error = new LinkedHashMap<>();

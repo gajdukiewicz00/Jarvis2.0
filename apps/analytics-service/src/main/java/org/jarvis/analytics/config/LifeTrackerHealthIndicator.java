@@ -53,7 +53,7 @@ public class LifeTrackerHealthIndicator implements HealthIndicator {
                     .withDetail("error", e.getMessage())
                     .build();
                     
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Life-tracker health check failed: {}", e.getMessage());
             return Health.down()
                     .withDetail("service", "life-tracker")
@@ -63,4 +63,3 @@ public class LifeTrackerHealthIndicator implements HealthIndicator {
         }
     }
 }
-

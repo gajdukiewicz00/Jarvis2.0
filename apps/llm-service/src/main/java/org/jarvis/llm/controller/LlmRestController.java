@@ -94,7 +94,7 @@ public class LlmRestController {
                 return ResponseEntity.badRequest().build();
             }
             return ResponseEntity.status(503).build();
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Error processing chat request: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
@@ -141,7 +141,7 @@ public class LlmRestController {
                     .mode("dialog")
                     .build());
                     
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Error processing dialog request: {}", e.getMessage(), e);
             
             return ResponseEntity.ok(DialogResponse.builder()

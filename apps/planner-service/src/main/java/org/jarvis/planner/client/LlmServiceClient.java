@@ -3,6 +3,7 @@ package org.jarvis.planner.client;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -28,7 +29,7 @@ public class LlmServiceClient {
             String url = llmServiceUrl + "/api/v1/llm/health";
             restTemplate.getForEntity(url, String.class);
             return true;
-        } catch (Exception e) {
+        } catch (RestClientException e) {
             log.warn("llm-service health check failed: {}", e.getMessage());
             return false;
         }

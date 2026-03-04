@@ -111,7 +111,7 @@ public class LlmService {
                 if (!memoryContext.isBlank()) {
                     log.info("[{}] Memory context found: {} chars", correlationId, memoryContext.length());
                 }
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.warn("[{}] Memory search failed (continuing without memory): {}", correlationId, e.getMessage());
             }
         }
@@ -155,11 +155,11 @@ public class LlmService {
                 backgroundExecutor.execute(() -> {
                     try {
                         memoryClient.ingestAsync(userId, sessionId, finalUserMessage, response.getReply(), correlationId);
-                    } catch (Exception e) {
+                    } catch (RuntimeException e) {
                         log.warn("[{}] Memory ingest task failed (non-fatal): {}", correlationId, e.getMessage());
                     }
                 });
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 log.warn("[{}] Memory ingest failed (non-fatal): {}", correlationId, e.getMessage());
             }
         }
@@ -305,7 +305,7 @@ public class LlmService {
                     .confidence(0.9) // LLM-based response
                     .build();
                     
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             long elapsed = System.currentTimeMillis() - startTime;
             log.error("[{}] ❌ Dialog processing failed after {}ms: {}", correlationId, elapsed, e.getMessage(), e);
             return DialogResponse.builder()

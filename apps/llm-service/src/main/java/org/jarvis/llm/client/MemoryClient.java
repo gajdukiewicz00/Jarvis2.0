@@ -92,7 +92,7 @@ public class MemoryClient {
             log.warn("[{}] Memory search returned empty response", correlationId);
             return "";
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("[{}] Memory search failed (non-fatal): {}", correlationId, e.getMessage());
             return "";
         }
@@ -132,7 +132,7 @@ public class MemoryClient {
             
             log.debug("[{}] Memory ingest queued", correlationId);
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("[{}] Memory ingest failed (non-fatal): {}", correlationId, e.getMessage());
         }
     }
@@ -157,7 +157,7 @@ public class MemoryClient {
             return response.getStatusCode().is2xxSuccessful() 
                     && response.getBody() != null 
                     && "healthy".equals(response.getBody().get("status"));
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.debug("Memory service health check failed: {}", e.getMessage());
             return false;
         }

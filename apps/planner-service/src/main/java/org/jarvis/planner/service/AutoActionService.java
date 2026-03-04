@@ -49,7 +49,7 @@ public class AutoActionService {
             // Database connection failure - log and continue, will retry in 1 hour
             log.error("Database connection error during auto-action check: {}. Will retry in 1 hour.",
                     e.getMessage());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // Catch all other exceptions to prevent scheduler from stopping
             log.error("Unexpected error during auto-action check: {}", e.getMessage(), e);
         }
@@ -131,7 +131,7 @@ public class AutoActionService {
             // If active > 2 hours continuously → suggest break
 
             log.debug("Checking break reminders for user: {}", userId);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // Catch all exceptions to prevent scheduler from stopping
             log.error("Error during break reminder check: {}", e.getMessage(), e);
         }

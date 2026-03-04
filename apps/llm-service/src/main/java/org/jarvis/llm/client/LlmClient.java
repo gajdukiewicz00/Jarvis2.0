@@ -164,7 +164,7 @@ public class LlmClient {
                         correlationId, elapsed, attempt, MAX_CONNECT_RETRIES, e.getMessage());
                 lastException = e;
 
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
                 long elapsed = System.currentTimeMillis() - startTime;
                 log.error("[{}] LLM chat <- EXCEPTION in {}ms: {} - {}", 
                         correlationId, elapsed, e.getClass().getSimpleName(), e.getMessage());
@@ -251,7 +251,7 @@ public class LlmClient {
             logHealthStateChange(false, url, "invalid response: " + response.getStatusCode());
             return false;
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             long elapsed = System.currentTimeMillis() - startTime;
             log.warn("LLM health check <- EXCEPTION in {}ms: {} - {}", 
                     elapsed, e.getClass().getSimpleName(), e.getMessage());

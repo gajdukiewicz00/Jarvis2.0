@@ -228,7 +228,7 @@ public class MemoryService {
     public void ingestAsync(IngestRequest request, String correlationId) {
         try {
             ingest(request, correlationId);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("[{}] Async ingest failed: {}", correlationId, e.getMessage(), e);
         }
     }
@@ -287,6 +287,5 @@ public class MemoryService {
         return result;
     }
 }
-
 
 

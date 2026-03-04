@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -163,7 +164,7 @@ public class LlmOrchestratorService {
         String json = extractJson(raw);
         try {
             return objectMapper.readValue(json, ModelToolPlan.class);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.warn("Failed to parse tool plan JSON: {}", e.getMessage());
             return new ModelToolPlan(List.of(), "", List.of("Invalid tool plan JSON"));
         }
@@ -193,7 +194,7 @@ public class LlmOrchestratorService {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashed = digest.digest(payload.getBytes(StandardCharsets.UTF_8));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(hashed);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
             return "idem-" + Integer.toHexString(payload.hashCode());
         }
     }

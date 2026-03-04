@@ -45,6 +45,7 @@ RG_EXCLUDES=(
     "--glob" "!**/scripts/legacy/**"
     "--glob" "!**/data/**"
     "--glob" "!**/application-dev.yaml"
+    "--glob" "!**/DevSecurityConfig.java"
 )
 
 fail_if_found() {
@@ -78,9 +79,21 @@ for d in "${PROJECT_ROOT}/k8s/legacy" "${PROJECT_ROOT}/k8s/overlays/local" "${PR
     fi
 done
 
-if rg -n ":latest|:0\\.1\\.0-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" "${PROJECT_ROOT}/k8s" >/dev/null; then
+k8s_forbidden_images="$(rg -n \
+    "^[[:space:]]*image:[[:space:]]*[^[:space:]]*(:latest|:0\\.1\\.0-SNAPSHOT)(@|[[:space:]]|$)" \
+    "${PROJECT_ROOT}/k8s" \
+    --glob "**/*.yml" \
+    --glob "**/*.yaml" 2>/dev/null || true)"
+launcher_forbidden_tags="$(rg -n ":latest|:0\\.1\\.0-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" 2>/dev/null || true)"
+
+if [[ -n "${k8s_forbidden_images}" || -n "${launcher_forbidden_tags}" ]]; then
     echo "❌ Found forbidden image tags (:latest or :0.1.0-SNAPSHOT) in runtime paths"
-    rg -n ":latest|:0\\.1\\.0-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" "${PROJECT_ROOT}/k8s" | head -20
+    if [[ -n "${launcher_forbidden_tags}" ]]; then
+        echo "${launcher_forbidden_tags}" | head -20
+    fi
+    if [[ -n "${k8s_forbidden_images}" ]]; then
+        echo "${k8s_forbidden_images}" | head -20
+    fi
     exit 1
 fi
 

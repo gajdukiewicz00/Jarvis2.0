@@ -48,6 +48,18 @@ curl -k https://api.jarvis.local/actuator/health
 ./scripts/product/jarvis-run-acceptance.sh
 ```
 
+Acceptance напрямую:
+```bash
+# Auto (по готовности деплоев)
+./scripts/acceptance-ai.sh
+
+# Принудительно включить LLM smoke
+JARVIS_ACCEPT_LLM=true ./scripts/acceptance-ai.sh
+
+# Принудительно выключить Memory smoke
+JARVIS_ACCEPT_MEMORY=false ./scripts/acceptance-ai.sh
+```
+
 ## 3) Tier B: Enable LLM
 
 Старт с LLM:
@@ -136,7 +148,24 @@ cat ~/.jarvis/run/last-run.json
 ./jarvis-stop.sh --yes
 ```
 
-## 6) Guardrails (порядок фиксированный)
+## 6) STOP / RESET
+
+Мягкая остановка:
+```bash
+./jarvis-stop.sh --yes
+```
+
+Если namespace/ingress завис:
+```bash
+kubectl delete ns jarvis
+```
+
+Если зависли port-forward процессы:
+```bash
+ps aux | rg "kubectl.*port-forward" | awk '{print $2}' | xargs -r kill
+```
+
+## 7) Guardrails (порядок фиксированный)
 
 ```bash
 mvn -q -DskipTests package

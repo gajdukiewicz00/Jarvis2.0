@@ -3,13 +3,6 @@
         "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
         "https://checkstyle.org/dtds/suppressions_1_2.dtd">
 <suppressions>
-    <suppress checks="IllegalCatch" files=".*JwtUtil\.java" lines="76"/>
-    <suppress checks="IllegalCatch" files=".*VoiceWebSocketProxyHandler\.java" lines="61"/>
-    <suppress checks="IllegalCatch" files=".*PcControlWebSocketHandler\.java" lines="53"/>
-    <suppress checks="IllegalCatch" files=".*JwtFilter\.java" lines="136"/>
-    <suppress checks="IllegalCatch" files=".*GlobalExceptionHandler\.java" lines="366"/>
-    <suppress checks="IllegalCatch" files=".*AuthProxyController\.java" lines="137"/>
-
     <suppress checks="IllegalCatch" files=".*OrchestratorServiceImpl\.java" lines="310,343,352,426"/>
 
     <suppress checks="IllegalCatch" files=".*FileController\.java" lines="30,46,62"/>

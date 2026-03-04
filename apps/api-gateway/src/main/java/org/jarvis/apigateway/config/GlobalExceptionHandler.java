@@ -363,7 +363,7 @@ public class GlobalExceptionHandler {
             if (content != null && !content.isEmpty()) {
                 return content;
             }
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // Ignore parsing errors
         }
         return null;

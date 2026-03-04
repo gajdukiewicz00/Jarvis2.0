@@ -50,7 +50,7 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
                 case "PONG" -> log.debug("Received PONG from {}", session.getId());
                 default -> log.debug("Unknown message type: {}", type);
             }
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Error processing message: {}", payload, e);
         }
     }

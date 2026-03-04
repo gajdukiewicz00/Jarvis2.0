@@ -1,5 +1,6 @@
 package org.jarvis.apigateway.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import feign.FeignException;
 import lombok.extern.slf4j.Slf4j;
@@ -134,7 +135,7 @@ public class AuthProxyController implements org.springframework.beans.factory.In
                 return ResponseEntity.status(responseStatus)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body);
-            } catch (Exception parseEx) {
+            } catch (JsonProcessingException parseEx) {
                 log.warn("Failed to parse error body from security-service: {}", parseEx.getMessage());
             }
         }

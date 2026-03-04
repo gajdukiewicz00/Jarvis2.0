@@ -14,8 +14,10 @@ import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 import java.net.URI;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -58,7 +60,12 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
             WebSocketSession backendSession = future.get(5, TimeUnit.SECONDS);
             proxySessions.put(clientSession.getId(), new ProxySession(clientSession, backendSession));
             log.info("✅ Voice WS backend connected for client {}", clientSession.getId());
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("❌ Voice WS proxy handshake interrupted for client {} -> {}: {}", clientSession.getId(), targetUrl,
+                    e.getMessage(), e);
+            clientSession.close(CloseStatus.SERVER_ERROR);
+        } catch (ExecutionException | TimeoutException | RuntimeException e) {
             log.error("❌ Voice WS proxy handshake failed for client {} -> {}: {}", clientSession.getId(), targetUrl, e.getMessage(), e);
             clientSession.close(CloseStatus.SERVER_ERROR);
         }

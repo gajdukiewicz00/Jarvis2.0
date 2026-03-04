@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Jarvis
+Comment=Start Jarvis (backend + desktop client)
+Exec=%JARVIS_HOME%/scripts/product/jarvis-desktop-launch.sh
+Icon=%JARVIS_HOME%/icons/jarvis-icon.png
+Terminal=false
+Categories=Utility;
+StartupNotify=true

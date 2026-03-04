@@ -25,6 +25,7 @@ ENABLE_LLM="${ENABLE_LLM:-false}"
 ENABLE_MEMORY="${ENABLE_MEMORY:-false}"
 ENABLE_GPU="${ENABLE_GPU:-true}"
 ENABLE_BUILD="${ENABLE_BUILD:-true}"
+ENABLE_IMPORT="${ENABLE_IMPORT:-auto}"
 ENABLE_PORT_FORWARD="${ENABLE_PORT_FORWARD:-false}"
 
 # Image configuration (single source of truth for build + deploy)
@@ -323,7 +324,7 @@ apply_tls_secret() {
         --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 }
 
-build_images() {
+build_images_legacy() {
     if [[ "${ENABLE_BUILD}" != "true" ]]; then
         info "Skipping build (ENABLE_BUILD=false)"
         return 0
@@ -452,6 +453,56 @@ build_images() {
         run_privileged k3s ctr images import "${tar_path}" >/dev/null
         rm -f "${tar_path}"
     fi
+}
+
+build_images() {
+    if [[ "${ENABLE_BUILD}" != "true" ]]; then
+        info "Skipping build (ENABLE_BUILD=false)"
+        return 0
+    fi
+
+    init_image_config
+
+    local build_script="${PROJECT_DIR}/scripts/build-images.sh"
+    if [[ ! -x "${build_script}" ]]; then
+        fail "Build script not found or not executable: ${build_script}"
+    fi
+
+    local import_mode
+    import_mode="${ENABLE_IMPORT,,}"
+    if [[ -z "${import_mode}" ]]; then
+        import_mode="auto"
+    fi
+
+    local build_args=()
+    local require_k3s_context="true"
+
+    case "${import_mode}" in
+        auto)
+            ;;
+        true|1|yes|on)
+            require_k3s_context="false"
+            ;;
+        false|0|no|off)
+            build_args+=(--no-import)
+            require_k3s_context="false"
+            ;;
+        *)
+            warn "Unknown ENABLE_IMPORT='${ENABLE_IMPORT}', using auto"
+            ;;
+    esac
+
+    info "Delegating image build/import to scripts/build-images.sh"
+    ENABLE_LLM="${ENABLE_LLM}" \
+    ENABLE_MEMORY="${ENABLE_MEMORY}" \
+    IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
+    IMAGE_REPO="${IMAGE_REPO}" \
+    IMAGE_TAG="${IMAGE_TAG}" \
+    BUILD_MVN_CLEAN=false \
+    JARVIS_IMPORT_REQUIRE_K3S_CONTEXT="${require_k3s_context}" \
+    JARVIS_K3S_IMPORT_MODE=auto \
+    JARVIS_NONINTERACTIVE="${JARVIS_NONINTERACTIVE:-}" \
+        "${build_script}" "${build_args[@]}"
 }
 
 wait_rollout() {

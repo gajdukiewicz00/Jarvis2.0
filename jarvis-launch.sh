@@ -282,6 +282,39 @@ ensure_ingress_nginx() {
     kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"LoadBalancer"}}' >/dev/null 2>&1 || true
 }
 
+ensure_ingress_routing() {
+    # k3s ships with Traefik LoadBalancer enabled by default.
+    # If both Traefik and ingress-nginx expose 80/443, TLS requests to api.jarvis.local
+    # may terminate on Traefik and return TRAEFIK DEFAULT CERT.
+    if ! is_k3s_context; then
+        return 0
+    fi
+
+    local disable_traefik
+    disable_traefik="${JARVIS_DISABLE_K3S_TRAEFIK:-true}"
+    if [[ "${disable_traefik,,}" != "true" && "${disable_traefik,,}" != "1" && "${disable_traefik,,}" != "yes" ]]; then
+        info "Keeping k3s Traefik enabled (JARVIS_DISABLE_K3S_TRAEFIK=${disable_traefik})"
+        return 0
+    fi
+
+    if kubectl -n kube-system get svc traefik >/dev/null 2>&1; then
+        local traefik_type
+        traefik_type="$(kubectl -n kube-system get svc traefik -o jsonpath='{.spec.type}' 2>/dev/null || true)"
+        if [[ "${traefik_type}" == "LoadBalancer" ]]; then
+            info "Disabling Traefik external LoadBalancer (avoid TLS cert conflicts on :443)..."
+            kubectl -n kube-system patch svc traefik --type=merge -p '{"spec":{"type":"ClusterIP"}}' >/dev/null 2>&1 || \
+                warn "Failed to patch kube-system/traefik service to ClusterIP"
+        fi
+    fi
+
+    if kubectl -n kube-system get deployment traefik >/dev/null 2>&1; then
+        kubectl -n kube-system scale deployment traefik --replicas=0 >/dev/null 2>&1 || \
+            warn "Failed to scale kube-system/traefik deployment to 0"
+    fi
+
+    kubectl patch svc ingress-nginx-controller -n ingress-nginx -p '{"spec":{"type":"LoadBalancer"}}' >/dev/null 2>&1 || true
+}
+
 ensure_namespace() {
     if ! kubectl get namespace "${NAMESPACE}" >/dev/null 2>&1; then
         kubectl create namespace "${NAMESPACE}" >/dev/null
@@ -398,6 +431,7 @@ ensure_cluster
 
 info "Ensuring ingress-nginx..."
 ensure_ingress_nginx
+ensure_ingress_routing
 
 info "Ensuring namespace..."
 ensure_namespace

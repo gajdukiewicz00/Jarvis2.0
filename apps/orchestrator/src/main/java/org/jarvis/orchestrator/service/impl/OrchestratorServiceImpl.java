@@ -307,7 +307,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     yield callLlm(originalText, correlationId, lang);
                 }
             };
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("❌ Error executing intent: {}, correlationId={}", intent, correlationId, e);
             return phraseProvider.getPhrase(PhraseContext.ACK_ERROR, lang);
         }
@@ -340,7 +340,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
             var result = apiGatewayPcClient.sendPcAction(
                     new ApiGatewayPcClient.PcActionRequest(action, params));
             log.info("📥 PC action result: {}, correlationId={}", result, correlationId);
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.warn("⚠️ Failed to send PC action via WebSocket ({}), falling back to direct call, correlationId={}",
                     e.getMessage(), correlationId);
             // Fallback to direct K8S pc-control (stub)
@@ -349,7 +349,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 params.forEach((k, v) -> stringParams.put(k, String.valueOf(v)));
                 pcControlClient.executeAction(new PcControlClient.ActionRequest(action, stringParams));
                 log.info("✅ PC action sent via direct client, correlationId={}", correlationId);
-            } catch (Exception ex) {
+            } catch (RuntimeException ex) {
                 log.error("❌ Failed to execute PC action: {}, correlationId={}", ex.getMessage(), correlationId);
             }
         }
@@ -423,7 +423,12 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     rejectedLlmTasks.get(),
                     correlationId);
             return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("🧠 LLM_INTERRUPTED: {}, correlationId={}", e.getMessage(), correlationId);
+            recordFailure();
+            return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
+        } catch (ExecutionException | RuntimeException e) {
             log.error("🧠 LLM_ERROR: {}, correlationId={}", e.getMessage(), correlationId);
             recordFailure();
             return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);

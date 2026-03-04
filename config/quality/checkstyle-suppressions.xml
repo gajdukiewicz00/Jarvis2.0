@@ -3,8 +3,6 @@
         "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
         "https://checkstyle.org/dtds/suppressions_1_2.dtd">
 <suppressions>
-    <suppress checks="IllegalCatch" files=".*OrchestratorServiceImpl\.java" lines="310,343,352,426"/>
-
     <suppress checks="IllegalCatch" files=".*FileController\.java" lines="30,46,62"/>
     <suppress checks="IllegalCatch" files=".*PcControlController\.java" lines="91,252"/>
     <suppress checks="IllegalCatch" files=".*TimerSchedulerService\.java" lines="68"/>

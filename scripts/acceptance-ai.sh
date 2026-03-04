@@ -16,6 +16,152 @@ fail() {
   exit 1
 }
 
+is_truthy() {
+  local value="${1:-}"
+  case "${value,,}" in
+    1|true|yes|on)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+is_k8s_available() {
+  command -v kubectl >/dev/null 2>&1 && kubectl cluster-info --request-timeout=5s >/dev/null 2>&1
+}
+
+deployment_ready() {
+  local deployment="$1"
+  local namespace="${JARVIS_NAMESPACE:-jarvis}"
+  local ready
+  ready="$(kubectl -n "${namespace}" get deployment "${deployment}" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+  [[ "${ready}" =~ ^[0-9]+$ ]] || ready="0"
+  [[ "${ready}" -gt 0 ]]
+}
+
+should_run_stack() {
+  local mode="${1:-auto}"
+  local deployment_a="$2"
+  local deployment_b="$3"
+
+  if is_truthy "${mode}"; then
+    return 0
+  fi
+
+  case "${mode,,}" in
+    0|false|no|off)
+      return 1
+      ;;
+    auto|"")
+      is_k8s_available && deployment_ready "${deployment_a}" && deployment_ready "${deployment_b}"
+      ;;
+    *)
+      warn "Unknown mode '${mode}', skipping optional stack checks"
+      return 1
+      ;;
+  esac
+}
+
+PORT_FORWARD_PIDS=()
+
+cleanup_port_forwards() {
+  local pid
+  for pid in "${PORT_FORWARD_PIDS[@]}"; do
+    if kill -0 "${pid}" >/dev/null 2>&1; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      wait "${pid}" 2>/dev/null || true
+    fi
+  done
+}
+
+trap cleanup_port_forwards EXIT
+
+start_port_forward() {
+  local service="$1"
+  local local_port="$2"
+  local remote_port="$3"
+  local namespace="${JARVIS_NAMESPACE:-jarvis}"
+
+  kubectl -n "${namespace}" get service "${service}" >/dev/null 2>&1 || fail "Service not found: ${namespace}/${service}"
+  kubectl -n "${namespace}" port-forward "svc/${service}" "${local_port}:${remote_port}" >/dev/null 2>&1 &
+  local pf_pid=$!
+  PORT_FORWARD_PIDS+=("${pf_pid}")
+
+  sleep 2
+  if ! kill -0 "${pf_pid}" >/dev/null 2>&1; then
+    fail "Failed to start port-forward for ${namespace}/${service} (${local_port}:${remote_port})"
+  fi
+}
+
+run_llm_smoke() {
+  local llm_service_port="${JARVIS_ACCEPT_LLM_SERVICE_PORT:-18091}"
+  local llm_server_port="${JARVIS_ACCEPT_LLM_SERVER_PORT:-15000}"
+  local llm_service_url="${LLM_SERVICE_URL:-http://127.0.0.1:${llm_service_port}}"
+  local llm_server_url="${LLM_SERVER_URL:-http://127.0.0.1:${llm_server_port}}"
+
+  if is_k8s_available; then
+    log "Setting up LLM port-forward (llm-service, llm-server)"
+    start_port_forward "llm-service" "${llm_service_port}" "8091"
+    start_port_forward "llm-server" "${llm_server_port}" "5000"
+  fi
+
+  log "Running llm-smoke"
+  LLM_SERVICE_URL="${llm_service_url}" LLM_SERVER_URL="${llm_server_url}" "${ROOT_DIR}/scripts/llm-smoke.sh"
+}
+
+run_memory_smoke() {
+  local memory_service_port="${JARVIS_ACCEPT_MEMORY_SERVICE_PORT:-18093}"
+  local embedding_service_port="${JARVIS_ACCEPT_EMBEDDING_SERVICE_PORT:-15001}"
+  local memory_url="${MEMORY_URL:-http://127.0.0.1:${memory_service_port}}"
+  local embedding_url="${EMBEDDING_URL:-http://127.0.0.1:${embedding_service_port}}"
+
+  if is_k8s_available; then
+    log "Setting up Memory port-forward (memory-service, embedding-service)"
+    start_port_forward "memory-service" "${memory_service_port}" "8093"
+    start_port_forward "embedding-service" "${embedding_service_port}" "5001"
+  fi
+
+  log "Running memory-smoke"
+  MEMORY_URL="${memory_url}" EMBEDDING_URL="${embedding_url}" "${ROOT_DIR}/scripts/memory-smoke.sh"
+}
+
+run_verify_suite() {
+  local verify_ai="${ROOT_DIR}/scripts/verify-ai.sh"
+  local llm_mode="${JARVIS_ACCEPT_LLM:-auto}"
+  local memory_mode="${JARVIS_ACCEPT_MEMORY:-auto}"
+
+  if [[ -x "${verify_ai}" ]]; then
+    log "Running verify-ai"
+    "${verify_ai}"
+    return
+  fi
+
+  log "verify-ai.sh not found, running fallback verification suite"
+  log "Running verify-prod"
+  "${ROOT_DIR}/scripts/verify-prod.sh"
+
+  if is_k8s_available; then
+    log "Running k8s preflight"
+    "${ROOT_DIR}/scripts/ci/k8s-preflight.sh"
+  else
+    log "k8s preflight skipped (kubectl cluster unavailable)"
+  fi
+
+  if should_run_stack "${llm_mode}" "llm-service" "llm-server"; then
+    run_llm_smoke
+  else
+    log "LLM smoke skipped (JARVIS_ACCEPT_LLM=${llm_mode})"
+  fi
+
+  if should_run_stack "${memory_mode}" "memory-service" "embedding-service"; then
+    run_memory_smoke
+  else
+    log "Memory smoke skipped (JARVIS_ACCEPT_MEMORY=${memory_mode})"
+  fi
+}
+
 run_flyway_info() {
   if command -v flyway >/dev/null 2>&1; then
     if [[ -n "${FLYWAY_URL:-}" || -n "${FLYWAY_CONFIG_FILES:-}" ]]; then
@@ -129,5 +275,4 @@ run_flyway_info
 run_ingress_tool_check
 run_idempotency_check
 
-log "Running verify-ai"
-"$ROOT_DIR/scripts/verify-ai.sh"
+run_verify_suite

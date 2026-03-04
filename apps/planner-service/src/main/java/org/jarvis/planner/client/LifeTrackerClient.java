@@ -3,6 +3,7 @@ package org.jarvis.planner.client;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -29,7 +30,7 @@ public class LifeTrackerClient {
             String url = lifeTrackerUrl + "/actuator/health";
             restTemplate.getForEntity(url, String.class);
             return true;
-        } catch (Exception e) {
+        } catch (RestClientException e) {
             log.warn("life-tracker health check failed: {}", e.getMessage());
             return false;
         }

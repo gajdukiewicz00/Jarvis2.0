@@ -35,7 +35,7 @@ public class ReminderScheduler {
                     try {
                         reminderService.triggerReminder(reminder.getId());
                         log.info("Triggered reminder: {} - {}", reminder.getId(), reminder.getMessage());
-                    } catch (Exception e) {
+                    } catch (RuntimeException e) {
                         log.error("Error triggering reminder {}: {}", reminder.getId(), e.getMessage());
                     }
                 }
@@ -44,7 +44,7 @@ public class ReminderScheduler {
             // Database connection failure - log and continue, will retry on next schedule
             log.error("Database connection error while checking reminders: {}. Will retry in 60 seconds.",
                     e.getMessage());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             // Catch all other exceptions to prevent scheduler from stopping
             log.error("Unexpected error while checking reminders: {}", e.getMessage(), e);
         }

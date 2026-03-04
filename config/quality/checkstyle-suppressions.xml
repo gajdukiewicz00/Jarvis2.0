@@ -3,14 +3,6 @@
         "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
         "https://checkstyle.org/dtds/suppressions_1_2.dtd">
 <suppressions>
-    <suppress checks="IllegalCatch" files=".*LifeTrackerClient\.java" lines="32"/>
-    <suppress checks="IllegalCatch" files=".*LlmServiceClient\.java" lines="36"/>
-    <suppress checks="IllegalCatch" files=".*AnalyticsClient\.java" lines="36"/>
-    <suppress checks="IllegalCatch" files=".*UserProfileClient\.java" lines="39"/>
-    <suppress checks="IllegalCatch" files=".*ReminderScheduler\.java" lines="38,47"/>
-    <suppress checks="IllegalCatch" files=".*AutoActionService\.java" lines="64,150"/>
-    <suppress checks="IllegalCatch" files=".*ToolRequestService\.java" lines="29"/>
-
     <suppress checks="IllegalCatch" files=".*JwtService\.java" lines="113"/>
     <suppress checks="IllegalCatch" files=".*AuthService\.java" lines="170"/>
 </suppressions>

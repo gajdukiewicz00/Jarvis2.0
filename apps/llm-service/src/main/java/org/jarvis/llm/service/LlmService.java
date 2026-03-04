@@ -1,5 +1,7 @@
 package org.jarvis.llm.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.llm.client.LlmClient;
@@ -15,6 +17,7 @@ import org.jarvis.llm.model.Emotion;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -53,9 +56,18 @@ public class LlmService {
     @Value("${memory.enabled:true}")
     private boolean memoryEnabled;
 
-    private final java.util.Map<String, Long> lastRequestTime = new java.util.concurrent.ConcurrentHashMap<>();
     private static final long RATE_LIMIT_MS = 2000;
     private static final int MAX_INPUT_LENGTH = 2000;
+    private static final long DEFAULT_RATE_LIMIT_CACHE_MAX_USERS = 100_000;
+    private static final Duration DEFAULT_RATE_LIMIT_CACHE_TTL = Duration.ofHours(1);
+
+    @Value("${llm.rate-limit.cache.max-users:100000}")
+    private long rateLimitCacheMaxUsers = DEFAULT_RATE_LIMIT_CACHE_MAX_USERS;
+
+    @Value("${llm.rate-limit.cache.ttl:PT1H}")
+    private Duration rateLimitCacheTtl = DEFAULT_RATE_LIMIT_CACHE_TTL;
+
+    private volatile Cache<String, Long> lastRequestCache;
 
     /**
      * Process user message with personalized Jarvis character.
@@ -75,11 +87,11 @@ public class LlmService {
         // Rate limiting
         String userId = extractUserId(sessionId);
         long now = System.currentTimeMillis();
-        long last = lastRequestTime.getOrDefault(userId, 0L);
+        long last = getLastRequestTime(userId);
         if (now - last < RATE_LIMIT_MS) {
             throw new RuntimeException("Rate limit exceeded. Please wait.");
         }
-        lastRequestTime.put(userId, now);
+        putLastRequestTime(userId, now);
 
         // Truncate input
         if (userMessage != null && userMessage.length() > MAX_INPUT_LENGTH) {
@@ -234,7 +246,7 @@ public class LlmService {
         
         // Rate limiting
         long now = System.currentTimeMillis();
-        long last = lastRequestTime.getOrDefault(userId, 0L);
+        long last = getLastRequestTime(userId);
         if (now - last < RATE_LIMIT_MS) {
             log.warn("Rate limit exceeded for user {}", userId);
             return DialogResponse.builder()
@@ -245,7 +257,7 @@ public class LlmService {
                     .processingTimeMs(System.currentTimeMillis() - startTime)
                     .build();
         }
-        lastRequestTime.put(userId, now);
+        putLastRequestTime(userId, now);
         
         // Truncate input
         if (input != null && input.length() > MAX_INPUT_LENGTH) {
@@ -378,5 +390,42 @@ public class LlmService {
             return sessionId.substring(0, dashIndex);
         }
         return sessionId;
+    }
+
+    private long getLastRequestTime(String userId) {
+        Long value = rateLimitCache().getIfPresent(userId);
+        return value != null ? value : 0L;
+    }
+
+    private void putLastRequestTime(String userId, long timestamp) {
+        rateLimitCache().put(userId, timestamp);
+    }
+
+    private Cache<String, Long> rateLimitCache() {
+        Cache<String, Long> cache = lastRequestCache;
+        if (cache == null) {
+            synchronized (this) {
+                cache = lastRequestCache;
+                if (cache == null) {
+                    cache = Caffeine.newBuilder()
+                            .maximumSize(safeRateLimitCacheMaxUsers())
+                            .expireAfterWrite(safeRateLimitCacheTtl())
+                            .build();
+                    lastRequestCache = cache;
+                }
+            }
+        }
+        return cache;
+    }
+
+    private long safeRateLimitCacheMaxUsers() {
+        return rateLimitCacheMaxUsers > 0 ? rateLimitCacheMaxUsers : DEFAULT_RATE_LIMIT_CACHE_MAX_USERS;
+    }
+
+    private Duration safeRateLimitCacheTtl() {
+        if (rateLimitCacheTtl == null || rateLimitCacheTtl.isNegative() || rateLimitCacheTtl.isZero()) {
+            return DEFAULT_RATE_LIMIT_CACHE_TTL;
+        }
+        return rateLimitCacheTtl;
     }
 }

@@ -1,63 +1,72 @@
 # Jarvis 2.0 - Modules Overview
 
-**Дата обновления:** 2025-12-02
+**Дата обновления:** 2026-03-04  
+**Источник правды:** `pom.xml` (root modules), `jarvis-launch.sh` (golden runtime path)
 
-## Сводка модулей
+## Сводка модулей (актуально)
 
-| Module | Type | Port | Description | Dependencies |
-|--------|------|------|-------------|--------------|
-| `api-gateway` | application | 8080 | API Gateway, точка входа для всех клиентов | security-service, life-tracker, analytics-service, smart-home-service, pc-control, voice-gateway, llm-service, orchestrator, nlp-service, planner-service |
-| `security-service` | application | 8088 | Аутентификация, JWT-токены | postgres |
-| `life-tracker` | application | 8085 | Финансы, время, календарь | postgres |
-| `analytics-service` | application | 8087 | Аналитика данных | life-tracker |
-| `assistant-core` | application | 8090 | Ядро ассистента, обработка команд | postgres, life-tracker, analytics-service, llm-service |
-| `voice-gateway` | application | 8081 | Голосовой шлюз (WebSocket, STT) | nlp-service, orchestrator |
-| `nlp-service` | application | 8082 | Обработка естественного языка | - |
-| `orchestrator` | application | 8083 | Оркестрация действий | pc-control, smart-home-service, life-tracker |
-| `llm-service` | application | 8091 | Интеграция с LLM-сервером | llm-server (Python) |
-| `planner-service` | application | 8092 | Планировщик задач | postgres, life-tracker, analytics-service, user-profile, llm-service |
-| `user-profile` | application | 8089 | Профили пользователей | postgres |
-| `smart-home-service` | application | 8086 | Управление умным домом (MQTT) | mosquitto |
-| `pc-control` | application | 8084 | Управление ПК (громкость, приложения) | - |
-| `desktop-client-javafx` | client | - | JavaFX/Kotlin десктоп-клиент | api-gateway (WebSocket) |
-| `mobile-client` | client | - | Android клиент (Kotlin) | api-gateway |
-| `shared-config` | config | - | Общие конфигурации (Hikari) | - |
+| Module | Type | Port | Notes |
+|---|---|---|---|
+| `jarvis-common` | library | - | Общая библиотека (security/common) |
+| `api-gateway` | application | 8080 | Единая точка входа, JWT, WS proxy |
+| `voice-gateway` | application | 8081 | STT/TTS + voice websocket |
+| `nlp-service` | application | 8082 | NLU/intent parsing |
+| `orchestrator` | application | 8083 | Оркестрация команд и fallback |
+| `pc-control` | application | 8084 | Действия на desktop/PC |
+| `life-tracker` | application | 8085 | Финансы/время/календарь |
+| `smart-home-service` | application | 8086 | MQTT bridge для smart-home |
+| `analytics-service` | application | 8087 | Аналитика на базе life-tracker |
+| `security-service` | application | 8088 | Auth/JWT + users DB |
+| `user-profile` | application | 8089 | Профили/предпочтения |
+| `llm-service` | application | 8091 | LLM orchestration layer |
+| `planner-service` | application | 8092 | Задачи/напоминания/planning |
+| `memory-service` | application | 8093 | Долгосрочная память (RAG) |
+| `desktop-client-javafx` | client | - | Desktop UI client |
+| `launcher-javafx` | client | - | Product launcher UI |
 
-## Типы модулей
+## Не-Maven модули/директории
 
-- **application**: Самостоятельный Spring Boot микросервис
-- **client**: Клиентское приложение (не сервер)
-- **config**: Конфигурационные файлы
+| Path | Type | Notes |
+|---|---|---|
+| `apps/mobile-client` | client (Gradle) | Android проект, не входит в root Maven modules |
+| `apps/shared-config` | config | Общие YAML-конфиги (например Hikari import) |
 
-## Микросервисы с БД
+## Снятые legacy элементы
 
-| Service | Database | Schema |
-|---------|----------|--------|
-| life-tracker | jarvis_db | public |
-| security-service | jarvis_security | public |
-| assistant-core | jarvis_assistant_core | public |
-| user-profile | jarvis_user_profile | public |
-| planner-service | jarvis_db | public |
+- `assistant-core` удалён из активного набора модулей.
+- Для истории старые snapshot-документы перемещены в `docs/_archive/legacy/`.
 
-## Внешние зависимости
+## Golden Path Launch
 
-| Service | Dependency | Type |
-|---------|------------|------|
-| All DB services | postgres | PostgreSQL 16 |
-| smart-home-service | mosquitto | MQTT Broker |
-| llm-service | llm-server | Python FastAPI (h2oGPT) |
-| voice-gateway | Vosk | STT Model |
+Единый поддерживаемый backend path:
 
-## Неиспользуемые/кандидаты на ревью
+```bash
+./jarvis-launch.sh
+```
 
-| Module | Status | Notes |
-|--------|--------|-------|
-| mobile-client | 🟡 В разработке | Минимальный Android-клиент |
-| src/ | ❓ Проверить | Директория в корне - неясно назначение |
+Остановка:
 
----
+```bash
+./jarvis-stop.sh
+```
 
-## Версии стека
+Логи:
 
-См. `docs/stack-versions.md` для детальной информации о версиях.
+```bash
+./jarvis-logs.sh
+```
 
+Опционально (LLM + Memory):
+
+```bash
+ENABLE_LLM=true ENABLE_MEMORY=true ./jarvis-launch.sh
+```
+
+## Минимальный runtime контур (Jarvis Alive)
+
+Базовый voice loop:
+- `api-gateway`, `voice-gateway`, `nlp-service`, `orchestrator`, `pc-control`, `security-service`, `postgres`
+
+Опционально:
+- LLM: `llm-service` + `llm-server`
+- Memory: `memory-service` + `embedding-service` + `postgres-pgvector`

@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Main memory service orchestrating storage and retrieval.
@@ -30,6 +29,7 @@ public class MemoryService {
     private final SessionSummaryRepository summaryRepository;
     private final EmbeddingClient embeddingClient;
     private final ChunkingService chunkingService;
+    private final MemoryIngestService memoryIngestService;
 
     @Value("${memory.search.top-k:5}")
     private int defaultTopK;
@@ -43,77 +43,8 @@ public class MemoryService {
     /**
      * Ingest messages into memory
      */
-    @Transactional
     public void ingest(IngestRequest request, String correlationId) {
-        log.info("[{}] Ingesting {} messages for user={}, session={}",
-                correlationId, request.getMessages().size(), request.getUserId(), request.getSessionId());
-
-        long startTime = System.currentTimeMillis();
-        List<UUID> savedMessageIds = new ArrayList<>();
-
-        // 1. Save raw messages
-        for (IngestRequest.MessageDto msgDto : request.getMessages()) {
-            ConversationMessage msg = ConversationMessage.builder()
-                    .userId(request.getUserId())
-                    .sessionId(request.getSessionId())
-                    .role(ConversationMessage.MessageRole.valueOf(msgDto.getRole()))
-                    .content(msgDto.getContent())
-                    .metadata(mergeMaps(request.getMetadata(), msgDto.getMetadata()))
-                    .build();
-
-            ConversationMessage saved = messageRepository.save(msg);
-            savedMessageIds.add(saved.getId());
-        }
-
-        log.debug("[{}] Saved {} messages", correlationId, savedMessageIds.size());
-
-        // 2. Create chunks if requested
-        if (request.isCreateChunks()) {
-            createChunks(request.getUserId(), savedMessageIds, request.getMessages(), correlationId);
-        }
-
-        long elapsed = System.currentTimeMillis() - startTime;
-        log.info("[{}] Ingest complete in {}ms", correlationId, elapsed);
-    }
-
-    /**
-     * Create chunks from messages and embed them
-     */
-    private void createChunks(String userId, List<UUID> messageIds, 
-                              List<IngestRequest.MessageDto> messages, String correlationId) {
-        // Extract text from messages
-        List<String> texts = messages.stream()
-                .map(m -> m.getRole() + ": " + m.getContent())
-                .collect(Collectors.toList());
-
-        // Chunk the conversation
-        List<String> chunks = chunkingService.chunkConversation(texts);
-        
-        if (chunks.isEmpty()) {
-            log.debug("[{}] No chunks created (text too short)", correlationId);
-            return;
-        }
-
-        log.debug("[{}] Created {} chunks", correlationId, chunks.size());
-
-        // Get embeddings for chunks
-        List<List<Float>> embeddings = embeddingClient.embedBatch(chunks, correlationId);
-
-        // Save chunks with embeddings
-        UUID[] messageIdArray = messageIds.toArray(new UUID[0]);
-        
-        for (int i = 0; i < chunks.size(); i++) {
-            MemoryChunk chunk = MemoryChunk.builder()
-                    .userId(userId)
-                    .sourceMessageIds(messageIdArray)
-                    .chunkText(chunks.get(i))
-                    .embedding(MemoryChunk.toVectorString(embeddings.get(i)))
-                    .build();
-
-            chunkRepository.save(chunk);
-        }
-
-        log.debug("[{}] Saved {} chunks with embeddings", correlationId, chunks.size());
+        memoryIngestService.ingest(request, correlationId);
     }
 
     /**
@@ -227,7 +158,7 @@ public class MemoryService {
     @Async
     public void ingestAsync(IngestRequest request, String correlationId) {
         try {
-            ingest(request, correlationId);
+            memoryIngestService.ingest(request, correlationId);
         } catch (RuntimeException e) {
             log.error("[{}] Async ingest failed: {}", correlationId, e.getMessage(), e);
         }
@@ -280,12 +211,5 @@ public class MemoryService {
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
-    private Map<String, Object> mergeMaps(Map<String, Object> a, Map<String, Object> b) {
-        Map<String, Object> result = new HashMap<>();
-        if (a != null) result.putAll(a);
-        if (b != null) result.putAll(b);
-        return result;
-    }
 }
-
 

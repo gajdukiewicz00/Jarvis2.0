@@ -258,3 +258,4 @@ If you have secrets in git (e.g., `k8s/base/secrets.yaml`):
 - File Permissions: `man chmod`
 
 
+

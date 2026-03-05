@@ -60,4 +60,6 @@ logging:
     querySnippetMaxLength: ${LOG_PII_QUERY_SNIPPET_MAX_LENGTH:32}
   level:
     org.jarvis.memory: INFO
-    org.hibernate.SQL: WARN
+    org.hibernate.SQL: ${LOG_HIBERNATE_SQL:WARN}
+    org.hibernate.type.descriptor.sql: ${LOG_HIBERNATE_BINDS:WARN}
+    org.springframework.transaction: ${LOG_TX:WARN}

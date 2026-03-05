@@ -9,7 +9,9 @@ import org.jarvis.memory.entity.SessionSummary;
 import org.jarvis.memory.repository.ConversationMessageRepository;
 import org.jarvis.memory.repository.MemoryChunkRepository;
 import org.jarvis.memory.repository.SessionSummaryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +32,11 @@ public class MemoryService {
     private final SessionSummaryRepository summaryRepository;
     private final EmbeddingClient embeddingClient;
     private final ChunkingService chunkingService;
+
+    /** Self-ref through proxy so that @Async → @Transactional AOP chain works. */
+    @Lazy
+    @Autowired
+    private MemoryService self;
 
     @Value("${memory.search.top-k:5}")
     private int defaultTopK;
@@ -227,8 +234,8 @@ public class MemoryService {
     @Async
     public void ingestAsync(IngestRequest request, String correlationId) {
         try {
-            ingest(request, correlationId);
-        } catch (Exception e) {
+            self.ingest(request, correlationId);
+        } catch (RuntimeException e) {
             log.error("[{}] Async ingest failed: {}", correlationId, e.getMessage(), e);
         }
     }

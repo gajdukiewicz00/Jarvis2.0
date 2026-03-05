@@ -23,6 +23,8 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.file.Files
+import java.nio.file.Paths
 
 class DesktopApplication : Application() {
     private val logger = LoggerFactory.getLogger(DesktopApplication::class.java)
@@ -232,7 +234,44 @@ class DesktopApplication : Application() {
     }
 }
 
-fun main() {
-    Application.launch(DesktopApplication::class.java)
+private fun configureDesktopTrustStore() {
+    val logger = LoggerFactory.getLogger("DesktopTlsBootstrap")
+
+    if (!System.getProperty("javax.net.ssl.trustStore").isNullOrBlank()) {
+        return
+    }
+
+    val envPath = System.getenv("JARVIS_JAVA_TRUSTSTORE")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.let { Paths.get(it) }
+
+    val userHome = System.getProperty("user.home")
+    val fallbackPaths = listOfNotNull(
+        envPath,
+        Paths.get(userHome, ".jarvis", "tls", "jarvis-cacerts.jks"),
+        Paths.get(userHome, ".jarvis", "certs", "jarvis-truststore.jks")
+    )
+
+    val trustStorePath = fallbackPaths.firstOrNull { Files.isRegularFile(it) }
+    if (trustStorePath == null) {
+        logger.warn("TLS truststore not found. Looked in {}", fallbackPaths.joinToString())
+        return
+    }
+
+    val trustStorePassword = System.getenv("JARVIS_JAVA_TRUSTSTORE_PASSWORD")
+        ?.takeIf { it.isNotBlank() }
+        ?: "changeit"
+
+    System.setProperty("javax.net.ssl.trustStore", trustStorePath.toAbsolutePath().toString())
+    if (System.getProperty("javax.net.ssl.trustStorePassword").isNullOrBlank()) {
+        System.setProperty("javax.net.ssl.trustStorePassword", trustStorePassword)
+    }
+
+    logger.info("Configured TLS truststore: {}", trustStorePath.toAbsolutePath())
 }
 
+fun main() {
+    configureDesktopTrustStore()
+    Application.launch(DesktopApplication::class.java)
+}

@@ -119,13 +119,17 @@ is_k3s_context() {
     [[ "${ctx}" == *"k3s"* ]]
 }
 
+can_sudo_n_k3s_ctr() {
+    command -v sudo >/dev/null 2>&1 && sudo -n k3s ctr version >/dev/null 2>&1
+}
+
 resolve_k3s_prefix() {
     local mode="${JARVIS_K3S_IMPORT_MODE,,}"
     case "${mode}" in
         sudo-n)
-            if ! command -v sudo >/dev/null 2>&1 || ! sudo -n true >/dev/null 2>&1; then
+            if ! can_sudo_n_k3s_ctr; then
                 log_warn "k3s import requires passwordless sudo for: $(command -v k3s 2>/dev/null || echo k3s)"
-                log_warn "Configure NOPASSWD in /etc/sudoers.d/jarvis-automation or run with --no-import"
+                log_warn "Configure NOPASSWD for 'k3s ctr *' in /etc/sudoers.d/jarvis-automation or run with --no-import"
                 return 1
             fi
             K3S_PREFIX=(sudo -n k3s)
@@ -133,7 +137,7 @@ resolve_k3s_prefix() {
         auto)
             if [[ "${EUID}" -eq 0 ]]; then
                 K3S_PREFIX=(k3s)
-            elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+            elif can_sudo_n_k3s_ctr; then
                 K3S_PREFIX=(sudo -n k3s)
             elif command -v sudo >/dev/null 2>&1 && [[ -t 0 ]]; then
                 K3S_PREFIX=(sudo k3s)

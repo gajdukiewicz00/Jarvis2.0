@@ -7,6 +7,38 @@ JARVIS_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_DIR="$HOME/.jarvis/logs"
 mkdir -p "$LOG_DIR"
 
+resolve_truststore() {
+  if [[ -n "${JARVIS_JAVA_TRUSTSTORE:-}" && -f "${JARVIS_JAVA_TRUSTSTORE}" ]]; then
+    printf '%s' "${JARVIS_JAVA_TRUSTSTORE}"
+    return 0
+  fi
+
+  local candidate="${HOME}/.jarvis/tls/jarvis-cacerts.jks"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  candidate="${HOME}/.jarvis/certs/jarvis-truststore.jks"
+  if [[ -f "$candidate" ]]; then
+    printf '%s' "$candidate"
+    return 0
+  fi
+
+  return 1
+}
+
+TRUSTSTORE_PATH=""
+if TRUSTSTORE_PATH="$(resolve_truststore)"; then
+  TRUSTSTORE_PASS="${JARVIS_JAVA_TRUSTSTORE_PASSWORD:-changeit}"
+  SSL_MAVEN_OPTS="-Djavax.net.ssl.trustStore=${TRUSTSTORE_PATH} -Djavax.net.ssl.trustStorePassword=${TRUSTSTORE_PASS}"
+  if [[ -n "${MAVEN_OPTS:-}" ]]; then
+    export MAVEN_OPTS="${MAVEN_OPTS} ${SSL_MAVEN_OPTS}"
+  else
+    export MAVEN_OPTS="${SSL_MAVEN_OPTS}"
+  fi
+fi
+
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 BACKEND_LOG="$LOG_DIR/backend_${TIMESTAMP}.log"
 CLIENT_LOG="$LOG_DIR/desktop-client_${TIMESTAMP}.log"
@@ -37,4 +69,8 @@ fi
   mvn -q -pl apps/desktop-client-javafx -DskipTests javafx:run
 ) >"$CLIENT_LOG" 2>&1 &
 echo "Started desktop client. Log: $CLIENT_LOG"
-
+if [[ -n "$TRUSTSTORE_PATH" ]]; then
+  echo "Desktop truststore: $TRUSTSTORE_PATH"
+else
+  echo "Desktop truststore not found; TLS may fail until truststore is configured"
+fi

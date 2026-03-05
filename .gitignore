@@ -1,7 +1,12 @@
 target/
+**/target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+.idea/
+.vscode/
+node_modules/
+out/
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
@@ -46,10 +51,15 @@ models/
 .env.local
 .env.test
 .env.production
+.env.*
 !.env.example
+secrets.env
 *.key
 *.pem
 *.crt
+*.jks
+*.p12
+*.pfx
 secrets/
 !secrets/.gitkeep
 !secrets/*.example.env
@@ -57,6 +67,7 @@ secrets*.yaml
 !secrets*.example.yaml
 ~/.jarvis/secrets/
 ~/.jarvis/tls/
+.jarvis/
 
 # Local runtime state
 data/
@@ -74,6 +85,7 @@ postgres/
 /audit-logs/
 /memory/
 /MEMORY.md
+REPORT.md
 PHASE*_REPORT.log
 
 ### Cursor / IDE workspace ###

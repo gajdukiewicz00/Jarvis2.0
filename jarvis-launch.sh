@@ -173,14 +173,17 @@ prepare_prod_overlay() {
     local rendered_overlay
     rendered_overlay="$(mktemp -d -t jarvis-prod-overlay-XXXXXX)"
     cp -R "${source_overlay}/." "${rendered_overlay}/"
+    cp -R "${K8S_DIR}/base" "${rendered_overlay}/_base"
 
     local escaped_tag
     local escaped_base
     escaped_tag="$(printf '%s' "${IMAGE_TAG}" | sed 's/[\\/&]/\\&/g')"
     escaped_base="$(printf '%s' "${IMAGE_BASE}" | sed 's/[\\/&]/\\&/g')"
 
+    # We render overlay to a temp dir, so relative "../../base" must be rewritten.
+    sed -i -E "s#(^[[:space:]]*-[[:space:]]+)../../base\$#\\1./_base#g" "${rendered_overlay}/kustomization.yaml"
     sed -i -E "s#(^[[:space:]]*newName:[[:space:]]+)jarvis/#\\1${escaped_base}/#g" "${rendered_overlay}/kustomization.yaml"
-    sed -i -E "s#(^[[:space:]]*newTag:[[:space:]]+).*$#\\1${escaped_tag}#g" "${rendered_overlay}/kustomization.yaml"
+    sed -i -E "s#(^[[:space:]]*newTag:[[:space:]]+).*\$#\\1${escaped_tag}#g" "${rendered_overlay}/kustomization.yaml"
 
     printf '%s' "${rendered_overlay}"
 }
@@ -226,15 +229,41 @@ run_privileged() {
 
 is_k3s_context() {
     local ctx
+    local kubelet_version
+    local server
     ctx=$(kubectl config current-context 2>/dev/null || true)
     if [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" == "/etc/rancher/k3s/k3s.yaml" ]]; then
         return 0
     fi
-    [[ "${ctx}" == *"k3s"* ]]
+    if [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" == "${JARVIS_HOME}/kubeconfig" ]]; then
+        return 0
+    fi
+    if [[ "${ctx}" == *"k3s"* ]]; then
+        return 0
+    fi
+
+    # Fallback heuristic for local single-node k3s installs.
+    server="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+    if [[ "${server}" == "https://127.0.0.1:6443" ]]; then
+        kubelet_version="$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}' 2>/dev/null || true)"
+        [[ "${kubelet_version}" == *"+k3s"* ]] && return 0
+    fi
+
+    return 1
 }
 
 ensure_kubeconfig() {
-    if [[ -z "${KUBECONFIG:-}" ]] && [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
+    if [[ -n "${KUBECONFIG:-}" ]]; then
+        return 0
+    fi
+
+    if [[ -r "${JARVIS_HOME}/kubeconfig" ]]; then
+        export KUBECONFIG="${JARVIS_HOME}/kubeconfig"
+        info "Using user kubeconfig: ${KUBECONFIG}"
+        return 0
+    fi
+
+    if [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
         export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
         info "Using k3s kubeconfig: ${KUBECONFIG}"
     fi

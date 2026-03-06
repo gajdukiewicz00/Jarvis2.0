@@ -45,8 +45,13 @@ spec:
                 echo "MQTT_USERNAME and MQTT_PASSWORD must be set in jarvis-secrets"
                 exit 1
               fi
+              rm -f /work/passwords
               mosquitto_passwd -b -c /work/passwords "${USERNAME}" "${PASSWORD}"
               chmod 600 /work/passwords
+              cat > /work/aclfile <<'EOF'
+              topic readwrite jarvis/#
+              EOF
+              chmod 644 /work/aclfile
           volumeMounts:
             - name: mosquitto-passwd
               mountPath: /work
@@ -59,7 +64,7 @@ spec:
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -153,13 +158,13 @@ data:
     listener 1883
     allow_anonymous false
     password_file /mosquitto/config/auth/passwords
-    acl_file /mosquitto/config/aclfile
+    acl_file /mosquitto/config/auth/aclfile
     
     listener 9001
     protocol websockets
     allow_anonymous false
     password_file /mosquitto/config/auth/passwords
-    acl_file /mosquitto/config/aclfile
+    acl_file /mosquitto/config/auth/aclfile
     
     persistence true
     persistence_location /mosquitto/data/

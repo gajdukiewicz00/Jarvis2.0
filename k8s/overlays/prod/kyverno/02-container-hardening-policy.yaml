@@ -30,14 +30,14 @@ spec:
             deny:
               conditions:
                 any:
-                  - key: "{{ element.securityContext.allowPrivilegeEscalation || '' }}"
+                  - key: "{{ element.securityContext.allowPrivilegeEscalation }}"
                     operator: NotEquals
                     value: false
           - list: "request.object.spec.initContainers || []"
             deny:
               conditions:
                 any:
-                  - key: "{{ element.securityContext.allowPrivilegeEscalation || '' }}"
+                  - key: "{{ element.securityContext.allowPrivilegeEscalation }}"
                     operator: NotEquals
                     value: false
     - name: disallow-privileged-containers

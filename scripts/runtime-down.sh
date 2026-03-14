@@ -10,6 +10,8 @@ ensure_local_env
 
 stop_service "llm-service"
 stop_service "planner-service"
+stop_service "analytics-service"
+stop_service "life-tracker"
 stop_service "smart-home-service"
 stop_service "api-gateway"
 stop_service "voice-gateway"

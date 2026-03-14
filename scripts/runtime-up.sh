@@ -28,6 +28,12 @@ wait_for_service "voice-gateway"
 start_service "smart-home-service"
 wait_for_service "smart-home-service"
 
+start_service "life-tracker"
+wait_for_service "life-tracker"
+
+start_service "analytics-service"
+wait_for_service "analytics-service"
+
 start_service "api-gateway"
 wait_for_service "api-gateway"
 

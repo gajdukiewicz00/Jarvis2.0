@@ -22,6 +22,8 @@ CORE_SERVICES=(
     "orchestrator"
     "voice-gateway"
     "smart-home-service"
+    "life-tracker"
+    "analytics-service"
     "api-gateway"
     "planner-service"
 )
@@ -68,13 +70,13 @@ print(secrets.token_urlsafe(48))
 PY
 }
 
-default_vosk_enabled() {
-    local ru_path="${JARVIS_HOME}/models/vosk-model-small-ru-0.22"
-    local en_path="${JARVIS_HOME}/models/vosk-model-small-en-us-0.15"
+default_stt_provider() {
+    local ru_path="${JARVIS_HOME}/models/vosk/vosk-model-small-ru-0.22"
+    local en_path="${JARVIS_HOME}/models/vosk/vosk-model-small-en-us-0.15"
     if [[ -d "${ru_path}" || -d "${en_path}" ]]; then
-        printf 'true'
+        printf 'vosk'
     else
-        printf 'false'
+        printf 'noop'
     fi
 }
 
@@ -90,7 +92,7 @@ ensure_local_env() {
         ENABLE_LLM
         JARVIS_LLM_ENABLED
         ENABLE_MEMORY
-        JARVIS_VOSK_ENABLED
+        JARVIS_STT_PROVIDER
         JARVIS_VOSK_MODEL_PATH_RU
         JARVIS_VOSK_MODEL_PATH_EN
         LLM_SERVER_URL
@@ -128,9 +130,9 @@ ensure_local_env() {
     : "${JARVIS_LLM_ENABLED:=${ENABLE_LLM}}"
     : "${ENABLE_MEMORY:=false}"
     : "${SMART_HOME_PROVIDER:=mock}"
-    : "${JARVIS_VOSK_MODEL_PATH_RU:=${JARVIS_HOME}/models/vosk-model-small-ru-0.22}"
-    : "${JARVIS_VOSK_MODEL_PATH_EN:=${JARVIS_HOME}/models/vosk-model-small-en-us-0.15}"
-    : "${JARVIS_VOSK_ENABLED:=$(default_vosk_enabled)}"
+    : "${JARVIS_VOSK_MODEL_PATH_RU:=${JARVIS_HOME}/models/vosk/vosk-model-small-ru-0.22}"
+    : "${JARVIS_VOSK_MODEL_PATH_EN:=${JARVIS_HOME}/models/vosk/vosk-model-small-en-us-0.15}"
+    : "${JARVIS_STT_PROVIDER:=$(default_stt_provider)}"
     : "${LLM_SERVER_URL:=http://127.0.0.1:5000}"
     : "${MANAGEMENT_HEALTH_RABBIT_ENABLED:=false}"
     : "${MANAGEMENT_HEALTH_KAFKA_ENABLED:=false}"
@@ -151,7 +153,7 @@ ENABLE_LLM=${ENABLE_LLM}
 JARVIS_LLM_ENABLED=${JARVIS_LLM_ENABLED}
 ENABLE_MEMORY=${ENABLE_MEMORY}
 SMART_HOME_PROVIDER=${SMART_HOME_PROVIDER}
-JARVIS_VOSK_ENABLED=${JARVIS_VOSK_ENABLED}
+JARVIS_STT_PROVIDER=${JARVIS_STT_PROVIDER}
 JARVIS_VOSK_MODEL_PATH_RU=${JARVIS_VOSK_MODEL_PATH_RU}
 JARVIS_VOSK_MODEL_PATH_EN=${JARVIS_VOSK_MODEL_PATH_EN}
 LLM_SERVER_URL=${LLM_SERVER_URL}
@@ -170,7 +172,7 @@ EOF
     export JARVIS_LLM_ENABLED
     export ENABLE_MEMORY
     export SMART_HOME_PROVIDER
-    export JARVIS_VOSK_ENABLED
+    export JARVIS_STT_PROVIDER
     export JARVIS_VOSK_MODEL_PATH_RU
     export JARVIS_VOSK_MODEL_PATH_EN
     export LLM_SERVER_URL
@@ -182,7 +184,9 @@ EOF
     export VOICE_GATEWAY_URL="http://127.0.0.1:8081"
     export NLP_SERVICE_URL="http://127.0.0.1:8082"
     export ORCHESTRATOR_URL="http://127.0.0.1:8083"
+    export LIFE_TRACKER_URL="http://127.0.0.1:8085"
     export SMART_HOME_URL="http://127.0.0.1:8086"
+    export ANALYTICS_URL="http://127.0.0.1:8087"
     export SECURITY_URL="http://127.0.0.1:8088"
     export USER_PROFILE_URL="http://127.0.0.1:8089"
     export API_GATEWAY_URL="http://127.0.0.1:8080"
@@ -217,6 +221,8 @@ service_health_url() {
         voice-gateway) printf 'http://127.0.0.1:8081/actuator/health' ;;
         api-gateway) printf 'http://127.0.0.1:8080/actuator/health' ;;
         smart-home-service) printf 'http://127.0.0.1:8086/actuator/health' ;;
+        life-tracker) printf 'http://127.0.0.1:8085/actuator/health' ;;
+        analytics-service) printf 'http://127.0.0.1:8087/actuator/health' ;;
         planner-service) printf 'http://127.0.0.1:8092/actuator/health' ;;
         llm-service) printf 'http://127.0.0.1:8091/api/v1/llm/health' ;;
         *)
@@ -233,6 +239,8 @@ module_list() {
         "apps/orchestrator"
         "apps/voice-gateway"
         "apps/smart-home-service"
+        "apps/life-tracker"
+        "apps/analytics-service"
         "apps/api-gateway"
         "apps/planner-service"
     )
@@ -437,7 +445,7 @@ start_service() {
         export SPRING_RABBITMQ_PORT
         export USER_PROFILE_ENABLED
         export MEMORY_ENABLED
-        export JARVIS_VOSK_ENABLED
+        export JARVIS_STT_PROVIDER
         export JARVIS_VOSK_MODEL_PATH_RU
         export JARVIS_VOSK_MODEL_PATH_EN
         export LLM_SERVER_URL

@@ -20,19 +20,23 @@ spring:
       max-request-size: 10MB
 
 jarvis:
+  stt:
+    provider: ${JARVIS_STT_PROVIDER:vosk}
   vosk:
-    enabled: ${JARVIS_VOSK_ENABLED:true}
     model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:/models/vosk-model-small-ru-0.22}
     model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:/models/vosk-model-small-en-us-0.15}
     default-language: ${JARVIS_VOSK_DEFAULT_LANGUAGE:ru-RU}
     sample-rate: ${JARVIS_VOSK_SAMPLE_RATE:16000}
+  voice:
+    whisper:
+      model-path: ${JARVIS_VOICE_WHISPER_MODEL_PATH:models/ggml-small.bin}
   orchestrator:
     url: ${JARVIS_ORCHESTRATOR_URL:http://orchestrator:8083}
 
 # Text-to-Speech Configuration
 tts:
-  enabled: true
-  provider: espeak  # Using espeak (no credentials needed)
+  enabled: ${TTS_ENABLED:true}
+  provider: ${TTS_PROVIDER:espeak}
   espeak:
     voice: russian
     speed: 150

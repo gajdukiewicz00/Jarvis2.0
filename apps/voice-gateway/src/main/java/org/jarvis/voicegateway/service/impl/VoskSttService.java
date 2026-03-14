@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "jarvis.vosk.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "jarvis.stt.provider", havingValue = "vosk", matchIfMissing = true)
 public class VoskSttService implements SttService {
 
     @Value("${jarvis.vosk.model-path-ru:vosk-model-small-ru-0.22}")

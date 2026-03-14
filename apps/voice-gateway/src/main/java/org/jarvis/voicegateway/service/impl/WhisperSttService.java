@@ -18,30 +18,22 @@ import java.nio.file.Path;
 import java.util.Arrays;
 
 /**
- * Whisper-based STT service using whisper.cpp JNI bindings
- * Only active when jarvis.voice.whisper.enabled=true
+ * Whisper-based STT service using whisper.cpp JNI bindings.
+ * Active when jarvis.stt.provider=whisper.
  */
 @Slf4j
 @Service
-@ConditionalOnProperty(name = "jarvis.voice.whisper.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(name = "jarvis.stt.provider", havingValue = "whisper")
 public class WhisperSttService implements SttService {
 
     @Value("${jarvis.voice.whisper.model-path:models/ggml-small.bin}")
     private String modelPath;
-
-    @Value("${jarvis.voice.whisper.enabled:false}")
-    private boolean enabled;
 
     private WhisperJNI whisper;
     private WhisperContext context;
 
     @PostConstruct
     public void init() {
-        if (!enabled) {
-            log.info("Whisper STT is disabled (jarvis.voice.whisper.enabled=false)");
-            return;
-        }
-
         try {
             WhisperJNI.loadLibrary();
             whisper = new WhisperJNI();
@@ -52,7 +44,7 @@ public class WhisperSttService implements SttService {
                 log.info("To enable Whisper:");
                 log.info("  1. Download model from: https://huggingface.co/ggerganov/whisper.cpp/tree/main");
                 log.info("  2. Place it at: {}", path.toAbsolutePath());
-                log.info("  3. Set jarvis.voice.whisper.enabled=true");
+                log.info("  3. Set jarvis.stt.provider=whisper");
                 return; // Don't throw - allow service to start without Whisper
             }
 

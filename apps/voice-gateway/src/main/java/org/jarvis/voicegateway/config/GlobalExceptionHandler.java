@@ -1,7 +1,7 @@
 package org.jarvis.voicegateway.config;
 
 import lombok.extern.slf4j.Slf4j;
-import org.jarvis.voicegateway.service.impl.NoOpSttService;
+import org.jarvis.voicegateway.exception.SttUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -24,9 +24,9 @@ public class GlobalExceptionHandler {
      * Handle STT unavailable exception.
      * Returns 503 Service Unavailable with clear message.
      */
-    @ExceptionHandler(NoOpSttService.SttUnavailableException.class)
+    @ExceptionHandler(SttUnavailableException.class)
     public ResponseEntity<Map<String, Object>> handleSttUnavailable(
-            NoOpSttService.SttUnavailableException ex, WebRequest request) {
+            SttUnavailableException ex, WebRequest request) {
         
         log.warn("STT unavailable: {}", ex.getMessage());
         

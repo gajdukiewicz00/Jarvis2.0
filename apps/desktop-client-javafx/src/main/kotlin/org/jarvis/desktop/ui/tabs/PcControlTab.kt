@@ -15,6 +15,7 @@ class PcControlTab(private val apiClient: ApiClient) {
     private val statusLabel = Label("")
     private val systemControl = SystemControlService()
     private val logger = LoggerFactory.getLogger(PcControlTab::class.java)
+    private var missingDeps: Set<String> = emptySet()
 
     init {
         val content = VBox(15.0).apply {
@@ -34,19 +35,27 @@ class PcControlTab(private val apiClient: ApiClient) {
         checkDependencies()
         
         // === Volume Control ===
-        content.children.add(createSection("🔊 Volume", createVolumeControls()))
+        val volumeSection = createSection("🔊 Volume", createVolumeControls())
+        disableSectionIf(volumeSection, "pactl")
+        content.children.add(volumeSection)
         
         // === Media Control ===
-        content.children.add(createSection("🎵 Media", createMediaControls()))
+        val mediaSection = createSection("🎵 Media", createMediaControls())
+        disableSectionIf(mediaSection, "playerctl")
+        content.children.add(mediaSection)
         
         // === Applications ===
         content.children.add(createSection("📱 Apps", createAppControls()))
         
         // === Hotkeys ===
-        content.children.add(createSection("⌨️ Hotkeys", createHotkeyControls()))
+        val hotkeySection = createSection("⌨️ Hotkeys", createHotkeyControls())
+        disableSectionIf(hotkeySection, "xdotool")
+        content.children.add(hotkeySection)
         
         // === Windows ===
-        content.children.add(createSection("🪟 Windows", createWindowControls()))
+        val windowSection = createSection("🪟 Windows", createWindowControls())
+        disableSectionIf(windowSection, "xdotool")
+        content.children.add(windowSection)
         
         // === Scenarios ===
         content.children.add(createSection("🎯 Scenarios", createScenarioControls()))
@@ -258,12 +267,19 @@ class PcControlTab(private val apiClient: ApiClient) {
         }
     }
     
+    private fun disableSectionIf(section: VBox, requiredUtility: String) {
+        if (requiredUtility in missingDeps) {
+            section.isDisable = true
+            section.opacity = 0.5
+        }
+    }
+
     private fun checkDependencies() {
         val deps = systemControl.checkDependencies()
-        val missing = deps.filter { !it.value }.keys
-        if (missing.isNotEmpty()) {
-            showStatus("⚠️ Missing utilities: ${missing.joinToString()}", false)
-            logger.warn("Missing utilities: $missing. Install with: sudo apt install ${missing.joinToString(" ")}")
+        missingDeps = deps.filter { !it.value }.keys
+        if (missingDeps.isNotEmpty()) {
+            showStatus("⚠️ Missing: ${missingDeps.joinToString()}. Install: sudo apt install ${missingDeps.joinToString(" ")}", false)
+            logger.warn("Missing utilities: $missingDeps. Install with: sudo apt install ${missingDeps.joinToString(" ")}")
         }
     }
 }

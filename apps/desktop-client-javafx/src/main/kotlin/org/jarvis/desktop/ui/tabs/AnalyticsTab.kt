@@ -117,10 +117,15 @@ class AnalyticsTab(private val apiClient: ApiClient) {
             } catch (e: Exception) {
                 val errorMessage = e.message ?: "Unknown error"
                 Platform.runLater {
-                    statusLabel.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                        "✗ Server unavailable. Please start the API gateway (http://localhost:8080)"
-                    } else {
-                        "✗ Error loading analytics: $errorMessage"
+                    statusLabel.text = when {
+                        e is org.jarvis.desktop.api.AccessDeniedException ->
+                            "✗ Access denied. Check authorization configuration or user roles."
+                        errorMessage.contains("Connection refused") || errorMessage.contains("not available") ->
+                            "✗ Server unavailable. Please start the API gateway (http://localhost:8080)"
+                        errorMessage.contains("not found (404)") ->
+                            "✗ Analytics service not deployed. Start it with the local runtime."
+                        else ->
+                            "✗ Error loading analytics: $errorMessage"
                     }
                     statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
                 }

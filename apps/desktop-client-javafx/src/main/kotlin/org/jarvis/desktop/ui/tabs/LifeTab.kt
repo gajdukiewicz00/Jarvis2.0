@@ -64,7 +64,7 @@ class LifeTab(private val apiClient: ApiClient) {
                         userId = TokenManager.getUserId()
                     )
                     
-                    apiClient.post("/life/finance/expense", requestBody)
+                    apiClient.post("/life/finance/expenses", requestBody)
                     statusLabel.text = "✓ Expense added: €$amount - $category"
                     statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
                     amountField.clear()
@@ -148,11 +148,15 @@ class LifeTab(private val apiClient: ApiClient) {
             statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
         } catch (e: Exception) {
             val errorMessage = e.message ?: "Unknown error"
-            // Show user-friendly error message
-            statusLabel.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                "✗ Server unavailable. Please start the API gateway (${AppConfig.apiGatewayBaseUrl})"
-            } else {
-                "✗ Error loading expenses: $errorMessage"
+            statusLabel.text = when {
+                e is org.jarvis.desktop.api.AccessDeniedException ->
+                    "✗ Access denied. Check authorization configuration or user roles."
+                errorMessage.contains("Connection refused") || errorMessage.contains("not available") ->
+                    "✗ Server unavailable. Please start the API gateway (${AppConfig.apiGatewayBaseUrl})"
+                errorMessage.contains("not found (404)") ->
+                    "✗ Life tracker service not deployed. Start it with the local runtime."
+                else ->
+                    "✗ Error loading expenses: $errorMessage"
             }
             statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
             expenseListView.items.clear()

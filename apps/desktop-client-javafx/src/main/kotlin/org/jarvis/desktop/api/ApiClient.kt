@@ -54,7 +54,7 @@ class ApiClient(
             } else {
                 val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                 logger.warn("GET $endpoint failed: $responseCode - $errorBody")
-                throw Exception("Request failed with code $responseCode")
+                throw httpError(responseCode, errorBody)
             }
         } catch (e: UnauthorizedRequestException) {
             throw e
@@ -105,7 +105,7 @@ class ApiClient(
                 response
             } else {
                 val error = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
-                throw Exception("HTTP $responseCode: $error")
+                throw httpError(responseCode, error)
             }
         } catch (e: UnauthorizedRequestException) {
             throw e
@@ -176,7 +176,7 @@ class ApiClient(
                 response
             } else {
                 val error = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
-                throw Exception("HTTP $responseCode: $error")
+                throw httpError(responseCode, error)
             }
         } catch (e: UnauthorizedRequestException) {
             throw e
@@ -209,6 +209,17 @@ class ApiClient(
     private fun configureTimeouts(connection: HttpURLConnection) {
         connection.connectTimeout = 10000
         connection.readTimeout = 10000
+    }
+
+    private fun httpError(code: Int, body: String): Exception = when (code) {
+        HttpURLConnection.HTTP_FORBIDDEN ->
+            AccessDeniedException("Access denied (403). Check user roles or service authorization.")
+        HttpURLConnection.HTTP_NOT_FOUND ->
+            Exception("Resource not found (404). The service may not be deployed.")
+        in 500..599 ->
+            Exception("Server error ($code). The backend service may be unhealthy.")
+        else ->
+            Exception("HTTP $code: $body")
     }
 
     private fun isConnectionError(exception: Exception): Boolean {
@@ -263,3 +274,4 @@ class ApiClient(
 }
 
 private class UnauthorizedRequestException(message: String) : Exception(message)
+class AccessDeniedException(message: String) : Exception(message)

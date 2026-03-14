@@ -1,13 +1,13 @@
 package org.jarvis.pccontrol.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.pccontrol.model.OpenAppRequest;
 import org.jarvis.pccontrol.service.SystemControlService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -21,6 +21,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
+@lombok.RequiredArgsConstructor
 @ConditionalOnProperty(name = "pc-control.stub-mode", havingValue = "false", matchIfMissing = true)
 public class LinuxSystemControlService implements SystemControlService {
 
@@ -41,35 +42,27 @@ public class LinuxSystemControlService implements SystemControlService {
             Map.entry("telegram", List.of("telegram-desktop"))
     );
 
+    private final LinuxAudioControl audioControl;
+    private final org.jarvis.pccontrol.service.DesktopControlService desktopControlService;
+
     @Override
     public void changeVolume(int deltaPercent, String direction) throws IOException, InterruptedException {
-        int delta = Math.max(1, Math.min(100, deltaPercent));
-        String sign = "+".equals(direction) ? "+" : "-";
-        List<String> cmd = List.of("pactl", "set-sink-volume", "@DEFAULT_SINK@", sign + delta + "%");
-        log.info("🔊 Executing volume change: {}", cmd);
-        execWithFallback(cmd, "Volume change");
+        audioControl.changeVolume(deltaPercent, direction);
     }
 
     @Override
     public void setVolume(int percent) throws IOException, InterruptedException {
-        int level = Math.max(0, Math.min(100, percent));
-        List<String> cmd = List.of("pactl", "set-sink-volume", "@DEFAULT_SINK@", level + "%");
-        log.info("🔊 Setting volume to {}%: {}", level, cmd);
-        execWithFallback(cmd, "Set volume");
+        audioControl.setVolume(Math.max(0, Math.min(100, percent)));
     }
 
     @Override
     public void mute() throws IOException, InterruptedException {
-        List<String> cmd = List.of("pactl", "set-sink-mute", "@DEFAULT_SINK@", "1");
-        log.info("🔇 Executing mute");
-        execWithFallback(cmd, "Mute");
+        audioControl.mute();
     }
 
     @Override
     public void unmute() throws IOException, InterruptedException {
-        List<String> cmd = List.of("pactl", "set-sink-mute", "@DEFAULT_SINK@", "0");
-        log.info("🔊 Executing unmute");
-        execWithFallback(cmd, "Unmute");
+        audioControl.unmute();
     }
 
     @Override
@@ -117,9 +110,16 @@ public class LinuxSystemControlService implements SystemControlService {
 
     @Override
     public void openApp(String appName) throws IOException {
-        List<String> cmd = resolveAppCommand(appName);
-        log.info("🚀 Opening app: {} with command: {}", appName, cmd);
-        startProcess(cmd);
+        try {
+            desktopControlService.openApp(new OpenAppRequest(appName));
+        } catch (IllegalArgumentException e) {
+            List<String> fallbackCommand = APP_COMMANDS.get(normalizeAppName(appName));
+            if (fallbackCommand == null) {
+                throw e;
+            }
+            log.info("Fallback app launch for {} with {}", appName, fallbackCommand);
+            startProcess(fallbackCommand);
+        }
     }
 
     @Override
@@ -207,15 +207,10 @@ public class LinuxSystemControlService implements SystemControlService {
         }
     }
 
-    private static List<String> resolveAppCommand(String appName) {
+    private static String normalizeAppName(String appName) {
         if (appName == null || appName.isBlank()) {
             throw new IllegalArgumentException("App name is required");
         }
-        String key = appName.toLowerCase(Locale.ROOT).trim();
-        List<String> cmd = APP_COMMANDS.get(key);
-        if (cmd == null) {
-            throw new IllegalArgumentException("Unsupported app: " + appName);
-        }
-        return cmd;
+        return appName.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

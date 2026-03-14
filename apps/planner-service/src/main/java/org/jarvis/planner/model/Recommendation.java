@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.ColumnTransformer;
 
 import java.time.Instant;
 
@@ -41,6 +42,7 @@ public class Recommendation {
     private RecommendationStatus status = RecommendationStatus.PENDING;
     
     @Column(columnDefinition = "JSONB")
+    @ColumnTransformer(write = "cast(? as jsonb)")
     private String data; // Additional context as JSON
     
     @CreationTimestamp

@@ -4,6 +4,7 @@ import org.jarvis.orchestrator.client.ApiGatewayPcClient;
 import org.jarvis.orchestrator.client.LlmServiceClient;
 import org.jarvis.orchestrator.client.NlpClient;
 import org.jarvis.orchestrator.client.PcControlClient;
+import org.jarvis.orchestrator.client.SmartHomeClient;
 import org.jarvis.orchestrator.config.OrchestratorExecutorProperties;
 import org.jarvis.orchestrator.dto.LlmChatResponse;
 import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
@@ -30,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,6 +47,8 @@ class OrchestratorServiceImplTest {
     private JarvisPhraseProvider phraseProvider;
     @Mock
     private LlmServiceClient llmClient;
+    @Mock
+    private SmartHomeClient smartHomeClient;
 
     private OrchestratorServiceImpl service;
 
@@ -70,6 +74,7 @@ class OrchestratorServiceImplTest {
                 apiGatewayPcClient,
                 phraseProvider,
                 llmClient,
+                smartHomeClient,
                 props);
 
         ReflectionTestUtils.setField(service, "llmEnabled", true);
@@ -81,7 +86,7 @@ class OrchestratorServiceImplTest {
         CountDownLatch firstCallStarted = new CountDownLatch(1);
         CountDownLatch releaseLlmCalls = new CountDownLatch(1);
 
-        when(llmClient.chat(any(), anyString())).thenAnswer(invocation -> {
+        when(llmClient.chat(any(), anyString(), nullable(String.class))).thenAnswer(invocation -> {
             firstCallStarted.countDown();
             releaseLlmCalls.await(3, TimeUnit.SECONDS);
             return new LlmChatResponse("llm-reply", Map.of(), "test-model", 1, "neutral");
@@ -120,6 +125,7 @@ class OrchestratorServiceImplTest {
                 apiGatewayPcClient,
                 phraseProvider,
                 llmClient,
+                smartHomeClient,
                 props);
 
         assertFalse(service.getLlmExecutor().isShutdown());

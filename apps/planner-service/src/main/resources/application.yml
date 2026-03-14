@@ -40,6 +40,8 @@ server:
 
 # External services
 services:
+  api-gateway:
+    url: ${API_GATEWAY_URL:http://api-gateway:8080}
   life-tracker:
     url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
   analytics:
@@ -48,6 +50,8 @@ services:
     url: ${USER_PROFILE_URL:http://user-profile:8089}
   llm-service:
     url: ${LLM_SERVICE_URL:http://llm-service:8091}
+  voice-gateway:
+    url: ${VOICE_GATEWAY_URL:http://voice-gateway:8081}
 
 # Planner configuration
 planner:

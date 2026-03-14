@@ -174,4 +174,19 @@ public class AnalyticsController {
         log.debug("Getting calendar statistics");
         return ResponseEntity.ok(analyticsService.getCalendarStatistics());
     }
+
+    @GetMapping("/habits/sleep-average")
+    public ResponseEntity<SleepSummaryDTO> getSleepSummary(
+            @RequestParam(defaultValue = "14") int days) {
+        log.debug("Getting sleep summary for trailing {} days", days);
+        return ResponseEntity.ok(analyticsService.getSleepSummary(days));
+    }
+
+    @GetMapping("/habits/weekly-overtime")
+    public ResponseEntity<OvertimeSummaryDTO> getWeeklyOvertime(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(defaultValue = "40") int baselineHours) {
+        log.debug("Getting overtime summary for trailing {} days and baseline {}", days, baselineHours);
+        return ResponseEntity.ok(analyticsService.getOvertimeSummary(days, baselineHours));
+    }
 }

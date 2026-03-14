@@ -73,6 +73,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Internal service JWTs may already have established authentication.
+        if (SecurityContextHolder.getContext().getAuthentication() != null
+                && SecurityContextHolder.getContext().getAuthentication().isAuthenticated()) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
 
         // Public endpoints: skip JWT validation

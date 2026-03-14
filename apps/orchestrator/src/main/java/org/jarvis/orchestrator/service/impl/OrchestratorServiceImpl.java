@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.orchestrator.client.ApiGatewayPcClient;
 import org.jarvis.orchestrator.client.NlpClient;
 import org.jarvis.orchestrator.client.PcControlClient;
+import org.jarvis.orchestrator.client.SmartHomeClient;
 import org.jarvis.orchestrator.config.OrchestratorExecutorProperties;
 import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
 import org.jarvis.orchestrator.phrases.Language;
@@ -43,6 +44,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     private final ApiGatewayPcClient apiGatewayPcClient;
     private final JarvisPhraseProvider phraseProvider;
     private final org.jarvis.orchestrator.client.LlmServiceClient llmClient;
+    private final SmartHomeClient smartHomeClient;
 
     // LLM Feature flag and configuration
     @Value("${jarvis.llm.enabled:false}")
@@ -72,18 +74,24 @@ public class OrchestratorServiceImpl implements OrchestratorService {
             ApiGatewayPcClient apiGatewayPcClient,
             JarvisPhraseProvider phraseProvider,
             org.jarvis.orchestrator.client.LlmServiceClient llmClient,
+            SmartHomeClient smartHomeClient,
             OrchestratorExecutorProperties executorProperties) {
         this.nlpClient = nlpClient;
         this.pcControlClient = pcControlClient;
         this.apiGatewayPcClient = apiGatewayPcClient;
         this.phraseProvider = phraseProvider;
         this.llmClient = llmClient;
+        this.smartHomeClient = smartHomeClient;
         this.executorProperties = executorProperties;
         this.llmExecutor = createLlmExecutor(executorProperties);
     }
 
-    @Override
     public String processText(String text, String language, String correlationId) {
+        return processText(text, language, correlationId, null);
+    }
+
+    @Override
+    public String processText(String text, String language, String correlationId, String userId) {
         log.info("📝 Processing text: '{}', lang={}, correlationId={}", text, language, correlationId);
 
         // Auto-detect language from text if not provided
@@ -94,12 +102,17 @@ public class OrchestratorServiceImpl implements OrchestratorService {
         NlpClient.NlpResult result = nlpClient.analyze(new NlpClient.AnalyzeRequest(text));
         log.info("🔍 NLP Result: intent={}, slots={}, correlationId={}", result.intent(), result.slots(),
                 correlationId);
-        return executeIntent(result.intent(), result.slots(), lang.getCode(), correlationId, text);
+        return executeIntent(result.intent(), result.slots(), lang.getCode(), correlationId, text, userId);
+    }
+
+    public String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,
+            String originalText) {
+        return executeIntent(intent, slots, language, correlationId, originalText, null);
     }
 
     @Override
     public String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,
-            String originalText) {
+            String originalText, String userId) {
         // Normalize intent to lowercase snake_case for consistent matching
         String normalizedIntent = normalizeIntent(intent);
 
@@ -150,7 +163,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     if (delta == 10)
                         delta = parseIntOrDefault(slots != null ? slots.get("amount") : null, 10);
                     log.info("🔊 Executing VOLUME_UP, delta={}, correlationId={}", delta, correlationId);
-                    sendPcAction("VOLUME_UP", Map.of("delta", delta), correlationId);
+                    sendPcAction("VOLUME_UP", Map.of("delta", delta), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.VOLUME_UP, lang);
                 }
                 case "volume_down" -> {
@@ -158,45 +171,45 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     if (delta == 10)
                         delta = parseIntOrDefault(slots != null ? slots.get("amount") : null, 10);
                     log.info("🔉 Executing VOLUME_DOWN, delta={}, correlationId={}", delta, correlationId);
-                    sendPcAction("VOLUME_DOWN", Map.of("delta", delta), correlationId);
+                    sendPcAction("VOLUME_DOWN", Map.of("delta", delta), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.VOLUME_DOWN, lang);
                 }
                 case "mute" -> {
                     log.info("🔇 Executing MUTE, correlationId={}", correlationId);
-                    sendPcAction("MUTE", Map.of(), correlationId);
+                    sendPcAction("MUTE", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.MUTE, lang);
                 }
                 case "unmute" -> {
                     log.info("🔊 Executing UNMUTE, correlationId={}", correlationId);
-                    sendPcAction("UNMUTE", Map.of(), correlationId);
+                    sendPcAction("UNMUTE", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.UNMUTE, lang);
                 }
                 case "set_volume" -> {
                     int level = parseIntOrDefault(slots != null ? slots.get("level") : null, 100);
                     log.info("🔊 Executing SET_VOLUME, level={}%, correlationId={}", level, correlationId);
-                    sendPcAction("SET_VOLUME", Map.of("level", level), correlationId);
+                    sendPcAction("SET_VOLUME", Map.of("level", level), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.VOLUME_MAX, lang);
                 }
 
                 // ==================== Media Control ====================
                 case "play", "resume", "media_toggle" -> {
                     log.info("▶️ Executing PLAY/TOGGLE, correlationId={}", correlationId);
-                    sendPcAction("PLAY_PAUSE", Map.of(), correlationId);
+                    sendPcAction("PLAY_PAUSE", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.PLAY, lang);
                 }
                 case "pause", "stop" -> {
                     log.info("⏸️ Executing PAUSE, correlationId={}", correlationId);
-                    sendPcAction("PAUSE", Map.of(), correlationId);
+                    sendPcAction("PAUSE", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.PAUSE, lang);
                 }
                 case "next_track", "next", "media_next" -> {
                     log.info("⏭️ Executing NEXT, correlationId={}", correlationId);
-                    sendPcAction("NEXT", Map.of(), correlationId);
+                    sendPcAction("NEXT", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.NEXT_TRACK, lang);
                 }
                 case "previous_track", "prev", "previous", "media_prev" -> {
                     log.info("⏮️ Executing PREV, correlationId={}", correlationId);
-                    sendPcAction("PREV", Map.of(), correlationId);
+                    sendPcAction("PREV", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.PREVIOUS_TRACK, lang);
                 }
 
@@ -205,72 +218,72 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     String app = slots != null ? slots.getOrDefault("app", slots.getOrDefault("application", "browser"))
                             : "browser";
                     log.info("🚀 Executing OPEN_APP: {}, correlationId={}", app, correlationId);
-                    sendPcAction("OPEN_APP", Map.of("app", app), correlationId);
+                    sendPcAction("OPEN_APP", Map.of("app", app), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.OPEN_APP, lang, Map.of("app", app));
                 }
                 case "open_browser" -> {
                     log.info("🌐 Executing OPEN_BROWSER, correlationId={}", correlationId);
-                    sendPcAction("OPEN_APP", Map.of("app", "browser"), correlationId);
+                    sendPcAction("OPEN_APP", Map.of("app", "browser"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.OPEN_BROWSER, lang);
                 }
                 case "open_youtube" -> {
                     log.info("🎬 Executing OPEN_YOUTUBE, correlationId={}", correlationId);
-                    sendPcAction("OPEN_APP", Map.of("app", "youtube"), correlationId);
+                    sendPcAction("OPEN_APP", Map.of("app", "youtube"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.OPEN_YOUTUBE, lang);
                 }
                 case "open_ide", "open_code", "open_notepad" -> {
                     String ide = slots != null ? slots.getOrDefault("ide", "code") : "code";
                     log.info("💻 Executing OPEN_IDE: {}, correlationId={}", ide, correlationId);
-                    sendPcAction("OPEN_APP", Map.of("app", ide), correlationId);
+                    sendPcAction("OPEN_APP", Map.of("app", ide), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.OPEN_IDE, lang);
                 }
                 case "open_terminal" -> {
                     log.info("🖥️ Executing OPEN_TERMINAL, correlationId={}", correlationId);
-                    sendPcAction("OPEN_APP", Map.of("app", "terminal"), correlationId);
+                    sendPcAction("OPEN_APP", Map.of("app", "terminal"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.OPEN_TERMINAL, lang);
                 }
 
                 // ==================== Scenarios / Protocols ====================
                 case "work_mode" -> {
                     log.info("💼 Activating WORK_MODE, correlationId={}", correlationId);
-                    sendPcAction("SCENARIO", Map.of("name", "work"), correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "work"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.WORK_MODE, lang);
                 }
                 case "rest_mode", "relax_mode" -> {
                     log.info("🛋️ Activating REST_MODE, correlationId={}", correlationId);
-                    sendPcAction("SCENARIO", Map.of("name", "rest"), correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "rest"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.REST_MODE, lang);
                 }
                 case "focus_mode" -> {
                     log.info("🎯 Activating FOCUS_MODE, correlationId={}", correlationId);
-                    sendPcAction("SCENARIO", Map.of("name", "focus"), correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "focus"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.FOCUS_MODE, lang);
                 }
                 case "house_party", "party_mode", "protocol_house_party" -> {
                     log.info("🎉 Activating HOUSE_PARTY protocol, correlationId={}", correlationId);
-                    sendPcAction("SCENARIO", Map.of("name", "party"), correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "party"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_HOUSE_PARTY, lang);
                 }
                 case "clean_slate", "shutdown_mode", "protocol_clean_slate" -> {
                     log.info("🧹 Activating CLEAN_SLATE protocol, correlationId={}", correlationId);
-                    sendPcAction("SCENARIO", Map.of("name", "clean_slate"), correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "clean_slate"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_CLEAN_SLATE, lang);
                 }
 
                 // ==================== Window Control ====================
                 case "minimize_window", "window_minimize" -> {
                     log.info("⬇️ Executing MINIMIZE, correlationId={}", correlationId);
-                    sendPcAction("MINIMIZE", Map.of(), correlationId);
+                    sendPcAction("MINIMIZE", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.WINDOW_MINIMIZE, lang);
                 }
                 case "maximize_window", "window_maximize" -> {
                     log.info("⬆️ Executing MAXIMIZE, correlationId={}", correlationId);
-                    sendPcAction("MAXIMIZE", Map.of(), correlationId);
+                    sendPcAction("MAXIMIZE", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.WINDOW_MAXIMIZE, lang);
                 }
                 case "lock_screen" -> {
                     log.info("🔒 Executing LOCK_SCREEN, correlationId={}", correlationId);
-                    sendPcAction("LOCK_SCREEN", Map.of(), correlationId);
+                    sendPcAction("LOCK_SCREEN", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.LOCK_SCREEN, lang);
                 }
 
@@ -290,7 +303,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                             "title", lang == Language.RU ? "Таймер" : "Timer",
                             "message", lang == Language.RU ? "Установлен на " + amount + " " + unit
                                     : "Set for " + amount + " " + unit),
-                            correlationId);
+                            correlationId, userId);
 
                     String unitLocalized = lang == Language.RU
                             ? ("min".equals(unit) ? "минут" : "секунд")
@@ -298,19 +311,48 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     yield phraseProvider.getPhrase(PhraseContext.TIMER_SET, lang,
                             Map.of("amount", amount, "unit", unitLocalized));
                 }
+                case "smart_home_action" -> handleSmartHomeAction(slots, lang, correlationId, userId);
 
                 // ==================== Fallback ====================
-                case "fallback", "unknown" -> callLlm(originalText, correlationId, lang);
+                case "fallback", "unknown" -> callLlm(originalText, correlationId, lang, userId);
                 default -> {
                     log.warn("⚠️ Unknown intent: {} (normalized: {}), correlationId={}", intent, normalizedIntent,
                             correlationId);
-                    yield callLlm(originalText, correlationId, lang);
+                    yield callLlm(originalText, correlationId, lang, userId);
                 }
             };
         } catch (RuntimeException e) {
             log.error("❌ Error executing intent: {}, correlationId={}", intent, correlationId, e);
             return phraseProvider.getPhrase(PhraseContext.ACK_ERROR, lang);
         }
+    }
+
+    private String handleSmartHomeAction(
+            Map<String, String> slots,
+            Language lang,
+            String correlationId,
+            String userId) {
+        String deviceId = slots != null ? slots.get("deviceId") : null;
+        String action = slots != null ? slots.get("action") : null;
+        String payload = slots != null ? slots.get("payload") : null;
+        if (deviceId == null || deviceId.isBlank() || action == null || action.isBlank()) {
+            throw new IllegalArgumentException("smart_home_action requires deviceId and action");
+        }
+
+        String scopedUserId = userId != null && !userId.isBlank() ? userId : "local-user";
+        SmartHomeClient.ActionResult result = smartHomeClient.executeAction(
+                scopedUserId,
+                deviceId,
+                new SmartHomeClient.ActionRequest(action, payload));
+
+        sendPcAction("NOTIFY", Map.of(
+                "title", lang == Language.RU ? "Умный дом" : "Smart Home",
+                "message", buildSmartHomeNotification(result)), correlationId, scopedUserId);
+
+        return phraseProvider.getPhrase(
+                resolveSmartHomePhraseContext(result),
+                lang,
+                buildSmartHomePhraseParams(deviceId, result, lang));
     }
 
     /**
@@ -333,12 +375,12 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     /**
      * Send PC action to Desktop via API Gateway WebSocket.
      */
-    private void sendPcAction(String action, Map<String, Object> params, String correlationId) {
+    private void sendPcAction(String action, Map<String, Object> params, String correlationId, String userId) {
         try {
-            log.info("📤 Sending PC action via API Gateway: action={}, params={}, correlationId={}",
-                    action, params, correlationId);
+            log.info("📤 Sending PC action via API Gateway: action={}, params={}, correlationId={}, userId={}",
+                    action, params, correlationId, userId);
             var result = apiGatewayPcClient.sendPcAction(
-                    new ApiGatewayPcClient.PcActionRequest(action, params));
+                    new ApiGatewayPcClient.PcActionRequest(action, params, userId));
             log.info("📥 PC action result: {}, correlationId={}", result, correlationId);
         } catch (RuntimeException e) {
             log.warn("⚠️ Failed to send PC action via WebSocket ({}), falling back to direct call, correlationId={}",
@@ -365,13 +407,92 @@ public class OrchestratorServiceImpl implements OrchestratorService {
         }
     }
 
+    private PhraseContext resolveSmartHomePhraseContext(SmartHomeClient.ActionResult result) {
+        String action = result.action();
+        if ("TURN_ON".equals(action) || ("TOGGLE".equals(action) && isPowered(result.device()))) {
+            return PhraseContext.SMART_HOME_TURN_ON;
+        }
+        if ("TURN_OFF".equals(action) || ("TOGGLE".equals(action) && !isPowered(result.device()))) {
+            return PhraseContext.SMART_HOME_TURN_OFF;
+        }
+        return PhraseContext.SMART_HOME_SET_VALUE;
+    }
+
+    private Map<String, Object> buildSmartHomePhraseParams(
+            String deviceId,
+            SmartHomeClient.ActionResult result,
+            Language lang) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("device", localizedSmartHomeDeviceName(deviceId, lang));
+        if (result.device() != null && result.device().state() != null) {
+            Object targetTemperature = result.device().state().get("targetTemperature");
+            Object brightness = result.device().state().get("brightness");
+            if (targetTemperature != null) {
+                params.put("value", targetTemperature + "°C");
+            } else if (brightness != null) {
+                params.put("value", brightness + "%");
+            }
+        }
+        return params;
+    }
+
+    private String buildSmartHomeNotification(SmartHomeClient.ActionResult result) {
+        if (result.device() == null) {
+            return "Smart-home action completed.";
+        }
+
+        String displayName = result.device().displayName();
+        if ("SET_TEMPERATURE".equals(result.action())) {
+            Object targetTemperature = result.device().state() != null
+                    ? result.device().state().get("targetTemperature")
+                    : null;
+            return targetTemperature != null
+                    ? displayName + " set to " + targetTemperature + "°C."
+                    : displayName + " updated.";
+        }
+        if ("TURN_OFF".equals(result.action()) || ("TOGGLE".equals(result.action()) && !isPowered(result.device()))) {
+            return displayName + " is now off.";
+        }
+        if ("TURN_ON".equals(result.action()) || "TOGGLE".equals(result.action())) {
+            return displayName + " is now on.";
+        }
+        return displayName + " updated.";
+    }
+
+    private boolean isPowered(SmartHomeClient.DeviceView device) {
+        if (device == null || device.state() == null) {
+            return false;
+        }
+
+        Object power = device.state().get("power");
+        if (power instanceof Boolean powered) {
+            return powered;
+        }
+
+        Object locked = device.state().get("locked");
+        if (locked instanceof Boolean lockedState) {
+            return lockedState;
+        }
+        return false;
+    }
+
+    private String localizedSmartHomeDeviceName(String deviceId, Language lang) {
+        return switch (deviceId) {
+            case "kitchen_light" -> lang == Language.RU ? "кухонный свет" : "kitchen light";
+            case "desk_lamp" -> lang == Language.RU ? "настольная лампа" : "desk lamp";
+            case "hall_thermostat" -> lang == Language.RU ? "термостат в коридоре" : "hall thermostat";
+            case "front_door_lock" -> lang == Language.RU ? "замок входной двери" : "front door lock";
+            default -> deviceId.replace('_', ' ');
+        };
+    }
+
     /**
      * Call LLM service with circuit breaker, timeout, and fallback.
      * 
      * If LLM is disabled, times out, or circuit is open → returns rule-based phrase immediately.
      * Never blocks the response pipeline indefinitely.
      */
-    private String callLlm(String text, String correlationId, Language lang) {
+    private String callLlm(String text, String correlationId, Language lang, String userId) {
         // Check 1: Feature flag
         if (!llmEnabled) {
             log.debug("🧠 LLM_SKIPPED: feature disabled, correlationId={}", correlationId);
@@ -390,13 +511,15 @@ public class OrchestratorServiceImpl implements OrchestratorService {
             log.info("🧠 Calling LLM for text: '{}', timeout={}s, correlationId={}", 
                     text, llmTimeoutSeconds, correlationId);
 
-            String sessionId = correlationId;
+            String sessionId = (userId != null && !userId.isBlank())
+                    ? userId + "-" + correlationId
+                    : correlationId;
             var message = new org.jarvis.orchestrator.dto.LlmChatRequest.Message("user", text);
             var request = new org.jarvis.orchestrator.dto.LlmChatRequest(sessionId, java.util.List.of(message));
 
             // Execute with timeout
             Future<org.jarvis.orchestrator.dto.LlmChatResponse> future = llmExecutor.submit(
-                    () -> llmClient.chat(request, correlationId));
+                    () -> llmClient.chat(request, correlationId, userId));
 
             org.jarvis.orchestrator.dto.LlmChatResponse response;
             try {

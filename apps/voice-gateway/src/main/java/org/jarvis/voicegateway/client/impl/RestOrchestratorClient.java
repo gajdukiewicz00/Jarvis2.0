@@ -57,12 +57,18 @@ public class RestOrchestratorClient implements OrchestratorClient {
 
     @Override
     public String sendIntent(String action, Map<String, Object> parameters, String language, String correlationId) {
-        return sendIntent(action, parameters, language, correlationId, null);
+        return sendIntent(action, parameters, language, correlationId, null, null);
     }
 
     @Override
     public String sendIntent(String action, Map<String, Object> parameters, String language,
             String correlationId, String originalText) {
+        return sendIntent(action, parameters, language, correlationId, originalText, null);
+    }
+
+    @Override
+    public String sendIntent(String action, Map<String, Object> parameters, String language,
+            String correlationId, String originalText, String userId) {
         log.info("📤 Sending intent to Orchestrator: action={}, params={}, lang={}, correlationId={}, hasText={}",
                 action, parameters, language, correlationId, originalText != null);
 
@@ -87,12 +93,18 @@ public class RestOrchestratorClient implements OrchestratorClient {
 
             log.debug("Request body: {}", requestBody);
 
-            String response = restClientBuilder.build()
+            RestClient.RequestBodySpec request = restClientBuilder.build()
                     .post()
                     .uri(orchestratorUrl + "/api/v1/orchestrator/execute")
                     .header("Authorization",
                             "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
-                    .contentType(MediaType.APPLICATION_JSON)
+                    .contentType(MediaType.APPLICATION_JSON);
+
+            if (userId != null && !userId.isBlank()) {
+                request.header("X-User-Id", userId);
+            }
+
+            String response = request
                     .body(requestBody)
                     .retrieve()
                     .body(String.class);

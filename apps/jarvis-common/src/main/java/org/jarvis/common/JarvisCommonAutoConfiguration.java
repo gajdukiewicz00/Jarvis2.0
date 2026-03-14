@@ -70,4 +70,12 @@ public class JarvisCommonAutoConfiguration {
     public ServiceJwtFilter serviceJwtFilter(ServiceJwtProvider serviceJwtProvider) {
         return new ServiceJwtFilter(serviceJwtProvider);
     }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "serviceJwtFilterRegistration")
+    public FilterRegistrationBean<ServiceJwtFilter> serviceJwtFilterRegistration(ServiceJwtFilter filter) {
+        FilterRegistrationBean<ServiceJwtFilter> registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
 }

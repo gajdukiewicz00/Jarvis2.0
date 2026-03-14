@@ -41,9 +41,9 @@ public class CalendarService {
         return dtoMapper.toDTO(saved);
     }
 
-    public CalendarEventDTO moveEvent(Long eventId, LocalDateTime newStart, LocalDateTime newEnd) {
-        CalendarEvent event = calendarEventRepository.findById(eventId)
-                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+    public CalendarEventDTO moveEvent(String userId, Long eventId, LocalDateTime newStart, LocalDateTime newEnd) {
+        CalendarEvent event = calendarEventRepository.findByIdAndUserId(eventId, userId)
+                .orElseThrow(() -> new CalendarEventNotFoundException(userId, eventId));
 
         event.setStartTime(newStart);
         event.setEndTime(newEnd);

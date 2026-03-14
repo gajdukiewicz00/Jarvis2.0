@@ -2,12 +2,15 @@ package org.jarvis.lifetracker.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -20,6 +23,7 @@ import java.util.Map;
  */
 @Slf4j
 @RestControllerAdvice
+@Order(Ordered.LOWEST_PRECEDENCE)
 public class GlobalExceptionHandler {
 
     /**
@@ -123,6 +127,19 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(
+            ResponseStatusException ex, WebRequest request) {
+
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        return buildErrorResponse(
+                status,
+                ex.getReason() != null ? ex.getReason().toUpperCase().replace(' ', '_') : status.name(),
+                ex.getReason() != null ? ex.getReason() : "Request failed",
+                request
+        );
+    }
+
     /**
      * Catch-all handler for unexpected exceptions.
      */
@@ -178,4 +195,3 @@ public class GlobalExceptionHandler {
         return "Please check your input data.";
     }
 }
-

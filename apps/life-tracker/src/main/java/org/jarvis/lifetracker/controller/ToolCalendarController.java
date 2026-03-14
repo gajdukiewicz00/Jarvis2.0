@@ -79,6 +79,7 @@ public class ToolCalendarController {
         }
 
         CalendarEventDTO moved = calendarService.moveEvent(
+                userId,
                 request.getEventId(),
                 request.getNewStartTime(),
                 request.getNewEndTime());

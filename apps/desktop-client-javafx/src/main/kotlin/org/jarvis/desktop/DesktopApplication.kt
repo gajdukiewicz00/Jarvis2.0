@@ -14,6 +14,9 @@ import org.jarvis.desktop.auth.AuthResponse
 import org.jarvis.desktop.auth.LoginRequest
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.i18n.I18n
+import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
+import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
 import org.jarvis.desktop.service.AuthService
 import org.jarvis.desktop.service.PcControlWebSocketClient
 import org.jarvis.desktop.service.SystemControlService
@@ -23,6 +26,9 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.nio.file.Files
 import java.nio.file.Paths
 
@@ -32,12 +38,17 @@ class DesktopApplication : Application() {
     private val apiBaseUrl = AppConfig.apiBaseUrl
     private val objectMapper = jacksonObjectMapper()
     private val httpClient = HttpClient.newBuilder().build()
+    private val runtimeMonitor = DesktopRuntimeMonitor()
+    private val runtimeHealthProbe = LocalRuntimeHealthProbe(apiGatewayBase)
+    private val runtimeHealthExecutor = Executors.newSingleThreadScheduledExecutor()
+    private var runtimeHealthTask: ScheduledFuture<*>? = null
     
     // PC Control services
     private val systemControlService = SystemControlService()
     private var pcWebSocketClient: PcControlWebSocketClient? = null
 
     override fun start(stage: Stage) {
+        I18n.setLocale(AppConfig.locale)
         logger.info("🚀 Starting Jarvis 2.0 Desktop Application...")
         
         // Development mode auto-login
@@ -83,8 +94,8 @@ class DesktopApplication : Application() {
         val settingsTab = SettingsTab(onLogout = { handleLogout(stage) })
 
         tabPane.tabs.addAll(
-            HomeTab(apiClient).tab,
-            VoiceTab(apiClient).tab,
+            HomeTab(runtimeMonitor, onRefreshRuntime = { refreshRuntimeHealthNow() }).tab,
+            VoiceTab(apiClient, runtimeMonitor).tab,
             DevicesTab(apiClient).tab,
             PcControlTab(apiClient).tab,
             LifeTab(apiClient).tab,
@@ -97,6 +108,14 @@ class DesktopApplication : Application() {
         stage.title = "Jarvis 2.0 - ${TokenManager.getUsername()}"
         stage.scene = scene
         stage.show()
+
+        runtimeMonitor.recordEvent(
+            DesktopRuntimeMonitor.EventSource.SYSTEM,
+            DesktopRuntimeMonitor.EventSeverity.INFO,
+            "Desktop ready",
+            "Signed in as ${TokenManager.getUsername() ?: "unknown"}"
+        )
+        startRuntimeHealthPolling()
         
         // Initialize PC Control WebSocket connection
         initPcControlWebSocket()
@@ -104,6 +123,8 @@ class DesktopApplication : Application() {
         // Handle window close
         stage.setOnCloseRequest {
             logger.info("🛑 Application closing, cleaning up...")
+            stopRuntimeHealthPolling()
+            runtimeHealthExecutor.shutdownNow()
             pcWebSocketClient?.disconnect()
             Platform.exit()
         }
@@ -120,6 +141,7 @@ class DesktopApplication : Application() {
             systemControl = systemControlService,
             onStatusChange = { status ->
                 logger.debug("PC WebSocket status: $status")
+                runtimeMonitor.consumePcStatus(status)
             }
         )
         
@@ -134,6 +156,26 @@ class DesktopApplication : Application() {
         }.start()
         
         logger.info("🔌 PC Control WebSocket initialized")
+    }
+
+    private fun startRuntimeHealthPolling() {
+        stopRuntimeHealthPolling()
+        runtimeHealthTask = runtimeHealthExecutor.scheduleAtFixedRate(
+            { refreshRuntimeHealthNow() },
+            0,
+            5,
+            TimeUnit.SECONDS
+        )
+    }
+
+    private fun stopRuntimeHealthPolling() {
+        runtimeHealthTask?.cancel(true)
+        runtimeHealthTask = null
+    }
+
+    private fun refreshRuntimeHealthNow() {
+        val status = runtimeHealthProbe.probe()
+        runtimeMonitor.updateBackend(status)
     }
 
     private fun tryAutoLogin(username: String, password: String, stage: Stage) {
@@ -228,6 +270,9 @@ class DesktopApplication : Application() {
 
     private fun handleLogout(stage: Stage) {
         logger.info("🔒 Logging out current user")
+        stopRuntimeHealthPolling()
+        runtimeMonitor.consumeVoiceStatus("DISCONNECTED")
+        runtimeMonitor.consumePcStatus("Disconnected")
         pcWebSocketClient?.disconnect()
         TokenManager.clearTokens()
         showLoginScreen(stage)

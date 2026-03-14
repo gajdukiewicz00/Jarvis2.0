@@ -7,7 +7,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.analytics.client.LifeTrackerClient;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.actuate.health.Status;
 import org.springframework.stereotype.Component;
+
+import java.util.Map;
 
 /**
  * Health indicator that checks life-tracker service availability.
@@ -25,14 +28,24 @@ public class LifeTrackerHealthIndicator implements HealthIndicator {
     @Override
     public Health health() {
         try {
-            // Try to fetch a small amount of data to verify connectivity
             long startTime = System.currentTimeMillis();
-            lifeTrackerClient.getExpenses();
+            Map<String, Object> readiness = lifeTrackerClient.getReadiness();
             long responseTime = System.currentTimeMillis() - startTime;
+
+            String reportedStatus = String.valueOf(readiness.getOrDefault("status", "UNKNOWN"));
+            if (!Status.UP.getCode().equalsIgnoreCase(reportedStatus)) {
+                return Health.down()
+                        .withDetail("service", "life-tracker")
+                        .withDetail("endpoint", "/actuator/health/readiness")
+                        .withDetail("status", reportedStatus)
+                        .withDetail("responseTimeMs", responseTime)
+                        .build();
+            }
             
             return Health.up()
                     .withDetail("service", "life-tracker")
-                    .withDetail("status", "reachable")
+                    .withDetail("endpoint", "/actuator/health/readiness")
+                    .withDetail("status", reportedStatus)
                     .withDetail("responseTimeMs", responseTime)
                     .build();
                     
@@ -40,6 +53,7 @@ public class LifeTrackerHealthIndicator implements HealthIndicator {
             log.warn("Life-tracker health check failed (timeout): {}", e.getMessage());
             return Health.down()
                     .withDetail("service", "life-tracker")
+                    .withDetail("endpoint", "/actuator/health/readiness")
                     .withDetail("status", "timeout")
                     .withDetail("error", "Connection timeout")
                     .build();
@@ -48,6 +62,7 @@ public class LifeTrackerHealthIndicator implements HealthIndicator {
             log.warn("Life-tracker health check failed [{}]: {}", e.status(), e.getMessage());
             return Health.down()
                     .withDetail("service", "life-tracker")
+                    .withDetail("endpoint", "/actuator/health/readiness")
                     .withDetail("status", "error")
                     .withDetail("httpStatus", e.status())
                     .withDetail("error", e.getMessage())
@@ -57,6 +72,7 @@ public class LifeTrackerHealthIndicator implements HealthIndicator {
             log.error("Life-tracker health check failed: {}", e.getMessage());
             return Health.down()
                     .withDetail("service", "life-tracker")
+                    .withDetail("endpoint", "/actuator/health/readiness")
                     .withDetail("status", "unknown")
                     .withDetail("error", e.getMessage())
                     .build();

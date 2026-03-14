@@ -61,6 +61,7 @@ secrets.env
 *.p12
 *.pfx
 secrets/
+!secrets/
 !secrets/.gitkeep
 !secrets/*.example.env
 secrets*.yaml

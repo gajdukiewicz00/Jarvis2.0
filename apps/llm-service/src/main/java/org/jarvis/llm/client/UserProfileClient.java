@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import org.springframework.core.ParameterizedTypeReference;
 
 /**
  * Client for user-profile service.
@@ -105,6 +106,42 @@ public class UserProfileClient {
     }
 
     /**
+     * Get active user goals as plain titles.
+     * Returns an empty list if user-profile is unavailable.
+     */
+    public List<String> getGoals(String userId, String correlationId) {
+        if (!enabled) {
+            return List.of();
+        }
+
+        try {
+            String url = userProfileUrl + "/api/v1/user-profile/" + userId + "/goals";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
+
+            ResponseEntity<List<UserGoalResponse>> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<List<UserGoalResponse>>() {
+                    });
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return List.of();
+            }
+
+            return response.getBody().stream()
+                    .map(UserGoalResponse::title)
+                    .filter(title -> title != null && !title.isBlank())
+                    .toList();
+        } catch (RuntimeException e) {
+            log.warn("[{}] ⚠ failed to fetch goals for user {}: {}", correlationId, userId, e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * Get user preferences (backward compatible overload).
      */
     public UserPreferencesDto getPreferences(String userId) {
@@ -132,5 +169,8 @@ public class UserProfileClient {
         dto.setTtsVoiceId("jarvis_male_en");
         dto.setTtsEmotionDefault(Emotion.NEUTRAL);
         return dto;
+    }
+
+    private record UserGoalResponse(String title) {
     }
 }

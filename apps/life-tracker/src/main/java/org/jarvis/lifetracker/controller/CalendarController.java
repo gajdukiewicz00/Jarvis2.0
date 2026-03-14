@@ -41,9 +41,12 @@ public class CalendarController {
     }
 
     @PutMapping("/event/{id}")
-    public CalendarEventDTO moveEvent(@PathVariable Long id, @RequestBody MoveEventRequest request) {
+    public CalendarEventDTO moveEvent(
+            @RequestHeader("X-User-Id") String userId,
+            @PathVariable Long id,
+            @RequestBody MoveEventRequest request) {
         log.info("Moving event {}", id);
-        return calendarService.moveEvent(id, request.newStartTime(), request.newEndTime());
+        return calendarService.moveEvent(userId, id, request.newStartTime(), request.newEndTime());
     }
 
     @GetMapping("/events")

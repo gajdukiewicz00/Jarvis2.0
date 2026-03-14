@@ -6,6 +6,7 @@ import org.jarvis.userprofile.domain.UserPriority;
 import org.jarvis.userprofile.repository.UserGoalRepository;
 import org.jarvis.userprofile.repository.UserHabitRepository;
 import org.jarvis.userprofile.repository.UserPriorityRepository;
+import org.jarvis.userprofile.service.UserProfileProvisioningService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,19 +22,23 @@ public class UserProfileController {
     private final UserGoalRepository userGoalRepository;
     private final UserHabitRepository userHabitRepository;
     private final UserPriorityRepository userPriorityRepository;
+    private final UserProfileProvisioningService userProfileProvisioningService;
 
     public UserProfileController(UserGoalRepository userGoalRepository,
                                  UserHabitRepository userHabitRepository,
-                                 UserPriorityRepository userPriorityRepository) {
+                                 UserPriorityRepository userPriorityRepository,
+                                 UserProfileProvisioningService userProfileProvisioningService) {
         this.userGoalRepository = userGoalRepository;
         this.userHabitRepository = userHabitRepository;
         this.userPriorityRepository = userPriorityRepository;
+        this.userProfileProvisioningService = userProfileProvisioningService;
     }
 
     // Goals
     @GetMapping("/{userId}/goals")
     public List<UserGoal> getUserGoals(@PathVariable String userId) {
         String authUser = requireUserId();
+        userProfileProvisioningService.ensureProfileExists(authUser);
         if (!authUser.equals(userId)) {
             userId = authUser;
         }
@@ -43,6 +48,7 @@ public class UserProfileController {
     @PostMapping("/{userId}/goals")
     public UserGoal createUserGoal(@PathVariable String userId, @RequestBody UserGoal goal) {
         String authUser = requireUserId();
+        userProfileProvisioningService.ensureProfileExists(authUser);
         goal.setUserId(authUser);
         return userGoalRepository.save(goal);
     }
@@ -51,6 +57,7 @@ public class UserProfileController {
     @GetMapping("/{userId}/habits")
     public List<UserHabit> getUserHabits(@PathVariable String userId) {
         String authUser = requireUserId();
+        userProfileProvisioningService.ensureProfileExists(authUser);
         if (!authUser.equals(userId)) {
             userId = authUser;
         }
@@ -60,6 +67,7 @@ public class UserProfileController {
     @PostMapping("/{userId}/habits")
     public UserHabit createUserHabit(@PathVariable String userId, @RequestBody UserHabit habit) {
         String authUser = requireUserId();
+        userProfileProvisioningService.ensureProfileExists(authUser);
         habit.setUserId(authUser);
         return userHabitRepository.save(habit);
     }
@@ -68,6 +76,7 @@ public class UserProfileController {
     @GetMapping("/{userId}/priorities")
     public List<UserPriority> getUserPriorities(@PathVariable String userId) {
         String authUser = requireUserId();
+        userProfileProvisioningService.ensureProfileExists(authUser);
         if (!authUser.equals(userId)) {
             userId = authUser;
         }
@@ -77,6 +86,7 @@ public class UserProfileController {
     @PostMapping("/{userId}/priorities")
     public UserPriority createUserPriority(@PathVariable String userId, @RequestBody UserPriority priority) {
         String authUser = requireUserId();
+        userProfileProvisioningService.ensureProfileExists(authUser);
         priority.setUserId(authUser);
         return userPriorityRepository.save(priority);
     }

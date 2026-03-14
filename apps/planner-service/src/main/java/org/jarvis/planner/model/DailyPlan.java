@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.ColumnTransformer;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,6 +28,7 @@ public class DailyPlan {
     private LocalDate planDate;
     
     @Column(name = "plan_json", columnDefinition = "JSONB", nullable = false)
+    @ColumnTransformer(write = "cast(? as jsonb)")
     private String planJson;
     
     @CreationTimestamp

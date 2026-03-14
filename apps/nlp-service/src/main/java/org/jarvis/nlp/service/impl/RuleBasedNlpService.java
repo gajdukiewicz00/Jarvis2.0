@@ -6,6 +6,8 @@ import org.jarvis.nlp.service.NlpService;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -106,9 +108,20 @@ public class RuleBasedNlpService implements NlpService {
     private static final Pattern LOCK_SCREEN = Pattern.compile(
             "(?:^|\\b)(?:заблокируй|залочь|lock)(?:\\s+(?:экран|компьютер|комп))?\\b", RXF);
 
+    private static final Pattern TEMPERATURE_VALUE = Pattern.compile("\\b(1[6-9]|2\\d|30)(?:[\\.,](\\d))?\\b");
+
     private static final Pattern NUM_TOKEN = Pattern.compile("\\d+");
 
     private static final Map<String, Integer> RUS_NUM = buildRusNumbers();
+    private static final Map<String, List<String>> SMART_HOME_DEVICE_ALIASES = buildSmartHomeDeviceAliases();
+    private static final List<String> SMART_HOME_ON_KEYWORDS = List.of(
+            "включи", "вруби", "зажги", "turn on", "switch on");
+    private static final List<String> SMART_HOME_OFF_KEYWORDS = List.of(
+            "выключи", "отключи", "погаси", "turn off", "switch off");
+    private static final List<String> SMART_HOME_TOGGLE_KEYWORDS = List.of(
+            "переключи", "toggle");
+    private static final List<String> SMART_HOME_SET_KEYWORDS = List.of(
+            "установи", "поставь", "сделай", "set", "adjust");
 
     @Override
     public NlpResult infer(String text, String languageCode) {
@@ -227,6 +240,11 @@ public class RuleBasedNlpService implements NlpService {
             return new NlpResult("open_app", Map.of("app", "terminal"));
         }
 
+        NlpResult smartHomeResult = inferSmartHome(norm);
+        if (smartHomeResult != null) {
+            return smartHomeResult;
+        }
+
         // Scenarios
         if (WORK_MODE.matcher(norm).find()) {
             return new NlpResult("work_mode", Map.of());
@@ -250,6 +268,68 @@ public class RuleBasedNlpService implements NlpService {
         }
 
         return new NlpResult("fallback", Map.of());
+    }
+
+    private static NlpResult inferSmartHome(String norm) {
+        String deviceId = detectSmartHomeDevice(norm);
+        if (deviceId == null) {
+            return null;
+        }
+
+        if ("hall_thermostat".equals(deviceId)) {
+            String targetTemperature = extractTemperature(norm);
+            if (targetTemperature != null && containsAny(norm, SMART_HOME_SET_KEYWORDS)) {
+                return new NlpResult("smart_home_action", Map.of(
+                        "deviceId", deviceId,
+                        "action", "SET_TEMPERATURE",
+                        "payload", targetTemperature));
+            }
+        }
+
+        if (containsAny(norm, SMART_HOME_OFF_KEYWORDS)) {
+            return new NlpResult("smart_home_action", Map.of(
+                    "deviceId", deviceId,
+                    "action", "TURN_OFF"));
+        }
+        if (containsAny(norm, SMART_HOME_ON_KEYWORDS)) {
+            return new NlpResult("smart_home_action", Map.of(
+                    "deviceId", deviceId,
+                    "action", "TURN_ON"));
+        }
+        if (containsAny(norm, SMART_HOME_TOGGLE_KEYWORDS)) {
+            return new NlpResult("smart_home_action", Map.of(
+                    "deviceId", deviceId,
+                    "action", "TOGGLE"));
+        }
+        return null;
+    }
+
+    private static String detectSmartHomeDevice(String norm) {
+        for (Map.Entry<String, List<String>> entry : SMART_HOME_DEVICE_ALIASES.entrySet()) {
+            if (containsAny(norm, entry.getValue())) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private static boolean containsAny(String norm, List<String> candidates) {
+        for (String candidate : candidates) {
+            if (norm.contains(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String extractTemperature(String norm) {
+        Matcher matcher = TEMPERATURE_VALUE.matcher(norm);
+        if (!matcher.find()) {
+            return null;
+        }
+        return matcher.group(2) == null
+                ? matcher.group(1)
+                : matcher.group(1) + "." + matcher.group(2);
     }
 
     private static boolean isSeconds(String unitTok) {
@@ -330,5 +410,26 @@ public class RuleBasedNlpService implements NlpService {
         m.put("одну", 1);
         m.put("четверть", 15);
         return m;
+    }
+
+    private static Map<String, List<String>> buildSmartHomeDeviceAliases() {
+        Map<String, List<String>> aliases = new LinkedHashMap<>();
+        aliases.put("kitchen_light", List.of(
+                "кухонный свет",
+                "свет на кухне",
+                "kitchen light",
+                "kitchen lights"));
+        aliases.put("desk_lamp", List.of(
+                "настольная лампа",
+                "настольную лампу",
+                "лампу на столе",
+                "desk lamp",
+                "desk light"));
+        aliases.put("hall_thermostat", List.of(
+                "термостат в коридоре",
+                "термостат",
+                "hall thermostat",
+                "hallway thermostat"));
+        return aliases;
     }
 }

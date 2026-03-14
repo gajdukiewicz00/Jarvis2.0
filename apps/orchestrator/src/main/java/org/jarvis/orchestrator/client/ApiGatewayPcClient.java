@@ -14,7 +14,7 @@ import java.util.Map;
  */
 @FeignClient(
         name = "api-gateway-pc",
-        url = "${jarvis.api-gateway.url:http://api-gateway:8080}",
+        url = "${api-gateway.url:${API_GATEWAY_URL:http://api-gateway:8080}}",
         configuration = ServiceAuthFeignConfig.class)
 public interface ApiGatewayPcClient {
 
@@ -30,6 +30,6 @@ public interface ApiGatewayPcClient {
     @GetMapping("/internal/pc-control/status")
     Map<String, Object> getStatus();
 
-    record PcActionRequest(String action, Map<String, Object> params) {
+    record PcActionRequest(String action, Map<String, Object> params, String userId) {
     }
 }

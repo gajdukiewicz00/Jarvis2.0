@@ -22,6 +22,72 @@ class PcControlWebSocketClient(
     private val onStatusChange: (String) -> Unit = {}
 ) : WebSocketListener() {
 
+    internal companion object {
+        fun buildIdentifyMessage(userId: String?, username: String?): String {
+            val resolvedClientId = when {
+                !userId.isNullOrBlank() -> "desktop-$userId"
+                !username.isNullOrBlank() -> "desktop-$username"
+                else -> "desktop-anonymous"
+            }
+
+            return buildJsonObject {
+                put("type", "IDENTIFY")
+                put("client", "desktop")
+                put("clientId", resolvedClientId)
+                if (!userId.isNullOrBlank()) {
+                    put("userId", userId)
+                }
+                if (!username.isNullOrBlank()) {
+                    put("username", username)
+                }
+                put("capabilities", buildJsonArray {
+                    add("VOLUME_CONTROL")
+                    add("MEDIA_CONTROL")
+                    add("APP_CONTROL")
+                    add("WINDOW_CONTROL")
+                    add("HOTKEY")
+                    add("NOTIFICATION")
+                    add("SCENARIO")
+                })
+            }.toString()
+        }
+
+        fun describeAction(action: String, params: JsonObject): String {
+            return when (action.uppercase()) {
+                "NOTIFY", "NOTIFICATION" -> {
+                    val title = params["title"]?.jsonPrimitive?.contentOrNull ?: "Jarvis"
+                    val message = params["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                    if (message.isBlank()) "Notification: $title" else "Notification: $title - $message"
+                }
+                "SCENARIO" -> {
+                    val scenario = params["name"]?.jsonPrimitive?.contentOrNull
+                        ?: params["scenario"]?.jsonPrimitive?.contentOrNull
+                        ?: "unknown"
+                    "Scenario: $scenario"
+                }
+                "VOLUME_UP" -> "Volume up ${params["delta"]?.jsonPrimitive?.intOrNull ?: 10}%"
+                "VOLUME_DOWN" -> "Volume down ${params["delta"]?.jsonPrimitive?.intOrNull ?: 10}%"
+                "OPEN_APP" -> {
+                    val app = params["app"]?.jsonPrimitive?.contentOrNull
+                        ?: params["appName"]?.jsonPrimitive?.contentOrNull
+                        ?: "application"
+                    "Open app: $app"
+                }
+                else -> action.replace('_', ' ')
+                    .lowercase()
+                    .replaceFirstChar { it.titlecase() }
+            }
+        }
+
+        fun formatStatusMessage(prefix: String, action: String, params: JsonObject, error: String? = null): String {
+            val summary = describeAction(action, params)
+            return when {
+                error.isNullOrBlank() -> "$prefix $summary"
+                else -> "$prefix $summary: $error"
+            }
+        }
+    }
+
     private val logger = LoggerFactory.getLogger(PcControlWebSocketClient::class.java)
     private val json = Json { ignoreUnknownKeys = true }
     
@@ -73,22 +139,8 @@ class PcControlWebSocketClient(
         reconnectAttempts = 0
         logger.info("✅ Connected to PC Control WebSocket")
         updateStatus("Connected")
-        
-        // Send identification message
-        val identifyMsg = buildJsonObject {
-            put("type", "IDENTIFY")
-            put("client", "desktop")
-            put("capabilities", buildJsonArray {
-                add("VOLUME_CONTROL")
-                add("MEDIA_CONTROL")
-                add("APP_CONTROL")
-                add("WINDOW_CONTROL")
-                add("HOTKEY")
-                add("NOTIFICATION")
-                add("SCENARIO")
-            })
-        }
-        webSocket.send(identifyMsg.toString())
+
+        webSocket.send(buildIdentifyMessage(TokenManager.getUserId(), TokenManager.getUsername()))
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
@@ -112,9 +164,10 @@ class PcControlWebSocketClient(
     private fun handlePcAction(jsonObj: JsonObject) {
         val action = jsonObj["action"]?.jsonPrimitive?.content ?: return
         val params = jsonObj["params"]?.jsonObject ?: buildJsonObject { }
+        val actionSummary = describeAction(action, params)
         
         logger.info("🎯 Executing PC action: $action with params: $params")
-        updateStatus("Executing: $action")
+        updateStatus("Executing $actionSummary")
         
         Platform.runLater {
             try {
@@ -201,16 +254,16 @@ class PcControlWebSocketClient(
                 
                 if (result.isSuccess) {
                     logger.info("✓ Action completed: $action")
-                    updateStatus("✓ $action")
+                    updateStatus(formatStatusMessage("✓", action, params))
                     sendAck(action, true)
                 } else {
                     logger.error("✗ Action failed: $action - ${result.exceptionOrNull()?.message}")
-                    updateStatus("✗ $action failed")
+                    updateStatus(formatStatusMessage("✗", action, params, result.exceptionOrNull()?.message ?: "failed"))
                     sendAck(action, false, result.exceptionOrNull()?.message)
                 }
             } catch (e: Exception) {
                 logger.error("Error executing action: $action", e)
-                updateStatus("✗ Error: ${e.message}")
+                updateStatus(formatStatusMessage("✗", action, params, e.message ?: "unexpected error"))
                 sendAck(action, false, e.message)
             }
         }

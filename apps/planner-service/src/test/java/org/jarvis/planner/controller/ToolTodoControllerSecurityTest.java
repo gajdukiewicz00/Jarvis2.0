@@ -27,6 +27,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -94,5 +95,18 @@ class ToolTodoControllerSecurityTest {
                 .andExpect(status().isOk());
 
         verify(taskService).getTasks(eq("user-123"), eq(null));
+    }
+
+    @Test
+    void listWithValidServiceTokenButMissingUserHeaderReturnsBadRequest() throws Exception {
+        String serviceToken = serviceJwtProvider.createToken("api-gateway", List.of("SVC_INTERNAL"));
+
+        mockMvc.perform(post("/api/v1/tools/todo/list")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
+                        .header("X-Service-Token", serviceToken))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(taskService);
     }
 }

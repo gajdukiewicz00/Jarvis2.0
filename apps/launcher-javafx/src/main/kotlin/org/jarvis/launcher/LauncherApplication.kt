@@ -31,7 +31,7 @@ class LauncherApplication : Application() {
     private val logger = LoggerFactory.getLogger(LauncherApplication::class.java)
     private val executor = Executors.newSingleThreadExecutor()
     private val autoStart = System.getenv("JARVIS_AUTO_START")?.toBoolean() ?: true
-    private val autoBootstrap = System.getenv("JARVIS_AUTO_BOOTSTRAP")?.toBoolean() ?: true
+    private val autoBootstrap = System.getenv("JARVIS_AUTO_BOOTSTRAP")?.toBoolean() ?: !JarvisPaths.isLocalRuntime()
     private val autoInstallDeps = System.getenv("JARVIS_AUTO_INSTALL_DEPS")?.toBoolean() ?: true
     private val configManager = LauncherConfig(JarvisPaths.launcherConfig)
     private val initialSettings = configManager.load()
@@ -78,6 +78,8 @@ class LauncherApplication : Application() {
     private var launcherLockChannel: FileChannel? = null
     private var launcherLock: FileLock? = null
     private val startAllInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val backendExpectedRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val requireVoiceGateway = System.getenv("JARVIS_REQUIRE_VOICE_GATEWAY")?.toBoolean() ?: false
     
     // Stage 4: Log Viewer and Diagnostics
     private var logViewer: LogViewer? = null
@@ -139,35 +141,36 @@ class LauncherApplication : Application() {
         
         // Initialize health check service
         val apiUrl = JarvisPaths.getApiGatewayUrl()
-        healthCheckService = HealthCheckService(apiUrl) { healthStatus ->
+        healthCheckService = HealthCheckService(
+            apiUrl,
+            { bootstrapKubeconfig ?: System.getenv("KUBECONFIG") }
+        ) { healthStatus ->
             Platform.runLater {
                 updateStatusFromHealth(healthStatus)
             }
         }
-        healthCheckService?.updateFlags(enableLlm, enableMemory)
-        
-        // Check if backend is already running
-        checkBackendStatus()
-        
         // Stage 5: Cleanup stale PIDs on startup
         cleanupStalePids()
+
+        // Check if backend is already running
+        checkBackendStatus()
+
+        healthCheckService?.updateFlags(
+            enableLlm,
+            enableMemory,
+            voiceRequired = requireVoiceGateway
+        )
         
         // Start periodic health checks (every 5 seconds)
         startHealthChecks()
-
-        if (autoStart) {
-            Platform.runLater {
-                appendLog("Auto-start enabled: starting full stack...")
-                startAll()
-            }
-        }
+        refreshHealthOnce(autoStartAfterRefresh = autoStart)
     }
     
     private fun startHealthChecks() {
         healthCheckTask = healthCheckExecutor.scheduleAtFixedRate({
             try {
                 val pid = processRunner.get()?.getPid() ?: getBackendPidFromFile()
-                val healthStatus = healthCheckService?.checkHealth(pid)
+                val healthStatus = healthCheckService?.checkHealth(pid, backendExpectedRunning.get())
                 if (healthStatus != null) {
                     Platform.runLater {
                         updateStatusFromHealth(healthStatus)
@@ -190,6 +193,25 @@ class LauncherApplication : Application() {
             }
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun isProcessAlive(pid: Long): Boolean {
+        return try {
+            ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun healthIndicatesBackendUsable(
+        healthStatus: HealthCheckService.ServiceHealthStatus?
+    ): Boolean {
+        if (healthStatus == null || healthStatus.coreServices.isEmpty()) {
+            return false
+        }
+        return healthStatus.coreServices.values.all {
+            it.status == HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UP
         }
     }
 
@@ -260,7 +282,10 @@ class LauncherApplication : Application() {
             }
             HealthCheckService.ServiceHealthStatus.OverallStatus.DEGRADED -> {
                 val optionalIssues = healthStatus.optionalServices.values
-                    .filter { it.status == HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN }
+                    .filter {
+                        it.status != HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UP &&
+                            !it.isDisabled
+                    }
                     .map { "${it.name}: ${it.message}" }
                 "DEGRADED\nCore services OK, but optional services unavailable:\n${optionalIssues.joinToString("\n")}\n\nDesktop is available, but some features may not work."
             }
@@ -462,7 +487,7 @@ class LauncherApplication : Application() {
         enableLlmCheckBox.setOnAction {
             enableLlm = enableLlmCheckBox.isSelected
             persistSettings()
-            healthCheckService?.updateFlags(enableLlm, enableMemory)
+            healthCheckService?.updateFlags(enableLlm, enableMemory, voiceRequired = requireVoiceGateway)
         }
 
         enableMemoryCheckBox = CheckBox("Enable Memory")
@@ -471,7 +496,7 @@ class LauncherApplication : Application() {
         enableMemoryCheckBox.setOnAction {
             enableMemory = enableMemoryCheckBox.isSelected
             persistSettings()
-            healthCheckService?.updateFlags(enableLlm, enableMemory)
+            healthCheckService?.updateFlags(enableLlm, enableMemory, voiceRequired = requireVoiceGateway)
         }
 
         enableGpuCheckBox = CheckBox("Enable GPU")
@@ -566,6 +591,7 @@ class LauncherApplication : Application() {
                     }
                     
                     if (processHandle != null && processHandle.isAlive) {
+                        backendExpectedRunning.set(true)
                         Platform.runLater {
                             updateStatus(LauncherStatus.READY)
                             appendLog("Backend already running (PID: $pid)")
@@ -594,6 +620,7 @@ class LauncherApplication : Application() {
         // Check if already running
         val existingRunner = processRunner.get()
         if (existingRunner != null && existingRunner.isRunning()) {
+            backendExpectedRunning.set(true)
             appendLog("Backend already running (PID: ${existingRunner.getPid()})")
             updateStatus(LauncherStatus.READY)
             return
@@ -616,6 +643,7 @@ class LauncherApplication : Application() {
                     appendLog("Cleaned up stale PID file")
                 } else {
                     // Process is actually running
+                    backendExpectedRunning.set(true)
                     appendLog("Backend already running (detected via PID file: $pid)")
                     updateStatus(LauncherStatus.READY)
                     return
@@ -661,6 +689,7 @@ class LauncherApplication : Application() {
         processRunner.set(newRunner)
         
         executor.execute {
+            backendExpectedRunning.set(true)
             val envVars = mutableMapOf(
                 "ENABLE_LLM" to enableLlm.toString(),
                 "ENABLE_MEMORY" to enableMemory.toString(),
@@ -681,6 +710,7 @@ class LauncherApplication : Application() {
                 Platform.runLater {
                     if (throwable != null) {
                         logger.error("Backend start failed", throwable)
+                        backendExpectedRunning.set(false)
                         updateStatus(LauncherStatus.ERROR)
                         appendLog("ERROR: ${throwable.message}")
                         showError(
@@ -691,10 +721,12 @@ class LauncherApplication : Application() {
                         )
                     } else {
                         if (exitCode == 0) {
+                            backendExpectedRunning.set(true)
                             updateStatus(LauncherStatus.READY)
                             appendLog("Backend started successfully")
                             appendLog("Status: READY - You can now start Desktop")
                         } else {
+                            backendExpectedRunning.set(false)
                             updateStatus(LauncherStatus.ERROR)
                             appendLog("Backend exited with code: $exitCode")
                             showError(
@@ -719,6 +751,7 @@ class LauncherApplication : Application() {
                 val stopped = runner.stop()
                 Platform.runLater {
                     if (stopped) {
+                        backendExpectedRunning.set(false)
                         updateStatus(LauncherStatus.IDLE)
                         appendLog("Backend stopped")
                     } else {
@@ -738,6 +771,7 @@ class LauncherApplication : Application() {
                         
                         val exitCode = process.waitFor()
                         Platform.runLater {
+                            backendExpectedRunning.set(false)
                             updateStatus(LauncherStatus.IDLE)
                             appendLog("Backend stopped via script (exit code: $exitCode)")
                         }
@@ -791,8 +825,10 @@ class LauncherApplication : Application() {
                     .redirectOutput(ProcessBuilder.Redirect.appendTo(JarvisPaths.desktopLog.toFile()))
                     .redirectError(ProcessBuilder.Redirect.appendTo(JarvisPaths.desktopLog.toFile()))
                 val env = processBuilder.environment()
-                env.putIfAbsent("JARVIS_API_BASE_URL", System.getenv("JARVIS_API_BASE_URL") ?: "https://api.jarvis.local")
-                env.putIfAbsent("JARVIS_USE_TLS", System.getenv("JARVIS_USE_TLS") ?: "true")
+                val apiBaseUrl = System.getenv("JARVIS_API_BASE_URL") ?: JarvisPaths.getApiGatewayUrl()
+                env.putIfAbsent("JARVIS_API_BASE_URL", apiBaseUrl)
+                env.putIfAbsent("JARVIS_USE_TLS", System.getenv("JARVIS_USE_TLS")
+                    ?: if (apiBaseUrl.startsWith("https://")) "true" else "false")
                 val process = processBuilder.start()
                 
                 // Stage 5: Save desktop PID
@@ -943,11 +979,30 @@ class LauncherApplication : Application() {
             startAllInProgress.set(false)
             return
         }
-        
-        if (currentStatus == LauncherStatus.STARTING) {
-            appendLog("Backend is already starting, please wait...")
+
+        val currentHealth = healthCheckService?.getCurrentStatus()
+        if (healthIndicatesBackendUsable(currentHealth)) {
+            backendExpectedRunning.set(true)
+            if (!isDesktopRunning()) {
+                appendLog("Backend core services already UP, starting desktop...")
+                startDesktop()
+            } else {
+                appendLog("Desktop already running")
+            }
             startAllInProgress.set(false)
             return
+        }
+        
+        if (currentStatus == LauncherStatus.STARTING) {
+            val runnerActive = processRunner.get()?.isRunning() == true
+            val backendPid = getBackendPidFromFile()
+            val backendProcessAlive = backendPid != null && isProcessAlive(backendPid)
+            if (runnerActive || backendProcessAlive) {
+                appendLog("Backend is already starting, please wait...")
+                startAllInProgress.set(false)
+                return
+            }
+            appendLog("Status is STARTING, but no backend bootstrap process is running. Retrying startup...")
         }
         
         if (!autoBootstrap || bootstrapCompleted.get()) {
@@ -1262,7 +1317,9 @@ class LauncherApplication : Application() {
         if (runCommand(listOf("docker", "info"), JarvisPaths.getProjectRoot(), silent = true) == 0) {
             return true
         }
-        if (commandExists("pkexec") && commandExists("systemctl")) {
+        val dockerServiceActive = commandExists("systemctl") &&
+            runCommand(listOf("systemctl", "is-active", "--quiet", "docker"), JarvisPaths.getProjectRoot(), silent = true) == 0
+        if (!dockerServiceActive && commandExists("pkexec") && commandExists("systemctl")) {
             appendLog("Starting docker service...")
             val cmd = listOf("pkexec", "/usr/bin/env", "systemctl", "start", "docker")
             if (runCommand(cmd, JarvisPaths.getProjectRoot()) != 0) {
@@ -1375,7 +1432,11 @@ class LauncherApplication : Application() {
             return true
         }
         return try {
-            Files.readString(path).contains("k3s")
+            val content = Files.readString(path)
+            if (content.contains("k3s")) {
+                return true
+            }
+            Regex("server:\\s*(\\S+)").find(content)?.groupValues?.get(1) == "https://127.0.0.1:6443"
         } catch (e: Exception) {
             false
         }
@@ -1515,7 +1576,7 @@ class LauncherApplication : Application() {
                         System.setProperty("javax.net.ssl.trustStorePassword", System.getenv("JARVIS_JAVA_TRUSTSTORE_PASSWORD") ?: "changeit")
                     }
                     val pid = processRunner.get()?.getPid() ?: getBackendPidFromFile()
-                    val healthStatus = healthCheckService?.checkHealth(pid)
+                    val healthStatus = healthCheckService?.checkHealth(pid, backendExpectedRunning.get())
                     if (healthStatus != null) {
                         updateStatusFromHealth(healthStatus)
                         val apiCheck = healthStatus.coreServices["api-gateway"]
@@ -1618,13 +1679,27 @@ class LauncherApplication : Application() {
         }
     }
 
-    private fun refreshHealthOnce() {
+    private fun refreshHealthOnce(autoStartAfterRefresh: Boolean = false) {
         executor.execute {
             val pid = processRunner.get()?.getPid() ?: getBackendPidFromFile()
-            val healthStatus = healthCheckService?.checkHealth(pid)
-            if (healthStatus != null) {
-                Platform.runLater {
+            val healthStatus = healthCheckService?.checkHealth(pid, backendExpectedRunning.get())
+            Platform.runLater {
+                if (healthStatus != null) {
                     updateStatusFromHealth(healthStatus)
+                }
+                if (autoStartAfterRefresh) {
+                    appendLog("Auto-start enabled: starting full stack...")
+                    if (healthIndicatesBackendUsable(healthStatus)) {
+                        backendExpectedRunning.set(true)
+                        if (!isDesktopRunning()) {
+                            appendLog("Backend core services already UP, starting desktop...")
+                            startDesktop()
+                        } else {
+                            appendLog("Desktop already running")
+                        }
+                    } else {
+                        startAll()
+                    }
                 }
             }
         }

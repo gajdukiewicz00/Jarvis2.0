@@ -32,7 +32,11 @@ public interface OrchestratorClient {
      */
     default String sendIntent(String action, Map<String, Object> parameters, String language, 
                               String correlationId, String originalText) {
-        // Default implementation: ignore originalText for backwards compatibility
-        return sendIntent(action, parameters, language, correlationId);
+        return sendIntent(action, parameters, language, correlationId, originalText, null);
+    }
+
+    default String sendIntent(String action, Map<String, Object> parameters, String language,
+                              String correlationId, String originalText, String userId) {
+        return sendIntent(action, parameters, language, correlationId, originalText);
     }
 }

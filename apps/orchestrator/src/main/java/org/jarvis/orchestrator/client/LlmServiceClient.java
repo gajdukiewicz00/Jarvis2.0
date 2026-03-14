@@ -17,5 +17,6 @@ public interface LlmServiceClient {
     @PostMapping("/api/v1/llm/chat")
     LlmChatResponse chat(
             @RequestBody LlmChatRequest request,
-            @RequestHeader("X-Correlation-ID") String correlationId);
+            @RequestHeader("X-Correlation-ID") String correlationId,
+            @RequestHeader(value = "X-User-Id", required = false) String userId);
 }

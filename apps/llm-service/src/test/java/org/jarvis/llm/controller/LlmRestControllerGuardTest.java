@@ -21,7 +21,7 @@ class LlmRestControllerGuardTest {
         LlmRestController controller = new LlmRestController(llmService);
         ChatRequestDto request = new ChatRequestDto("session-1", List.of(), 256, 0.5);
 
-        ResponseEntity<?> response = controller.chat(request, null);
+        ResponseEntity<?> response = controller.chat(request, null, null);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verifyNoInteractions(llmService);
@@ -34,7 +34,7 @@ class LlmRestControllerGuardTest {
         ChatMessageDto message = new ChatMessageDto(ChatMessageDto.Role.USER, "   ");
         ChatRequestDto request = new ChatRequestDto("session-1", List.of(message), 256, 0.5);
 
-        ResponseEntity<?> response = controller.chat(request, null);
+        ResponseEntity<?> response = controller.chat(request, null, null);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verifyNoInteractions(llmService);

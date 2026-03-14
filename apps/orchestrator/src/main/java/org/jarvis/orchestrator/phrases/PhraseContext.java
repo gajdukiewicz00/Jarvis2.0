@@ -69,6 +69,11 @@ public enum PhraseContext {
     // ==================== Timer / Reminders ====================
     TIMER_SET,
 
+    // ==================== Smart Home ====================
+    SMART_HOME_TURN_ON,
+    SMART_HOME_TURN_OFF,
+    SMART_HOME_SET_VALUE,
+
     // ==================== Sarcasm / Personality ====================
     /** Sarcasm after repeated failures */
     SARCASTIC_FAILURE,
@@ -96,4 +101,3 @@ public enum PhraseContext {
     STT_NOISE,
     GOODBYE
 }
-

@@ -188,21 +188,25 @@ REQUIRED_KEYS=(
     "SERVICE_JWT_SECRET"
 )
 
-while IFS='=' read -r key value || [[ -n "$key" ]]; do
-    # Skip comments and empty lines
-    [[ "$key" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "${key// }" ]] && continue
-    
-    # Remove leading/trailing whitespace
-    key=$(echo "$key" | xargs)
-    value=$(echo "$value" | xargs)
-    
+while IFS= read -r line || [[ -n "$line" ]]; do
+    # Skip comments and empty lines while preserving '=' inside values.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    [[ "$line" != *"="* ]] && continue
+
+    key="${line%%=*}"
+    value="${line#*=}"
+
+    # Remove leading/trailing whitespace without altering base64 padding.
+    key="$(printf '%s' "$key" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    value="$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+
     # Remove quotes if present
     value="${value#\"}"
     value="${value%\"}"
     value="${value#\'}"
     value="${value%\'}"
-    
+
     if [[ -n "$key" ]] && [[ -n "$value" ]]; then
         SECRET_VALUES["$key"]="$value"
     fi
@@ -285,5 +289,4 @@ echo "Secrets applied successfully!"
 echo "=========================================="
 echo ""
 echo -e "${GRAY}Note: Secret values are never printed in logs for security.${NC}"
-
 

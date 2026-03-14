@@ -19,7 +19,7 @@ require_cmd rg
 echo "🔎 Checking Mosquitto auth hardening..."
 rg -n "allow_anonymous false" "${MOSQUITTO_MANIFEST}" >/dev/null
 rg -n "password_file /mosquitto/config/auth/passwords" "${MOSQUITTO_MANIFEST}" >/dev/null
-rg -n "acl_file /mosquitto/config/aclfile" "${MOSQUITTO_MANIFEST}" >/dev/null
+rg -n "acl_file /mosquitto/config/auth/aclfile" "${MOSQUITTO_MANIFEST}" >/dev/null
 rg -n "key: MQTT_USERNAME" "${MOSQUITTO_MANIFEST}" >/dev/null
 rg -n "key: MQTT_PASSWORD" "${MOSQUITTO_MANIFEST}" >/dev/null
 

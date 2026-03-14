@@ -3,7 +3,9 @@ package org.jarvis.apigateway.websocket;
 import jakarta.websocket.ContainerProvider;
 import jakarta.websocket.WebSocketContainer;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.security.ServiceJwtProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -12,6 +14,7 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -34,13 +37,24 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
     private String voiceGatewayUrl;
 
     private final StandardWebSocketClient backendClient;
+    private final ServiceJwtProvider serviceJwtProvider;
 
-    public VoiceWebSocketProxyHandler() {
+    @Autowired
+    public VoiceWebSocketProxyHandler(ServiceJwtProvider serviceJwtProvider) {
+        this(createDefaultBackendClient(), serviceJwtProvider);
+    }
+
+    VoiceWebSocketProxyHandler(StandardWebSocketClient backendClient, ServiceJwtProvider serviceJwtProvider) {
+        this.backendClient = backendClient;
+        this.serviceJwtProvider = serviceJwtProvider;
+    }
+
+    private static StandardWebSocketClient createDefaultBackendClient() {
         // Configure WebSocket container with larger buffer sizes for audio streaming
         WebSocketContainer container = ContainerProvider.getWebSocketContainer();
         container.setDefaultMaxBinaryMessageBufferSize(1024 * 1024); // 1MB
         container.setDefaultMaxTextMessageBufferSize(64 * 1024);     // 64KB
-        this.backendClient = new StandardWebSocketClient(container);
+        return new StandardWebSocketClient(container);
     }
 
     private final Map<String, ProxySession> proxySessions = new ConcurrentHashMap<>();
@@ -50,7 +64,8 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
         String targetUrl = toWsUrl(voiceGatewayUrl) + "/ws/voice";
         WebSocketHttpHeaders headers = new WebSocketHttpHeaders();
         headers.putAll(clientSession.getHandshakeHeaders());
-        applyUserHeaders(headers);
+        applyUserHeaders(clientSession, headers);
+        applyServiceHeaders(headers);
 
         log.info("🔀 Voice WS proxy: {} -> {}", clientSession.getId(), targetUrl);
         try {
@@ -117,18 +132,47 @@ public class VoiceWebSocketProxyHandler extends AbstractWebSocketHandler {
         return httpUrl.replaceFirst("^http", "ws").replaceAll("/$", "");
     }
 
-    private void applyUserHeaders(WebSocketHttpHeaders headers) {
+    private void applyUserHeaders(WebSocketSession clientSession, WebSocketHttpHeaders headers) {
+        if (clientSession.getPrincipal() != null && clientSession.getPrincipal().getName() != null
+                && !clientSession.getPrincipal().getName().isBlank()) {
+            headers.set("X-User-Id", clientSession.getPrincipal().getName());
+        }
+
+        String username = clientSession.getHandshakeHeaders() != null
+                ? clientSession.getHandshakeHeaders().getFirst("X-Username")
+                : null;
+        if (username != null && !username.isBlank()) {
+            headers.set("X-Username", username);
+        }
+
+        String roles = clientSession.getHandshakeHeaders() != null
+                ? clientSession.getHandshakeHeaders().getFirst("X-User-Roles")
+                : null;
+        if (roles != null && !roles.isBlank()) {
+            headers.set("X-User-Roles", roles);
+            return;
+        }
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
             return;
         }
-        headers.set("X-User-Id", authentication.getName());
-        String roles = authentication.getAuthorities().stream()
+        if (!headers.containsKey("X-User-Id")) {
+            headers.set("X-User-Id", authentication.getName());
+        }
+        String delegatedRoles = authentication.getAuthorities().stream()
                 .map(auth -> auth.getAuthority())
                 .collect(Collectors.joining(","));
-        if (!roles.isBlank()) {
-            headers.set("X-User-Roles", roles);
+        if (!delegatedRoles.isBlank()) {
+            headers.set("X-User-Roles", delegatedRoles);
         }
+    }
+
+    private void applyServiceHeaders(WebSocketHttpHeaders headers) {
+        if (!serviceJwtProvider.isEnabled()) {
+            return;
+        }
+        headers.set("X-Service-Token", serviceJwtProvider.createToken("api-gateway", List.of("SVC_INTERNAL")));
     }
 
     private record ProxySession(WebSocketSession client, WebSocketSession backend) {

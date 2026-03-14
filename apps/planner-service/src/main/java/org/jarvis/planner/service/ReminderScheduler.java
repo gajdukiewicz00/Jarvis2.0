@@ -33,8 +33,13 @@ public class ReminderScheduler {
 
                 for (Reminder reminder : dueReminders) {
                     try {
-                        reminderService.triggerReminder(reminder.getId());
-                        log.info("Triggered reminder: {} - {}", reminder.getId(), reminder.getMessage());
+                        boolean delivered = reminderService.triggerReminder(reminder.getId());
+                        if (delivered) {
+                            log.info("Triggered reminder: {} - {}", reminder.getId(), reminder.getMessage());
+                        } else {
+                            log.warn("Reminder {} remained pending because no delivery channel was available",
+                                    reminder.getId());
+                        }
                     } catch (RuntimeException e) {
                         log.error("Error triggering reminder {}: {}", reminder.getId(), e.getMessage());
                     }

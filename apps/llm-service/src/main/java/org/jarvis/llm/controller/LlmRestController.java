@@ -11,6 +11,8 @@ import org.jarvis.llm.dto.DialogResponse;
 import org.jarvis.llm.service.LlmService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -53,6 +55,7 @@ public class LlmRestController {
     @PostMapping("/chat")
     public ResponseEntity<ChatResponseDto> chat(
             @Valid @RequestBody ChatRequestDto request,
+            Authentication authentication,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
 
         if (correlationId == null) {
@@ -78,6 +81,7 @@ public class LlmRestController {
 
             ChatResponseDto response = llmService.processMessage(
                     request.getSessionId(),
+                    resolveEffectiveUserId(authentication),
                     userMessage,
                     correlationId);
 
@@ -116,12 +120,16 @@ public class LlmRestController {
     @PostMapping("/dialog")
     public ResponseEntity<DialogResponse> dialog(
             @RequestBody DialogRequest request,
+            Authentication authentication,
             @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
         
         if (correlationId == null) {
             correlationId = java.util.UUID.randomUUID().toString();
         }
         LogSanitizer sanitizer = logSanitizer();
+        if (request.getUserId() == null || request.getUserId().isBlank()) {
+            request.setUserId(resolveEffectiveUserId(authentication));
+        }
 
         log.info("📝 Dialog request: sessionId={}, mode={}, correlationId={}", 
                 sanitizer.sanitizeId(request.getSessionId()), request.getMode(), correlationId);
@@ -177,5 +185,25 @@ public class LlmRestController {
 
     private LogSanitizer logSanitizer() {
         return new LogSanitizer(piiLoggingEnabled, piiAllowQuerySnippet, piiQuerySnippetMaxLength);
+    }
+
+    private String resolveEffectiveUserId(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+
+        Object details = authentication.getDetails();
+        if (details instanceof String detailsString && detailsString.startsWith("delegated-by:")) {
+            return authentication.getName();
+        }
+
+        boolean internalOnly = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("SVC_INTERNAL"::equals);
+        if (internalOnly) {
+            return null;
+        }
+
+        return authentication.getName();
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Component
@@ -25,7 +26,12 @@ public class ActionValidator {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action cannot be empty");
         }
 
-        if (!allowedActions.contains(action)) {
+        String normalizedAction = normalize(action);
+        boolean allowed = allowedActions.stream()
+                .map(ActionValidator::normalize)
+                .anyMatch(normalizedAction::equals);
+
+        if (!allowed) {
             log.warn("Blocked unsafe smart home action: {}", action);
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -33,5 +39,9 @@ public class ActionValidator {
         }
 
         log.debug("Smart home action validated: {}", action);
+    }
+
+    private static String normalize(String action) {
+        return action.trim().replace('-', '_').toUpperCase(Locale.ROOT);
     }
 }

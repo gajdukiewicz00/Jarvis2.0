@@ -39,18 +39,28 @@ public class ReminderService {
     }
     
     @Transactional
-    public void triggerReminder(Long id) {
+    public boolean triggerReminder(Long id) {
         Reminder reminder = reminderRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Reminder not found: " + id));
-        
+
+        NotificationService.NotificationDeliveryResult deliveryResult = notificationService.sendReminderNotification(
+                reminder.getUserId(),
+                reminder.getMessage());
+
+        if (!deliveryResult.deliveredAny()) {
+            log.warn("Reminder {} was due but no delivery channel accepted it; leaving ACTIVE for retry", id);
+            return false;
+        }
+
         reminder.setStatus(ReminderStatus.TRIGGERED);
         reminder.setTriggeredAt(Instant.now());
         reminderRepository.save(reminder);
-        
-        log.info("Triggered reminder: {}", id);
-        
-        // Send notification
-        notificationService.sendReminderNotification(reminder.getUserId(), reminder.getMessage());
+
+        log.info("Triggered reminder: {} (desktop={}, voice={})",
+                id,
+                deliveryResult.desktopDelivered(),
+                deliveryResult.voiceDelivered());
+        return true;
     }
     
     public List<Reminder> checkDueReminders() {

@@ -112,11 +112,26 @@ image_ref() {
 
 is_k3s_context() {
     local ctx
+    local server
+    local kubelet_version
     ctx="$(kubectl config current-context 2>/dev/null || true)"
     if [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" == "/etc/rancher/k3s/k3s.yaml" ]]; then
         return 0
     fi
-    [[ "${ctx}" == *"k3s"* ]]
+    if [[ -n "${KUBECONFIG:-}" && "${KUBECONFIG}" == "${HOME}/.jarvis/kubeconfig" ]]; then
+        return 0
+    fi
+    if [[ "${ctx}" == *"k3s"* ]]; then
+        return 0
+    fi
+
+    server="$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+    if [[ "${server}" == "https://127.0.0.1:6443" ]]; then
+        kubelet_version="$(kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.kubeletVersion}' 2>/dev/null || true)"
+        [[ "${kubelet_version}" == *"+k3s"* ]] && return 0
+    fi
+
+    return 1
 }
 
 can_sudo_n_k3s_ctr() {

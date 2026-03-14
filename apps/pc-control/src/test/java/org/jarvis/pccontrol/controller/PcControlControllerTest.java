@@ -1,8 +1,9 @@
 package org.jarvis.pccontrol.controller;
 
-import org.jarvis.pccontrol.service.SystemControlService;
-import org.jarvis.pccontrol.service.TimerLimitExceededException;
-import org.jarvis.pccontrol.service.TimerSchedulerService;
+import org.jarvis.pccontrol.model.PcActionExecutionStatus;
+import org.jarvis.pccontrol.model.PcActionRequest;
+import org.jarvis.pccontrol.model.PcActionResult;
+import org.jarvis.pccontrol.service.PcActionExecutionService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -11,54 +12,74 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class PcControlControllerTest {
 
     @Mock
-    private SystemControlService systemControlService;
-
-    @Mock
-    private TimerSchedulerService timerSchedulerService;
+    private PcActionExecutionService executionService;
 
     @InjectMocks
     private PcControlController pcControlController;
 
     @Test
     void shouldReturnTooManyRequestsWhenTimerLimitReached() {
-        when(timerSchedulerService.scheduleTimer(eq(15), any(Runnable.class)))
-                .thenThrow(new TimerLimitExceededException("Too many active timers (2)"));
+        when(executionService.execute(new PcActionRequest(
+                "SYSTEM_COMMAND",
+                Map.of("command", "timer", "args", "15")
+        ))).thenReturn(new PcActionResult(
+                false,
+                "SYSTEM_COMMAND",
+                PcActionExecutionStatus.REJECTED,
+                "Too many active timers (2)",
+                "TIMER_LIMIT_EXCEEDED",
+                Map.of("command", "timer"),
+                List.of(),
+                Instant.now()
+        ));
 
-        PcControlController.ActionRequest request = new PcControlController.ActionRequest(
+        PcActionRequest request = new PcActionRequest(
                 "SYSTEM_COMMAND",
                 Map.of("command", "timer", "args", "15")
         );
 
-        ResponseEntity<Map<String, Object>> response = pcControlController.executeAction(request);
+        ResponseEntity<PcActionResult> response = pcControlController.executeAction(request);
 
         assertEquals(HttpStatus.TOO_MANY_REQUESTS, response.getStatusCode());
-        assertEquals("TIMER_LIMIT_EXCEEDED", response.getBody().get("error"));
+        assertEquals("TIMER_LIMIT_EXCEEDED", response.getBody().errorCode());
     }
 
     @Test
     void shouldReturnTimerIdWhenTimerAccepted() {
-        when(timerSchedulerService.scheduleTimer(eq(5), any(Runnable.class))).thenReturn("timer-123");
+        when(executionService.execute(new PcActionRequest(
+                "SYSTEM_COMMAND",
+                Map.of("command", "timer", "args", "5")
+        ))).thenReturn(new PcActionResult(
+                true,
+                "SYSTEM_COMMAND",
+                PcActionExecutionStatus.SUCCESS,
+                "Timer started",
+                null,
+                Map.of("timerId", "timer-123"),
+                List.of(),
+                Instant.now()
+        ));
 
-        PcControlController.ActionRequest request = new PcControlController.ActionRequest(
+        PcActionRequest request = new PcActionRequest(
                 "SYSTEM_COMMAND",
                 Map.of("command", "timer", "args", "5")
         );
 
-        ResponseEntity<Map<String, Object>> response = pcControlController.executeAction(request);
+        ResponseEntity<PcActionResult> response = pcControlController.executeAction(request);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals("timer-123", response.getBody().get("timerId"));
-        assertEquals(true, response.getBody().get("success"));
+        assertEquals("timer-123", response.getBody().details().get("timerId"));
+        assertEquals(true, response.getBody().success());
     }
 }

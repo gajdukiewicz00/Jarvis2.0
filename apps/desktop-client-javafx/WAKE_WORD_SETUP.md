@@ -36,7 +36,7 @@
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
-export PORCUPINE_ACCESS_KEY="TeMts+7XXA7gBDPyXUryVCamZTYQy+5AB1hvpViRIplsZjJz8ySFjA=="
+export PORCUPINE_ACCESS_KEY="your-picovoice-access-key"
 
 # Apply
 source ~/.bashrc
@@ -46,18 +46,18 @@ source ~/.bashrc
 
 ```cmd
 # PowerShell
-$env:PORCUPINE_ACCESS_KEY = "TeMts+7XXA7gBDPyXUryVCamZTYQy+5AB1hvpViRIplsZjJz8ySFjA=="
+$env:PORCUPINE_ACCESS_KEY = "your-picovoice-access-key"
 
 # Or System Environment Variables:
 # Settings → System → Advanced → Environment Variables
-# Add: PORCUPINE_ACCESS_KEY = TeMts+7XXA7gBDPyXUryVCamZTYQy+5AB1hvpViRIplsZjJz8ySFjA==
+# Add: PORCUPINE_ACCESS_KEY = your-picovoice-access-key
 ```
 
 ### IntelliJ IDEA Run Configuration:
 
 1. Run → Edit Configurations
 2. Select your app configuration
-3. Environment variables: `PORCUPINE_ACCESS_KEY=TeMts+7XXA7gBDPyXUryVCamZTYQy+5AB1hvpViRIplsZjJz8ySFjA==`
+3. Environment variables: `PORCUPINE_ACCESS_KEY=your-picovoice-access-key`
 
 ---
 
@@ -74,7 +74,7 @@ mkdir -p apps/desktop-client-javafx/src/main/resources/models
 
 ```bash
 # Set env var
-export PORCUPINE_ACCESS_KEY="TeMts+7XXA7gBDPyXUryVCamZTYQy+5AB1hvpViRIplsZjJz8ySFjA=="
+export PORCUPINE_ACCESS_KEY="your-picovoice-access-key"
 
 # Run
 mvn clean compile javafx:run -pl apps/desktop-client-javafx

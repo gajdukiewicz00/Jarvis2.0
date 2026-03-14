@@ -10,6 +10,8 @@ import java.nio.file.Paths
  * All paths are under ~/.jarvis/
  */
 object JarvisPaths {
+    private const val LOCAL_RUNTIME_MODE = "local"
+    private const val K8S_RUNTIME_MODE = "k8s"
     private val userHome: String = System.getProperty("user.home")
     private val jarvisRoot: Path = Paths.get(userHome, ".jarvis")
     
@@ -101,6 +103,12 @@ object JarvisPaths {
      * Get path to jarvis-launch.sh script.
      */
     fun getLaunchScript(): Path {
+        if (isLocalRuntime()) {
+            val localScript = getProjectRoot().resolve("scripts/runtime-up.sh")
+            if (Files.exists(localScript)) {
+                return localScript
+            }
+        }
         return getProjectRoot().resolve("jarvis-launch.sh")
     }
     
@@ -108,7 +116,32 @@ object JarvisPaths {
      * Get path to jarvis-stop.sh script.
      */
     fun getStopScript(): Path {
+        if (isLocalRuntime()) {
+            val localScript = getProjectRoot().resolve("scripts/runtime-down.sh")
+            if (Files.exists(localScript)) {
+                return localScript
+            }
+        }
         return getProjectRoot().resolve("jarvis-stop.sh")
+    }
+
+    fun isLocalRuntime(): Boolean {
+        return getRuntimeMode() == LOCAL_RUNTIME_MODE
+    }
+
+    fun getRuntimeMode(): String {
+        val explicitMode = normalizeRuntimeMode(System.getenv("JARVIS_RUNTIME_MODE"))
+        if (explicitMode != null) {
+            return explicitMode
+        }
+
+        val explicitUrl = System.getenv("JARVIS_API_BASE_URL")
+            ?: System.getenv("API_URL")
+        if (!explicitUrl.isNullOrBlank()) {
+            return if (isLocalUrl(explicitUrl)) LOCAL_RUNTIME_MODE else K8S_RUNTIME_MODE
+        }
+
+        return K8S_RUNTIME_MODE
     }
     
     /**
@@ -166,6 +199,19 @@ object JarvisPaths {
             }
         }
 
-        return "https://api.jarvis.local"
+        return if (isLocalRuntime()) "http://127.0.0.1:8080" else "https://api.jarvis.local"
+    }
+
+    private fun normalizeRuntimeMode(runtimeMode: String?): String? {
+        return when (runtimeMode?.trim()?.lowercase()) {
+            LOCAL_RUNTIME_MODE -> LOCAL_RUNTIME_MODE
+            K8S_RUNTIME_MODE -> K8S_RUNTIME_MODE
+            else -> null
+        }
+    }
+
+    private fun isLocalUrl(url: String): Boolean {
+        val normalized = url.trim().lowercase()
+        return normalized.contains("127.0.0.1") || normalized.contains("localhost")
     }
 }

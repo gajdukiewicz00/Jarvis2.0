@@ -13,10 +13,11 @@ public interface SessionSummaryRepository extends JpaRepository<SessionSummary, 
 
     Optional<SessionSummary> findBySessionId(String sessionId);
 
+    Optional<SessionSummary> findBySessionIdAndUserId(String sessionId, String userId);
+
     List<SessionSummary> findByUserIdOrderByUpdatedAtDesc(String userId);
 
     boolean existsBySessionId(String sessionId);
 }
-
 
 

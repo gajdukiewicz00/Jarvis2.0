@@ -47,16 +47,27 @@ spec:
           envFrom:
             - secretRef:
                 name: jarvis-secrets
+          env:
+            - name: MANAGEMENT_HEALTH_RABBIT_ENABLED
+              value: "false"
+            - name: JARVIS_VOSK_MODEL_PATH_RU
+              value: /models/vosk-model-ru-0.42
+            - name: SPRING_AUTOCONFIGURE_EXCLUDE
+              value: >-
+                org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,
+                org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,
+                org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration,
+                org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
           resources:
             limits:
-              memory: "1Gi"
+              memory: "12Gi"
               cpu: "1"
             requests:
-              memory: "512Mi"
+              memory: "4Gi"
               cpu: "250m"
           startupProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: 8081
             initialDelaySeconds: 10
             periodSeconds: 5

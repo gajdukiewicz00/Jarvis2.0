@@ -44,6 +44,11 @@ spec:
           envFrom:
             - secretRef:
                 name: jarvis-secrets
+          env:
+            - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_LIVENESS_INCLUDE
+              value: livenessState
+            - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE
+              value: readinessState
           resources:
             limits:
               memory: "512Mi"
@@ -53,7 +58,7 @@ spec:
               cpu: "100m"
           startupProbe:
             httpGet:
-              path: /actuator/health
+              path: /actuator/health/liveness
               port: 8087
             initialDelaySeconds: 10
             periodSeconds: 5

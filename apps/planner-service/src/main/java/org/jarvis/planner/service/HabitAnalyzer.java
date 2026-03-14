@@ -30,8 +30,8 @@ public class HabitAnalyzer {
         Double avgSleep = analyticsClient.getAverageSleepHours(userId);
         Map<String, Object> sleepAnalysis = new HashMap<>();
         sleepAnalysis.put("averageHours", avgSleep);
-        sleepAnalysis.put("status", avgSleep >= 7.0 ? "GOOD" : "NEEDS_IMPROVEMENT");
-        if (avgSleep < 7.0) {
+        sleepAnalysis.put("status", avgSleep == null ? "UNKNOWN" : avgSleep >= 7.0 ? "GOOD" : "NEEDS_IMPROVEMENT");
+        if (avgSleep != null && avgSleep < 7.0) {
             sleepAnalysis.put("recommendation", "Попробуй ложиться на 30 минут раньше");
         }
         analysis.put("sleep", sleepAnalysis);
@@ -40,8 +40,8 @@ public class HabitAnalyzer {
         Integer overtime = analyticsClient.getWeeklyOvertimeHours(userId);
         Map<String, Object> workAnalysis = new HashMap<>();
         workAnalysis.put("weeklyOvertime", overtime);
-        workAnalysis.put("status", overtime <= 5 ? "BALANCED" : "OVERWORKED");
-        if (overtime > 10) {
+        workAnalysis.put("status", overtime == null ? "UNKNOWN" : overtime <= 5 ? "BALANCED" : "OVERWORKED");
+        if (overtime != null && overtime > 10) {
             workAnalysis.put("recommendation", "Слишком много переработок. Нужен отдых.");
         }
         analysis.put("work", workAnalysis);

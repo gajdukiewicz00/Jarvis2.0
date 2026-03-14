@@ -28,6 +28,7 @@ import javax.net.ssl.TrustManagerFactory
  */
 class HealthCheckService(
     private val apiBaseUrl: String,
+    private val kubeconfigProvider: () -> String?,
     private val onStatusChange: (ServiceHealthStatus) -> Unit
 ) {
     private val logger = LoggerFactory.getLogger(HealthCheckService::class.java)
@@ -45,19 +46,24 @@ class HealthCheckService(
     @Volatile private var llmEnabled = false
     @Volatile private var memoryEnabled = false
     @Volatile private var voiceEnabled = true
+    @Volatile private var voiceRequired = false
     @Volatile private var cachedTruststorePath: String? = null
     @Volatile private var cachedSslSocketFactory: javax.net.ssl.SSLSocketFactory? = null
-    
-    // Required services (core)
-    private val requiredServices = listOf("api-gateway", "security-service")
-    
-    // Optional services (for DEGRADED status)
-    private val optionalServices = listOf("voice-gateway", "llm-service", "memory-service")
+    private val localRuntime =
+        apiBaseUrl.contains("127.0.0.1") ||
+            apiBaseUrl.contains("localhost") ||
+            (System.getenv("JARVIS_RUNTIME_MODE")?.equals("local", ignoreCase = true) == true)
 
-    fun updateFlags(llmEnabled: Boolean, memoryEnabled: Boolean, voiceEnabled: Boolean = true) {
+    fun updateFlags(
+        llmEnabled: Boolean,
+        memoryEnabled: Boolean,
+        voiceEnabled: Boolean = true,
+        voiceRequired: Boolean = false
+    ) {
         this.llmEnabled = llmEnabled
         this.memoryEnabled = memoryEnabled
         this.voiceEnabled = voiceEnabled
+        this.voiceRequired = voiceRequired
     }
     
     /**
@@ -96,7 +102,7 @@ class HealthCheckService(
      * Thread-safe: prevents concurrent checks.
      * Includes watchdog timeout to prevent guard from getting stuck.
      */
-    fun checkHealth(backendPid: Long?): ServiceHealthStatus? {
+    fun checkHealth(backendPid: Long?, backendExpectedRunning: Boolean = false): ServiceHealthStatus? {
         // Prevent concurrent checks
         if (!runningCheck.compareAndSet(false, true)) {
             // Another check is running, return current status
@@ -111,7 +117,7 @@ class HealthCheckService(
         }, 4, java.util.concurrent.TimeUnit.SECONDS)
         
         return try {
-            checkHealthInternal(backendPid)
+            checkHealthInternal(backendPid, backendExpectedRunning)
         } catch (e: Exception) {
             logger.error("Health check error", e)
             currentStatus.get()  // Return current status on error
@@ -123,9 +129,22 @@ class HealthCheckService(
         }
     }
     
-    private fun checkHealthInternal(backendPid: Long?): ServiceHealthStatus {
-        // IDLE: No backend process
-        if (backendPid == null || !isProcessAlive(backendPid)) {
+    private fun checkHealthInternal(backendPid: Long?, backendExpectedRunning: Boolean): ServiceHealthStatus {
+        val processAlive = backendPid != null && isProcessAlive(backendPid)
+        val requiredServices = mutableListOf("api-gateway", "security-service")
+        val optionalServices = mutableListOf("llm-service", "memory-service")
+        if (voiceRequired) {
+            requiredServices.add("voice-gateway")
+        } else {
+            optionalServices.add(0, "voice-gateway")
+        }
+
+        val coreChecks = linkedMapOf<String, ServiceHealthStatus.ServiceCheck>()
+        val apiCheck = checkApiGateway()
+        val externallyObservable = apiCheck.status != ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN
+
+        // IDLE: no bootstrap process and nothing externally reachable.
+        if (!processAlive && !backendExpectedRunning && !externallyObservable) {
             consecutiveSuccess.set(0)
             consecutiveFailures.set(0)
             val status = ServiceHealthStatus(
@@ -137,13 +156,15 @@ class HealthCheckService(
             updateStatus(status)
             return status
         }
-        
-        // Check core services
-        val coreChecks = requiredServices.associateWith { serviceName ->
-            checkServiceHealth(serviceName)
+
+        requiredServices.forEach { serviceName ->
+            coreChecks[serviceName] = if (serviceName == "api-gateway") {
+                apiCheck
+            } else {
+                checkServiceHealth(serviceName)
+            }
         }
-        
-        // Check optional services (if enabled)
+
         val optionalChecks = optionalServices.associateWith { serviceName ->
             checkServiceHealth(serviceName, optional = true)
         }
@@ -166,7 +187,16 @@ class HealthCheckService(
         
         // Build detailed reasons
         val reasons = mutableListOf<String>()
-        reasons.add("Process: pid=${if (backendPid != null && isProcessAlive(backendPid)) "alive" else "dead"}")
+        reasons.add(
+            "Bootstrap process: ${
+                when {
+                    processAlive -> "alive"
+                    backendExpectedRunning -> "finished"
+                    externallyObservable -> "not-running (backend reachable)"
+                    else -> "dead"
+                }
+            }"
+        )
         coreChecks.forEach { (name, check) ->
             val statusStr = when (check.status) {
                 ServiceHealthStatus.ServiceCheck.CheckStatus.UP -> "UP"
@@ -316,6 +346,9 @@ class HealthCheckService(
     }
     
     private fun checkSecurityService(): ServiceHealthStatus.ServiceCheck {
+        if (localRuntime) {
+            return checkHttpService("security-service", "http://127.0.0.1:8088/actuator/health")
+        }
         // Check security-service through api-gateway or directly
         return try {
             // Try through gateway first
@@ -385,14 +418,92 @@ class HealthCheckService(
                 isDisabled = true  // Mark as intentionally disabled
             )
         }
-        
-        // Voice enabled but not fully checked yet (treat as potential error, not disabled)
-        return ServiceHealthStatus.ServiceCheck(
-            name = "voice-gateway",
-            status = ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN,
-            message = "Optional (enabled, not fully checked)",
-            isDisabled = false  // Not disabled, just not checked yet
-        )
+
+        if (localRuntime) {
+            return checkHttpService("voice-gateway", "http://127.0.0.1:8081/actuator/health")
+        }
+
+        // voice.jarvis.local is routed through api-gateway ingress, so HTTP /actuator checks
+        // are not authoritative for the voice-gateway deployment itself.
+        return checkWorkloadHealth("deployment", "voice-gateway")
+    }
+
+    private fun checkWorkloadHealth(kind: String, name: String): ServiceHealthStatus.ServiceCheck {
+        return try {
+            val desiredText = kubectlJsonPath(kind, name, "{.spec.replicas}")
+            val desired = desiredText.toIntOrNull()
+            if (desired == null) {
+                return ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "kubectl returned invalid desired replicas"
+                )
+            }
+
+            val ready = kubectlJsonPath(kind, name, "{.status.readyReplicas}").toIntOrNull() ?: 0
+            val available = when (kind) {
+                "deployment" -> kubectlJsonPath(kind, name, "{.status.availableReplicas}").toIntOrNull() ?: 0
+                else -> ready
+            }
+
+            if (desired == 0) {
+                return ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "Scaled to 0 replicas"
+                )
+            }
+
+            if (ready >= desired && available >= desired) {
+                ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+                    message = "Ready $ready/$desired"
+                )
+            } else {
+                ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "Ready $ready/$desired, available $available/$desired"
+                )
+            }
+        } catch (e: java.net.SocketTimeoutException) {
+            ServiceHealthStatus.ServiceCheck(
+                name = name,
+                status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                message = "kubectl timeout"
+            )
+        } catch (e: Exception) {
+            ServiceHealthStatus.ServiceCheck(
+                name = name,
+                status = ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN,
+                message = "kubectl unavailable: ${e.message?.take(50) ?: "Unknown"}"
+            )
+        }
+    }
+
+    private fun kubectlJsonPath(kind: String, name: String, path: String): String {
+        val command = mutableListOf("kubectl")
+        val kubeconfig = kubeconfigProvider()?.takeIf { it.isNotBlank() }
+        if (kubeconfig != null) {
+            command += listOf("--kubeconfig", kubeconfig)
+        }
+        command += listOf("get", kind, name, "-n", "jarvis", "-o", "jsonpath=$path")
+
+        val process = ProcessBuilder(command)
+            .redirectErrorStream(true)
+            .start()
+        if (!process.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            throw java.net.SocketTimeoutException("kubectl get $kind/$name timed out")
+        }
+
+        val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+        if (process.exitValue() != 0) {
+            throw IllegalStateException(output.ifBlank { "kubectl get $kind/$name failed" })
+        }
+
+        return output
     }
     
     private fun checkLlmService(optional: Boolean): ServiceHealthStatus.ServiceCheck {
@@ -404,6 +515,10 @@ class HealthCheckService(
                 message = "Disabled by flag (ENABLE_LLM=false)",
                 isDisabled = true  // Mark as intentionally disabled
             )
+        }
+
+        if (localRuntime) {
+            return checkHttpService("llm-service", "http://127.0.0.1:8091/api/v1/llm/health")
         }
         
         // LLM enabled - perform actual health check
@@ -481,6 +596,10 @@ class HealthCheckService(
                 message = "Disabled by flag (ENABLE_MEMORY=false)",
                 isDisabled = true  // Mark as intentionally disabled
             )
+        }
+
+        if (localRuntime) {
+            return checkHttpService("memory-service", "http://127.0.0.1:8093/actuator/health")
         }
         
         // Memory enabled - perform actual health check
@@ -582,6 +701,36 @@ class HealthCheckService(
     
     fun getCurrentStatus(): ServiceHealthStatus? {
         return currentStatus.get()
+    }
+
+    private fun checkHttpService(name: String, url: String): ServiceHealthStatus.ServiceCheck {
+        return try {
+            val connection = openConnection(URL(url))
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.connect()
+
+            if (connection.responseCode == 200) {
+                ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+                    message = "UP"
+                )
+            } else {
+                ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "HTTP ${connection.responseCode}"
+                )
+            }
+        } catch (e: Exception) {
+            ServiceHealthStatus.ServiceCheck(
+                name = name,
+                status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                message = "Error: ${e.message?.take(50) ?: "Unknown"}"
+            )
+        }
     }
 
     private fun openConnection(url: URL): HttpURLConnection {

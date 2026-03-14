@@ -4,6 +4,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.jarvis.apigateway.client.OrchestratorClient;
 import org.jarvis.apigateway.controller.OrchestratorProxyController;
+import org.jarvis.common.JarvisCommonAutoConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import jakarta.servlet.Filter;
@@ -49,10 +50,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "jarvis.jwt.enabled=true",
         "jarvis.jwt.secret=0123456789012345678901234567890123456789012345678901234567890123",
         "jarvis.jwt.issuer=jarvis",
+        "service.jwt.secret=service-secret-01234567890123456789012345678901",
         "logging.level.org.jarvis.apigateway.security.JwtAuthFilter=DEBUG"
 })
 @AutoConfigureMockMvc(addFilters = false)
-@Import({ SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class })
+@Import({ SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class })
 @ActiveProfiles("test")
 class JwtAuthenticationFilterIntegrationTest {
 

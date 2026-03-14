@@ -504,6 +504,40 @@ public class JarvisPhraseProvider {
                 "Done, sir. I'll remind you in {amount} {unit}."
         );
 
+        // ==================== Smart Home ====================
+        add(PhraseContext.SMART_HOME_TURN_ON, Language.RU,
+                "{device} включён, сэр.",
+                "Включаю {device}, сэр.",
+                "{device} уже активен, сэр."
+        );
+        add(PhraseContext.SMART_HOME_TURN_ON, Language.EN,
+                "{device} is now on, sir.",
+                "Turning on {device}, sir.",
+                "{device} is active, sir."
+        );
+
+        add(PhraseContext.SMART_HOME_TURN_OFF, Language.RU,
+                "{device} выключен, сэр.",
+                "Выключаю {device}, сэр.",
+                "{device} отключён, сэр."
+        );
+        add(PhraseContext.SMART_HOME_TURN_OFF, Language.EN,
+                "{device} is now off, sir.",
+                "Turning off {device}, sir.",
+                "{device} is offline, sir."
+        );
+
+        add(PhraseContext.SMART_HOME_SET_VALUE, Language.RU,
+                "{device} установлен на {value}, сэр.",
+                "Настраиваю {device}: {value}, сэр.",
+                "{device} обновлён до {value}, сэр."
+        );
+        add(PhraseContext.SMART_HOME_SET_VALUE, Language.EN,
+                "{device} set to {value}, sir.",
+                "Adjusting {device} to {value}, sir.",
+                "{device} updated to {value}, sir."
+        );
+
         // ==================== Sarcasm / Personality ====================
         add(PhraseContext.SARCASTIC_FAILURE, Language.RU,
                 "Хм, это не сработало и в этот раз, сэр. Удивительно, не правда ли?",
@@ -654,4 +688,3 @@ public class JarvisPhraseProvider {
         ));
     }
 }
-

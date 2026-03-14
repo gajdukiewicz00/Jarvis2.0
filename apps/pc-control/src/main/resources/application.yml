@@ -43,12 +43,24 @@ jarvis:
     kafka-enabled: ${FEATURE_KAFKA_PC_CONTROL:false}
 
 pc-control:
-  stub-mode: ${PC_CONTROL_STUB_MODE:true}
+  stub-mode: ${PC_CONTROL_STUB_MODE:false}
   file-root: ${PC_CONTROL_FILE_ROOT:/var/jarvis/shared}
   file-extensions: ${PC_CONTROL_FILE_EXTENSIONS:txt,log,md,json,yml,yaml,csv}
+  desktop:
+    application-dirs:
+      - /usr/share/applications
+      - ${user.home}/.local/share/applications
+    browser-candidates:
+      - firefox
+      - google-chrome
+      - chromium
+      - brave-browser
+      - microsoft-edge
+      - microsoft-edge-stable
+    amixer-control: ${PC_CONTROL_AMIXER_CONTROL:Master}
 
 security:
-  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:VOLUME_UP,VOLUME_DOWN,VOLUME_MUTE,LAUNCH_APP,MEDIA_CONTROL,TIMER_START,TIMER_STOP}
+  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:MEDIA_CONTROL,VOLUME_UP,VOLUME_DOWN,SET_VOLUME,VOLUME_SET,MUTE,UNMUTE,PLAY_PAUSE,PAUSE,NEXT,PREV,OPEN_APP,HOTKEY,NOTIFY,SYSTEM_COMMAND,SCENARIO}
 
 # Actuator endpoints
 management:
@@ -58,7 +70,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: when_authorized
+      show-details: always
       probes:
         enabled: true
   health:

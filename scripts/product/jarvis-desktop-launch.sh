@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JARVIS_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
+RUNTIME_MODE="${JARVIS_RUNTIME_MODE:-local}"
 
 LOG_DIR="$HOME/.jarvis/logs"
 mkdir -p "$LOG_DIR"
@@ -44,11 +45,24 @@ BACKEND_LOG="$LOG_DIR/backend_${TIMESTAMP}.log"
 CLIENT_LOG="$LOG_DIR/desktop-client_${TIMESTAMP}.log"
 
 backend_running=false
-if command -v kubectl >/dev/null 2>&1; then
-  if kubectl get namespace jarvis >/dev/null 2>&1; then
-    ready_replicas="$(kubectl get deployment api-gateway -n jarvis -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
-    if [[ "$ready_replicas" =~ ^[1-9][0-9]*$ ]]; then
-      backend_running=true
+BACKEND_SCRIPT="./jarvis-launch.sh"
+
+if [[ "${RUNTIME_MODE}" == "local" ]]; then
+  export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-http://127.0.0.1:8080}"
+  export JARVIS_USE_TLS="${JARVIS_USE_TLS:-false}"
+  BACKEND_SCRIPT="./scripts/runtime-up.sh"
+  if curl -fsS "${JARVIS_API_BASE_URL}/actuator/health" >/dev/null 2>&1; then
+    backend_running=true
+  fi
+else
+  export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
+  export JARVIS_USE_TLS="${JARVIS_USE_TLS:-true}"
+  if command -v kubectl >/dev/null 2>&1; then
+    if kubectl get namespace jarvis >/dev/null 2>&1; then
+      ready_replicas="$(kubectl get deployment api-gateway -n jarvis -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+      if [[ "$ready_replicas" =~ ^[1-9][0-9]*$ ]]; then
+        backend_running=true
+      fi
     fi
   fi
 fi
@@ -56,11 +70,11 @@ fi
 if [ "$backend_running" = false ]; then
   (
     cd "$JARVIS_HOME"
-    ENABLE_LLM=true ENABLE_MEMORY=true ./jarvis-launch.sh
+    ENABLE_LLM=true ENABLE_MEMORY=true "${BACKEND_SCRIPT}"
   ) >"$BACKEND_LOG" 2>&1 &
   echo "Started backend. Log: $BACKEND_LOG"
 else
-  echo "Backend already running in namespace 'jarvis' (api-gateway readyReplicas > 0)."
+  echo "Backend already running."
   echo "Backend log reserved at: $BACKEND_LOG"
 fi
 

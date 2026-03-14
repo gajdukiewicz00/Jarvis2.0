@@ -11,12 +11,14 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * WebSocket handler for PC Control commands.
- * Desktop clients connect here to receive PC control commands from
- * orchestrator/voice.
+ * WebSocket handler for desktop-side PC control sessions.
+ *
+ * Sessions are tracked by authenticated user ID so internal services can route
+ * actions to the correct desktop instead of broadcasting blindly.
  */
 @Slf4j
 @Component
@@ -25,18 +27,23 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentHashMap<String, ClientSession> clientSessions = new ConcurrentHashMap<>();
 
-    private record ClientSession(WebSocketSession session, String clientType, String clientId) {
+    private record ClientSession(
+            WebSocketSession session,
+            String clientType,
+            String clientId,
+            String userId,
+            String username) {
     }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        log.info("🔌 PC Control WebSocket connected: {}", session.getId());
-        // Store session - will be identified properly when IDENTIFY message arrives
-        clientSessions.put(session.getId(), new ClientSession(session, "UNKNOWN", session.getId()));
+        String userId = principalName(session.getPrincipal());
+        log.info("🔌 PC Control WebSocket connected: session={}, userId={}", session.getId(), userId);
+        clientSessions.put(session.getId(), new ClientSession(session, "UNKNOWN", session.getId(), userId, null));
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String payload = message.getPayload();
         log.debug("Received from {}: {}", session.getId(), payload);
 
@@ -56,20 +63,33 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleIdentify(WebSocketSession session, JsonNode json) {
-        String client = json.has("client") ? json.get("client").asText() : "unknown";
-        String clientId = json.has("clientId") ? json.get("clientId").asText() : session.getId();
+        String client = readText(json, "client", "unknown");
+        String clientId = readText(json, "clientId", session.getId());
+        String username = readText(json, "username", null);
+        String requestedUserId = readText(json, "userId", null);
         String normalizedClient = normalizeClientType(client);
+        String resolvedUserId = principalName(session.getPrincipal());
+        if (resolvedUserId == null || resolvedUserId.isBlank()) {
+            resolvedUserId = requestedUserId;
+        }
 
-        clientSessions.put(session.getId(), new ClientSession(session, normalizedClient, clientId));
+        clientSessions.put(
+                session.getId(),
+                new ClientSession(session, normalizedClient, clientId, resolvedUserId, username));
 
-        log.info("✅ Client identified: {} (session: {}, clientId: {})", normalizedClient, session.getId(), clientId);
+        log.info(
+                "✅ Client identified: type={}, session={}, clientId={}, userId={}, username={}",
+                normalizedClient,
+                session.getId(),
+                clientId,
+                resolvedUserId,
+                username);
 
-        // Send acknowledgement
         sendMessage(session, createMessage("ACK", "message", "Connected to PC Control"));
     }
 
     private void handleAck(WebSocketSession session, JsonNode json) {
-        String action = json.has("action") ? json.get("action").asText() : "";
+        String action = readText(json, "action", "");
         boolean success = json.has("success") && json.get("success").asBoolean();
         log.info("Action {} completed: {}", action, success ? "✓" : "✗");
     }
@@ -86,17 +106,8 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         clientSessions.remove(session.getId());
     }
 
-    /**
-     * Send a PC action command to all connected desktop clients.
-     * Called by orchestrator or other services.
-     */
     public void sendPcAction(String action, JsonNode params) {
-        ObjectNode message = objectMapper.createObjectNode();
-        message.put("type", "PC_ACTION");
-        message.put("action", action);
-        message.set("params", params != null ? params : objectMapper.createObjectNode());
-
-        String messageStr = message.toString();
+        String messageStr = pcActionMessage(action, params);
         long targetCount = clientSessions.values().stream()
                 .filter(this::isPcControlClient)
                 .filter(cs -> cs.session().isOpen())
@@ -107,21 +118,32 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
                 action, targetCount, clientSessions.size());
     }
 
-    /**
-     * Send a PC action to a specific session.
-     */
     public boolean sendPcActionToSession(String sessionId, String action, JsonNode params) {
         ClientSession clientSession = clientSessions.get(sessionId);
         if (clientSession != null && clientSession.session().isOpen()) {
-            ObjectNode message = objectMapper.createObjectNode();
-            message.put("type", "PC_ACTION");
-            message.put("action", action);
-            message.set("params", params != null ? params : objectMapper.createObjectNode());
-            sendMessage(clientSession.session(), message.toString());
+            sendMessage(clientSession.session(), pcActionMessage(action, params));
             return true;
         }
         log.warn("Session {} not found or closed for action {}", sessionId, action);
         return false;
+    }
+
+    public int sendPcActionToUser(String userId, String action, JsonNode params) {
+        if (userId == null || userId.isBlank()) {
+            return 0;
+        }
+
+        String messageStr = pcActionMessage(action, params);
+        int targetCount = (int) clientSessions.values().stream()
+                .filter(this::isPcControlClient)
+                .filter(cs -> userId.equals(cs.userId()))
+                .filter(cs -> cs.session().isOpen())
+                .peek(cs -> sendMessage(cs.session(), messageStr))
+                .count();
+
+        log.info("📤 Sending PC action '{}' to {} PC_CONTROL clients for user {}",
+                action, targetCount, userId);
+        return targetCount;
     }
 
     public int getConnectedClientsCount() {
@@ -133,6 +155,14 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
 
     public boolean hasConnectedClients() {
         return getConnectedClientsCount() > 0;
+    }
+
+    private String pcActionMessage(String action, JsonNode params) {
+        ObjectNode message = objectMapper.createObjectNode();
+        message.put("type", "PC_ACTION");
+        message.put("action", action);
+        message.set("params", params != null ? params : objectMapper.createObjectNode());
+        return message.toString();
     }
 
     private String createMessage(String type, String key, String value) {
@@ -166,5 +196,13 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
             case "DESKTOP", "PC_CONTROL", "PC_CONTROL_CLIENT" -> "PC_CONTROL_CLIENT";
             default -> upper;
         };
+    }
+
+    private String principalName(Principal principal) {
+        return principal != null ? principal.getName() : null;
+    }
+
+    private String readText(JsonNode json, String field, String defaultValue) {
+        return json.has(field) ? json.get(field).asText() : defaultValue;
     }
 }

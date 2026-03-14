@@ -3,8 +3,15 @@ package org.jarvis.planner.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.planner.client.AnalyticsClient;
+import org.jarvis.planner.client.PcControlActionClient;
+import org.jarvis.planner.model.Reminder;
+import org.jarvis.planner.model.ReminderType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Map;
 
 /**
  * Automatic actions triggered based on analytics and user habits
@@ -16,6 +23,9 @@ public class AutoActionService {
 
     private final AnalyticsClient analyticsClient;
     private final NotificationService notificationService;
+    private final PcControlActionClient pcControlActionClient;
+    private final ReminderService reminderService;
+    private final Clock clock;
 
     /**
      * Check every hour for automatic actions
@@ -61,10 +71,11 @@ public class AutoActionService {
     public void triggerFocusMode(String userId, String mode) {
         log.info("Activating focus mode: {} for user: {}", mode, userId);
 
-        // TODO: Integrate with pc-control to:
-        // - Close distracting apps (social media, games)
-        // - Enable Do Not Disturb
-        // - Set screen dimming
+        String scenarioName = mapFocusScenario(mode);
+        boolean routed = pcControlActionClient.sendAction(userId, "SCENARIO", Map.of("name", scenarioName));
+        if (!routed) {
+            log.warn("Focus mode scenario {} could not be routed to a desktop session for user {}", scenarioName, userId);
+        }
 
         notificationService.sendDesktopNotification(
                 userId,
@@ -92,14 +103,19 @@ public class AutoActionService {
     public void startPomodoroTimer(String userId, int durationMinutes) {
         log.info("Starting Pomodoro timer ({} min) for user: {}", durationMinutes, userId);
 
-        // TODO: Integrate with pc-control timer service
-        // Start 25-minute work session
-        // Auto-start 5-minute break after
+        pcControlActionClient.sendAction(userId, "SCENARIO", Map.of("name", "focus"));
 
         notificationService.sendDesktopNotification(
                 userId,
                 "Pomodoro",
                 "Таймер на " + durationMinutes + " минут запущен. Фокус!");
+
+        Reminder reminder = new Reminder();
+        reminder.setUserId(userId);
+        reminder.setMessage("Pomodoro завершен. Сделай перерыв на 5 минут.");
+        reminder.setReminderTime(Instant.now(clock).plusSeconds(durationMinutes * 60L));
+        reminder.setReminderType(ReminderType.ONCE);
+        reminderService.createReminder(reminder);
     }
 
     /**
@@ -135,5 +151,17 @@ public class AutoActionService {
             // Catch all exceptions to prevent scheduler from stopping
             log.error("Error during break reminder check: {}", e.getMessage(), e);
         }
+    }
+
+    private String mapFocusScenario(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return "focus";
+        }
+        return switch (mode.trim().toUpperCase()) {
+            case "WORK" -> "work";
+            case "RELAX", "REST" -> "rest";
+            case "FOCUS" -> "focus";
+            default -> mode.trim().toLowerCase();
+        };
     }
 }

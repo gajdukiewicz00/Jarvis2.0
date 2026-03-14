@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 
 @Slf4j
 @Component
@@ -25,7 +26,11 @@ public class CommandValidator {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Action type cannot be empty");
         }
 
-        if (!allowedActions.contains(actionType)) {
+        String normalizedAction = normalize(actionType);
+        boolean allowed = allowedActions.stream()
+                .map(CommandValidator::normalize)
+                .anyMatch(normalizedAction::equals);
+        if (!allowed) {
             log.warn("Blocked dangerous action attempt: {}", actionType);
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
@@ -33,5 +38,9 @@ public class CommandValidator {
         }
 
         log.debug("Action validated: {}", actionType);
+    }
+
+    private static String normalize(String actionType) {
+        return actionType.trim().replace('-', '_').toUpperCase(Locale.ROOT);
     }
 }

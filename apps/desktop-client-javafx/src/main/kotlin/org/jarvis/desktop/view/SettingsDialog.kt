@@ -1,11 +1,9 @@
 package org.jarvis.desktop.view
 
 import javafx.geometry.Insets
-import javafx.geometry.Pos
 import javafx.scene.control.*
 import javafx.scene.layout.GridPane
-import javafx.scene.layout.HBox
-import javafx.scene.layout.VBox
+import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.i18n.I18n
 import java.util.*
 
@@ -29,13 +27,13 @@ class SettingsDialog : Dialog<ButtonType>() {
         )
         
         // Select current language
-        val currentLocale = I18n.getCurrentLocale()
+        val currentLocale = AppConfig.locale
         languageComboBox.selectionModel.select(
             languageComboBox.items.find { it.locale.language == currentLocale.language }
         )
         
         // Server URL
-        serverUrlField.text = "http://localhost:8080" // TODO: Load from config
+        serverUrlField.text = AppConfig.apiGatewayBaseUrl
         serverUrlField.prefWidth = 300.0
         
         // Layout
@@ -59,9 +57,8 @@ class SettingsDialog : Dialog<ButtonType>() {
             if (buttonType == ButtonType.OK) {
                 val selectedLanguage = languageComboBox.selectionModel.selectedItem
                 if (selectedLanguage != null) {
+                    AppConfig.saveSettings(serverUrlField.text, selectedLanguage.locale)
                     I18n.setLocale(selectedLanguage.locale)
-                    // TODO: Save to preferences
-                    // TODO: Refresh UI
                 }
             }
             buttonType

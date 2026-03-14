@@ -39,6 +39,7 @@ public class PcControlInternalController {
         String action = (String) body.get("action");
         JsonNode params = objectMapper.valueToTree(body.get("params"));
         String sessionId = body.get("sessionId") != null ? String.valueOf(body.get("sessionId")) : null;
+        String userId = body.get("userId") != null ? String.valueOf(body.get("userId")) : null;
 
         if (action == null || action.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "action is required"));
@@ -64,6 +65,22 @@ public class PcControlInternalController {
                     "status", "sent",
                     "action", action,
                     "sessionId", sessionId));
+        }
+
+        if (userId != null && !userId.isBlank()) {
+            log.info("🎯 Triggering PC action for user {}: {} with params: {}", userId, action, params);
+            int sentCount = webSocketHandler.sendPcActionToUser(userId, action, params);
+            if (sentCount == 0) {
+                return ResponseEntity.status(404).body(Map.of(
+                        "status", "user_not_connected",
+                        "userId", userId,
+                        "action", action));
+            }
+            return ResponseEntity.ok(Map.of(
+                    "status", "sent",
+                    "action", action,
+                    "userId", userId,
+                    "clients", sentCount));
         }
 
         log.info("🎯 Triggering PC action (broadcast): {} with params: {}", action, params);

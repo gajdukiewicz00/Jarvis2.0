@@ -7,6 +7,7 @@ import org.jarvis.analytics.dto.*;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,14 +20,17 @@ import java.util.stream.Collectors;
 public class AnalyticsService {
 
     private final LifeTrackerClient lifeTrackerClient;
+    private final Clock clock;
     private static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
+    private static final Set<String> SLEEP_KEYWORDS = Set.of("sleep", "slept", "nap", "rest");
+    private static final Set<String> WORK_KEYWORDS = Set.of("work", "focus", "coding", "meeting", "study");
 
     /**
      * Get expense summaries grouped by month with optional date filtering
      */
     public List<ExpenseSummaryDTO> getExpensesByMonth(LocalDate from, LocalDate to) {
         log.info("Aggregating expenses by month (from: {}, to: {})", from, to);
-        List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        List<ExpenseDTO> expenses = safeList(lifeTrackerClient.getExpenses());
         expenses = expenses.stream()
                 .filter(this::isExpense)
                 .collect(Collectors.toList());
@@ -62,7 +66,7 @@ public class AnalyticsService {
      */
     public List<ExpenseSummaryDTO> getExpensesByCategory(LocalDate from, LocalDate to) {
         log.info("Aggregating expenses by category (from: {}, to: {})", from, to);
-        List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        List<ExpenseDTO> expenses = safeList(lifeTrackerClient.getExpenses());
         expenses = expenses.stream()
                 .filter(this::isExpense)
                 .collect(Collectors.toList());
@@ -127,7 +131,7 @@ public class AnalyticsService {
     private List<ExpenseSummaryDTO> getExpensesByWeek(LocalDate from, LocalDate to) {
         // Simplified: group by ISO week
         DateTimeFormatter weekFormatter = DateTimeFormatter.ofPattern("yyyy-'W'ww");
-        List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        List<ExpenseDTO> expenses = safeList(lifeTrackerClient.getExpenses());
         expenses = expenses.stream()
                 .filter(this::isExpense)
                 .collect(Collectors.toList());
@@ -157,7 +161,7 @@ public class AnalyticsService {
 
     private List<ExpenseSummaryDTO> getExpensesByYear(LocalDate from, LocalDate to) {
         DateTimeFormatter yearFormatter = DateTimeFormatter.ofPattern("yyyy");
-        List<ExpenseDTO> expenses = lifeTrackerClient.getExpenses();
+        List<ExpenseDTO> expenses = safeList(lifeTrackerClient.getExpenses());
         expenses = expenses.stream()
                 .filter(this::isExpense)
                 .collect(Collectors.toList());
@@ -204,7 +208,7 @@ public class AnalyticsService {
      */
     public List<TimeStatisticsDTO> getTimeStatistics() {
         log.info("Calculating time tracking statistics");
-        List<org.jarvis.analytics.dto.TimeRecordDTO> timeRecords = lifeTrackerClient.getTimeRecords();
+        List<org.jarvis.analytics.dto.TimeRecordDTO> timeRecords = safeList(lifeTrackerClient.getTimeRecords());
 
         Map<String, List<org.jarvis.analytics.dto.TimeRecordDTO>> byCategory = timeRecords.stream()
                 .filter(record -> record.getDurationSeconds() != null)
@@ -238,7 +242,7 @@ public class AnalyticsService {
      */
     public CalendarStatisticsDTO getCalendarStatistics() {
         log.info("Calculating calendar statistics");
-        List<org.jarvis.analytics.dto.CalendarEventDTO> events = lifeTrackerClient.getCalendarEvents();
+        List<org.jarvis.analytics.dto.CalendarEventDTO> events = safeList(lifeTrackerClient.getCalendarEvents());
 
         LocalDateTime now = LocalDateTime.now();
         int total = events.size();
@@ -263,5 +267,84 @@ public class AnalyticsService {
         }
 
         return new CalendarStatisticsDTO(total, upcoming, past, allDay);
+    }
+
+    public SleepSummaryDTO getSleepSummary(int trailingDays) {
+        int normalizedDays = normalizePositive(trailingDays, "trailingDays");
+        LocalDate cutoff = LocalDate.now(clock).minusDays(normalizedDays - 1L);
+
+        Map<LocalDate, Long> sleepByDay = safeList(lifeTrackerClient.getTimeRecords()).stream()
+                .filter(this::hasDuration)
+                .filter(this::isSleepRecord)
+                .filter(record -> isWithinTrailingWindow(record, cutoff))
+                .collect(Collectors.groupingBy(
+                        record -> record.getStartTime().toLocalDate(),
+                        Collectors.summingLong(TimeRecordDTO::getDurationSeconds)));
+
+        double totalSleepHours = roundHours(sleepByDay.values().stream()
+                .mapToLong(Long::longValue)
+                .sum() / 3600.0);
+        int daysSampled = sleepByDay.size();
+        Double averageHours = daysSampled > 0 ? roundHours(totalSleepHours / daysSampled) : null;
+
+        return new SleepSummaryDTO(averageHours, daysSampled, normalizedDays, totalSleepHours);
+    }
+
+    public OvertimeSummaryDTO getOvertimeSummary(int trailingDays, int baselineHours) {
+        int normalizedDays = normalizePositive(trailingDays, "trailingDays");
+        int normalizedBaseline = normalizePositive(baselineHours, "baselineHours");
+        LocalDate cutoff = LocalDate.now(clock).minusDays(normalizedDays - 1L);
+
+        double trackedWorkHours = roundHours(safeList(lifeTrackerClient.getTimeRecords()).stream()
+                .filter(this::hasDuration)
+                .filter(this::isWorkRecord)
+                .filter(record -> isWithinTrailingWindow(record, cutoff))
+                .mapToLong(TimeRecordDTO::getDurationSeconds)
+                .sum() / 3600.0);
+
+        int overtimeHours = Math.max(0, (int) Math.round(trackedWorkHours - normalizedBaseline));
+        return new OvertimeSummaryDTO(overtimeHours, trackedWorkHours, normalizedBaseline, normalizedDays);
+    }
+
+    private boolean hasDuration(TimeRecordDTO record) {
+        return record != null && record.getDurationSeconds() != null && record.getDurationSeconds() > 0
+                && record.getStartTime() != null;
+    }
+
+    private boolean isWithinTrailingWindow(TimeRecordDTO record, LocalDate cutoff) {
+        LocalDate recordDate = record.getStartTime().toLocalDate();
+        LocalDate today = LocalDate.now(clock);
+        return (recordDate.isEqual(cutoff) || recordDate.isAfter(cutoff)) && !recordDate.isAfter(today);
+    }
+
+    private boolean isSleepRecord(TimeRecordDTO record) {
+        return matchesKeyword(record.getCategory(), SLEEP_KEYWORDS) || matchesKeyword(record.getActivity(), SLEEP_KEYWORDS);
+    }
+
+    private boolean isWorkRecord(TimeRecordDTO record) {
+        return matchesKeyword(record.getCategory(), WORK_KEYWORDS) || matchesKeyword(record.getActivity(), WORK_KEYWORDS);
+    }
+
+    private boolean matchesKeyword(String value, Set<String> keywords) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        return keywords.stream().anyMatch(normalized::contains);
+    }
+
+    private int normalizePositive(int value, String fieldName) {
+        if (value < 1) {
+            throw new IllegalArgumentException(fieldName + " must be greater than zero");
+        }
+        return value;
+    }
+
+    private double roundHours(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private <T> List<T> safeList(List<T> values) {
+        return values == null ? List.of() : values;
     }
 }

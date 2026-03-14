@@ -16,6 +16,18 @@ public class SmartHomeProxyController {
 
     private final SmartHomeClient smartHomeClient;
 
+    @GetMapping("/devices")
+    public ResponseEntity<String> listDevices() {
+        log.info("Proxying GET /api/v1/smarthome/devices");
+        return smartHomeClient.listDevices();
+    }
+
+    @GetMapping("/devices/{id}")
+    public ResponseEntity<String> getDevice(@PathVariable("id") String deviceId) {
+        log.info("Proxying GET /api/v1/smarthome/devices/{}", deviceId);
+        return smartHomeClient.getDevice(deviceId);
+    }
+
     @PostMapping("/devices/{id}/action")
     public ResponseEntity<String> deviceAction(@PathVariable("id") String deviceId,
             @RequestBody Map<String, String> request) {

@@ -28,9 +28,14 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        default_schema: user_profile
   flyway:
     enabled: true
     baseline-on-migrate: true
+    table: flyway_schema_history_user_profile
+    schemas: user_profile
+    default-schema: user_profile
+    create-schemas: true
 
 server:
   port: 8089

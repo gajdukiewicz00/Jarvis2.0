@@ -150,6 +150,7 @@ if [[ -z "${PROJECT_ROOT}" ]] && is_valid_repo_root "${REPO_ROOT}"; then
 fi
 if [[ -z "${PROJECT_ROOT}" ]]; then
     for candidate in \
+        "${HOME}/Jarvis/Jarvis2.0" \
         "${HOME}/IdeaProjects/Jarvis2.0" \
         "${HOME}/Projects/Jarvis2.0" \
         "${HOME}/Jarvis2.0"; do
@@ -207,7 +208,24 @@ log "Resolved project root: ${PROJECT_ROOT}"
 export JARVIS_PROJECT_ROOT="${PROJECT_ROOT}"
 export JARVIS_LOG_DIR="${LOG_DIR}"
 export JARVIS_AUTO_START="${JARVIS_AUTO_START:-true}"
-export JARVIS_AUTO_BOOTSTRAP="${JARVIS_AUTO_BOOTSTRAP:-true}"
+if [[ -z "${JARVIS_RUNTIME_MODE:-}" ]]; then
+    if [[ "${REPO_ROOT}" == "${JARVIS_APP}" ]]; then
+        export JARVIS_RUNTIME_MODE="k8s"
+    else
+        export JARVIS_RUNTIME_MODE="local"
+    fi
+else
+    export JARVIS_RUNTIME_MODE
+fi
+if [[ "${JARVIS_RUNTIME_MODE}" == "local" ]]; then
+    export JARVIS_AUTO_BOOTSTRAP="${JARVIS_AUTO_BOOTSTRAP:-false}"
+    export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-http://127.0.0.1:8080}"
+    export JARVIS_USE_TLS="${JARVIS_USE_TLS:-false}"
+else
+    export JARVIS_AUTO_BOOTSTRAP="${JARVIS_AUTO_BOOTSTRAP:-true}"
+    export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
+    export JARVIS_USE_TLS="${JARVIS_USE_TLS:-true}"
+fi
 export JARVIS_AUTO_INSTALL_DEPS="${JARVIS_AUTO_INSTALL_DEPS:-true}"
 if [[ -n "${JARVIS_ENABLE_LLM:-}" ]]; then
     export JARVIS_ENABLE_LLM
@@ -218,8 +236,6 @@ fi
 if [[ -n "${JARVIS_ENABLE_GPU:-}" ]]; then
     export JARVIS_ENABLE_GPU
 fi
-export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
-export JARVIS_USE_TLS="${JARVIS_USE_TLS:-true}"
 
 # Prefer local k3s kubeconfig for diagnostics and helper commands
 if [[ -f "${HOME}/.jarvis/kubeconfig" ]]; then

@@ -6,17 +6,23 @@ import javafx.scene.control.Tab
 import javafx.scene.control.TextField
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jarvis.desktop.api.ApiClient
+import org.jarvis.desktop.auth.TokenManager
+import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.model.ExpenseDTO
+import org.jarvis.desktop.service.LifeExpenseRequestFactory
 import java.math.BigDecimal
 
 class LifeTab(private val apiClient: ApiClient) {
     val tab = Tab("Life")
     private val statusLabel = Label("")
     private val expenseListView = javafx.scene.control.ListView<String>()
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
+    private val expenseRequestFactory = LifeExpenseRequestFactory()
 
     init {
         val content = VBox(10.0)
@@ -50,15 +56,13 @@ class LifeTab(private val apiClient: ApiClient) {
             
             if (amount != null) {
                 try {
-                    // Use type-safe data class instead of manual JSON
-                    val expense = ExpenseDTO(
-                        amount = BigDecimal(amount),
+                    val requestBody = expenseRequestFactory.create(
+                        amount = BigDecimal.valueOf(amount),
                         currency = "EUR",
                         category = category,
                         description = description,
-                        userId = "user1"  // TODO: Get from auth
+                        userId = TokenManager.getUserId()
                     )
-                    val requestBody = json.encodeToString(expense)
                     
                     apiClient.post("/life/finance/expense", requestBody)
                     statusLabel.text = "✓ Expense added: €$amount - $category"
@@ -146,7 +150,7 @@ class LifeTab(private val apiClient: ApiClient) {
             val errorMessage = e.message ?: "Unknown error"
             // Show user-friendly error message
             statusLabel.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                "✗ Server unavailable. Please start the API gateway (http://localhost:8080)"
+                "✗ Server unavailable. Please start the API gateway (${AppConfig.apiGatewayBaseUrl})"
             } else {
                 "✗ Error loading expenses: $errorMessage"
             }

@@ -27,6 +27,8 @@ jarvis:
     url: ${NLP_SERVICE_URL:http://nlp-service:8082}
   pc-control:
     url: ${PC_CONTROL_URL:http://pc-control:8084}
+  smart-home:
+    url: ${SMART_HOME_URL:http://smart-home-service:8086}
   llm:
     url: ${LLM_SERVICE_URL:http://llm-service:8091}
     # LLM Feature flag - disabled by default for stability

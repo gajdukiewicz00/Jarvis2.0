@@ -2,6 +2,10 @@ package org.jarvis.planner.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -35,14 +39,43 @@ public class AnalyticsClient {
         }
     }
     
-    // Placeholder methods for analytics data
     public Double getAverageSleepHours(String userId) {
-        // TODO: Implement when analytics DTOs are ready
-        return 7.5; // Mock value
+        try {
+            ResponseEntity<SleepSummaryResponse> response = restTemplate.exchange(
+                    analyticsUrl + "/api/v1/analytics/habits/sleep-average?days=14",
+                    HttpMethod.GET,
+                    requestEntity(userId),
+                    SleepSummaryResponse.class);
+            return response.getBody() != null ? response.getBody().averageHours() : null;
+        } catch (RestClientException e) {
+            log.warn("sleep summary fetch failed for {}: {}", userId, e.getMessage());
+            return null;
+        }
     }
     
     public Integer getWeeklyOvertimeHours(String userId) {
-        // TODO: Implement when analytics DTOs are ready
-        return 5; // Mock value
+        try {
+            ResponseEntity<OvertimeSummaryResponse> response = restTemplate.exchange(
+                    analyticsUrl + "/api/v1/analytics/habits/weekly-overtime?days=7&baselineHours=40",
+                    HttpMethod.GET,
+                    requestEntity(userId),
+                    OvertimeSummaryResponse.class);
+            return response.getBody() != null ? response.getBody().overtimeHours() : null;
+        } catch (RestClientException e) {
+            log.warn("overtime summary fetch failed for {}: {}", userId, e.getMessage());
+            return null;
+        }
+    }
+
+    private HttpEntity<Void> requestEntity(String userId) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-User-Id", userId);
+        return new HttpEntity<>(headers);
+    }
+
+    private record SleepSummaryResponse(Double averageHours) {
+    }
+
+    private record OvertimeSummaryResponse(Integer overtimeHours) {
     }
 }

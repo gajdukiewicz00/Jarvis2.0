@@ -16,7 +16,9 @@ public class OrchestratorController {
     private final OrchestratorService orchestratorService;
 
     @PostMapping("/execute")
-    public String execute(@RequestBody ExecuteRequest request) {
+    public String execute(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestBody ExecuteRequest request) {
         String correlationId = request.correlationId() != null ? request.correlationId() : "N/A";
         String language = request.language() != null ? request.language() : "ru";
 
@@ -24,13 +26,16 @@ public class OrchestratorController {
             log.info("📥 Received intent execution: intent={}, params={}, lang={}, correlationId={}",
                     request.intent(), request.parameters(), language, correlationId);
             String result = orchestratorService.executeIntent(request.intent(), request.parameters(), language,
-                    correlationId, request.text() != null ? request.text() : request.intent());
+                    correlationId,
+                    request.originalText() != null ? request.originalText()
+                            : (request.text() != null ? request.text() : request.intent()),
+                    userId);
             log.info("📤 Intent execution result: '{}', correlationId={}", result, correlationId);
             return result;
         } else if (request.text() != null) {
             log.info("📥 Received text processing: text='{}', lang={}, correlationId={}",
                     request.text(), language, correlationId);
-            String result = orchestratorService.processText(request.text(), language, correlationId);
+            String result = orchestratorService.processText(request.text(), language, correlationId, userId);
             log.info("📤 Text processing result: '{}', correlationId={}", result, correlationId);
             return result;
         } else {
@@ -43,6 +48,7 @@ public class OrchestratorController {
             String intent,
             Map<String, String> parameters,
             String text,
+            String originalText,
             String language,
             String correlationId) {
     }

@@ -22,6 +22,7 @@ import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -48,13 +49,23 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         log.info("New Voice WS connection: {}", session.getId());
-        SessionContext ctx = new SessionContext(session, createRecognitionSession(defaultLanguage), defaultLanguage);
+        StreamingRecognitionSession recognitionSession = tryCreateRecognitionSession(defaultLanguage);
+        SessionContext ctx = new SessionContext(
+                session,
+                recognitionSession,
+                defaultLanguage,
+                resolveUserId(session));
         sessions.put(session.getId(), ctx);
 
         sendJsonMessage(session, Map.of(
                 "type", "STATE",
                 "state", "CONNECTED",
-                "language", ctx.language));
+                "language", ctx.language,
+                "sttAvailable", recognitionSession != null));
+
+        if (recognitionSession == null) {
+            sendSttUnavailable(session, ctx.language, null);
+        }
     }
 
     @Override
@@ -76,10 +87,14 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     if (ctx.recognitionSession != null) {
                         ctx.recognitionSession.close();
                     }
-                    ctx.recognitionSession = createRecognitionSession(ctx.language);
+                    ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
                     chunkCounter.set(0);
                     log.info("🎤 Voice command started, correlationId={}, session={}, language={}",
                             correlationId, session.getId(), ctx.language);
+
+                    if (ctx.recognitionSession == null) {
+                        sendSttUnavailable(session, ctx.language, correlationId);
+                    }
                 }
             } else if ("CONFIG".equals(type)) {
                 Map<String, Object> cfg = (Map<String, Object>) msg.get("config");
@@ -137,14 +152,16 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
 
         StreamingRecognitionSession recognitionSession = ctx.recognitionSession;
-        if (recognitionSession == null)
+        if (recognitionSession == null) {
+            sendSttUnavailable(session, ctx.language, ctx.correlationId);
             return;
+        }
 
         if (recognitionSession.acceptWaveForm(data, data.length)) {
             String result = recognitionSession.getResult();
             log.info("🔇 Silence detected -> finalizing transcript, correlationId={}", ctx.correlationId);
             processRecognitionResult(ctx, result, true);
-            ctx.recognitionSession = createRecognitionSession(ctx.language);
+            ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
         } else {
             String partial = recognitionSession.getPartialResult();
             if (partial != null && !partial.isEmpty()) {
@@ -221,7 +238,8 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                         intent.getParameters(),
                         lang,
                         correlationId,
-                        text); // Pass original text for LLM fallback
+                        text,
+                        ctx.userId); // Pass original text and user context for downstream routing
                 log.info("📥 Orchestrator response: '{}', correlationId={}", orchestratorResponse, correlationId);
 
                 // Use orchestrator response if available
@@ -265,6 +283,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     voiceName(lang),
                     1.0,
                     0.0);
+            if (audio == null || audio.length == 0) {
+                log.warn("TTS returned no audio, correlationId={}", correlationId);
+                return;
+            }
             log.info("🔊 TTS synthesized {} bytes, correlationId={}", audio.length, correlationId);
 
             if (ctx.session.isOpen()) {
@@ -287,6 +309,21 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
+    public int sendNotificationToUser(String userId, String message, String languageCode) {
+        if (userId == null || userId.isBlank() || message == null || message.isBlank()) {
+            return 0;
+        }
+
+        int delivered = (int) sessions.values().stream()
+                .filter(ctx -> userId.equals(ctx.userId))
+                .filter(ctx -> ctx.session.isOpen())
+                .filter(ctx -> sendNotification(ctx, message, languageCode))
+                .count();
+
+        log.info("Sent voice notification to {} active sessions for user {}", delivered, userId);
+        return delivered;
+    }
+
     private void sendJsonMessage(WebSocketSession session, Object payload) {
         try {
             String json = objectMapper.writeValueAsString(payload);
@@ -295,6 +332,47 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             }
         } catch (IOException e) {
             log.error("Failed to send JSON message", e);
+        }
+    }
+
+    private boolean sendNotification(SessionContext ctx, String message, String languageCode) {
+        String lang = languageCode != null && !languageCode.isBlank()
+                ? languageCode
+                : (ctx.language != null ? ctx.language : defaultLanguage);
+        String correlationId = "notification-" + UUID.randomUUID();
+
+        try {
+            String json = objectMapper.writeValueAsString(Map.of(
+                    "type", "RESPONSE",
+                    "action", "NOTIFY",
+                    "handled", true,
+                    "text", message,
+                    "correlationId", correlationId));
+            if (ctx.session.isOpen()) {
+                ctx.session.sendMessage(new TextMessage(json));
+            }
+
+            byte[] audio = ttsService.synthesize(
+                    message,
+                    languageCode(lang),
+                    voiceName(lang),
+                    1.0,
+                    0.0);
+            if (audio == null || audio.length == 0) {
+                log.warn("Voice notification TTS returned no audio, userId={}, correlationId={}",
+                        ctx.userId, correlationId);
+                return true;
+            }
+            if (ctx.session.isOpen()) {
+                ctx.session.sendMessage(new BinaryMessage(audio));
+            }
+            return true;
+        } catch (IOException e) {
+            log.error("Failed to send voice notification to session {}", ctx.session.getId(), e);
+            return false;
+        } catch (RuntimeException e) {
+            log.error("Failed to synthesize voice notification for session {}", ctx.session.getId(), e);
+            return false;
         }
     }
 
@@ -312,7 +390,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 ctx.recognitionSession.close();
             }
             ctx.language = normalized;
-            ctx.recognitionSession = createRecognitionSession(normalized);
+            ctx.recognitionSession = tryCreateRecognitionSession(normalized);
+            if (ctx.recognitionSession == null) {
+                sendSttUnavailable(session, normalized, ctx.correlationId);
+            }
         } catch (RuntimeException e) {
             log.error("Failed to update language for session {}", session.getId(), e);
         }
@@ -322,16 +403,44 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         return sttService.createSession(language);
     }
 
+    private StreamingRecognitionSession tryCreateRecognitionSession(String language) {
+        try {
+            return createRecognitionSession(language);
+        } catch (RuntimeException e) {
+            log.warn("STT is unavailable for language {}: {}", language, e.getMessage());
+            return null;
+        }
+    }
+
     private void finalizeRecognition(WebSocketSession session) {
         SessionContext ctx = sessions.get(session.getId());
         if (ctx == null || ctx.recognitionSession == null) {
             log.warn("Finalize called but no session context/recognizer for {}", session.getId());
+            sendSttUnavailable(session, ctx != null ? ctx.language : defaultLanguage, ctx != null ? ctx.correlationId : null);
             return;
         }
         log.info("Finalizing recognition (END marker) for session {}", session.getId());
         String result = ctx.recognitionSession.getResult();
         processRecognitionResult(ctx, result, true);
-        ctx.recognitionSession = createRecognitionSession(ctx.language);
+        ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
+    }
+
+    private void sendSttUnavailable(WebSocketSession session, String language, String correlationId) {
+        String lang = language != null ? language : defaultLanguage;
+        sendJsonMessage(session, Map.of(
+                "type", "RESPONSE",
+                "action", "STT_UNAVAILABLE",
+                "handled", false,
+                "text", sttUnavailableMessage(lang),
+                "correlationId", correlationId != null ? correlationId : ""));
+    }
+
+    private String sttUnavailableMessage(String language) {
+        String normalized = language != null ? language.toLowerCase() : "";
+        if (normalized.startsWith("en")) {
+            return "Speech recognition is unavailable. Install a local STT model to use voice commands.";
+        }
+        return "Распознавание речи недоступно. Установите локальную STT-модель для голосовых команд.";
     }
 
     /**
@@ -349,7 +458,9 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     "STT_TIMEOUT",
                     java.util.Map.of(),
                     lang,
-                    correlationId);
+                    correlationId,
+                    null,
+                    ctx != null ? ctx.userId : null);
 
             if (timeoutResponse == null || timeoutResponse.isBlank()) {
                 timeoutResponse = lang.startsWith("en")
@@ -373,6 +484,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     voiceName(lang),
                     1.0,
                     0.0);
+            if (audio == null || audio.length == 0) {
+                log.warn("STT timeout TTS returned no audio, correlationId={}", correlationId);
+                return;
+            }
 
             if (session.isOpen()) {
                 session.sendMessage(new BinaryMessage(audio));
@@ -396,16 +511,39 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 : "ru-RU-Wavenet-A";
     }
 
+    private String firstHeader(WebSocketSession session, String headerName) {
+        if (session.getHandshakeHeaders() == null) {
+            return null;
+        }
+        String value = session.getHandshakeHeaders().getFirst(headerName);
+        return value != null && !value.isBlank() ? value : null;
+    }
+
+    private String resolveUserId(WebSocketSession session) {
+        String headerUserId = firstHeader(session, "X-User-Id");
+        if (headerUserId != null) {
+            return headerUserId;
+        }
+        if (session.getPrincipal() != null && session.getPrincipal().getName() != null
+                && !session.getPrincipal().getName().isBlank()) {
+            return session.getPrincipal().getName();
+        }
+        return null;
+    }
+
     private static class SessionContext {
         final WebSocketSession session;
         StreamingRecognitionSession recognitionSession;
         String language;
         String correlationId;
+        String userId;
 
-        SessionContext(WebSocketSession session, StreamingRecognitionSession recognitionSession, String language) {
+        SessionContext(WebSocketSession session, StreamingRecognitionSession recognitionSession, String language,
+                String userId) {
             this.session = session;
             this.recognitionSession = recognitionSession;
             this.language = language;
+            this.userId = userId;
         }
     }
 }

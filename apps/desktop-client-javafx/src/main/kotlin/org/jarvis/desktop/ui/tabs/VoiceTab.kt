@@ -9,8 +9,14 @@ import javafx.scene.shape.Circle
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.audio.AudioPlayer
 import org.jarvis.desktop.audio.AudioRecorder
+import org.jarvis.desktop.model.VoiceActionAvailability
+import org.jarvis.desktop.model.VoiceEventClassifier
+import org.jarvis.desktop.model.VoiceRuntimeState
 import org.jarvis.desktop.model.VoiceState
+import org.jarvis.desktop.model.VoiceUxStatus
+import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
 import org.jarvis.desktop.service.SystemControlService
+import org.jarvis.desktop.service.VoiceControlService
 import org.jarvis.desktop.service.VoiceSession
 import org.jarvis.desktop.service.VoiceWebSocketClient
 import org.jarvis.desktop.service.WakeWordDetector
@@ -27,24 +33,34 @@ import java.io.File
  * - Cooldown period after TTS prevents background noise triggers
  * - Noise filtering ignores short/filler transcripts silently
  */
-class VoiceTab(private val apiClient: ApiClient) {
+class VoiceTab(
+    private val apiClient: ApiClient,
+    private val runtimeMonitor: DesktopRuntimeMonitor
+) {
     private val logger = LoggerFactory.getLogger(VoiceTab::class.java)
     
     val tab = Tab("Voice")
     private val statusLabel = Label("")
+    private val guidanceLabel = Label("")
+    private val deviceInfoLabel = Label("")
     private val transcriptionArea = TextArea()
     private val responseArea = TextArea()
     private val pushToTalkBtn = Button("🎤 Manual Talk")
+    private val cancelBtn = Button("⏹ Stop / Cancel")
     private val toggleListeningBtn = Button("Start Always Listening")
+    private val refreshDevicesBtn = Button("↻ Refresh devices")
     private val stateIndicator = Circle(10.0)
     
     private val audioRecorder = AudioRecorder()
     private val audioPlayer = AudioPlayer()
     private lateinit var voiceWebSocketClient: VoiceWebSocketClient
     private lateinit var voiceSession: VoiceSession
+    lateinit var voiceControlService: VoiceControlService
+        private set
     
     private var wakeWordDetector: WakeWordDetector? = null
     private var isAlwaysListening = false
+    @Volatile private var previousVoiceState: VoiceRuntimeState? = null
 
     init {
         val content = VBox(10.0)
@@ -54,6 +70,10 @@ class VoiceTab(private val apiClient: ApiClient) {
         voiceSession = VoiceSession(
             onStateChange = { state, correlationId ->
                 logger.info("📊 State change: {} (correlationId={})", state, correlationId)
+                runtimeMonitor.consumeVoiceStatus(state.name)
+                if (::voiceControlService.isInitialized) {
+                    voiceControlService.onSessionStateChanged(state, correlationId)
+                }
                 Platform.runLater { updateState(state) }
             },
             onStartRecording = {
@@ -101,6 +121,10 @@ class VoiceTab(private val apiClient: ApiClient) {
         voiceWebSocketClient = VoiceWebSocketClient(
             onStateChange = { state ->
                 logger.debug("WebSocket State: {}", state)
+                runtimeMonitor.consumeVoiceStatus(state)
+                if (::voiceControlService.isInitialized) {
+                    voiceControlService.onConnectionStateChanged(state)
+                }
                 if (state == "CONNECTED") {
                     Platform.runLater { statusLabel.text = "Connected" }
                 } else if (state == "DISCONNECTED") {
@@ -119,6 +143,7 @@ class VoiceTab(private val apiClient: ApiClient) {
                 }
             },
             onResponse = { text, action, handled ->
+                runtimeMonitor.recordAssistantResponse(text, action, handled)
                 Platform.runLater {
                     responseArea.appendText("Jarvis: $text\n")
                 }
@@ -140,17 +165,47 @@ class VoiceTab(private val apiClient: ApiClient) {
             voiceSession.onTtsPlaybackFinished()
         }
         
+        // Voice control service — single control surface for voice state/actions
+        voiceControlService = VoiceControlService(voiceSession, voiceWebSocketClient)
+        voiceControlService.addListener { vrs ->
+            val events = VoiceEventClassifier.classify(previousVoiceState, vrs)
+            previousVoiceState = vrs
+            events.forEach { event ->
+                runtimeMonitor.recordEvent(
+                    source = DesktopRuntimeMonitor.EventSource.VOICE,
+                    severity = mapEventSeverity(event.severity),
+                    title = event.title,
+                    details = event.details
+                )
+            }
+        }
+        voiceControlService.addListener { runtimeMonitor.updateVoiceRuntime(it) }
+        voiceControlService.addListener { vrs -> Platform.runLater { renderVoiceStatus(vrs) } }
+        voiceControlService.refreshDevices()
+
         // Connect immediately
         voiceWebSocketClient.connect()
         
-        // State indicator row
+        // State indicator + headline
         val stateRow = HBox(10.0)
         stateIndicator.fill = Color.GRAY
         val stateLabel = Label("Status:")
         stateRow.children.addAll(stateLabel, stateIndicator, statusLabel)
         content.children.add(stateRow)
-        
         statusLabel.style = "-fx-font-weight: bold;"
+
+        guidanceLabel.style = "-fx-font-size: 12px; -fx-text-fill: #555;"
+        guidanceLabel.isWrapText = true
+        content.children.add(guidanceLabel)
+
+        // Device info row
+        deviceInfoLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
+        refreshDevicesBtn.style = "-fx-font-size: 11px;"
+        refreshDevicesBtn.setOnAction { voiceControlService.refreshDevices() }
+        val deviceRow = HBox(8.0)
+        deviceRow.children.addAll(deviceInfoLabel, refreshDevicesBtn)
+        content.children.add(deviceRow)
+
         updateState(VoiceState.IDLE)
 
         // Instructions
@@ -187,11 +242,10 @@ class VoiceTab(private val apiClient: ApiClient) {
         }
         
         pushToTalkBtn.setOnMouseReleased {
-            // For manual mode, release triggers end of speech
-            // Session will handle stopping recording
             val correlationId = voiceSession.currentCorrelationId
             if (voiceSession.state == VoiceState.LISTENING && correlationId != null) {
                 logger.info("⏹️ Manual talk button released, ending session")
+                voiceControlService.pushToTalkRelease()
                 stopRecordingInternal()
                 voiceWebSocketClient.endOfSpeech()
             }
@@ -199,8 +253,20 @@ class VoiceTab(private val apiClient: ApiClient) {
                 pushToTalkBtn.text = "🎤 Manual Talk"
             }
         }
-        
-        content.children.add(pushToTalkBtn)
+
+        // Cancel / Stop button
+        cancelBtn.prefWidth = 200.0
+        cancelBtn.prefHeight = 35.0
+        cancelBtn.style = "-fx-font-size: 13px; -fx-background-color: #E74C3C; -fx-text-fill: white;"
+        cancelBtn.isDisable = true
+        cancelBtn.setOnAction {
+            logger.info("⏹ Cancel requested by user")
+            voiceControlService.cancelCurrentSession()
+        }
+
+        val buttonRow = HBox(10.0)
+        buttonRow.children.addAll(pushToTalkBtn, cancelBtn)
+        content.children.add(buttonRow)
 
         // Transcription display
         val transcriptionLabel = Label("Transcription:")
@@ -225,9 +291,47 @@ class VoiceTab(private val apiClient: ApiClient) {
 
     private fun updateState(newState: VoiceState) {
         Platform.runLater {
-            statusLabel.text = newState.getDisplayText()
             stateIndicator.fill = Color.web(newState.getColorHex())
         }
+    }
+
+    private fun renderVoiceStatus(vrs: VoiceRuntimeState) {
+        val status = VoiceUxStatus.compute(vrs)
+        statusLabel.text = status.headline
+        statusLabel.style = "-fx-font-weight: bold; -fx-text-fill: ${severityColor(status.severity)};"
+        guidanceLabel.text = status.guidance ?: ""
+        guidanceLabel.isVisible = status.guidance != null
+        guidanceLabel.isManaged = status.guidance != null
+
+        val deviceParts = mutableListOf<String>()
+        vrs.inputDevice?.let { deviceParts += "Mic: ${it.name}" }
+        vrs.outputDevice?.let { deviceParts += "Out: ${it.name}" }
+        if (vrs.availableInputDevices.size > 1) {
+            deviceParts += "(${vrs.availableInputDevices.size} inputs available)"
+        }
+        deviceInfoLabel.text = if (deviceParts.isEmpty()) "No audio devices detected" else deviceParts.joinToString(" • ")
+
+        val actions = VoiceActionAvailability.from(vrs)
+        pushToTalkBtn.isDisable = !(actions.canPushToTalkStart || actions.canPushToTalkRelease)
+        cancelBtn.isDisable = !actions.canCancelSession
+        toggleListeningBtn.isDisable = !actions.canToggleAlwaysListening
+        refreshDevicesBtn.isDisable = !actions.canRefreshDevices
+    }
+
+    private fun mapEventSeverity(s: VoiceEventClassifier.Severity): DesktopRuntimeMonitor.EventSeverity =
+        when (s) {
+            VoiceEventClassifier.Severity.INFO -> DesktopRuntimeMonitor.EventSeverity.INFO
+            VoiceEventClassifier.Severity.SUCCESS -> DesktopRuntimeMonitor.EventSeverity.SUCCESS
+            VoiceEventClassifier.Severity.WARNING -> DesktopRuntimeMonitor.EventSeverity.WARNING
+            VoiceEventClassifier.Severity.ERROR -> DesktopRuntimeMonitor.EventSeverity.ERROR
+        }
+
+    private fun severityColor(severity: VoiceUxStatus.Severity): String = when (severity) {
+        VoiceUxStatus.Severity.INFO -> "#555"
+        VoiceUxStatus.Severity.ACTIVE -> "#E74C3C"
+        VoiceUxStatus.Severity.SUCCESS -> "#27AE60"
+        VoiceUxStatus.Severity.WARNING -> "#F39C12"
+        VoiceUxStatus.Severity.ERROR -> "#C0392B"
     }
 
     private fun toggleAlwaysListening() {
@@ -316,6 +420,7 @@ class VoiceTab(private val apiClient: ApiClient) {
             wakeWordDetector?.start()
             isAlwaysListening = true
             voiceSession.enableAlwaysListening()
+            voiceControlService.onAlwaysListeningChanged(true)
             
             Platform.runLater {
                 toggleListeningBtn.text = "Stop Always Listening"
@@ -345,6 +450,7 @@ class VoiceTab(private val apiClient: ApiClient) {
         wakeWordDetector = null
         isAlwaysListening = false
         voiceSession.disableAlwaysListening()
+        voiceControlService.onAlwaysListeningChanged(false)
         
         Platform.runLater {
             toggleListeningBtn.text = "Start Always Listening"
@@ -375,21 +481,17 @@ class VoiceTab(private val apiClient: ApiClient) {
 
     /**
      * Start manual recording when push-to-talk button is pressed.
+     * Delegates to VoiceControlService for state management.
      */
     private fun startManualRecording() {
         logger.info("🎤 Manual recording requested")
         
-        // Start session through state machine - VoiceSession generates the unified correlationId
-        val correlationId = voiceSession.startSession()
+        val correlationId = voiceControlService.pushToTalkStart()
         
         if (correlationId != null) {
-            // Pass the unified correlationId to WebSocket client
-            voiceWebSocketClient.startCommand(correlationId)
-            
             Platform.runLater {
                 pushToTalkBtn.text = "🔴 Recording..."
             }
-            
             logger.info("🎤 Manual recording started: correlationId={}", correlationId)
         } else {
             logger.warn("⚠️ Could not start manual recording (state machine rejected)")

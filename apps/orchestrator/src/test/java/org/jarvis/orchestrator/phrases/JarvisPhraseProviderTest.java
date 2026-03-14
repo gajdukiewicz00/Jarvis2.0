@@ -118,6 +118,17 @@ class JarvisPhraseProviderTest {
                 "Should include amount or unit: " + phrase);
     }
 
+    @Test
+    @DisplayName("Smart-home phrase includes the device name")
+    void smartHomeTurnOnWithParams() {
+        String phrase = provider.getPhrase(PhraseContext.SMART_HOME_TURN_ON, Language.EN,
+                Map.of("device", "kitchen light"));
+
+        assertNotNull(phrase);
+        assertTrue(phrase.toLowerCase().contains("kitchen light"),
+                "Should include the device name: " + phrase);
+    }
+
     // ==================== Protocols ====================
 
     @Test

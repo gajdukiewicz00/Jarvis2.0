@@ -27,6 +27,8 @@ ENABLE_GPU="${ENABLE_GPU:-true}"
 ENABLE_BUILD="${ENABLE_BUILD:-true}"
 ENABLE_IMPORT="${ENABLE_IMPORT:-auto}"
 ENABLE_PORT_FORWARD="${ENABLE_PORT_FORWARD:-false}"
+REQUIRE_VOICE_GATEWAY="${JARVIS_REQUIRE_VOICE_GATEWAY:-false}"
+FORCE_REDEPLOY="${JARVIS_FORCE_REDEPLOY:-false}"
 
 # Image configuration (single source of truth for build + deploy)
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-}"
@@ -118,6 +120,18 @@ warn() {
 
 info() {
     echo -e "${CYAN}[INFO]${NC} $*"
+}
+
+is_truthy() {
+    local value="${1:-}"
+    case "${value,,}" in
+        1|true|yes|on)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 IMAGE_CONFIG_READY="false"
@@ -254,7 +268,12 @@ is_k3s_context() {
 
 ensure_kubeconfig() {
     if [[ -n "${KUBECONFIG:-}" ]]; then
-        return 0
+        if is_k3s_context; then
+            info "Using kubeconfig from environment: ${KUBECONFIG}"
+            return 0
+        fi
+        warn "Ignoring KUBECONFIG='${KUBECONFIG}' (non-k3s), using local k3s config"
+        unset KUBECONFIG
     fi
 
     if [[ -r "${JARVIS_HOME}/kubeconfig" ]]; then
@@ -436,11 +455,157 @@ build_images() {
         "${build_script}" "${build_args[@]}"
 }
 
-wait_rollout() {
+jsonpath_value() {
+    local kind="$1"
+    local name="$2"
+    local path="$3"
+    kubectl get "${kind}" "${name}" -n "${NAMESPACE}" -o "jsonpath=${path}" 2>/dev/null || true
+}
+
+workload_is_ready() {
+    local kind="$1"
+    local name="$2"
+    local allow_zero="${3:-false}"
+    local desired=""
+    local ready=""
+    local available=""
+
+    case "${kind}" in
+        deployment)
+            desired="$(jsonpath_value deployment "${name}" '{.spec.replicas}')"
+            ready="$(jsonpath_value deployment "${name}" '{.status.readyReplicas}')"
+            available="$(jsonpath_value deployment "${name}" '{.status.availableReplicas}')"
+            ;;
+        statefulset)
+            desired="$(jsonpath_value statefulset "${name}" '{.spec.replicas}')"
+            ready="$(jsonpath_value statefulset "${name}" '{.status.readyReplicas}')"
+            available="${ready}"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    [[ "${desired}" =~ ^[0-9]+$ ]] || return 1
+    [[ "${ready}" =~ ^[0-9]+$ ]] || ready=0
+    [[ "${available}" =~ ^[0-9]+$ ]] || available=0
+
+    if [[ "${desired}" -eq 0 ]]; then
+        if [[ "${allow_zero}" == "true" ]]; then
+            return 0
+        fi
+        return 1
+    fi
+
+    [[ "${ready}" -ge "${desired}" && "${available}" -ge "${desired}" ]]
+}
+
+wait_workload() {
     local kind="$1"
     local name="$2"
     local timeout="$3"
-    kubectl rollout status "${kind}/${name}" -n "${NAMESPACE}" --timeout="${timeout}" >/dev/null 2>&1 || warn "${kind}/${name} not ready"
+    local required="${4:-true}"
+    local message="${5:-${kind}/${name} not ready}"
+
+    if kubectl rollout status "${kind}/${name}" -n "${NAMESPACE}" --timeout="${timeout}" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if workload_is_ready "${kind}" "${name}"; then
+        info "${kind}/${name} already available; rollout status is stale or paused"
+        return 0
+    fi
+
+    if [[ "${required}" == "true" ]]; then
+        fail "${message}"
+    fi
+
+    OPTIONAL_FAILED="true"
+    warn "${message}"
+    return 1
+}
+
+backend_core_ready() {
+    workload_is_ready statefulset postgres || return 1
+    workload_is_ready deployment security-service || return 1
+    workload_is_ready deployment api-gateway || return 1
+    workload_is_ready deployment orchestrator || return 1
+    workload_is_ready deployment life-tracker || return 1
+    workload_is_ready deployment analytics-service || return 1
+    workload_is_ready deployment planner-service || return 1
+    workload_is_ready deployment user-profile || return 1
+    workload_is_ready deployment nlp-service || return 1
+    workload_is_ready deployment pc-control || return 1
+    workload_is_ready deployment smart-home-service || return 1
+
+    if is_truthy "${REQUIRE_VOICE_GATEWAY}" && ! workload_is_ready deployment voice-gateway; then
+        return 1
+    fi
+
+    return 0
+}
+
+assess_optional_workloads() {
+    if is_truthy "${REQUIRE_VOICE_GATEWAY}"; then
+        if ! workload_is_ready deployment voice-gateway; then
+            fail "Required deployment/voice-gateway not ready"
+        fi
+    elif ! workload_is_ready deployment voice-gateway; then
+        OPTIONAL_FAILED="true"
+        warn "Optional deployment/voice-gateway not ready; backend is available in DEGRADED mode"
+    fi
+
+    if [[ "${ENABLE_LLM}" == "true" ]]; then
+        if ! workload_is_ready deployment embedding-service || ! workload_is_ready deployment llm-server || ! workload_is_ready deployment llm-service; then
+            OPTIONAL_FAILED="true"
+            warn "Optional LLM workloads not fully ready"
+        fi
+    fi
+
+    if [[ "${ENABLE_MEMORY}" == "true" ]]; then
+        if ! workload_is_ready statefulset postgres-pgvector || ! workload_is_ready deployment memory-service; then
+            OPTIONAL_FAILED="true"
+            warn "Optional memory workloads not fully ready"
+        fi
+    fi
+}
+
+print_ready_status() {
+    local overall_status="$1"
+
+    echo ""
+    echo -e "${GREEN}✓${NC} Jarvis backend is up"
+    echo ""
+    echo -e "  ${CYAN}API Gateway (HTTPS):${NC} ${RUN_API_URL}"
+    echo -e "  ${CYAN}Voice Gateway (WSS):${NC} ${RUN_VOICE_URL}"
+    echo ""
+    echo -e "${CYAN}Status:${NC} ${overall_status}"
+    echo -e "${YELLOW}Next:${NC}"
+    echo "  - Trust CA: sudo ./scripts/product/jarvis-install-tls.sh"
+    echo "  - /etc/hosts: sudo ./scripts/product/jarvis-setup-hosts.sh"
+}
+
+maybe_skip_redeploy() {
+    if is_truthy "${FORCE_REDEPLOY}"; then
+        return 1
+    fi
+
+    if ! backend_core_ready; then
+        return 1
+    fi
+
+    info "Backend already running and core workloads are ready; skipping rebuild/reapply"
+    assess_optional_workloads
+    if [[ "${OPTIONAL_FAILED}" == "true" ]]; then
+        RUN_STATUS="degraded"
+        print_ready_status "DEGRADED"
+    else
+        RUN_STATUS="ready"
+        print_ready_status "READY"
+    fi
+    write_run_summary
+    info "Set JARVIS_FORCE_REDEPLOY=true to force rebuild/reapply"
+    return 0
 }
 
 print_header() {
@@ -475,6 +640,10 @@ ensure_tls
 apply_tls_secret
 
 rotate_backend_log
+
+if maybe_skip_redeploy; then
+    exit 0
+fi
 
 if [[ "${ENABLE_LLM}" == "true" && "${ENABLE_GPU}" == "true" ]]; then
     if ! kubectl get nodes -o jsonpath='{.items[*].status.allocatable}' 2>/dev/null | grep -q 'nvidia.com/gpu'; then
@@ -558,28 +727,32 @@ fi
 
 # Wait for core services
 info "Waiting for core services..."
-wait_rollout statefulset postgres 180s
-wait_rollout deployment security-service 180s
-wait_rollout deployment api-gateway 180s
-wait_rollout deployment orchestrator 180s
-wait_rollout deployment life-tracker 180s
-wait_rollout deployment analytics-service 180s
-wait_rollout deployment planner-service 180s
-wait_rollout deployment user-profile 180s
-wait_rollout deployment nlp-service 180s
-wait_rollout deployment pc-control 180s
-wait_rollout deployment smart-home-service 180s
-wait_rollout deployment voice-gateway 180s
+wait_workload statefulset postgres 180s true "statefulset/postgres not ready"
+wait_workload deployment security-service 180s true "deployment/security-service not ready"
+wait_workload deployment api-gateway 180s true "deployment/api-gateway not ready"
+wait_workload deployment orchestrator 180s true "deployment/orchestrator not ready"
+wait_workload deployment life-tracker 180s true "deployment/life-tracker not ready"
+wait_workload deployment analytics-service 180s true "deployment/analytics-service not ready"
+wait_workload deployment planner-service 180s true "deployment/planner-service not ready"
+wait_workload deployment user-profile 180s true "deployment/user-profile not ready"
+wait_workload deployment nlp-service 180s true "deployment/nlp-service not ready"
+wait_workload deployment pc-control 180s true "deployment/pc-control not ready"
+wait_workload deployment smart-home-service 180s true "deployment/smart-home-service not ready"
+if is_truthy "${REQUIRE_VOICE_GATEWAY}"; then
+    wait_workload deployment voice-gateway 180s true "Required deployment/voice-gateway not ready"
+else
+    wait_workload deployment voice-gateway 180s false "Optional deployment/voice-gateway not ready; backend is available in DEGRADED mode"
+fi
 
 # Optional waits
 if [[ "${ENABLE_LLM}" == "true" ]]; then
-    wait_rollout deployment embedding-service 180s
-    wait_rollout deployment llm-server 600s
-    wait_rollout deployment llm-service 180s
+    wait_workload deployment embedding-service 180s false "Optional deployment/embedding-service not ready"
+    wait_workload deployment llm-server 600s false "Optional deployment/llm-server not ready"
+    wait_workload deployment llm-service 180s false "Optional deployment/llm-service not ready"
 fi
 if [[ "${ENABLE_MEMORY}" == "true" ]]; then
-    wait_rollout statefulset postgres-pgvector 180s
-    wait_rollout deployment memory-service 180s
+    wait_workload statefulset postgres-pgvector 180s false "Optional statefulset/postgres-pgvector not ready"
+    wait_workload deployment memory-service 180s false "Optional deployment/memory-service not ready"
 fi
 
 # Endpoints
@@ -588,20 +761,12 @@ VOICE_WS_URL="wss://voice.jarvis.local"
 RUN_API_URL="${API_URL}"
 RUN_VOICE_URL="${VOICE_WS_URL}"
 
-echo ""
-echo -e "${GREEN}✓${NC} Jarvis backend is up"
-echo ""
-echo -e "  ${CYAN}API Gateway (HTTPS):${NC} ${API_URL}"
-echo -e "  ${CYAN}Voice Gateway (WSS):${NC} ${VOICE_WS_URL}"
-echo ""
-echo -e "${YELLOW}Next:${NC}"
-echo "  - Trust CA: sudo ./scripts/product/jarvis-install-tls.sh"
-echo "  - /etc/hosts: sudo ./scripts/product/jarvis-setup-hosts.sh"
-
 if [[ "${OPTIONAL_FAILED}" == "true" ]]; then
     RUN_STATUS="degraded"
+    print_ready_status "DEGRADED"
 else
     RUN_STATUS="ready"
+    print_ready_status "READY"
 fi
 write_run_summary
 

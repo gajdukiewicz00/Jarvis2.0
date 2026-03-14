@@ -74,6 +74,13 @@ public class LlmService {
      * Now includes RAG (Retrieval-Augmented Generation) with long-term memory.
      */
     public ChatResponseDto processMessage(String sessionId, String userMessage, String correlationId) {
+        return processMessage(sessionId, null, userMessage, correlationId);
+    }
+
+    /**
+     * Process user message with explicit delegated user context when available.
+     */
+    public ChatResponseDto processMessage(String sessionId, String userId, String userMessage, String correlationId) {
         long startTime = System.currentTimeMillis();
         log.info("[{}] Processing message for session: {}", correlationId, sessionId);
 
@@ -85,13 +92,15 @@ public class LlmService {
         }
 
         // Rate limiting
-        String userId = extractUserId(sessionId);
+        String effectiveUserId = (userId != null && !userId.isBlank())
+                ? userId
+                : extractUserId(sessionId);
         long now = System.currentTimeMillis();
-        long last = getLastRequestTime(userId);
+        long last = getLastRequestTime(effectiveUserId);
         if (now - last < RATE_LIMIT_MS) {
             throw new RuntimeException("Rate limit exceeded. Please wait.");
         }
-        putLastRequestTime(userId, now);
+        putLastRequestTime(effectiveUserId, now);
 
         // Truncate input
         if (userMessage != null && userMessage.length() > MAX_INPUT_LENGTH) {
@@ -101,16 +110,17 @@ public class LlmService {
         }
 
         // Get user preferences (optional - returns defaults if unavailable)
-        log.debug("[{}] Fetching preferences for user: {}", correlationId, userId);
-        UserPreferencesDto prefs = userProfileClient.getPreferences(userId, correlationId);
+        log.debug("[{}] Fetching preferences for user: {}", correlationId, effectiveUserId);
+        UserPreferencesDto prefs = userProfileClient.getPreferences(effectiveUserId, correlationId);
         log.debug("[{}] Using communication style: {}", correlationId, prefs.getCommunicationStyle());
+        List<String> goals = userProfileClient.getGoals(effectiveUserId, correlationId);
 
         // Build personalized system prompt
         String systemPrompt = promptBuilder.buildSystemPrompt(
                 prefs.getFullName(),
                 prefs.getTimezone(),
                 prefs.getOccupation(),
-                List.of(), // TODO: fetch goals from user-profile
+                goals,
                 prefs.getCommunicationStyle(),
                 prefs.getAllowSarcasm());
 
@@ -119,7 +129,7 @@ public class LlmService {
         if (memoryEnabled) {
             try {
                 memoryContext = memoryClient.searchContext(
-                        userId, userMessage, memoryTopK, memoryMaxTokens, correlationId);
+                        effectiveUserId, userMessage, memoryTopK, memoryMaxTokens, correlationId);
                 if (!memoryContext.isBlank()) {
                     log.info("[{}] Memory context found: {} chars", correlationId, memoryContext.length());
                 }
@@ -166,7 +176,12 @@ public class LlmService {
             try {
                 backgroundExecutor.execute(() -> {
                     try {
-                        memoryClient.ingestAsync(userId, sessionId, finalUserMessage, response.getReply(), correlationId);
+                        memoryClient.ingestAsync(
+                                effectiveUserId,
+                                sessionId,
+                                finalUserMessage,
+                                response.getReply(),
+                                correlationId);
                     } catch (RuntimeException e) {
                         log.warn("[{}] Memory ingest task failed (non-fatal): {}", correlationId, e.getMessage());
                     }

@@ -7,7 +7,6 @@ import okio.ByteString.Companion.toByteString
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
 import org.slf4j.LoggerFactory
-import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,6 +34,7 @@ class VoiceWebSocketClient(
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
     private val logger = LoggerFactory.getLogger(VoiceWebSocketClient::class.java)
+    private val messageFactory = VoiceWebSocketMessageFactory()
     
     private var webSocket: WebSocket? = null
     private var isConnected = false
@@ -65,9 +65,14 @@ class VoiceWebSocketClient(
             logger.debug("No access token available for Voice WS - connecting without Authorization header")
         }
 
+        val userId = TokenManager.getUserId()
+        if (!userId.isNullOrBlank()) {
+            requestBuilder.addHeader("X-User-Id", userId)
+        }
+
         val username = TokenManager.getUsername()
         if (!username.isNullOrBlank()) {
-            requestBuilder.addHeader("X-User-Id", username)
+            requestBuilder.addHeader("X-Username", username)
         }
 
         val role = TokenManager.getUserRole()
@@ -147,8 +152,10 @@ class VoiceWebSocketClient(
     }
     
     fun sendConfig(config: Map<String, String>) {
-        if (!isConnected) return
-        // TODO: Serialize config to JSON and send
+        if (!isConnected || config.isEmpty()) return
+        val message = messageFactory.configMessage(config)
+        logger.info("🎛️ Sending voice config: {}", config)
+        webSocket?.send(message)
     }
 
     fun endOfSpeech() {
@@ -188,7 +195,7 @@ class VoiceWebSocketClient(
         reconnectAttempts = 0 // Reset on successful connection
         logger.info("🔌 Voice WS connected: ${response.request.url}")
         Platform.runLater { onStateChange("CONNECTED") }
-        println("WebSocket connected to $url")
+        sendConfig(mapOf("language" to AppConfig.voiceLanguage))
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {

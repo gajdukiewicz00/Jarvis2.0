@@ -1,2 +1,3 @@
 org.jarvis.common.JarvisCommonAutoConfiguration
+org.jarvis.common.feign.ServiceFeignAutoConfiguration
 org.jarvis.common.logging.PiiLoggingGuardAutoConfiguration

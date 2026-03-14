@@ -52,6 +52,13 @@
             <artifactId>guava</artifactId>
         </dependency>
         
+        <!-- OpenFeign (optional — only for services that declare spring-cloud-starter-openfeign) -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+        
         <!-- HTTP Client -->
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>

@@ -29,6 +29,13 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
+# Service-to-service JWT (validated by ServiceJwtFilter from jarvis-common)
+service:
+  jwt:
+    secret: ${SERVICE_JWT_SECRET:${JWT_SECRET:}}
+jwt:
+  secret: ${JWT_SECRET:}
+
 # Life-tracker URL
 jarvis:
   life-tracker:

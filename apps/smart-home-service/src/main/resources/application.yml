@@ -43,6 +43,13 @@ jarvis:
   features:
     rabbitmq-enabled: ${FEATURE_RABBITMQ_SMART_HOME:false}
 
+# Service-to-service JWT (validated by ServiceJwtFilter from jarvis-common)
+service:
+  jwt:
+    secret: ${SERVICE_JWT_SECRET:${JWT_SECRET:}}
+jwt:
+  secret: ${JWT_SECRET:}
+
 smarthome:
   provider: ${SMART_HOME_PROVIDER:mqtt}
 

@@ -112,6 +112,13 @@ jarvis:
     expiration: 86400000  # 24 hours
     issuer: jarvis
 
+# Service-to-service JWT (used by FeignAuthConfig to sign X-Service-Token)
+service:
+  jwt:
+    secret: ${SERVICE_JWT_SECRET:${JWT_SECRET}}
+jwt:
+  secret: ${JWT_SECRET:}
+
 # CORS
 cors:
   enabled: true

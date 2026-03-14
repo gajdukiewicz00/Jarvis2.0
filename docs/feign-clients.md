@@ -104,7 +104,7 @@ public interface LifeTrackerClient {
     @GetMapping("/api/v1/life/finance/expenses")
     List<ExpenseDTO> getExpenses();
     
-    @PostMapping("/api/v1/life/finance/expense")
+    @PostMapping("/api/v1/life/finance/expenses")
     ExpenseDTO addExpense(@RequestBody Map<String, Object> expense);
     
     @GetMapping("/api/v1/life/time/records")
@@ -124,7 +124,7 @@ public interface LifeTrackerClient {
 | Метод | HTTP | Path | Описание |
 |-------|------|------|----------|
 | getExpenses | GET | /api/v1/life/finance/expenses | Список расходов |
-| addExpense | POST | /api/v1/life/finance/expense | Добавить расход |
+| addExpense | POST | /api/v1/life/finance/expenses | Добавить расход |
 | getTimeRecords | GET | /api/v1/life/time/records | Записи времени |
 | addTimeRecord | POST | /api/v1/life/time/record | Добавить запись |
 | getCalendarEvents | GET | /api/v1/life/calendar/events | События календаря |

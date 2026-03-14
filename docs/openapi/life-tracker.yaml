@@ -3,7 +3,7 @@ info:
   title: Life Tracker Service API
   version: 1.0.0
 paths:
-  /api/v1/life/finance/expense:
+  /api/v1/life/finance/expenses:
     post:
       summary: Add a new expense
       requestBody:
@@ -24,7 +24,6 @@ paths:
       responses:
         '200':
           description: Expense added
-  /api/v1/life/finance/expenses:
     get:
       summary: Get all expenses
       responses:

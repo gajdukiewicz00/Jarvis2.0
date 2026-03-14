@@ -18,9 +18,9 @@ public class LifeTrackerProxyController {
     private final LifeTrackerClient lifeClient;
 
     // Finance endpoints
-    @PostMapping("/finance/expense")
+    @PostMapping("/finance/expenses")
     public ResponseEntity<Map<String, Object>> addExpense(@RequestBody Map<String, Object> expense) {
-        log.info("Proxying POST /api/v1/life/finance/expense: amount={}", expense.get("amount"));
+        log.info("Proxying POST /api/v1/life/finance/expenses: amount={}", expense.get("amount"));
         return lifeClient.addExpense(expense);
     }
 

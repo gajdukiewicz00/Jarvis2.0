@@ -11,7 +11,7 @@ import java.util.Map;
 public interface LifeTrackerClient {
 
     // Expenses
-    @PostMapping("/api/v1/life/finance/expense")
+    @PostMapping("/api/v1/life/finance/expenses")
     ResponseEntity<Map<String, Object>> addExpense(@RequestBody Map<String, Object> expense);
 
     @GetMapping("/api/v1/life/finance/expenses")

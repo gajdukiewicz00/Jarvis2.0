@@ -377,7 +377,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
 curl http://localhost:8080/api/v1/life/finance/expenses
 
 # 6. Добавить расход
-curl -X POST http://localhost:8080/api/v1/life/finance/expense \
+curl -X POST http://localhost:8080/api/v1/life/finance/expenses \
   -H "Content-Type: application/json" \
   -d '{"amount":25.50,"category":"FOOD","description":"Test"}'
 

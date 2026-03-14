@@ -114,7 +114,7 @@ class LifeTrackerIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/life/finance/expense - creates expense")
+    @DisplayName("POST /api/v1/life/finance/expenses - creates expense")
     void createExpense_success() throws Exception {
         String requestBody = """
             {
@@ -125,7 +125,7 @@ class LifeTrackerIntegrationTest {
             }
             """;
 
-        mockMvc.perform(post("/api/v1/life/finance/expense")
+        mockMvc.perform(post("/api/v1/life/finance/expenses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("X-User-Id", USER_ID)
                         .content(requestBody))
@@ -141,7 +141,7 @@ class LifeTrackerIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/v1/life/finance/expense - defaults currency to EUR")
+    @DisplayName("POST /api/v1/life/finance/expenses - defaults currency to EUR")
     void createExpense_defaultCurrency() throws Exception {
         String requestBody = """
             {
@@ -151,7 +151,7 @@ class LifeTrackerIntegrationTest {
             }
             """;
 
-        mockMvc.perform(post("/api/v1/life/finance/expense")
+        mockMvc.perform(post("/api/v1/life/finance/expenses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("X-User-Id", USER_ID)
                         .content(requestBody))

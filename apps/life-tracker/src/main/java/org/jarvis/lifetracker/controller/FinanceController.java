@@ -127,7 +127,7 @@ public class FinanceController {
         return financeService.listRecurring(resolvedUserId);
     }
 
-    @PostMapping("/expense")
+    @PostMapping("/expenses")
     public ExpenseDTO addExpense(
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
             @RequestBody ExpenseRequest request) {

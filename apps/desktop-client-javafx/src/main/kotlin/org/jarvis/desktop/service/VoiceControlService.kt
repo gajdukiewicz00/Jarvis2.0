@@ -58,7 +58,7 @@ class VoiceControlService(
                 state.sessionState, state.connectionPhase)
             return null
         }
-        val correlationId = voiceSession.startSession()
+        val correlationId = voiceSession.startSession(isManualTalk = true)
         if (correlationId != null) {
             webSocketClient.startCommand(correlationId)
             mutate { it.copy(pushToTalkActive = true, currentCorrelationId = correlationId) }
@@ -163,9 +163,13 @@ class VoiceControlService(
 
     fun onConnectionStateChanged(rawState: String) {
         val phase = mapConnectionPhase(rawState)
-        val error = if (rawState.startsWith("ERROR", ignoreCase = true))
-            rawState.removePrefix("ERROR:").removePrefix("ERROR").trim().ifEmpty { null }
-        else null
+        val error = when {
+            rawState.startsWith("ERROR", ignoreCase = true) ->
+                rawState.removePrefix("ERROR:").removePrefix("ERROR").trim().ifEmpty { null }
+            rawState.startsWith("UNAVAILABLE", ignoreCase = true) ->
+                rawState.removePrefix("UNAVAILABLE:").removePrefix("UNAVAILABLE").trim().ifEmpty { "Voice backend not reachable" }
+            else -> null
+        }
         mutate { current ->
             val lostConnection = current.connectionPhase.isUsable() && !phase.isUsable()
             if (lostConnection && current.isBusy) {
@@ -201,6 +205,7 @@ class VoiceControlService(
             s.equals("CONNECTED", ignoreCase = true) -> ConnectionPhase.CONNECTED
             s.equals("DISCONNECTED", ignoreCase = true) -> ConnectionPhase.DISCONNECTED
             s.startsWith("Reconnecting", ignoreCase = true) -> ConnectionPhase.RECONNECTING
+            s.startsWith("UNAVAILABLE", ignoreCase = true) -> ConnectionPhase.FAILED
             s.startsWith("ERROR", ignoreCase = true) -> ConnectionPhase.FAILED
             s.startsWith("Connection failed", ignoreCase = true) -> ConnectionPhase.FAILED
             else -> state.connectionPhase

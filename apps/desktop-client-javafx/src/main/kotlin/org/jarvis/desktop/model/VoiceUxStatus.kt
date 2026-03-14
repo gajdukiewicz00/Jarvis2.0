@@ -73,6 +73,13 @@ object VoiceUxStatus {
                     "Check microphone connection and try again"
                 )
 
+            "not reachable" in lower || "unavailable" in lower ->
+                StatusLine(
+                    "Voice backend unavailable",
+                    Severity.ERROR,
+                    "Voice gateway is not running or scaled to zero"
+                )
+
             "websocket" in lower || "connection" in lower || "socket" in lower ->
                 StatusLine(
                     "Voice connection failed",

@@ -44,6 +44,7 @@ class VoiceSession(
         Thread(r, "VoiceSession-Scheduler").apply { isDaemon = true }
     }
     
+    private var recordingStartFuture: ScheduledFuture<*>? = null
     private var listenTimeoutFuture: ScheduledFuture<*>? = null
     private var processingTimeoutFuture: ScheduledFuture<*>? = null
     private var cooldownFuture: ScheduledFuture<*>? = null
@@ -52,10 +53,12 @@ class VoiceSession(
     val currentCorrelationId: String? get() = correlationId
     
     /**
-     * Start a new voice session when wake word is detected.
+     * Start a new voice session.
+     *
+     * @param isManualTalk true for push-to-talk (no delay), false for wake-word (delayed start to skip the wake word audio)
      * Transitions: IDLE/LISTENING_WAKE_WORD → LISTENING
      */
-    fun startSession(): String? {
+    fun startSession(isManualTalk: Boolean = false): String? {
         val expectedStates = setOf(VoiceState.IDLE, VoiceState.LISTENING_WAKE_WORD)
         val current = currentState.get()
         
@@ -67,7 +70,7 @@ class VoiceSession(
         val newCorrelationId = UUID.randomUUID().toString()
         correlationId = newCorrelationId
         
-        logger.info("🎤 Starting voice session: correlationId={}, {} → LISTENING", newCorrelationId, current)
+        logger.info("🎤 Starting voice session: correlationId={}, {} → LISTENING, manual={}", newCorrelationId, current, isManualTalk)
         
         // Transition to LISTENING
         if (currentState.compareAndSet(current, VoiceState.LISTENING)) {
@@ -85,13 +88,17 @@ class VoiceSession(
             
             onStateChange(VoiceState.LISTENING, newCorrelationId)
             
-            // Start recording after brief delay
-            scheduler.schedule({
-                if (currentState.get() == VoiceState.LISTENING) {
-                    onStartRecording()
-                    startListenTimeout()
-                }
-            }, VoiceConfig.wakeWordDelayMs, TimeUnit.MILLISECONDS)
+            if (isManualTalk) {
+                onStartRecording()
+                startListenTimeout()
+            } else {
+                recordingStartFuture = scheduler.schedule({
+                    if (currentState.get() == VoiceState.LISTENING) {
+                        onStartRecording()
+                        startListenTimeout()
+                    }
+                }, VoiceConfig.wakeWordDelayMs, TimeUnit.MILLISECONDS)
+            }
             
             return newCorrelationId
         }
@@ -119,7 +126,8 @@ class VoiceSession(
         
         logger.info("📝 Final transcript received: '{}', correlationId={}", transcript, correlationId)
         
-        // Cancel listen timeout
+        recordingStartFuture?.cancel(false)
+        recordingStartFuture = null
         listenTimeoutFuture?.cancel(false)
         listenTimeoutFuture = null
         
@@ -241,6 +249,8 @@ class VoiceSession(
         logger.info("🔇 Ending session silently: reason='{}', correlationId={}", reason, endedCorrelationId)
         
         // Cancel all timers
+        recordingStartFuture?.cancel(false)
+        recordingStartFuture = null
         listenTimeoutFuture?.cancel(false)
         processingTimeoutFuture?.cancel(false)
         cooldownFuture?.cancel(false)
@@ -281,6 +291,8 @@ class VoiceSession(
             reason, current, endedCorrelationId, error)
         
         // Cancel all timers
+        recordingStartFuture?.cancel(false)
+        recordingStartFuture = null
         listenTimeoutFuture?.cancel(false)
         processingTimeoutFuture?.cancel(false)
         cooldownFuture?.cancel(false)
@@ -426,6 +438,7 @@ class VoiceSession(
      */
     fun shutdown() {
         logger.info("Shutting down VoiceSession")
+        recordingStartFuture?.cancel(true)
         listenTimeoutFuture?.cancel(true)
         processingTimeoutFuture?.cancel(true)
         cooldownFuture?.cancel(true)

@@ -98,15 +98,20 @@ class VoiceWebSocketClient(
         if (!shouldReconnect || reconnectAttempts >= maxReconnectAttempts) {
             logger.warn("🔌 Not reconnecting: shouldReconnect={}, attempts={}/{}", 
                 shouldReconnect, reconnectAttempts, maxReconnectAttempts)
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                Platform.runLater {
+                    onStateChange("UNAVAILABLE: voice backend not reachable after $maxReconnectAttempts attempts")
+                }
+            }
             return
         }
         
         reconnectAttempts++
-        val delay = (reconnectAttempts * 2).coerceAtMost(10) // Max 10 seconds
+        val delay = minOf(reconnectAttempts * reconnectAttempts * 2, 30) // Exponential: 2, 8, 18, 30, 30
         logger.info("🔌 Scheduling Voice WS reconnect attempt {}/{} in {}s", 
             reconnectAttempts, maxReconnectAttempts, delay)
         
-        Platform.runLater { onStateChange("Reconnecting in ${delay}s...") }
+        Platform.runLater { onStateChange("Reconnecting in ${delay}s (attempt $reconnectAttempts/$maxReconnectAttempts)...") }
         
         Thread {
             Thread.sleep(delay * 1000L)
@@ -208,7 +213,11 @@ class VoiceWebSocketClient(
                 when (type) {
                     "STATE" -> {
                         val state = json["state"]?.jsonPrimitive?.content ?: "UNKNOWN"
+                        val sttAvailable = json["sttAvailable"]?.jsonPrimitive?.booleanOrNull
                         onStateChange(state)
+                        if (sttAvailable == false) {
+                            onStateChange("UNAVAILABLE: STT backend is not configured on the server")
+                        }
                     }
                     "TRANSCRIPT_PARTIAL" -> {
                         val transcript = json["text"]?.jsonPrimitive?.content ?: ""
@@ -228,6 +237,9 @@ class VoiceWebSocketClient(
                         val handled = json["handled"]?.jsonPrimitive?.booleanOrNull ?: false
                         logger.info("📢 Response: '{}', action={}, handled={}, correlationId={}", 
                             responseText, action, handled, msgCorrelationId)
+                        if (action == "STT_UNAVAILABLE") {
+                            onStateChange("UNAVAILABLE: $responseText")
+                        }
                         onResponse(responseText, action, handled)
                     }
                     "ACTION_RESULT" -> {

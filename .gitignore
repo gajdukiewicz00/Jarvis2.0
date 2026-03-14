@@ -36,6 +36,10 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+### Gradle ###
+.gradle/
+**/.gradle/
+
 ### VS Code ###
 .vscode/
 

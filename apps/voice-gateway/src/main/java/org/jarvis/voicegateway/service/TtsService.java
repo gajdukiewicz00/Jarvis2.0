@@ -27,6 +27,8 @@ public class TtsService {
 
     private TextToSpeechClient googleTtsClient;
     private boolean googleTtsAvailable = false;
+    private boolean espeakAvailable = false;
+    private String espeakBinary = "espeak";
 
     @PostConstruct
     public void init() {
@@ -35,19 +37,53 @@ public class TtsService {
             return;
         }
 
+        espeakAvailable = checkEspeakAvailable();
+
         if ("google".equalsIgnoreCase(ttsProvider)) {
             try {
                 googleTtsClient = TextToSpeechClient.create();
                 googleTtsAvailable = true;
                 log.info("Google Cloud TTS initialized successfully");
             } catch (IOException e) {
-                log.info("Using eSpeak TTS fallback (Google credentials not configured)");
-                log.debug("Google TTS initialization failed: {}", e.getMessage());
+                log.info("Google TTS not available ({}), checking eSpeak fallback...", e.getMessage());
                 googleTtsAvailable = false;
+                if (!espeakAvailable) {
+                    log.warn("⚠️ TTS DEGRADED: Neither Google TTS nor espeak are available. " +
+                            "Install espeak: sudo apt install espeak-ng");
+                }
+            }
+        } else if ("espeak".equalsIgnoreCase(ttsProvider)) {
+            if (espeakAvailable) {
+                log.info("Using eSpeak TTS provider (configured)");
+            } else {
+                log.warn("⚠️ TTS DEGRADED: espeak binary not found on host. " +
+                        "Install with: sudo apt install espeak-ng");
             }
         } else {
-            log.info("Using eSpeak TTS provider (configured)");
+            log.info("Using TTS provider: {}", ttsProvider);
         }
+    }
+
+    private boolean checkEspeakAvailable() {
+        for (String binary : new String[]{"espeak-ng", "espeak"}) {
+            try {
+                Process p = new ProcessBuilder(binary, "--version")
+                        .redirectErrorStream(true)
+                        .start();
+                int exit = p.waitFor();
+                if (exit == 0) {
+                    espeakBinary = binary;
+                    log.info("{} binary found on host", binary);
+                    return true;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return false;
+    }
+
+    public boolean isTtsAvailable() {
+        return ttsEnabled && (googleTtsAvailable || espeakAvailable);
     }
 
     /**
@@ -119,9 +155,8 @@ public class TtsService {
             java.io.File tempFile = java.io.File.createTempFile("tts_", ".wav");
             tempFile.deleteOnExit();
 
-            // Execute eSpeak command
             ProcessBuilder pb = new ProcessBuilder(
-                    "espeak",
+                    espeakBinary,
                     "-v", espeakLang,
                     "-w", tempFile.getAbsolutePath(),
                     text);

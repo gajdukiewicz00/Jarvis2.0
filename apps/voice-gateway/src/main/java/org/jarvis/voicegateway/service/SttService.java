@@ -1,5 +1,7 @@
 package org.jarvis.voicegateway.service;
 
+import java.util.Map;
+
 public interface SttService {
     String transcribe(byte[] wav16kMonoPcm, String languageCode);
 
@@ -16,5 +18,16 @@ public interface SttService {
      */
     default StreamingRecognitionSession createSession(String languageCode) {
         return createSession();
+    }
+
+    default String providerId() {
+        return "unknown";
+    }
+
+    default Map<String, Object> describeRuntime() {
+        return Map.of(
+                "configuredProvider", providerId(),
+                "status", "unknown",
+                "available", false);
     }
 }

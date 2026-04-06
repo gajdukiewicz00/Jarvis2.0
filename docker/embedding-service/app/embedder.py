@@ -1,10 +1,10 @@
 """
 Embedding generator using sentence-transformers
 """
-import logging
 import hashlib
+import logging
+from threading import RLock
 from typing import List, Optional
-from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
 from cachetools import LRUCache
@@ -28,46 +28,65 @@ class Embedder:
         self.model: Optional[SentenceTransformer] = None
         self.cache: LRUCache = LRUCache(maxsize=config.CACHE_SIZE)
         self._model_loaded = False
+        self._lock = RLock()
+        self.embedding_dim = config.EMBEDDING_DIM
     
     def load(self) -> None:
         """Load the embedding model"""
-        logger.info(f"Loading embedding model: {config.MODEL_NAME}")
-        
-        try:
-            self.model = SentenceTransformer(config.MODEL_NAME)
-            
-            # Get actual embedding dimension
-            test_embedding = self.model.encode("test", convert_to_numpy=True)
-            actual_dim = len(test_embedding)
-            
-            if actual_dim != config.EMBEDDING_DIM:
-                logger.warning(
-                    f"Embedding dimension mismatch! Expected {config.EMBEDDING_DIM}, got {actual_dim}. "
-                    f"Update EMBEDDING_DIM in config."
+        with self._lock:
+            if self.is_loaded():
+                return
+
+            logger.info("Loading embedding model: %s", config.MODEL_NAME)
+
+            try:
+                self.model = SentenceTransformer(config.MODEL_NAME)
+
+                test_embedding = self.model.encode(
+                    self._prepare_text("test", "query"),
+                    convert_to_numpy=True,
+                    normalize_embeddings=True,
                 )
-            
-            self._model_loaded = True
-            logger.info(f"Model loaded successfully. Embedding dimension: {actual_dim}")
-            
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            raise
+                actual_dim = len(test_embedding)
+                self.embedding_dim = actual_dim
+
+                if actual_dim != config.EMBEDDING_DIM:
+                    logger.warning(
+                        "Embedding dimension mismatch. Expected %s, got %s.",
+                        config.EMBEDDING_DIM,
+                        actual_dim,
+                    )
+
+                self._model_loaded = True
+                logger.info("Model loaded successfully. Embedding dimension: %s", actual_dim)
+
+            except Exception as exc:
+                logger.error("Failed to load model: %s", exc)
+                raise
     
     def is_loaded(self) -> bool:
         """Check if model is loaded"""
         return self._model_loaded and self.model is not None
     
-    def _get_cache_key(self, text: str) -> str:
+    def _get_cache_key(self, text: str, input_type: str) -> str:
         """Generate cache key for text"""
-        return hashlib.md5(text.encode()).hexdigest()
+        return f"{input_type}:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
     
     def _truncate_text(self, text: str) -> str:
         """Truncate text to max length"""
         if len(text) > config.MAX_TEXT_LENGTH:
             return text[:config.MAX_TEXT_LENGTH]
         return text
-    
-    def embed_single(self, text: str) -> List[float]:
+
+    def _prepare_text(self, text: str, input_type: str) -> str:
+        normalized_text = text.strip()
+        if input_type == "query":
+            return f"query: {normalized_text}"
+        if input_type == "passage":
+            return f"passage: {normalized_text}"
+        raise ValueError(f"Unsupported input_type: {input_type}")
+
+    def embed_single(self, text: str, input_type: str = "query") -> List[float]:
         """
         Generate embedding for a single text.
         
@@ -80,26 +99,25 @@ class Embedder:
         if not self.is_loaded():
             raise RuntimeError("Model not loaded")
         
-        # Truncate text
-        text = self._truncate_text(text)
-        
-        # Check cache
-        cache_key = self._get_cache_key(text)
-        if cache_key in self.cache:
-            logger.debug(f"Cache hit for text: {text[:50]}...")
-            return self.cache[cache_key]
-        
-        # Generate embedding
-        # e5 models expect "query: " or "passage: " prefix for best results
-        prefixed_text = f"query: {text}"
-        embedding = self.model.encode(prefixed_text, convert_to_numpy=True).tolist()
-        
-        # Cache result
-        self.cache[cache_key] = embedding
+        text = self._truncate_text(text.strip())
+        cache_key = self._get_cache_key(text, input_type)
+        cached = self.cache.get(cache_key)
+        if cached is not None:
+            logger.debug("Cache hit for %s text: %s...", input_type, text[:50])
+            return cached
+
+        embedding = self.model.encode(
+            self._prepare_text(text, input_type),
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        ).tolist()
+
+        with self._lock:
+            self.cache[cache_key] = embedding
         
         return embedding
     
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    def embed_batch(self, texts: List[str], input_type: str = "query") -> List[List[float]]:
         """
         Generate embeddings for multiple texts.
         
@@ -111,44 +129,41 @@ class Embedder:
         """
         if not self.is_loaded():
             raise RuntimeError("Model not loaded")
-        
-        if len(texts) > config.MAX_BATCH_SIZE:
-            logger.warning(f"Batch size {len(texts)} exceeds max {config.MAX_BATCH_SIZE}, processing in chunks")
-        
+
+        if not texts:
+            return []
+
         results = []
         uncached_texts = []
         uncached_indices = []
         
-        # Check cache for each text
         for i, text in enumerate(texts):
-            text = self._truncate_text(text)
-            cache_key = self._get_cache_key(text)
+            text = self._truncate_text(text.strip())
+            cache_key = self._get_cache_key(text, input_type)
             
             if cache_key in self.cache:
                 results.append((i, self.cache[cache_key]))
             else:
-                uncached_texts.append(f"query: {text}")
+                uncached_texts.append(self._prepare_text(text, input_type))
                 uncached_indices.append(i)
         
-        # Batch encode uncached texts
         if uncached_texts:
             embeddings = self.model.encode(
                 uncached_texts,
                 convert_to_numpy=True,
-                batch_size=min(len(uncached_texts), config.MAX_BATCH_SIZE)
+                batch_size=min(len(uncached_texts), config.MAX_BATCH_SIZE),
+                normalize_embeddings=True,
             )
             
             for idx, embedding in zip(uncached_indices, embeddings):
                 embedding_list = embedding.tolist()
                 
-                # Cache the result
-                original_text = self._truncate_text(texts[idx])
-                cache_key = self._get_cache_key(original_text)
+                original_text = self._truncate_text(texts[idx].strip())
+                cache_key = self._get_cache_key(original_text, input_type)
                 self.cache[cache_key] = embedding_list
                 
                 results.append((idx, embedding_list))
         
-        # Sort by original index and return embeddings only
         results.sort(key=lambda x: x[0])
         return [r[1] for r in results]
     
@@ -156,10 +171,13 @@ class Embedder:
         """Get cache and model statistics"""
         return {
             "model_name": config.MODEL_NAME,
-            "embedding_dim": config.EMBEDDING_DIM,
+            "embedding_dim": self.embedding_dim,
             "cache_size": len(self.cache),
             "cache_max_size": config.CACHE_SIZE,
             "model_loaded": self.is_loaded(),
+            "max_batch_size": config.MAX_BATCH_SIZE,
+            "max_text_length": config.MAX_TEXT_LENGTH,
+            "max_request_texts": config.MAX_REQUEST_TEXTS,
         }
     
     def clear_cache(self) -> None:
@@ -170,6 +188,5 @@ class Embedder:
 
 # Global embedder instance
 embedder = Embedder()
-
 
 

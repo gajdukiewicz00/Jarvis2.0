@@ -46,6 +46,12 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     private final org.jarvis.orchestrator.client.LlmServiceClient llmClient;
     private final SmartHomeClient smartHomeClient;
 
+    @Value("${api-gateway.url:${API_GATEWAY_URL:http://api-gateway:8080}}")
+    private String apiGatewayUrl = "http://api-gateway:8080";
+
+    @Value("${jarvis.nlp.url:${NLP_SERVICE_URL:http://nlp-service:8082}}")
+    private String nlpUrl = "http://nlp-service:8082";
+
     // LLM Feature flag and configuration
     @Value("${jarvis.llm.enabled:false}")
     private boolean llmEnabled;
@@ -93,6 +99,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     @Override
     public String processText(String text, String language, String correlationId, String userId) {
         log.info("📝 Processing text: '{}', lang={}, correlationId={}", text, language, correlationId);
+        log.info("🧠 Orchestrator NLP route: nlpUrl={}, correlationId={}", nlpUrl, correlationId);
 
         // Auto-detect language from text if not provided
         Language lang = language != null && !language.isBlank()
@@ -128,6 +135,10 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 case "hello", "greeting" -> {
                     log.info("👋 Greeting, correlationId={}", correlationId);
                     yield phraseProvider.getPhrase(PhraseContext.GREETING, lang);
+                }
+                case "morning_greeting" -> {
+                    log.info("🌅 Morning greeting, correlationId={}", correlationId);
+                    yield phraseProvider.getPhrase(PhraseContext.MORNING_GREETING, lang);
                 }
                 case "goodbye" -> {
                     log.info("👋 Goodbye, correlationId={}", correlationId);
@@ -242,6 +253,21 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     sendPcAction("OPEN_APP", Map.of("app", "terminal"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.OPEN_TERMINAL, lang);
                 }
+                case "open_url" -> {
+                    String url = slots != null ? slots.get("url") : null;
+                    if (url == null || url.isBlank()) {
+                        log.warn("OPEN_URL requested without url, correlationId={}", correlationId);
+                        yield phraseProvider.getPhrase(PhraseContext.ACK_ERROR, lang);
+                    }
+                    log.info("🌐 Executing OPEN_URL: {}, correlationId={}", url, correlationId);
+                    sendPcAction("OPEN_URL", Map.of("url", url), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.OPEN_URL, lang);
+                }
+                case "open_news" -> {
+                    String url = slots != null ? slots.getOrDefault("url", "https://news.google.com/") : "https://news.google.com/";
+                    sendPcAction("OPEN_URL", Map.of("url", url), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.OPEN_URL, lang);
+                }
 
                 // ==================== Scenarios / Protocols ====================
                 case "work_mode" -> {
@@ -269,6 +295,41 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     sendPcAction("SCENARIO", Map.of("name", "clean_slate"), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_CLEAN_SLATE, lang);
                 }
+                case "protocol_cozy_evening" -> {
+                    log.info("🕯️ Activating COZY_EVENING protocol, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "cozy_evening"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_COZY_EVENING, lang);
+                }
+                case "protocol_guests" -> {
+                    log.info("🥂 Activating GUESTS protocol, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "guests"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_GUESTS, lang);
+                }
+                case "protocol_holiday" -> {
+                    log.info("🎄 Activating HOLIDAY protocol, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "holiday"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_HOLIDAY, lang);
+                }
+                case "game_mode" -> {
+                    log.info("🎮 Activating GAME_MODE, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "game"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.GAME_MODE, lang);
+                }
+                case "protocol_morning" -> {
+                    log.info("🌅 Activating MORNING protocol, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "morning"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_MORNING, lang);
+                }
+                case "protocol_leaving" -> {
+                    log.info("🚪 Activating LEAVING protocol, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "leaving"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_LEAVING, lang);
+                }
+                case "protocol_panic" -> {
+                    log.info("🚨 Activating PANIC protocol, correlationId={}", correlationId);
+                    sendPcAction("SCENARIO", Map.of("name", "panic"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PROTOCOL_PANIC, lang);
+                }
 
                 // ==================== Window Control ====================
                 case "minimize_window", "window_minimize" -> {
@@ -285,6 +346,123 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     log.info("🔒 Executing LOCK_SCREEN, correlationId={}", correlationId);
                     sendPcAction("LOCK_SCREEN", Map.of(), correlationId, userId);
                     yield phraseProvider.getPhrase(PhraseContext.LOCK_SCREEN, lang);
+                }
+
+                // ==================== Legacy System Control ====================
+                case "clipboard_copy" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "ctrl+c"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.CLIPBOARD_COPY, lang);
+                }
+                case "clipboard_paste" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "ctrl+v"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.CLIPBOARD_PASTE, lang);
+                }
+                case "undo_action" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "ctrl+z"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.UNDO_ACTION, lang);
+                }
+                case "switch_window" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Alt+Tab"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.SWITCH_WINDOW, lang);
+                }
+                case "close_window" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Alt+F4"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.CLOSE_WINDOW, lang);
+                }
+                case "fullscreen" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "F11"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.FULLSCREEN, lang);
+                }
+                case "refresh_page" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "F5"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.REFRESH_PAGE, lang);
+                }
+                case "navigate_back" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Alt+Left"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.NAVIGATE_BACK, lang);
+                }
+                case "navigate_forward" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Alt+Right"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.NAVIGATE_FORWARD, lang);
+                }
+                case "show_desktop" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Super+d"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.SHOW_DESKTOP, lang);
+                }
+                case "open_settings" -> {
+                    sendPcAction("OPEN_APP", Map.of("app", "settings"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.OPEN_SETTINGS, lang);
+                }
+                case "system_search" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Super_L"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.SYSTEM_SEARCH, lang);
+                }
+                case "switch_language" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Alt+Shift"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.SWITCH_LANGUAGE, lang);
+                }
+                case "screenshot" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Print"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.SCREENSHOT, lang);
+                }
+                case "sleep_mode" -> {
+                    sendPcAction("SYSTEM_COMMAND", Map.of("command", "sleep"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.SLEEP_MODE, lang);
+                }
+                case "monitor_off" -> {
+                    sendPcAction("SYSTEM_COMMAND", Map.of("command", "monitor_off"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.MONITOR_OFF, lang);
+                }
+                case "network_check" -> {
+                    String url = slots != null ? slots.getOrDefault("url", "https://fast.com/") : "https://fast.com/";
+                    sendPcAction("OPEN_URL", Map.of("url", url), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.ACK_GENERIC, lang);
+                }
+                case "find_in_page" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "ctrl+f"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.ACK_GENERIC, lang);
+                }
+                case "focus_address_bar" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "ctrl+l"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.ACK_GENERIC, lang);
+                }
+                case "rename_item" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "F2"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.ACK_GENERIC, lang);
+                }
+                case "delete_selection" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Delete"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.ACK_GENERIC, lang);
+                }
+                case "press_enter" -> {
+                    sendPcAction("HOTKEY", Map.of("keyCombination", "Return"), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.ACK_GENERIC, lang);
+                }
+
+                // ==================== Conversation / Personality ====================
+                case "welcome_home" -> phraseProvider.getPhrase(PhraseContext.WELCOME_HOME, lang);
+                case "how_are_you" -> phraseProvider.getPhrase(PhraseContext.HOW_ARE_YOU, lang);
+                case "what_doing" -> phraseProvider.getPhrase(PhraseContext.WHAT_DOING, lang);
+                case "bored" -> phraseProvider.getPhrase(PhraseContext.BORED, lang);
+                case "cheer_up" -> phraseProvider.getPhrase(PhraseContext.CHEER_UP, lang);
+                case "love_response" -> phraseProvider.getPhrase(PhraseContext.LOVE_RESPONSE, lang);
+                case "random_fact" -> phraseProvider.getPhrase(PhraseContext.RANDOM_FACT, lang);
+                case "standby_mode" -> phraseProvider.getPhrase(PhraseContext.STANDBY_MODE, lang);
+
+                // ==================== Media / Legacy URL actions ====================
+                case "play_music" -> {
+                    String url = slots != null ? slots.get("url") : null;
+                    if (url != null && !url.isBlank()) {
+                        sendPcAction("OPEN_URL", Map.of("url", url), correlationId, userId);
+                    } else {
+                        sendPcAction("PLAY_PAUSE", Map.of(), correlationId, userId);
+                    }
+                    yield phraseProvider.getPhrase(PhraseContext.PLAY_MUSIC, lang);
+                }
+                case "play_radio" -> {
+                    String url = slots != null ? slots.getOrDefault("url", "https://radio.garden/") : "https://radio.garden/";
+                    sendPcAction("OPEN_URL", Map.of("url", url), correlationId, userId);
+                    yield phraseProvider.getPhrase(PhraseContext.PLAY_RADIO, lang);
                 }
 
                 // ==================== Timer ====================
@@ -377,19 +555,21 @@ public class OrchestratorServiceImpl implements OrchestratorService {
      */
     private void sendPcAction(String action, Map<String, Object> params, String correlationId, String userId) {
         try {
-            log.info("📤 Sending PC action via API Gateway: action={}, params={}, correlationId={}, userId={}",
-                    action, params, correlationId, userId);
+            log.info("📤 Sending PC action via API Gateway: action={}, params={}, apiGatewayUrl={}, correlationId={}, userId={}",
+                    action, params, apiGatewayUrl, correlationId, userId);
             var result = apiGatewayPcClient.sendPcAction(
                     new ApiGatewayPcClient.PcActionRequest(action, params, userId));
-            log.info("📥 PC action result: {}, correlationId={}", result, correlationId);
+            log.info("✅ API Gateway PC action routed: action={}, apiGatewayUrl={}, result={}, correlationId={}",
+                    action, apiGatewayUrl, result, correlationId);
         } catch (RuntimeException e) {
-            log.warn("⚠️ Failed to send PC action via WebSocket ({}), falling back to direct call, correlationId={}",
-                    e.getMessage(), correlationId);
+            log.warn("⚠️ Failed to send PC action via API Gateway ({}), apiGatewayUrl={}, falling back to direct call, correlationId={}",
+                    e.getMessage(), apiGatewayUrl, correlationId);
             // Fallback to direct K8S pc-control (stub)
             try {
                 Map<String, String> stringParams = new HashMap<>();
                 params.forEach((k, v) -> stringParams.put(k, String.valueOf(v)));
-                pcControlClient.executeAction(new PcControlClient.ActionRequest(action, stringParams));
+                pcControlClient.executeAction(userId != null && !userId.isBlank() ? userId : "local-user",
+                        new PcControlClient.ActionRequest(action, stringParams));
                 log.info("✅ PC action sent via direct client, correlationId={}", correlationId);
             } catch (RuntimeException ex) {
                 log.error("❌ Failed to execute PC action: {}, correlationId={}", ex.getMessage(), correlationId);

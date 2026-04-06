@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-pc-control: api-gateway-pc-control-v1
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: PC_CONTROL_URL
+              value: https://pc-control.jarvis.svc.cluster.local:8084

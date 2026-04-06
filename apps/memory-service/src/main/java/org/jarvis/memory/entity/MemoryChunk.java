@@ -1,12 +1,12 @@
 package org.jarvis.memory.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.Array;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -40,13 +40,10 @@ public class MemoryChunk {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String chunkText;
 
-    /**
-     * Vector embedding (384 dimensions for multilingual-e5-small).
-     * Stored as a string representation for native query compatibility.
-     * Format: "[0.1, 0.2, ...]"
-     */
+    @Array(length = 384)
+    @JdbcTypeCode(SqlTypes.VECTOR)
     @Column(columnDefinition = "vector(384)")
-    private String embedding;
+    private float[] embedding;
 
     @Column(nullable = false)
     @Builder.Default
@@ -57,22 +54,17 @@ public class MemoryChunk {
     @Builder.Default
     private Map<String, Object> metadata = Map.of();
 
-    /**
-     * Convert float array to pgvector string format
-     */
-    public static String toVectorString(List<Float> vector) {
+    public static float[] toPrimitiveArray(java.util.List<Float> vector) {
         if (vector == null || vector.isEmpty()) {
             return null;
         }
-        StringBuilder sb = new StringBuilder("[");
+        float[] values = new float[vector.size()];
         for (int i = 0; i < vector.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(vector.get(i));
+            Float value = vector.get(i);
+            values[i] = value == null ? 0.0f : value;
         }
-        sb.append("]");
-        return sb.toString();
+        return values;
     }
 }
-
 
 

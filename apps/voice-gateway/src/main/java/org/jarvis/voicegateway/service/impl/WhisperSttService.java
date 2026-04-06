@@ -5,6 +5,7 @@ import io.github.givimad.whisperjni.WhisperFullParams;
 import io.github.givimad.whisperjni.WhisperJNI;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.voicegateway.exception.SttUnavailableException;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
 import org.jarvis.voicegateway.service.SttService;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +16,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.Map;
 
 /**
  * Whisper-based STT service using whisper.cpp JNI bindings.
@@ -26,11 +27,12 @@ import java.util.Arrays;
 @ConditionalOnProperty(name = "jarvis.stt.provider", havingValue = "whisper")
 public class WhisperSttService implements SttService {
 
-    @Value("${jarvis.voice.whisper.model-path:models/ggml-small.bin}")
+    @Value("${jarvis.voice.whisper.model-path:${JARVIS_MODELS_DIR:models}/stt/whisper/ggml-small.bin}")
     private String modelPath;
 
     private WhisperJNI whisper;
     private WhisperContext context;
+    private volatile String initStatus = "Whisper STT not initialized";
 
     @PostConstruct
     public void init() {
@@ -40,6 +42,7 @@ public class WhisperSttService implements SttService {
 
             Path path = Path.of(modelPath);
             if (!Files.exists(path)) {
+                initStatus = "Whisper model not found at " + path.toAbsolutePath();
                 log.warn("Whisper model not found at '{}'. Whisper STT will not be available.", modelPath);
                 log.info("To enable Whisper:");
                 log.info("  1. Download model from: https://huggingface.co/ggerganov/whisper.cpp/tree/main");
@@ -49,12 +52,15 @@ public class WhisperSttService implements SttService {
             }
 
             context = whisper.init(path.toAbsolutePath());
+            initStatus = "ready";
             log.info("Whisper model loaded successfully from {}", path);
         } catch (IOException e) {
+            initStatus = "Failed to initialize Whisper due to IO error: " + e.getMessage();
             log.error("Failed to initialize Whisper due to IO error: {}. Whisper STT will not be available.",
                     e.getMessage());
             // Don't throw - allow service to start
         } catch (RuntimeException e) {
+            initStatus = "Failed to initialize Whisper: " + e.getMessage();
             log.error("Failed to initialize Whisper: {}. Whisper STT will not be available.", e.getMessage());
             // Don't throw - allow service to start
         }
@@ -62,11 +68,7 @@ public class WhisperSttService implements SttService {
 
     @Override
     public String transcribe(byte[] wav16kMonoPcm, String languageCode) {
-        // If Whisper not initialized, return empty
-        if (whisper == null || context == null) {
-            log.warn("Whisper not initialized - cannot transcribe");
-            return "";
-        }
+        ensureAvailable();
 
         // Convert byte[] (16-bit PCM) to float[]
         float[] samples = bytesToFloats(wav16kMonoPcm);
@@ -77,8 +79,7 @@ public class WhisperSttService implements SttService {
 
             int result = whisper.full(context, params, samples, samples.length);
             if (result != 0) {
-                log.error("Whisper transcription failed with code {}", result);
-                return "";
+                throw new SttUnavailableException("Whisper transcription failed with code " + result);
             }
 
             int numSegments = whisper.fullNSegments(context);
@@ -90,13 +91,49 @@ public class WhisperSttService implements SttService {
 
         } catch (RuntimeException e) {
             log.error("Transcription error", e);
-            return "";
+            throw new SttUnavailableException("Whisper transcription failed: " + e.getMessage(), e);
         }
     }
 
     @Override
+    public StreamingRecognitionSession createSession(String languageCode) {
+        ensureAvailable();
+        String requestedLanguage = languageCode != null ? languageCode : "ru-RU";
+        String lang = requestedLanguage.split("-")[0].toLowerCase();
+        log.info("Creating Whisper streaming session: requestedLanguage={}, effectiveLanguage={}",
+                requestedLanguage, lang);
+        return new WhisperSession(lang);
+    }
+
+    @Override
     public StreamingRecognitionSession createSession() {
-        return new WhisperSession();
+        return createSession("ru");
+    }
+
+    @Override
+    public String providerId() {
+        return "whisper";
+    }
+
+    @Override
+    public Map<String, Object> describeRuntime() {
+        boolean pathExists = Files.exists(Path.of(modelPath));
+        boolean available = whisper != null && context != null;
+
+        return Map.of(
+                "configuredProvider", providerId(),
+                "status", available ? "available" : "unavailable",
+                "available", available,
+                "modelPath", Path.of(modelPath).toAbsolutePath().toString(),
+                "pathExists", pathExists,
+                "reason", available ? "ready" : initStatus);
+    }
+
+    private void ensureAvailable() {
+        if (whisper != null && context != null) {
+            return;
+        }
+        throw new SttUnavailableException(initStatus);
     }
 
     private float[] bytesToFloats(byte[] bytes) {
@@ -112,9 +149,14 @@ public class WhisperSttService implements SttService {
 
     private class WhisperSession implements StreamingRecognitionSession {
         private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private final String language;
         private long lastSpeechTime = System.currentTimeMillis();
         private boolean isSpeaking = false;
         private String lastResult = "";
+
+        WhisperSession(String language) {
+            this.language = language;
+        }
 
         @Override
         public boolean acceptWaveForm(byte[] data, int length) {
@@ -152,7 +194,7 @@ public class WhisperSttService implements SttService {
             if (audio.length == 0)
                 return "";
 
-            String text = transcribe(audio, "ru");
+            String text = transcribe(audio, language);
             lastResult = text;
             return "{\"text\": \"" + text.replace("\"", "\\\"") + "\"}";
         }

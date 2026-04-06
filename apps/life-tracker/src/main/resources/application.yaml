@@ -1,6 +1,11 @@
 server:
-  port: 8085
+  port: ${JARVIS_LIFE_TRACKER_PORT:8085}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_LIFE_TRACKER_SSL_ENABLED:false}
+    key-store: ${JARVIS_LIFE_TRACKER_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_LIFE_TRACKER_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_LIFE_TRACKER_KEYSTORE_TYPE:PKCS12}
 
 spring:
   application:

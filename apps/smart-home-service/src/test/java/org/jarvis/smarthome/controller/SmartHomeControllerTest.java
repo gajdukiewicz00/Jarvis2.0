@@ -35,11 +35,13 @@ class SmartHomeControllerTest {
     void listDevicesReturnsUserScopedDevices() {
         when(smartHomeService.listDevices("user-1")).thenReturn(List.of(deviceView()));
 
-        ResponseEntity<List<SmartHomeDeviceView>> response = controller.listDevices("user-1");
+        ResponseEntity<?> response = controller.listDevices("user-1");
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(1, response.getBody().size());
-        assertEquals("kitchen_light", response.getBody().getFirst().id());
+        @SuppressWarnings("unchecked")
+        List<SmartHomeDeviceView> body = (List<SmartHomeDeviceView>) response.getBody();
+        assertEquals(1, body.size());
+        assertEquals("kitchen_light", body.getFirst().id());
     }
 
     @Test
@@ -72,6 +74,14 @@ class SmartHomeControllerTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("INVALID_ACTION", ((Map<?, ?>) response.getBody()).get("error"));
+    }
+
+    @Test
+    void listDevicesRejectsMissingDelegatedUserContext() {
+        ResponseEntity<?> response = controller.listDevices(" ");
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("MISSING_USER_CONTEXT", ((Map<?, ?>) response.getBody()).get("error"));
     }
 
     private SmartHomeDeviceView deviceView() {

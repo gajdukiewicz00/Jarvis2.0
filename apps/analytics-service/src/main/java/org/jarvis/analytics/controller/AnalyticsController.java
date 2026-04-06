@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.analytics.client.LifeTrackerClient;
 import org.jarvis.analytics.dto.*;
 import org.jarvis.analytics.service.AnalyticsService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,13 +33,18 @@ public class AnalyticsController {
     private final LifeTrackerClient lifeTrackerClient;
     private final AnalyticsService analyticsService;
 
+    @Value("${jarvis.life-tracker.url:http://life-tracker:8085}")
+    private String lifeTrackerUrl;
+
     /**
      * Get analytics overview with expense and time summaries.
      * This endpoint returns partial data even if some upstream calls fail.
      */
     @GetMapping("/overview")
-    public ResponseEntity<AnalyticsOverviewDTO> getOverview() {
-        log.info("Generating analytics overview");
+    public ResponseEntity<AnalyticsOverviewDTO> getOverview(
+            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
+        log.info("Generating analytics overview via life-tracker baseUrl={}, smokeRunId={}",
+                lifeTrackerUrl, smokeRunId != null ? smokeRunId : "");
         AnalyticsOverviewDTO.AnalyticsOverviewDTOBuilder builder = AnalyticsOverviewDTO.builder();
 
         // Fetch expenses with error handling
@@ -177,16 +183,19 @@ public class AnalyticsController {
 
     @GetMapping("/habits/sleep-average")
     public ResponseEntity<SleepSummaryDTO> getSleepSummary(
-            @RequestParam(defaultValue = "14") int days) {
-        log.debug("Getting sleep summary for trailing {} days", days);
+            @RequestParam(defaultValue = "14") int days,
+            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
+        log.info("Getting sleep summary for trailing {} days, smokeRunId={}", days, smokeRunId);
         return ResponseEntity.ok(analyticsService.getSleepSummary(days));
     }
 
     @GetMapping("/habits/weekly-overtime")
     public ResponseEntity<OvertimeSummaryDTO> getWeeklyOvertime(
             @RequestParam(defaultValue = "7") int days,
-            @RequestParam(defaultValue = "40") int baselineHours) {
-        log.debug("Getting overtime summary for trailing {} days and baseline {}", days, baselineHours);
+            @RequestParam(defaultValue = "40") int baselineHours,
+            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
+        log.info("Getting overtime summary for trailing {} days and baseline {}, smokeRunId={}",
+                days, baselineHours, smokeRunId);
         return ResponseEntity.ok(analyticsService.getOvertimeSummary(days, baselineHours));
     }
 }

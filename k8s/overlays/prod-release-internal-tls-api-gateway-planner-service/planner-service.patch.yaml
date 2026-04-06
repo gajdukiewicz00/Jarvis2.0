@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-planner-service: api-gateway-planner-service-v1
+    spec:
+      containers:
+        - name: planner-service
+          ports:
+            - containerPort: 8092
+              name: https
+          env:
+            - name: JARVIS_PLANNER_SSL_ENABLED
+              value: "true"
+            - name: JARVIS_PLANNER_KEYSTORE_PATH
+              value: /tls/planner-service-keystore.p12
+            - name: JARVIS_PLANNER_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-api-gateway-planner-service
+                  key: keystore-password
+            - name: JARVIS_PLANNER_KEYSTORE_TYPE
+              value: PKCS12
+          volumeMounts:
+            - name: internal-tls-api-gateway-planner-service
+              mountPath: /tls
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8092
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8092
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8092
+              scheme: HTTPS
+      volumes:
+        - name: internal-tls-api-gateway-planner-service
+          secret:
+            secretName: jarvis-internal-tls-api-gateway-planner-service
+            items:
+              - key: planner-service-keystore.p12
+                path: planner-service-keystore.p12
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: planner-service
+  namespace: jarvis
+spec:
+  ports:
+    - port: 8092
+      targetPort: 8092
+      name: https

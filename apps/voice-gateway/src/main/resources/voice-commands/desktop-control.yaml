@@ -1,0 +1,303 @@
+commands:
+  - id: rule_open_browser
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой браузер"
+          - "open browser"
+      - type: alias
+        values:
+          - "браузер"
+      - type: contains
+        values:
+          - "открой браузер"
+          - "запусти браузер"
+          - "launch browser"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: browser
+    response:
+      key: loading_sir
+
+  - id: rule_open_terminal
+    matchers:
+      - type: exact
+        values:
+          - "открой терминал"
+          - "open terminal"
+      - type: contains
+        values:
+          - "запусти терминал"
+          - "открой консоль"
+          - "launch terminal"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: terminal
+    response:
+      key: loading_sir
+
+  - id: rule_open_google
+    matchers:
+      - type: exact
+        values:
+          - "открой гугл"
+          - "open google"
+      - type: alias
+        values:
+          - "гугл"
+          - "google"
+      - type: contains
+        values:
+          - "запусти гугл"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.google.com"
+    response:
+      key: loading_sir
+
+  - id: rule_open_youtube
+    matchers:
+      - type: exact
+        values:
+          - "открой ютуб"
+          - "open youtube"
+      - type: alias
+        values:
+          - "ютуб"
+          - "youtube"
+      - type: contains
+        values:
+          - "запусти ютуб"
+          - "open the youtube"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/"
+    response:
+      key: loading_sir
+
+  - id: rule_volume_up
+    matchers:
+      - type: exact
+        values:
+          - "громче"
+          - "volume up"
+      - type: alias
+        values:
+          - "погромче"
+          - "louder"
+      - type: contains
+        values:
+          - "сделай громче"
+          - "прибавь звук"
+          - "turn up the volume"
+    action:
+      target: pc_control
+      name: VOLUME_UP
+      params:
+        delta: 10
+    response:
+      key: yes_sir
+
+  - id: rule_volume_down
+    matchers:
+      - type: exact
+        values:
+          - "тише"
+          - "volume down"
+      - type: alias
+        values:
+          - "потише"
+          - "quieter"
+      - type: contains
+        values:
+          - "сделай тише"
+          - "убавь звук"
+          - "turn down the volume"
+    action:
+      target: pc_control
+      name: VOLUME_DOWN
+      params:
+        delta: 10
+    response:
+      key: yes_sir
+
+  - id: rule_mute
+    matchers:
+      - type: exact
+        values:
+          - "выключи звук"
+          - "mute"
+      - type: contains
+        values:
+          - "отключи звук"
+          - "заглуши звук"
+    action:
+      target: pc_control
+      name: MUTE
+    response:
+      key: affirmative
+
+  - id: rule_unmute
+    matchers:
+      - type: exact
+        values:
+          - "включи звук"
+          - "unmute"
+      - type: contains
+        values:
+          - "верни звук"
+          - "restore the sound"
+    action:
+      target: pc_control
+      name: UNMUTE
+    response:
+      key: affirmative
+
+  - id: rule_clipboard_copy
+    matchers:
+      - type: exact
+        values:
+          - "скопируй"
+          - "copy"
+      - type: contains
+        values:
+          - "скопируй текст"
+          - "copy that"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+c"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_clipboard_paste
+    matchers:
+      - type: exact
+        values:
+          - "вставь"
+          - "paste"
+      - type: contains
+        values:
+          - "вставить"
+          - "paste text"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+v"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_close_window
+    matchers:
+      - type: exact
+        values:
+          - "закрой окно"
+          - "close window"
+      - type: contains
+        values:
+          - "закрой программу"
+          - "close app"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+F4"
+    response:
+      key: request_completed_sir
+
+  - id: rule_fullscreen
+    matchers:
+      - type: exact
+        values:
+          - "на весь экран"
+          - "fullscreen"
+      - type: contains
+        values:
+          - "полноэкранный режим"
+          - "go fullscreen"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "F11"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_screenshot
+    matchers:
+      - type: exact
+        values:
+          - "сделай скриншот"
+          - "screenshot"
+      - type: contains
+        values:
+          - "снимок экрана"
+          - "take screenshot"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Print"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_show_desktop
+    matchers:
+      - type: exact
+        values:
+          - "рабочий стол"
+          - "show desktop"
+      - type: contains
+        values:
+          - "покажи рабочий стол"
+          - "go to desktop"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Super+d"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_sleep_mode
+    matchers:
+      - type: exact
+        values:
+          - "спящий режим"
+          - "sleep mode"
+      - type: contains
+        values:
+          - "усыпи компьютер"
+          - "go to sleep"
+    action:
+      target: system
+      name: sleep
+    response:
+      key: rest_mode
+
+  - id: rule_monitor_off
+    matchers:
+      - type: exact
+        values:
+          - "выключи монитор"
+          - "monitor off"
+      - type: contains
+        values:
+          - "отключи монитор"
+          - "screen off"
+    action:
+      target: system
+      name: monitor_off
+    response:
+      key: rest_mode

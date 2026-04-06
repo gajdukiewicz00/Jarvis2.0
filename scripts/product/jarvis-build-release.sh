@@ -5,7 +5,8 @@
 # =============================================================================
 # Builds a release artifact (tar.gz) containing:
 # - launcher.jar
-# - desktop-client JAR
+# - unified desktop shell JAR
+# - optional legacy desktop client JAR (fallback)
 # - install scripts
 # - desktop file template
 # - documentation
@@ -53,20 +54,31 @@ if [[ ! -f "$LAUNCHER_JAR" ]]; then
 fi
 echo "  ✅ Launcher JAR found: $LAUNCHER_JAR"
 
-# Locate desktop-client JAR
-DESKTOP_JAR="${REPO_ROOT}/apps/desktop-client-javafx/target/desktop-client-javafx-${VERSION}.jar"
-if [[ ! -f "$DESKTOP_JAR" ]]; then
-    echo "ERROR: Desktop client JAR not found: $DESKTOP_JAR"
+# Locate unified desktop shell JAR
+DESKTOP_APP_JAR="${REPO_ROOT}/apps/desktop-app-javafx/target/desktop-app-javafx-${VERSION}.jar"
+if [[ ! -f "$DESKTOP_APP_JAR" ]]; then
+    echo "ERROR: Desktop shell JAR not found: $DESKTOP_APP_JAR"
     echo "Please build it first:"
-    echo "  mvn -pl apps/desktop-client-javafx -DskipTests clean package"
+    echo "  mvn -pl apps/desktop-app-javafx -am -DskipTests clean package"
     exit 1
 fi
-echo "  ✅ Desktop client JAR found: $DESKTOP_JAR"
+echo "  ✅ Desktop shell JAR found: $DESKTOP_APP_JAR"
+
+# Locate optional legacy desktop client JAR (fallback path only)
+DESKTOP_LEGACY_JAR="${REPO_ROOT}/apps/desktop-client-javafx/target/desktop-client-javafx-${VERSION}.jar"
+if [[ -f "$DESKTOP_LEGACY_JAR" ]]; then
+    echo "  ✅ Legacy desktop client JAR found: $DESKTOP_LEGACY_JAR"
+else
+    echo "  ℹ️  Legacy desktop client JAR not found; release will rely on unified shell only"
+fi
 
 # Copy JARs
 echo "Copying JARs..."
 cp "$LAUNCHER_JAR" "${RELEASE_DIR}/launcher.jar"
-cp "$DESKTOP_JAR" "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar"
+cp "$DESKTOP_APP_JAR" "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar"
+if [[ -f "$DESKTOP_LEGACY_JAR" ]]; then
+    cp "$DESKTOP_LEGACY_JAR" "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar"
+fi
 echo "  ✅ JARs copied"
 
 # Copy core launch scripts
@@ -237,6 +249,9 @@ echo ""
 # Copy files
 echo "Installing files..."
 cp "${RELEASE_DIR}/launcher.jar" "${JARVIS_APP}/"
+if [[ -f "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" ]]; then
+    cp "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" "${JARVIS_APP}/"
+fi
 if [[ -f "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" ]]; then
     cp "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" "${JARVIS_APP}/"
 fi
@@ -549,7 +564,8 @@ Or use the install script from the repository:
 ## Contents
 
 - \`launcher.jar\` - Launcher application
-- \`desktop-client-javafx-${VERSION}.jar\` - Desktop client
+- \`desktop-app-javafx-${VERSION}.jar\` - Unified desktop shell
+- \`desktop-client-javafx-${VERSION}.jar\` - Legacy desktop client fallback (optional)
 - \`bin/\` - Scripts (jarvis-launcher.sh, jarvis-stop.sh, jarvis-diagnostics.sh)
 - \`config/\` - Configuration files
 - \`docs/\` - Documentation

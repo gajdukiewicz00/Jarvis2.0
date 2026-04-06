@@ -55,4 +55,20 @@ class AnalyticsClientTest {
         assertEquals(6, overtimeHours);
         server.verify();
     }
+
+    @Test
+    void getAverageSleepHoursPropagatesOptionalSmokeRunId() {
+        server.expect(requestTo("http://analytics-service:8087/api/v1/analytics/habits/sleep-average?days=14"))
+                .andExpect(method(HttpMethod.GET))
+                .andExpect(header("X-User-Id", "user-123"))
+                .andExpect(header("X-Smoke-Run-Id", "planner-analytics-smoke-1"))
+                .andRespond(withSuccess("""
+                        {"averageHours":7.0,"daysSampled":4,"trailingDays":14,"totalSleepHours":28.0}
+                        """, MediaType.APPLICATION_JSON));
+
+        Double averageSleepHours = analyticsClient.getAverageSleepHours("user-123", "planner-analytics-smoke-1");
+
+        assertEquals(7.0, averageSleepHours);
+        server.verify();
+    }
 }

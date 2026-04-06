@@ -76,4 +76,15 @@ class DesktopRuntimeMonitorTest {
         assertTrue(snapshot.voiceRuntime!!.pushToTalkActive)
         assertEquals("Test Mic", snapshot.voiceRuntime!!.inputDevice?.name)
     }
+
+    @Test
+    fun `voice auth failure is surfaced as degraded instead of unknown`() {
+        val monitor = DesktopRuntimeMonitor(clock = clock, maxEvents = 3)
+
+        monitor.consumeVoiceStatus("AUTH_REQUIRED: voice session expired, login required")
+
+        val snapshot = monitor.currentSnapshot()
+        assertEquals(DesktopRuntimeMonitor.ConnectionState.DEGRADED, snapshot.voice.state)
+        assertTrue(snapshot.events.first().title.contains("authentication expired"))
+    }
 }

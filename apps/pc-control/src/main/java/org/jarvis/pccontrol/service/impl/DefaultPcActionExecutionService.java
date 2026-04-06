@@ -66,6 +66,7 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
             case "NEXT" -> executeSingleStep(actionType, primitiveStep("next", actionType, parameters));
             case "PREV" -> executeSingleStep(actionType, primitiveStep("prev", actionType, parameters));
             case "OPEN_APP" -> executeSingleStep(actionType, primitiveStep("open-app", actionType, parameters));
+            case "OPEN_URL" -> executeSingleStep(actionType, primitiveStep("open-url", actionType, parameters));
             case "HOTKEY" -> executeSingleStep(actionType, primitiveStep("hotkey", actionType, parameters));
             case "NOTIFY" -> executeSingleStep(actionType, primitiveStep("notify", actionType, parameters));
             case "SYSTEM_COMMAND" -> handleSystemCommand(parameters);
@@ -144,6 +145,12 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
         return switch (command.trim().toLowerCase(Locale.ROOT)) {
             case "timer" -> scheduleTimer(parameters);
             case "cancel_timer" -> cancelTimer(parameters);
+            case "sleep" -> executeSingleStep("SYSTEM_COMMAND",
+                    executeStep("sleep", "SYSTEM_COMMAND", Map.of("command", "sleep"),
+                            systemControlService::sleep, "Sleep mode requested", Map.of("command", "sleep")));
+            case "monitor_off" -> executeSingleStep("SYSTEM_COMMAND",
+                    executeStep("monitor-off", "SYSTEM_COMMAND", Map.of("command", "monitor_off"),
+                            systemControlService::turnMonitorOff, "Monitor off requested", Map.of("command", "monitor_off")));
             default -> result(false, "SYSTEM_COMMAND", PcActionExecutionStatus.REJECTED,
                     "Unknown system command: " + command, "UNKNOWN_COMMAND",
                     Map.of("command", command), List.of());
@@ -251,6 +258,14 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
                 yield executeStep(stepId, "OPEN_APP", parameters, () -> systemControlService.openApp(app),
                         "Application launch initiated", Map.of("app", app));
             }
+            case "OPEN_URL" -> {
+                String url = firstNonBlank(parameters, "url");
+                if (url == null) {
+                    yield rejectedStep(stepId, "OPEN_URL", "Parameter 'url' is required");
+                }
+                yield executeStep(stepId, "OPEN_URL", parameters, () -> systemControlService.openUrl(url),
+                        "URL launch initiated", Map.of("url", url));
+            }
             case "HOTKEY" -> {
                 String hotkey = firstNonBlank(parameters, "keyCombination", "keys", "combination");
                 if (hotkey == null) {
@@ -259,6 +274,60 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
                 yield executeStep(stepId, "HOTKEY", parameters, () -> systemControlService.executeHotkey(hotkey),
                         "Hotkey executed", Map.of("keyCombination", hotkey));
             }
+            case "WAIT" -> {
+                int millis = boundedInt(parameters.getOrDefault("millis", parameters.getOrDefault("ms", "0")),
+                        0, 60_000, "millis");
+                yield executeStep(stepId, "WAIT", parameters, () -> Thread.sleep(millis),
+                        "Waited for " + millis + "ms", Map.of("millis", millis));
+            }
+            case "WINDOW_FOCUS" -> {
+                String title = firstNonBlank(parameters, "title", "windowTitle");
+                if (title == null) {
+                    yield rejectedStep(stepId, "WINDOW_FOCUS", "Parameter 'title' is required");
+                }
+                yield executeStep(stepId, "WINDOW_FOCUS", parameters, () -> systemControlService.focusWindow(title),
+                        "Window focused", Map.of("title", title));
+            }
+            case "WINDOW_CLOSE" -> {
+                String title = firstNonBlank(parameters, "title", "windowTitle");
+                yield executeStep(stepId, "WINDOW_CLOSE", parameters, () -> systemControlService.closeWindow(title),
+                        "Window closed", title == null ? Map.of() : Map.of("title", title));
+            }
+            case "WINDOW_MINIMIZE" -> {
+                String title = firstNonBlank(parameters, "title", "windowTitle");
+                yield executeStep(stepId, "WINDOW_MINIMIZE", parameters, () -> systemControlService.minimizeWindow(title),
+                        "Window minimized", title == null ? Map.of() : Map.of("title", title));
+            }
+            case "WINDOW_MAXIMIZE" -> {
+                String title = firstNonBlank(parameters, "title", "windowTitle");
+                yield executeStep(stepId, "WINDOW_MAXIMIZE", parameters, () -> systemControlService.maximizeWindow(title),
+                        "Window maximized", title == null ? Map.of() : Map.of("title", title));
+            }
+            case "WINDOW_NORMALIZE", "WINDOW_RESTORE" -> {
+                String title = firstNonBlank(parameters, "title", "windowTitle");
+                yield executeStep(stepId, "WINDOW_NORMALIZE", parameters, () -> systemControlService.normalizeWindow(title),
+                        "Window normalized", title == null ? Map.of() : Map.of("title", title));
+            }
+            case "MOUSE_MOVE" -> {
+                int x = boundedInt(firstNonBlank(parameters, "x"), 0, 20_000, "x");
+                int y = boundedInt(firstNonBlank(parameters, "y"), 0, 20_000, "y");
+                yield executeStep(stepId, "MOUSE_MOVE", parameters, () -> systemControlService.moveMouseAbsolute(x, y),
+                        "Mouse moved", Map.of("x", x, "y", y));
+            }
+            case "MOUSE_LEFT_CLICK" -> executeStep(stepId, "MOUSE_LEFT_CLICK", parameters,
+                    systemControlService::leftClick, "Left click executed", Map.of());
+            case "MOUSE_RIGHT_CLICK" -> executeStep(stepId, "MOUSE_RIGHT_CLICK", parameters,
+                    systemControlService::rightClick, "Right click executed", Map.of());
+            case "MOUSE_LEFT_DOWN" -> executeStep(stepId, "MOUSE_LEFT_DOWN", parameters,
+                    systemControlService::leftButtonDown, "Left button down", Map.of());
+            case "MOUSE_LEFT_UP" -> executeStep(stepId, "MOUSE_LEFT_UP", parameters,
+                    systemControlService::leftButtonUp, "Left button up", Map.of());
+            case "EMPTY_TRASH" -> executeStep(stepId, "EMPTY_TRASH", parameters,
+                    systemControlService::emptyTrash, "Trash emptied", Map.of());
+            case "OPEN_OPTICAL_DRIVE" -> executeStep(stepId, "OPEN_OPTICAL_DRIVE", parameters,
+                    systemControlService::openOpticalDrive, "Optical drive opened", Map.of());
+            case "CLOSE_OPTICAL_DRIVE" -> executeStep(stepId, "CLOSE_OPTICAL_DRIVE", parameters,
+                    systemControlService::closeOpticalDrive, "Optical drive closed", Map.of());
             case "NOTIFY" -> {
                 String title = parameters.getOrDefault("title", "Jarvis");
                 String message = parameters.getOrDefault("message", "Notification");

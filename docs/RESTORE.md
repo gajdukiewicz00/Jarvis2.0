@@ -44,7 +44,7 @@ ENABLE_LLM=true ENABLE_MEMORY=true ./jarvis-launch.sh
 
 ## 7) Install desktop shortcut (optional)
 ```bash
-./scripts/product/jarvis-desktop-install.sh
+./scripts/product/jarvis-install.sh
 ```
 
 ## 8) Logs

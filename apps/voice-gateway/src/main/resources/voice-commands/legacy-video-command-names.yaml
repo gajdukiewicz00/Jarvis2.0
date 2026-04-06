@@ -1,0 +1,255 @@
+commands:
+  - id: rule_legacy_video_406
+    description: "Migrated legacy hotkey: Управление Ютубом / Остановка/ воспроизведение видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "остановка/ воспроизведение видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "k"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_424
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать вперед ( на 10 сек)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать вперед ( на 10 сек)"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "l"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_419
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать видео (на 10 сек назад)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать видео (на 10 сек назад)"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "j"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_426
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на начало видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на начало видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "0"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_423
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 10% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 10% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "1"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_428
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 20% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 20% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "2"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_414
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 30% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 30% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "3"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_430
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 40% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 40% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "4"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_427
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 50% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 50% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "5"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_402
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 60% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 60% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "6"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_429
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 70% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 70% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "7"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_434
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 80% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 80% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "8"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_431
+    description: "Migrated legacy hotkey: Управление Ютубом / Перемотать на 90% видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемотать на 90% видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "9"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_432
+    description: "Migrated legacy hotkey: Управление Ютубом / Полноэкранный режим"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "полноэкранный режим"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "f"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_475
+    description: "Migrated legacy hotkey: Управление Ютубом / Субтитры"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "субтитры"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "c"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_443
+    description: "Migrated legacy hotkey: Управление Ютубом / 2 режима просмотра видео"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "2 режима просмотра видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "t"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_video_446
+    description: "Migrated legacy hotkey: Управление Ютубом / Звук"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "звук"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "m"
+    response:
+      key: affirmative

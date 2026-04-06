@@ -2,6 +2,7 @@ package org.jarvis.pccontrol.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.pccontrol.model.OpenAppRequest;
+import org.jarvis.pccontrol.model.OpenUrlRequest;
 import org.jarvis.pccontrol.service.SystemControlService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
@@ -123,6 +124,11 @@ public class LinuxSystemControlService implements SystemControlService {
     }
 
     @Override
+    public void openUrl(String url) throws IOException {
+        desktopControlService.openUrl(new OpenUrlRequest(url, null));
+    }
+
+    @Override
     public void executeHotkey(String keyCombination) throws IOException, InterruptedException {
         // e.g. "Alt+Tab", "Control+c"
         validateHotkey(keyCombination);
@@ -132,10 +138,107 @@ public class LinuxSystemControlService implements SystemControlService {
     }
 
     @Override
+    public void focusWindow(String title) throws IOException, InterruptedException {
+        execWindowCommand(title, List.of("windowactivate", "--sync"), "WindowFocus");
+    }
+
+    @Override
+    public void closeWindow(String title) throws IOException, InterruptedException {
+        execWindowCommand(title, List.of("windowclose"), "WindowClose");
+    }
+
+    @Override
+    public void minimizeWindow(String title) throws IOException, InterruptedException {
+        execWindowCommand(title, List.of("windowminimize"), "WindowMinimize");
+    }
+
+    @Override
+    public void maximizeWindow(String title) throws IOException, InterruptedException {
+        try {
+            execWmctrl(title, "add,maximized_vert,maximized_horz", "WindowMaximize");
+        } catch (IOException e) {
+            log.warn("wmctrl maximize failed for '{}', falling back to Alt+F10", title);
+            if (title != null && !title.isBlank()) {
+                focusWindow(title);
+            }
+            executeHotkey("Alt+F10");
+        }
+    }
+
+    @Override
+    public void normalizeWindow(String title) throws IOException, InterruptedException {
+        try {
+            execWmctrl(title, "remove,maximized_vert,maximized_horz", "WindowNormalize");
+        } catch (IOException e) {
+            log.warn("wmctrl normalize failed for '{}', falling back to Alt+F5", title);
+            if (title != null && !title.isBlank()) {
+                focusWindow(title);
+            }
+            executeHotkey("Alt+F5");
+        }
+    }
+
+    @Override
+    public void moveMouseAbsolute(int x, int y) throws IOException, InterruptedException {
+        execWithFallback(List.of("xdotool", "mousemove", "--sync", String.valueOf(x), String.valueOf(y)),
+                "MouseMove");
+    }
+
+    @Override
+    public void leftClick() throws IOException, InterruptedException {
+        execWithFallback(List.of("xdotool", "click", "1"), "MouseLeftClick");
+    }
+
+    @Override
+    public void rightClick() throws IOException, InterruptedException {
+        execWithFallback(List.of("xdotool", "click", "3"), "MouseRightClick");
+    }
+
+    @Override
+    public void leftButtonDown() throws IOException, InterruptedException {
+        execWithFallback(List.of("xdotool", "mousedown", "1"), "MouseLeftDown");
+    }
+
+    @Override
+    public void leftButtonUp() throws IOException, InterruptedException {
+        execWithFallback(List.of("xdotool", "mouseup", "1"), "MouseLeftUp");
+    }
+
+    @Override
+    public void emptyTrash() throws IOException, InterruptedException {
+        try {
+            execWithFallback(List.of("gio", "trash", "--empty"), "EmptyTrash");
+        } catch (IOException e) {
+            log.warn("gio trash empty failed, falling back to trash-empty");
+            execWithFallback(List.of("trash-empty"), "EmptyTrashFallback");
+        }
+    }
+
+    @Override
+    public void openOpticalDrive() throws IOException, InterruptedException {
+        execWithFallback(List.of("eject"), "OpenOpticalDrive");
+    }
+
+    @Override
+    public void closeOpticalDrive() throws IOException, InterruptedException {
+        execWithFallback(List.of("eject", "-t"), "CloseOpticalDrive");
+    }
+
+    @Override
     public void sendNotification(String title, String message) throws IOException, InterruptedException {
         List<String> cmd = List.of("notify-send", title, message);
         log.info("📢 Sending notification: {} - {}", title, message);
         execWithFallback(cmd, "Notification");
+    }
+
+    @Override
+    public void sleep() throws IOException, InterruptedException {
+        execWithFallback(List.of("systemctl", "suspend"), "Sleep");
+    }
+
+    @Override
+    public void turnMonitorOff() throws IOException, InterruptedException {
+        execWithFallback(List.of("xset", "dpms", "force", "off"), "MonitorOff");
     }
 
     /**
@@ -196,6 +299,32 @@ public class LinuxSystemControlService implements SystemControlService {
 
     private static void startProcess(List<String> cmd) throws IOException {
         new ProcessBuilder(cmd).start();
+    }
+
+    private void execWindowCommand(String title, List<String> actionArgs, String operation)
+            throws IOException, InterruptedException {
+        List<String> cmd;
+        if (title == null || title.isBlank()) {
+            cmd = List.of("xdotool", "getactivewindow", actionArgs.get(0));
+            if (actionArgs.size() > 1) {
+                cmd = List.of("xdotool", "getactivewindow", actionArgs.get(0), actionArgs.get(1));
+            }
+        } else {
+            java.util.ArrayList<String> parts = new java.util.ArrayList<>();
+            parts.add("xdotool");
+            parts.add("search");
+            parts.add("--name");
+            parts.add(title);
+            parts.addAll(actionArgs);
+            parts.add("%@");
+            cmd = List.copyOf(parts);
+        }
+        execWithFallback(cmd, operation);
+    }
+
+    private void execWmctrl(String title, String toggle, String operation) throws IOException, InterruptedException {
+        String target = (title == null || title.isBlank()) ? ":ACTIVE:" : title;
+        execWithFallback(List.of("wmctrl", "-r", target, "-b", toggle), operation);
     }
 
     private static void validateHotkey(String keyCombination) {

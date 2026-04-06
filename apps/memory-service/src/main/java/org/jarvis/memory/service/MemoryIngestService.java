@@ -83,7 +83,7 @@ public class MemoryIngestService {
                     .userId(userId)
                     .sourceMessageIds(messageIdArray)
                     .chunkText(chunks.get(i))
-                    .embedding(MemoryChunk.toVectorString(embeddings.get(i)))
+                    .embedding(MemoryChunk.toPrimitiveArray(embeddings.get(i)))
                     .build();
 
             chunkRepository.save(chunk);

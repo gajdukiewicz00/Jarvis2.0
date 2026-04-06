@@ -12,14 +12,21 @@ import java.util.Map;
 public interface VoiceGatewayClient {
 
     @PostMapping(value = "/api/v1/voice/transcribe", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    ResponseEntity<Map<String, Object>> transcribe(@RequestPart("file") MultipartFile file);
+    ResponseEntity<Map<String, Object>> transcribe(
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(value = "language", required = false) String languageCode);
 
     @PostMapping(value = "/api/v1/voice/transcribe/stream", consumes = "application/octet-stream")
-    ResponseEntity<String> transcribeStream(@RequestBody byte[] audioData);
+    ResponseEntity<Map<String, Object>> transcribeStream(
+            @RequestBody byte[] audioData,
+            @RequestParam(value = "language", required = false) String languageCode);
 
     @PostMapping("/api/v1/voice/command")
     ResponseEntity<String> command(@RequestBody Map<String, String> request);
 
     @PostMapping(value = "/api/v1/voice/synthesize", produces = "audio/wav")
     ResponseEntity<byte[]> synthesize(@RequestBody Map<String, Object> request);
+
+    @GetMapping("/api/v1/voice/runtime")
+    ResponseEntity<Map<String, Object>> runtime();
 }

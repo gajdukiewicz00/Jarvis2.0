@@ -19,7 +19,11 @@ data class VoiceRuntimeState(
     val availableInputDevices: List<AudioDeviceInfo> = emptyList(),
     val availableOutputDevices: List<AudioDeviceInfo> = emptyList(),
     val lastError: String?,
-    val updatedAt: Instant
+    val updatedAt: Instant,
+    /** Server-reported STT availability (false when no model loaded / noop provider). */
+    val sttAvailable: Boolean = true,
+    /** Server-reported TTS availability (false when replies degrade to text-only). */
+    val ttsAvailable: Boolean = true
 ) {
 
     enum class ConnectionPhase {
@@ -41,7 +45,7 @@ data class VoiceRuntimeState(
         get() = sessionState == VoiceState.LISTENING
 
     val canStartSession: Boolean
-        get() = sessionState in STARTABLE_STATES && connectionPhase.isUsable()
+        get() = sessionState in STARTABLE_STATES && connectionPhase.isUsable() && sttAvailable
 
     val canCancel: Boolean
         get() = sessionState in CANCELLABLE_STATES
@@ -71,7 +75,9 @@ data class VoiceRuntimeState(
             availableInputDevices = emptyList(),
             availableOutputDevices = emptyList(),
             lastError = null,
-            updatedAt = now
+            updatedAt = now,
+            sttAvailable = true,
+            ttsAvailable = true
         )
     }
 }

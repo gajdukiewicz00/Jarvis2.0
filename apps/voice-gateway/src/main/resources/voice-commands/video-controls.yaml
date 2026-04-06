@@ -1,0 +1,288 @@
+commands:
+  - id: rule_video_play_pause
+    matchers:
+      - type: exact
+        values:
+          - "поставь видео на паузу"
+          - "видео на паузу"
+          - "продолжи видео"
+          - "продолжить видео"
+          - "pause the video"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "k"
+    response:
+      key: affirmative
+
+  - id: rule_video_seek_forward
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео вперед"
+          - "перемотай вперед на 10 секунд"
+          - "видео вперед на 10 секунд"
+          - "seek video forward"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "l"
+    response:
+      key: affirmative
+
+  - id: rule_video_seek_backward
+    matchers:
+      - type: exact
+        values:
+          - "отмотай видео назад"
+          - "перемотай назад на 10 секунд"
+          - "видео назад на 10 секунд"
+          - "seek video backward"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "j"
+    response:
+      key: affirmative
+
+  - id: rule_video_next
+    matchers:
+      - type: exact
+        values:
+          - "следующее видео"
+          - "следующий видос"
+          - "некст видео"
+          - "next video"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+n"
+    response:
+      key: affirmative
+
+  - id: rule_video_previous
+    matchers:
+      - type: exact
+        values:
+          - "предыдущее видео"
+          - "предыдущий видос"
+          - "previous video"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+p"
+    response:
+      key: affirmative
+
+  - id: rule_video_start
+    matchers:
+      - type: exact
+        values:
+          - "в начало видео"
+          - "перемотай видео в начало"
+          - "сначала видео"
+          - "video from start"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "0"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_10
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 10 процентов"
+          - "видео на 10 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "1"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_20
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 20 процентов"
+          - "видео на 20 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "2"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_30
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 30 процентов"
+          - "видео на 30 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "3"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_40
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 40 процентов"
+          - "видео на 40 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "4"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_50
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 50 процентов"
+          - "видео на 50 процентов"
+          - "половина видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "5"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_60
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 60 процентов"
+          - "видео на 60 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "6"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_70
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 70 процентов"
+          - "видео на 70 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "7"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_80
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 80 процентов"
+          - "видео на 80 процентов"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "8"
+    response:
+      key: affirmative
+
+  - id: rule_video_jump_90
+    matchers:
+      - type: exact
+        values:
+          - "перемотай видео на 90 процентов"
+          - "видео на 90 процентов"
+          - "конец видео"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "9"
+    response:
+      key: affirmative
+
+  - id: rule_video_subtitles
+    matchers:
+      - type: exact
+        values:
+          - "субтитры видео"
+          - "включи субтитры на видео"
+          - "покажи субтитры"
+          - "video subtitles"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "c"
+    response:
+      key: affirmative
+
+  - id: rule_video_theater_mode
+    matchers:
+      - type: exact
+        values:
+          - "режим просмотра видео"
+          - "другой режим видео"
+          - "средний режим видео"
+          - "theater mode"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "t"
+    response:
+      key: affirmative
+
+  - id: rule_video_mini_player
+    matchers:
+      - type: exact
+        values:
+          - "мини проигрыватель"
+          - "минипроигрыватель"
+          - "маленький режим видео"
+          - "mini player"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "i"
+    response:
+      key: affirmative
+
+  - id: rule_video_toggle_mute
+    matchers:
+      - type: exact
+        values:
+          - "звук видео"
+          - "выключи звук видео"
+          - "включи звук видео"
+          - "mute the video"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "m"
+    response:
+      key: affirmative

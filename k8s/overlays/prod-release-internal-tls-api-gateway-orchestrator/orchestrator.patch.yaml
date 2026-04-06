@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-orchestrator: api-gateway-orchestrator-v1
+    spec:
+      containers:
+        - name: orchestrator
+          ports:
+            - containerPort: 8083
+              name: https
+          env:
+            - name: JARVIS_ORCHESTRATOR_SSL_ENABLED
+              value: "true"
+            - name: JARVIS_ORCHESTRATOR_KEYSTORE_PATH
+              value: /tls/orchestrator-keystore.p12
+            - name: JARVIS_ORCHESTRATOR_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-api-gateway-orchestrator
+                  key: keystore-password
+            - name: JARVIS_ORCHESTRATOR_KEYSTORE_TYPE
+              value: PKCS12
+          volumeMounts:
+            - name: internal-tls-api-gateway-orchestrator
+              mountPath: /tls
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8083
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8083
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8083
+              scheme: HTTPS
+      volumes:
+        - name: internal-tls-api-gateway-orchestrator
+          secret:
+            secretName: jarvis-internal-tls-api-gateway-orchestrator
+            items:
+              - key: orchestrator-keystore.p12
+                path: orchestrator-keystore.p12
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  namespace: jarvis
+spec:
+  ports:
+    - port: 8083
+      targetPort: 8083
+      name: https

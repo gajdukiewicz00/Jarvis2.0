@@ -2,6 +2,7 @@ package org.jarvis.voicegateway.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.exception.SttUnavailableException;
+import org.jarvis.voicegateway.exception.TtsUnavailableException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -35,6 +36,20 @@ public class GlobalExceptionHandler {
             "STT_UNAVAILABLE",
             ex.getMessage(),
             request
+        );
+    }
+
+    @ExceptionHandler(TtsUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleTtsUnavailable(
+            TtsUnavailableException ex, WebRequest request) {
+
+        log.warn("TTS unavailable: {}", ex.getMessage());
+
+        return buildErrorResponse(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "TTS_UNAVAILABLE",
+                ex.getMessage(),
+                request
         );
     }
 
@@ -94,4 +109,3 @@ public class GlobalExceptionHandler {
         return description.replace("uri=", "");
     }
 }
-

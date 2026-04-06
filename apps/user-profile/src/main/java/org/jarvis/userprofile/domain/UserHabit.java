@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -29,6 +30,14 @@ public class UserHabit {
 
     private String frequency; // e.g., "DAILY", "WEEKLY", "MON,WED,FRI"
 
+    private String timeOfDay;
+
+    private Boolean reminderEnabled;
+
+    private Integer streakDays;
+
+    private LocalDate lastCompletedDate;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -36,6 +45,12 @@ public class UserHabit {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (reminderEnabled == null) {
+            reminderEnabled = false;
+        }
+        if (streakDays == null) {
+            streakDays = 0;
+        }
     }
 
     @PreUpdate

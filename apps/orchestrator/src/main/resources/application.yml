@@ -1,6 +1,11 @@
 server:
-  port: 8083
+  port: ${JARVIS_ORCHESTRATOR_PORT:8083}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_ORCHESTRATOR_SSL_ENABLED:false}
+    key-store: ${JARVIS_ORCHESTRATOR_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_ORCHESTRATOR_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_ORCHESTRATOR_KEYSTORE_TYPE:PKCS12}
 
 spring:
   lifecycle:

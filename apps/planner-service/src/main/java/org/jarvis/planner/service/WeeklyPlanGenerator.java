@@ -25,6 +25,8 @@ public class WeeklyPlanGenerator {
         Map<String, Object> weeklyPlan = new HashMap<>();
         weeklyPlan.put("userId", userId);
         weeklyPlan.put("weekStart", LocalDate.now());
+        weeklyPlan.put("generationMode", "RULE_BASED_TASK_DISTRIBUTION");
+        weeklyPlan.put("dataSources", List.of("planner.tasks"));
         
         // Get active tasks
         List<Task> tasks = taskRepository.findActiveTasks(userId);

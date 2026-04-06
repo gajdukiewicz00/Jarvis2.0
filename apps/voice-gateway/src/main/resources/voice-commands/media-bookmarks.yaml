@@ -1,0 +1,756 @@
+commands:
+  - id: rule_media_bookmark_001
+    description: "Legacy media bookmark: включи фильм Железный человек"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм железный человек"
+          - "открой фильм железный человек"
+          - "вруби фильм железный человек"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/242-zheleznyy-chelovek-2008.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_002
+    description: "Legacy media bookmark: включи фильм Железный человек 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм железный человек 2"
+          - "открой фильм железный человек 2"
+          - "вруби фильм железный человек 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/243-zheleznyy-chelovek-2-2010.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_003
+    description: "Legacy media bookmark: включи фильм Невероятный халк"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм невероятный халк"
+          - "открой фильм невероятный халк"
+          - "вруби фильм невероятный халк"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/754-neveroyatnyy-halk-2008.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_004
+    description: "Legacy media bookmark: включи фильм Тор"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм тор"
+          - "открой фильм тор"
+          - "вруби фильм тор"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/88-tor-2011.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_005
+    description: "Legacy media bookmark: включи фильм Первый мститель"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм первый мститель"
+          - "открой фильм первый мститель"
+          - "вруби фильм первый мститель"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/530-pervyy-mstitel-2011.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_006
+    description: "Legacy media bookmark: включи фильм Мстители"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители"
+          - "открой фильм мстители"
+          - "вруби фильм мстители"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/169-mstiteli-2012.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_007
+    description: "Legacy media bookmark: включи фильм Железный человек 3"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм железный человек 3"
+          - "открой фильм железный человек 3"
+          - "вруби фильм железный человек 3"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/343-zheleznyy-chelovek-3-2013.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_008
+    description: "Legacy media bookmark: включи фильм Тор 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм тор 2"
+          - "открой фильм тор 2"
+          - "вруби фильм тор 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/1036-tor-2-carstvo-tmy-2013.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_009
+    description: "Legacy media bookmark: включи фильм Первый мститель: Другая война"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм первый мститель другая война"
+          - "открой фильм первый мститель другая война"
+          - "вруби фильм первый мститель другая война"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/1603-pervyy-mstitel-drugaya-voyna-2014.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_010
+    description: "Legacy media bookmark: включи фильм Стражи Галактики"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм стражи галактики"
+          - "открой фильм стражи галактики"
+          - "вруби фильм стражи галактики"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/2031-strazhi-galaktiki-2014.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_011
+    description: "Legacy media bookmark: включи фильм Мстители: Эра Альтрона"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители эра альтрона"
+          - "открой фильм мстители эра альтрона"
+          - "вруби фильм мстители эра альтрона"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/9316-mstiteli-era-altrona-2015.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_012
+    description: "Legacy media bookmark: включи фильм Человек-муравей"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек муравей"
+          - "открой фильм человек муравей"
+          - "вруби фильм человек муравей"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/10735-chelovek-muravey-2015.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_013
+    description: "Legacy media bookmark: включи фильм Первый мститель: Противостояние"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм первый мститель противостояние"
+          - "открой фильм первый мститель противостояние"
+          - "вруби фильм первый мститель противостояние"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/12251-pervyy-mstitel-protivostoyanie-2016.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_014
+    description: "Legacy media bookmark: включи фильм Доктор Стрэндж"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм доктор стрэндж"
+          - "открой фильм доктор стрэндж"
+          - "вруби фильм доктор стрэндж"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/12891-doktor-strendzh-2016.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_015
+    description: "Legacy media bookmark: включи фильм Стражи Галактики 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм стражи галактики 2"
+          - "открой фильм стражи галактики 2"
+          - "вруби фильм стражи галактики 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/22867-strazhi-galaktiki-2-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_016
+    description: "Legacy media bookmark: включи фильм Человек-паук: Возвращение домой"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек паук возвращение домой"
+          - "открой фильм человек паук возвращение домой"
+          - "вруби фильм человек паук возвращение домой"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/23757-chelovek-pauk-vozvraschenie-domoy-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_017
+    description: "Legacy media bookmark: включи фильм Тор: Рагнарёк"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм тор рагнарек"
+          - "открой фильм тор рагнарек"
+          - "вруби фильм тор рагнарек"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/25923-tor-ragnarek-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_018
+    description: "Legacy media bookmark: включи фильм Чёрная Пантера"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм черная пантера"
+          - "открой фильм черная пантера"
+          - "вруби фильм черная пантера"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/26605-chernaya-pantera-2018.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_019
+    description: "Legacy media bookmark: включи фильм Мстители: Война бесконечности"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители война бесконечности"
+          - "открой фильм мстители война бесконечности"
+          - "вруби фильм мстители война бесконечности"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/27480-mstiteli-voyna-beskonechnosti-2018.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_020
+    description: "Legacy media bookmark: включи фильм Человек-муравей и Оса"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек муравей и оса"
+          - "открой фильм человек муравей и оса"
+          - "вруби фильм человек муравей и оса"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/28155-chelovek-muravey-i-osa-2018.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_021
+    description: "Legacy media bookmark: включи фильм Капитан Марвел"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм капитан марвел"
+          - "открой фильм капитан марвел"
+          - "вруби фильм капитан марвел"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/30219-kapitan-marvel-2019.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_022
+    description: "Legacy media bookmark: включи фильм Мстители: Финал"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители финал"
+          - "открой фильм мстители финал"
+          - "вруби фильм мстители финал"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/30651-mstiteli-final-2019.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_023
+    description: "Legacy media bookmark: включи фильм Человек-паук: Вдали от дома"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек-паук вдали от дома"
+          - "открой фильм человек-паук вдали от дома"
+          - "вруби фильм человек-паук вдали от дома"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/242-zheleznyy-chelovek-2008.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_024
+    description: "Legacy media bookmark: включи фильм Новый Человек-паук"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм новый человек-паук"
+          - "открой фильм новый человек-паук"
+          - "вруби фильм новый человек-паук"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/170-novyy-chelovek-pauk-2012.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_025
+    description: "Legacy media bookmark: включи фильм Новый Человек паук 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм новый человек паук 2"
+          - "открой фильм новый человек паук 2"
+          - "вруби фильм новый человек паук 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/1599-novyy-chelovek-pauk-vysokoe-napryazhenie-2014.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_026
+    description: "Legacy media bookmark: включи фильм Человек паук"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек паук"
+          - "открой фильм человек паук"
+          - "вруби фильм человек паук"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/1481-chelovek-pauk-2002.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_027
+    description: "Legacy media bookmark: включи фильм Человек паук 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек паук 2"
+          - "открой фильм человек паук 2"
+          - "вруби фильм человек паук 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/1488-chelovek-pauk-2-2004.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_028
+    description: "Legacy media bookmark: включи фильм Человек паук 3"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек паук 3"
+          - "открой фильм человек паук 3"
+          - "вруби фильм человек паук 3"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/1489-chelovek-pauk-3-vrag-v-otrazhenii-2007.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_029
+    description: "Legacy media bookmark: включи фильм Дэдпул"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм дэдпул"
+          - "открой фильм дэдпул"
+          - "вруби фильм дэдпул"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/11147-dedpul-2016.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_030
+    description: "Legacy media bookmark: включи фильм Дэдпул 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм дэдпул 2"
+          - "открой фильм дэдпул 2"
+          - "вруби фильм дэдпул 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/27599-dedpul-2-2018.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_031
+    description: "Legacy media bookmark: включи фильм Шан-Чи"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм шан-чи"
+          - "открой фильм шан-чи"
+          - "вруби фильм шан-чи"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/41487-shan-chi-i-legenda-desyati-kolec-2021.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_032
+    description: "Legacy media bookmark: включи фильм Человек паук Нет пути домой"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек паук нет пути домой"
+          - "открой фильм человек паук нет пути домой"
+          - "вруби фильм человек паук нет пути домой"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/41486-chelovek-pauk-net-puti-domoy-2021.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_033
+    description: "Legacy media bookmark: включи фильм Логан"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм логан"
+          - "открой фильм логан"
+          - "вруби фильм логан"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/22865-logan-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_034
+    description: "Legacy media bookmark: включи фильм Kingsman"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм kingsman"
+          - "открой фильм kingsman"
+          - "вруби фильм kingsman"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/7787-kingsman-sekretnaya-sluzhba-2014.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_035
+    description: "Legacy media bookmark: включи фильм Люди в черном"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм люди в черном"
+          - "открой фильм люди в черном"
+          - "вруби фильм люди в черном"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/3401-lyudi-v-chernom-1997.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_036
+    description: "Legacy media bookmark: включи фильм Kingsman 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм kingsman 2"
+          - "открой фильм kingsman 2"
+          - "вруби фильм kingsman 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/25661-kingsman-zolotoe-kolco-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_037
+    description: "Legacy media bookmark: включи фильм Веном"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм веном"
+          - "открой фильм веном"
+          - "вруби фильм веном"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/28770-venom-2018.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_038
+    description: "Legacy media bookmark: включи фильм Пипец"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм пипец"
+          - "открой фильм пипец"
+          - "вруби фильм пипец"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/614-pipec-2010.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_039
+    description: "Legacy media bookmark: включи фильм Чёрная Вдова"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм черная вдова"
+          - "открой фильм черная вдова"
+          - "вруби фильм черная вдова"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/39774-chernaya-vdova-2021.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_040
+    description: "Legacy media bookmark: включи фильм Вечные"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм вечные"
+          - "открой фильм вечные"
+          - "вруби фильм вечные"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/41484-vechnye-2021.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_041
+    description: "Legacy media bookmark: включи фильм Призрачный гонщик"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм призрачный гонщик"
+          - "открой фильм призрачный гонщик"
+          - "вруби фильм призрачный гонщик"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/1113-prizrachnyy-gonschik-2007.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_042
+    description: "Legacy media bookmark: включи фильм Веном 2"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм веном 2"
+          - "открой фильм веном 2"
+          - "вруби фильм веном 2"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/39566-venom-2-2021.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_043
+    description: "Legacy media bookmark: включи фильм Тор: Любовь и гром"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм тор: любовь и гром"
+          - "открой фильм тор: любовь и гром"
+          - "вруби фильм тор: любовь и гром"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fantasy/48332-tor-lyubov-i-grom-2022.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_044
+    description: "Legacy media bookmark: включи фильм Морбиус"
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм морбиус"
+          - "открой фильм морбиус"
+          - "вруби фильм морбиус"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/43599-morbius-2022.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_045
+    description: "Legacy media bookmark: открой сверхестественное"
+    matchers:
+      - type: exact
+        values:
+          - "открой сверхестественное"
+          - "включи сверхестественное"
+          - "запусти сверхестественное"
+          - "открой сериал сверхестественное"
+          - "открой сверхъестественное"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/series/fantasy/1749-sverhestestvennoe-2005.html#t:56-s:1-e:20"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_046
+    description: "Legacy media bookmark: открой ходячие мертвецы"
+    matchers:
+      - type: exact
+        values:
+          - "открой ходячие мертвецы"
+          - "включи ходячие мертвецы"
+          - "запусти ходячие мертвецы"
+          - "открой сериал ходячие мертвецы"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/series/horror/76-hodyachie-mertvecy-2010.html"
+    response:
+      key: loading_sir
+
+  - id: rule_media_bookmark_047
+    description: "Legacy media bookmark: открой сериал скорпион"
+    matchers:
+      - type: exact
+        values:
+          - "открой сериал скорпион"
+          - "включи сериал скорпион"
+          - "запусти сериал скорпион"
+          - "открой скорпион"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/series/action/2143-skorpion-2014.html"
+    response:
+      key: loading_sir

@@ -17,4 +17,15 @@ class VoiceWebSocketMessageFactoryTest {
         assertEquals("CONFIG", payload["type"]?.jsonPrimitive?.content)
         assertEquals("ru-RU", payload["config"]?.jsonObject?.get("language")?.jsonPrimitive?.content)
     }
+
+    @Test
+    fun startMessageCarriesExplicitRecognitionLanguage() {
+        val payload = Json.parseToJsonElement(
+            VoiceWebSocketMessageFactory().startMessage("corr-1", "ru-RU")
+        ).jsonObject
+
+        assertEquals("START", payload["type"]?.jsonPrimitive?.content)
+        assertEquals("corr-1", payload["correlationId"]?.jsonPrimitive?.content)
+        assertEquals("ru-RU", payload["language"]?.jsonPrimitive?.content)
+    }
 }

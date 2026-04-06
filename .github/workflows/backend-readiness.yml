@@ -1,0 +1,132 @@
+name: Core Backend Readiness
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backend-readiness.yml"
+      - ".github/workflows/prod-image-sign.yml"
+      - ".gitignore"
+      - "pom.xml"
+      - "apps/api-gateway/**"
+      - "apps/security-service/**"
+      - "apps/user-profile/**"
+      - "apps/nlp-service/**"
+      - "apps/orchestrator/**"
+      - "apps/voice-gateway/**"
+      - "apps/smart-home-service/**"
+      - "apps/life-tracker/**"
+      - "apps/analytics-service/**"
+      - "apps/planner-service/**"
+      - "apps/pc-control/**"
+      - "apps/jarvis-common/**"
+      - "scripts/**"
+      - "docker/postgres-init/**"
+      - "docker/mosquitto/**"
+      - "k8s/**"
+      - "k8s/overlays/prod-release/**"
+      - "README.md"
+      - "DEPLOYMENT_INSTRUCTIONS.md"
+      - "k8s/README.md"
+      - "docs/BACKEND_STATUS.md"
+      - "CORE_BACKEND_REALITY.md"
+      - "CORE_BACKEND_ARCHITECTURE.md"
+      - "CORE_BACKEND_OPERATIONS.md"
+      - "CORE_BACKEND_GAPS.md"
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/backend-readiness.yml"
+      - ".github/workflows/prod-image-sign.yml"
+      - ".gitignore"
+      - "pom.xml"
+      - "apps/api-gateway/**"
+      - "apps/security-service/**"
+      - "apps/user-profile/**"
+      - "apps/nlp-service/**"
+      - "apps/orchestrator/**"
+      - "apps/voice-gateway/**"
+      - "apps/smart-home-service/**"
+      - "apps/life-tracker/**"
+      - "apps/analytics-service/**"
+      - "apps/planner-service/**"
+      - "apps/pc-control/**"
+      - "apps/jarvis-common/**"
+      - "scripts/**"
+      - "docker/postgres-init/**"
+      - "docker/mosquitto/**"
+      - "k8s/**"
+      - "k8s/overlays/prod-release/**"
+      - "README.md"
+      - "DEPLOYMENT_INSTRUCTIONS.md"
+      - "k8s/README.md"
+      - "docs/BACKEND_STATUS.md"
+      - "CORE_BACKEND_REALITY.md"
+      - "CORE_BACKEND_ARCHITECTURE.md"
+      - "CORE_BACKEND_OPERATIONS.md"
+      - "CORE_BACKEND_GAPS.md"
+
+permissions:
+  contents: read
+
+env:
+  JARVIS_HOME: ${{ runner.temp }}/jarvis-home
+
+jobs:
+  release-wiring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend release wiring
+        run: ./scripts/ci/check-backend-release-wiring.sh
+
+  runtime-core-smoke:
+    needs: release-wiring
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JARVIS_LOCAL_POSTGRES_CONTAINER: jarvis-ci-postgres-core-${{ github.run_id }}-${{ github.run_attempt }}
+      JARVIS_RUNTIME_SMOKE_SKIP_LLM: "true"
+      JARVIS_RUNTIME_SMOKE_STOP_ON_EXIT: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Core backend runtime smoke
+        run: ./scripts/runtime-smoke.sh
+
+  runtime-analytics-smoke:
+    needs: release-wiring
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      JARVIS_LOCAL_POSTGRES_CONTAINER: jarvis-ci-postgres-analytics-${{ github.run_id }}-${{ github.run_attempt }}
+      JARVIS_RUNTIME_SMOKE_STOP_ON_EXIT: "true"
+      JARVIS_SKIP_BUILD: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Core analytics smoke
+        run: |
+          set -euo pipefail
+          cleanup() {
+            ./scripts/runtime-down.sh >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          ./scripts/runtime-up.sh
+          ./scripts/analytics-smoke.sh

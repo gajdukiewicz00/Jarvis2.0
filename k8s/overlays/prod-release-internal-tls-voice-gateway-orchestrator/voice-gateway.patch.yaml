@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-voice-gateway-orchestrator: voice-gateway-orchestrator-v1
+    spec:
+      containers:
+        - name: voice-gateway
+          env:
+            - name: JARVIS_ORCHESTRATOR_URL
+              value: https://orchestrator.jarvis.svc.cluster.local:8083
+            - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-voice-gateway-orchestrator
+                  key: truststore-password
+            - name: JAVA_TOOL_OPTIONS
+              value: -Djavax.net.ssl.trustStore=/tls-orchestrator/jarvis-internal-truststore.jks -Djavax.net.ssl.trustStorePassword=$(JARVIS_JAVA_TRUSTSTORE_PASSWORD)
+          volumeMounts:
+            - name: internal-tls-voice-gateway-orchestrator
+              mountPath: /tls-orchestrator
+              readOnly: true
+      volumes:
+        - name: internal-tls-voice-gateway-orchestrator
+          secret:
+            secretName: jarvis-internal-tls-voice-gateway-orchestrator
+            items:
+              - key: truststore.jks
+                path: jarvis-internal-truststore.jks
+              - key: ca.crt
+                path: ca.crt

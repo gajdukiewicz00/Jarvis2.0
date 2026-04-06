@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Analyzes user habits (sleep, work, finances) for recommendations
+ * Produces rule-based planning signals from analytics-service and user-profile.
  */
 @Slf4j
 @Service
@@ -22,12 +22,25 @@ public class HabitAnalyzer {
     private final UserProfileClient userProfileClient;
     
     public Map<String, Object> analyzeHabits(String userId) {
-        log.info("Analyzing habits for user: {}", userId);
+        return analyzeHabits(userId, null);
+    }
+
+    public Map<String, Object> analyzeHabits(String userId, String smokeRunId) {
+        log.info("Analyzing habits for user: {}, smokeRunId={}", userId, smokeRunId);
         
         Map<String, Object> analysis = new HashMap<>();
+        UserProfileClient.PlanningContext planningContext = userProfileClient.getPlanningContext(userId);
+        List<String> activeGoals = planningContext.activeGoalTitles();
+        List<String> priorityCategories = planningContext.priorityCategories();
+        List<String> morningHabits = planningContext.habitNamesForTime("morning");
+        List<String> eveningHabits = planningContext.habitNamesForTime("evening");
+        analysis.put("analysisMode", "RULE_BASED_DERIVED");
+        analysis.put("dataSources", List.of("analytics-service", "user-profile"));
         
         // Sleep analysis
-        Double avgSleep = analyticsClient.getAverageSleepHours(userId);
+        Double avgSleep = smokeRunId == null
+                ? analyticsClient.getAverageSleepHours(userId)
+                : analyticsClient.getAverageSleepHours(userId, smokeRunId);
         Map<String, Object> sleepAnalysis = new HashMap<>();
         sleepAnalysis.put("averageHours", avgSleep);
         sleepAnalysis.put("status", avgSleep == null ? "UNKNOWN" : avgSleep >= 7.0 ? "GOOD" : "NEEDS_IMPROVEMENT");
@@ -37,7 +50,9 @@ public class HabitAnalyzer {
         analysis.put("sleep", sleepAnalysis);
         
         // Work balance analysis
-        Integer overtime = analyticsClient.getWeeklyOvertimeHours(userId);
+        Integer overtime = smokeRunId == null
+                ? analyticsClient.getWeeklyOvertimeHours(userId)
+                : analyticsClient.getWeeklyOvertimeHours(userId, smokeRunId);
         Map<String, Object> workAnalysis = new HashMap<>();
         workAnalysis.put("weeklyOvertime", overtime);
         workAnalysis.put("status", overtime == null ? "UNKNOWN" : overtime <= 5 ? "BALANCED" : "OVERWORKED");
@@ -46,12 +61,18 @@ public class HabitAnalyzer {
         }
         analysis.put("work", workAnalysis);
         
-        // Goals progress
-        List<String> goals = userProfileClient.getUserGoals(userId);
+        // Profile-derived context
         Map<String, Object> goalsAnalysis = new HashMap<>();
-        goalsAnalysis.put("activeGoals", goals.size());
-        goalsAnalysis.put("goals", goals);
+        goalsAnalysis.put("activeGoals", activeGoals.size());
+        goalsAnalysis.put("goals", activeGoals);
         analysis.put("goals", goalsAnalysis);
+
+        Map<String, Object> profileAnalysis = new HashMap<>();
+        profileAnalysis.put("priorityCategories", priorityCategories);
+        profileAnalysis.put("morningHabits", morningHabits);
+        profileAnalysis.put("eveningHabits", eveningHabits);
+        profileAnalysis.put("timezone", planningContext.timezone());
+        analysis.put("profile", profileAnalysis);
         
         return analysis;
     }

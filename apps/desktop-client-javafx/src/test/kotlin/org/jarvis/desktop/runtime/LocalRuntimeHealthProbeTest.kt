@@ -14,7 +14,7 @@ class LocalRuntimeHealthProbeTest {
     @Test
     fun `healthy actuator response is marked connected`() {
         val probe = LocalRuntimeHealthProbe(
-            apiGatewayBaseUrl = "http://127.0.0.1:8080",
+            apiGatewayBaseUrlProvider = { "http://127.0.0.1:8080" },
             fetcher = { _: URI -> LocalRuntimeHealthProbe.HttpResult(200, """{"status":"UP"}""") },
             clock = clock
         )
@@ -28,7 +28,7 @@ class LocalRuntimeHealthProbeTest {
     @Test
     fun `unhealthy response is marked degraded`() {
         val probe = LocalRuntimeHealthProbe(
-            apiGatewayBaseUrl = "http://127.0.0.1:8080",
+            apiGatewayBaseUrlProvider = { "http://127.0.0.1:8080" },
             fetcher = { _: URI -> LocalRuntimeHealthProbe.HttpResult(200, """{"status":"DOWN"}""") },
             clock = clock
         )
@@ -41,7 +41,7 @@ class LocalRuntimeHealthProbeTest {
     @Test
     fun `connection error is marked error`() {
         val probe = LocalRuntimeHealthProbe(
-            apiGatewayBaseUrl = "http://127.0.0.1:8080",
+            apiGatewayBaseUrlProvider = { "http://127.0.0.1:8080" },
             fetcher = { _: URI -> throw IllegalStateException("connection refused") },
             clock = clock
         )
@@ -50,5 +50,31 @@ class LocalRuntimeHealthProbeTest {
 
         assertEquals(DesktopRuntimeMonitor.ConnectionState.ERROR, status.state)
         assertEquals("Runtime unreachable: connection refused", status.detail)
+    }
+
+    @Test
+    fun `probe uses the latest configured base URL on each invocation`() {
+        var baseUrl = "http://127.0.0.1:8080"
+        val seenUris = mutableListOf<URI>()
+        val probe = LocalRuntimeHealthProbe(
+            apiGatewayBaseUrlProvider = { baseUrl },
+            fetcher = { uri ->
+                seenUris += uri
+                LocalRuntimeHealthProbe.HttpResult(200, """{"status":"UP"}""")
+            },
+            clock = clock
+        )
+
+        probe.probe()
+        baseUrl = "https://api.jarvis.local"
+        probe.probe()
+
+        assertEquals(
+            listOf(
+                URI.create("http://127.0.0.1:8080/actuator/health"),
+                URI.create("https://api.jarvis.local/actuator/health")
+            ),
+            seenUris
+        )
     }
 }

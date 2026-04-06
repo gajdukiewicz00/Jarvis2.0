@@ -1,0 +1,166 @@
+# Website opening intents — migrated from the legacy "Открытие сайтов" group.
+
+intent_group: open_website
+description: "Voice-activated website bookmarks from the legacy VoxCommando archive"
+
+commands:
+  - id: open_yandex
+    phrases_ru:
+      - "яндекс"
+      - "открой яндекс"
+      - "запусти яндекс"
+      - "зайди в яндекс"
+      - "открой дзен"
+      - "запусти дзен"
+    phrases_en:
+      - "open yandex"
+      - "open dzen"
+    action: OPEN_URL
+    params:
+      url: "https://dzen.ru/"
+
+  - id: open_youtube
+    phrases_ru:
+      - "ютуб"
+      - "ютубчик"
+      - "ютьюб"
+      - "открой ютуб"
+      - "запусти ютуб"
+      - "зайди в ютуб"
+    phrases_en:
+      - "youtube"
+      - "open youtube"
+      - "launch youtube"
+    action: OPEN_URL
+    params:
+      url: "https://www.youtube.com/"
+
+  - id: open_vk
+    phrases_ru:
+      - "вконтакте"
+      - "вк"
+      - "вэка"
+      - "открой вк"
+      - "запусти вконтакте"
+    phrases_en:
+      - "open vk"
+      - "open vkontakte"
+    action: OPEN_URL
+    params:
+      url: "https://vk.com/feed"
+
+  - id: open_translator
+    phrases_ru:
+      - "переводчик"
+      - "переведи"
+      - "мне нужен перевод"
+      - "открой переводчик"
+      - "запусти переводчик"
+    phrases_en:
+      - "translator"
+      - "open translator"
+      - "translate for me"
+    action: OPEN_URL
+    params:
+      url: "https://translate.google.com/"
+
+  - id: open_google
+    phrases_ru:
+      - "гугл"
+      - "гугл хром"
+      - "хром"
+      - "открой гугл"
+      - "запусти гугл"
+    phrases_en:
+      - "google"
+      - "chrome"
+      - "open google"
+    action: OPEN_URL
+    params:
+      url: "https://www.google.com/?hl=ru"
+
+  - id: open_spotify
+    phrases_ru:
+      - "споти"
+      - "спотифай"
+      - "открой спотифай"
+      - "запусти спотифай"
+    phrases_en:
+      - "spotify"
+      - "open spotify"
+    action: OPEN_URL
+    params:
+      url: "https://open.spotify.com/"
+
+  - id: open_pikabu
+    phrases_ru:
+      - "пикабу"
+      - "открой пикабу"
+      - "запусти пикабу"
+    phrases_en:
+      - "open pikabu"
+    action: OPEN_URL
+    params:
+      url: "https://pikabu.ru/"
+
+  - id: open_twitter
+    phrases_ru:
+      - "твиттер"
+      - "открой твиттер"
+      - "запусти твиттер"
+    phrases_en:
+      - "open twitter"
+      - "open x"
+    action: OPEN_URL
+    params:
+      url: "https://twitter.com/"
+
+  - id: open_facebook
+    phrases_ru:
+      - "фейсбук"
+      - "открой фейсбук"
+      - "запусти фейсбук"
+    phrases_en:
+      - "open facebook"
+    action: OPEN_URL
+    params:
+      url: "https://www.facebook.com/"
+
+  - id: open_instagram
+    phrases_ru:
+      - "инстаграм"
+      - "инстаграмм"
+      - "открой инстаграм"
+      - "запусти инстаграм"
+    phrases_en:
+      - "instagram"
+      - "open instagram"
+    action: OPEN_URL
+    params:
+      url: "https://www.instagram.com/"
+
+  - id: open_wikipedia
+    phrases_ru:
+      - "википедия"
+      - "вики"
+      - "википедию"
+      - "открой википедию"
+    phrases_en:
+      - "wikipedia"
+      - "open wikipedia"
+    action: OPEN_URL
+    params:
+      url: "https://ru.wikipedia.org/wiki/Заглавная_страница"
+
+  - id: open_tiktok
+    phrases_ru:
+      - "тик ток"
+      - "тикток"
+      - "открой тик ток"
+      - "запусти тик ток"
+    phrases_en:
+      - "tiktok"
+      - "open tiktok"
+    action: OPEN_URL
+    params:
+      url: "https://www.tiktok.com/"

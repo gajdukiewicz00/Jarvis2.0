@@ -1,0 +1,10 @@
+- op: add
+  path: /spec/egress/-
+  value:
+    to:
+      - podSelector:
+          matchLabels:
+            app: voice-gateway
+    ports:
+      - protocol: TCP
+        port: 8081

@@ -1,12 +1,11 @@
 package org.jarvis.userprofile.controller;
 
-import org.jarvis.userprofile.domain.UserGoal;
-import org.jarvis.userprofile.domain.UserHabit;
-import org.jarvis.userprofile.domain.UserPriority;
-import org.jarvis.userprofile.repository.UserGoalRepository;
-import org.jarvis.userprofile.repository.UserHabitRepository;
-import org.jarvis.userprofile.repository.UserPriorityRepository;
-import org.jarvis.userprofile.service.UserProfileProvisioningService;
+import lombok.RequiredArgsConstructor;
+import org.jarvis.userprofile.dto.PlanningContextDto;
+import org.jarvis.userprofile.dto.UserGoalDto;
+import org.jarvis.userprofile.dto.UserHabitDto;
+import org.jarvis.userprofile.dto.UserPriorityDto;
+import org.jarvis.userprofile.service.UserProfileService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,78 +16,61 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/user-profile")
+@RequiredArgsConstructor
 public class UserProfileController {
 
-    private final UserGoalRepository userGoalRepository;
-    private final UserHabitRepository userHabitRepository;
-    private final UserPriorityRepository userPriorityRepository;
-    private final UserProfileProvisioningService userProfileProvisioningService;
+    private final UserProfileService userProfileService;
 
-    public UserProfileController(UserGoalRepository userGoalRepository,
-                                 UserHabitRepository userHabitRepository,
-                                 UserPriorityRepository userPriorityRepository,
-                                 UserProfileProvisioningService userProfileProvisioningService) {
-        this.userGoalRepository = userGoalRepository;
-        this.userHabitRepository = userHabitRepository;
-        this.userPriorityRepository = userPriorityRepository;
-        this.userProfileProvisioningService = userProfileProvisioningService;
+    @GetMapping("/{userId}/planning-context")
+    public PlanningContextDto getPlanningContext(@PathVariable String userId) {
+        return userProfileService.getPlanningContext(resolveUserId(userId));
     }
 
     // Goals
     @GetMapping("/{userId}/goals")
-    public List<UserGoal> getUserGoals(@PathVariable String userId) {
-        String authUser = requireUserId();
-        userProfileProvisioningService.ensureProfileExists(authUser);
-        if (!authUser.equals(userId)) {
-            userId = authUser;
-        }
-        return userGoalRepository.findByUserId(userId);
+    public List<UserGoalDto> getUserGoals(@PathVariable String userId) {
+        return userProfileService.getGoals(resolveUserId(userId));
     }
 
     @PostMapping("/{userId}/goals")
-    public UserGoal createUserGoal(@PathVariable String userId, @RequestBody UserGoal goal) {
-        String authUser = requireUserId();
-        userProfileProvisioningService.ensureProfileExists(authUser);
-        goal.setUserId(authUser);
-        return userGoalRepository.save(goal);
+    public UserGoalDto createUserGoal(@PathVariable String userId, @RequestBody UserGoalDto goal) {
+        return userProfileService.createGoal(resolveUserId(userId), goal);
     }
 
     // Habits
     @GetMapping("/{userId}/habits")
-    public List<UserHabit> getUserHabits(@PathVariable String userId) {
-        String authUser = requireUserId();
-        userProfileProvisioningService.ensureProfileExists(authUser);
-        if (!authUser.equals(userId)) {
-            userId = authUser;
-        }
-        return userHabitRepository.findByUserId(userId);
+    public List<UserHabitDto> getUserHabits(@PathVariable String userId) {
+        return userProfileService.getHabits(resolveUserId(userId));
     }
 
     @PostMapping("/{userId}/habits")
-    public UserHabit createUserHabit(@PathVariable String userId, @RequestBody UserHabit habit) {
-        String authUser = requireUserId();
-        userProfileProvisioningService.ensureProfileExists(authUser);
-        habit.setUserId(authUser);
-        return userHabitRepository.save(habit);
+    public UserHabitDto createUserHabit(@PathVariable String userId, @RequestBody UserHabitDto habit) {
+        return userProfileService.createHabit(resolveUserId(userId), habit);
     }
 
     // Priorities
     @GetMapping("/{userId}/priorities")
-    public List<UserPriority> getUserPriorities(@PathVariable String userId) {
-        String authUser = requireUserId();
-        userProfileProvisioningService.ensureProfileExists(authUser);
-        if (!authUser.equals(userId)) {
-            userId = authUser;
-        }
-        return userPriorityRepository.findByUserId(userId);
+    public List<UserPriorityDto> getUserPriorities(@PathVariable String userId) {
+        return userProfileService.getPriorities(resolveUserId(userId));
     }
 
     @PostMapping("/{userId}/priorities")
-    public UserPriority createUserPriority(@PathVariable String userId, @RequestBody UserPriority priority) {
-        String authUser = requireUserId();
-        userProfileProvisioningService.ensureProfileExists(authUser);
-        priority.setUserId(authUser);
-        return userPriorityRepository.save(priority);
+    public UserPriorityDto createUserPriority(@PathVariable String userId, @RequestBody UserPriorityDto priority) {
+        return userProfileService.createPriority(resolveUserId(userId), priority);
+    }
+
+    private String resolveUserId(String pathUserId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
+        }
+        // Service-delegated calls: GatewayAuthFilter sets details to "delegated-by:<service>"
+        // when a service JWT with X-User-Id header is used. Trust the path userId in this case.
+        if (auth.getDetails() instanceof String details && details.startsWith("delegated-by:")) {
+            return pathUserId;
+        }
+        String authUser = auth.getName();
+        return authUser.equals(pathUserId) ? pathUserId : authUser;
     }
 
     private String requireUserId() {

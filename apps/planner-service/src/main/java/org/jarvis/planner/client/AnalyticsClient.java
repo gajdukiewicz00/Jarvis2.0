@@ -40,12 +40,18 @@ public class AnalyticsClient {
     }
     
     public Double getAverageSleepHours(String userId) {
+        return getAverageSleepHours(userId, null);
+    }
+
+    public Double getAverageSleepHours(String userId, String smokeRunId) {
         try {
             ResponseEntity<SleepSummaryResponse> response = restTemplate.exchange(
                     analyticsUrl + "/api/v1/analytics/habits/sleep-average?days=14",
                     HttpMethod.GET,
-                    requestEntity(userId),
+                    requestEntity(userId, smokeRunId),
                     SleepSummaryResponse.class);
+            log.info("Planner analytics routed: metric=sleep-average, userId={}, analyticsUrl={}, smokeRunId={}",
+                    userId, analyticsUrl, smokeRunId);
             return response.getBody() != null ? response.getBody().averageHours() : null;
         } catch (RestClientException e) {
             log.warn("sleep summary fetch failed for {}: {}", userId, e.getMessage());
@@ -54,12 +60,18 @@ public class AnalyticsClient {
     }
     
     public Integer getWeeklyOvertimeHours(String userId) {
+        return getWeeklyOvertimeHours(userId, null);
+    }
+
+    public Integer getWeeklyOvertimeHours(String userId, String smokeRunId) {
         try {
             ResponseEntity<OvertimeSummaryResponse> response = restTemplate.exchange(
                     analyticsUrl + "/api/v1/analytics/habits/weekly-overtime?days=7&baselineHours=40",
                     HttpMethod.GET,
-                    requestEntity(userId),
+                    requestEntity(userId, smokeRunId),
                     OvertimeSummaryResponse.class);
+            log.info("Planner analytics routed: metric=weekly-overtime, userId={}, analyticsUrl={}, smokeRunId={}",
+                    userId, analyticsUrl, smokeRunId);
             return response.getBody() != null ? response.getBody().overtimeHours() : null;
         } catch (RestClientException e) {
             log.warn("overtime summary fetch failed for {}: {}", userId, e.getMessage());
@@ -67,9 +79,12 @@ public class AnalyticsClient {
         }
     }
 
-    private HttpEntity<Void> requestEntity(String userId) {
+    private HttpEntity<Void> requestEntity(String userId, String smokeRunId) {
         HttpHeaders headers = new HttpHeaders();
         headers.set("X-User-Id", userId);
+        if (smokeRunId != null && !smokeRunId.isBlank()) {
+            headers.set("X-Smoke-Run-Id", smokeRunId);
+        }
         return new HttpEntity<>(headers);
     }
 

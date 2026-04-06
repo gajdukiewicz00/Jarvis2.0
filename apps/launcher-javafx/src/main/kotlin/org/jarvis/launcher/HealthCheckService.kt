@@ -42,6 +42,7 @@ class HealthCheckService(
     )
     private val consecutiveSuccess = AtomicInteger(0)
     private val consecutiveFailures = AtomicInteger(0)
+    private val stableReady = java.util.concurrent.atomic.AtomicBoolean(false)
     private val runningCheck = java.util.concurrent.atomic.AtomicBoolean(false)
     @Volatile private var llmEnabled = false
     @Volatile private var memoryEnabled = false
@@ -132,7 +133,13 @@ class HealthCheckService(
     private fun checkHealthInternal(backendPid: Long?, backendExpectedRunning: Boolean): ServiceHealthStatus {
         val processAlive = backendPid != null && isProcessAlive(backendPid)
         val requiredServices = mutableListOf("api-gateway", "security-service")
-        val optionalServices = mutableListOf("llm-service", "memory-service")
+        val optionalServices = mutableListOf(
+            "smart-home-api",
+            "life-api",
+            "analytics-api",
+            "llm-service",
+            "memory-service"
+        )
         if (voiceRequired) {
             requiredServices.add("voice-gateway")
         } else {
@@ -147,6 +154,7 @@ class HealthCheckService(
         if (!processAlive && !backendExpectedRunning && !externallyObservable) {
             consecutiveSuccess.set(0)
             consecutiveFailures.set(0)
+            stableReady.set(false)
             val status = ServiceHealthStatus(
                 overall = ServiceHealthStatus.OverallStatus.IDLE,
                 coreServices = emptyMap(),
@@ -219,8 +227,9 @@ class HealthCheckService(
         val newStatus = when {
             coreReady -> {
                 // Hysteresis: require 2 consecutive successes for READY
-                if (consecutiveSuccess.incrementAndGet() >= 2) {
-                    consecutiveFailures.set(0)
+                consecutiveFailures.set(0)
+                if (consecutiveSuccess.incrementAndGet() >= 2 || stableReady.get()) {
+                    stableReady.set(true)
                     // READY if all optional are ready, DEGRADED if some are down
                     if (optionalDown && !optionalReady) {
                         ServiceHealthStatus.OverallStatus.DEGRADED
@@ -233,19 +242,28 @@ class HealthCheckService(
                 }
             }
             coreDown -> {
+                consecutiveSuccess.set(0)
+                val failures = consecutiveFailures.incrementAndGet()
                 // Hysteresis: require 3 consecutive failures for ERROR
-                if (consecutiveFailures.incrementAndGet() >= 3) {
-                    consecutiveSuccess.set(0)
+                if (failures >= 3) {
+                    stableReady.set(false)
                     ServiceHealthStatus.OverallStatus.ERROR
+                } else if (stableReady.get()) {
+                    // Was stable READY — treat transient failure as degraded, not STARTING
+                    ServiceHealthStatus.OverallStatus.DEGRADED
                 } else {
                     // Still in STARTING, might recover
                     ServiceHealthStatus.OverallStatus.STARTING
                 }
             }
             else -> {
-                consecutiveFailures.incrementAndGet()
                 consecutiveSuccess.set(0)
-                ServiceHealthStatus.OverallStatus.STARTING
+                consecutiveFailures.incrementAndGet()
+                if (stableReady.get()) {
+                    ServiceHealthStatus.OverallStatus.DEGRADED
+                } else {
+                    ServiceHealthStatus.OverallStatus.STARTING
+                }
             }
         }
         
@@ -266,6 +284,9 @@ class HealthCheckService(
                 "api-gateway" -> checkApiGateway()
                 "security-service" -> checkSecurityService()
                 "voice-gateway" -> checkVoiceGateway(optional)
+                "smart-home-api" -> checkGatewaySurface("smart-home-api", "/api/v1/smarthome/devices")
+                "life-api" -> checkGatewaySurface("life-api", "/api/v1/life/finance/expenses")
+                "analytics-api" -> checkGatewaySurface("analytics-api", "/api/v1/analytics/expenses/by-month")
                 "llm-service" -> checkLlmService(optional)
                 "memory-service" -> checkMemoryService(optional)
                 else -> ServiceHealthStatus.ServiceCheck(
@@ -339,6 +360,63 @@ class HealthCheckService(
         } catch (e: Exception) {
             ServiceHealthStatus.ServiceCheck(
                 name = "api-gateway",
+                status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                message = "Error: ${e.message?.take(50) ?: "Unknown"}"
+            )
+        }
+    }
+
+    private fun checkGatewaySurface(name: String, path: String): ServiceHealthStatus.ServiceCheck {
+        return try {
+            val url = "$apiBaseUrl$path"
+            val connection = openConnection(URL(url))
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.setRequestProperty("Accept", "application/json")
+            connection.connect()
+
+            when (val responseCode = connection.responseCode) {
+                in 200..299 -> ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+                    message = "HTTP $responseCode"
+                )
+                401, 403 -> ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+                    message = "Reachable but protected (HTTP $responseCode)"
+                )
+                502, 503, 504 -> ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "Gateway upstream failure (HTTP $responseCode)"
+                )
+                404 -> ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "Gateway route missing (HTTP 404)"
+                )
+                else -> ServiceHealthStatus.ServiceCheck(
+                    name = name,
+                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                    message = "HTTP $responseCode"
+                )
+            }
+        } catch (e: javax.net.ssl.SSLException) {
+            val msg = e.message?.take(120) ?: "SSL error"
+            val isTrust = msg.contains("PKIX", ignoreCase = true) ||
+                msg.contains("certificate_unknown", ignoreCase = true) ||
+                msg.contains("unable to find valid certification path", ignoreCase = true)
+            ServiceHealthStatus.ServiceCheck(
+                name = name,
+                status = if (isTrust) ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN
+                else ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                message = if (isTrust) "TLS trust missing - click Fix TLS" else "SSL error: ${msg.take(50)}"
+            )
+        } catch (e: Exception) {
+            ServiceHealthStatus.ServiceCheck(
+                name = name,
                 status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
                 message = "Error: ${e.message?.take(50) ?: "Unknown"}"
             )

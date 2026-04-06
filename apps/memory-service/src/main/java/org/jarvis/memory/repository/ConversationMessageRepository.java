@@ -2,8 +2,6 @@ package org.jarvis.memory.repository;
 
 import org.jarvis.memory.entity.ConversationMessage;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
@@ -17,12 +15,6 @@ public interface ConversationMessageRepository extends JpaRepository<Conversatio
      * Find messages by user and session
      */
     List<ConversationMessage> findByUserIdAndSessionIdOrderByCreatedAtAsc(String userId, String sessionId);
-
-    /**
-     * Find recent messages by user
-     */
-    @Query("SELECT m FROM ConversationMessage m WHERE m.userId = :userId ORDER BY m.createdAt DESC LIMIT :limit")
-    List<ConversationMessage> findRecentByUserId(@Param("userId") String userId, @Param("limit") int limit);
 
     /**
      * Find messages by session
@@ -45,6 +37,5 @@ public interface ConversationMessageRepository extends JpaRepository<Conversatio
      */
     void deleteByCreatedAtBefore(OffsetDateTime before);
 }
-
 
 

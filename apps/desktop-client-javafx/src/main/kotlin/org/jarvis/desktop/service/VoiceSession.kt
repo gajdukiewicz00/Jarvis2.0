@@ -32,7 +32,8 @@ class VoiceSession(
     private val onPauseMedia: () -> Unit,  // Pause media playback on wake word
     private val onResumeMedia: () -> Unit,  // Resume media playback after command
     private val onSpeakTimeout: () -> Unit,  // Speak "Sir, I couldn't hear you"
-    private val onSessionError: (String, Exception?) -> Unit
+    private val onSessionError: (String, Exception?) -> Unit,
+    private val voiceTransportReady: () -> Boolean = { true }  // Check if voice WS is connected
 ) {
     private val logger = LoggerFactory.getLogger(VoiceSession::class.java)
     
@@ -64,6 +65,12 @@ class VoiceSession(
         
         if (current !in expectedStates) {
             logger.warn("⚠️ Cannot start session in state {}, expected {}", current, expectedStates)
+            return null
+        }
+
+        if (!voiceTransportReady()) {
+            logger.warn("⚠️ Cannot start session — voice transport not connected")
+            onSessionError("Voice unavailable — not connected", null)
             return null
         }
         

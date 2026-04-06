@@ -8,14 +8,17 @@ import org.jarvis.llm.dto.ChatRequestDto;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.DialogRequest;
 import org.jarvis.llm.dto.DialogResponse;
+import org.jarvis.llm.service.AiRuntimeStatusService;
 import org.jarvis.llm.service.LlmService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 /**
  * REST controller for LLM service.
@@ -39,6 +42,7 @@ import java.util.Map;
 public class LlmRestController {
 
     private final LlmService llmService;
+    private final AiRuntimeStatusService aiRuntimeStatusService;
 
     @Value("${logging.pii.enabled:true}")
     private boolean piiLoggingEnabled = true;
@@ -83,7 +87,8 @@ public class LlmRestController {
                     request.getSessionId(),
                     resolveEffectiveUserId(authentication),
                     userMessage,
-                    correlationId);
+                    correlationId,
+                    !isInternalRequest(authentication));
 
             return ResponseEntity.ok(response);
 
@@ -97,6 +102,9 @@ public class LlmRestController {
             } else if (cause instanceof org.springframework.web.client.HttpClientErrorException) {
                 return ResponseEntity.badRequest().build();
             }
+            return ResponseEntity.status(503).build();
+        } catch (org.jarvis.llm.client.MemoryClient.MemoryClientException e) {
+            log.error("Memory Client error: {}", e.getMessage());
             return ResponseEntity.status(503).build();
         } catch (RuntimeException e) {
             log.error("Error processing chat request: {}", e.getMessage(), e);
@@ -140,24 +148,17 @@ public class LlmRestController {
             
         } catch (org.jarvis.llm.client.LlmClient.LlmClientException e) {
             log.error("LLM Client error in dialog: {}", e.getMessage());
-            
-            // Return fallback response instead of error
-            return ResponseEntity.ok(DialogResponse.builder()
-                    .sessionId(request.getSessionId())
-                    .reply("Извини, сейчас не могу ответить. Попробуй позже.")
-                    .shouldContinue(true)
-                    .mode("dialog")
-                    .build());
-                    
+            Throwable cause = e.getCause();
+            if (cause instanceof org.springframework.web.client.ResourceAccessException) {
+                return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).build();
+            }
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        } catch (org.jarvis.llm.client.MemoryClient.MemoryClientException e) {
+            log.error("Memory Client error in dialog: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         } catch (RuntimeException e) {
             log.error("Error processing dialog request: {}", e.getMessage(), e);
-            
-            return ResponseEntity.ok(DialogResponse.builder()
-                    .sessionId(request.getSessionId())
-                    .reply("Произошла ошибка. Попробуй ещё раз.")
-                    .shouldContinue(true)
-                    .mode("dialog")
-                    .build());
+            return ResponseEntity.internalServerError().build();
         }
     }
 
@@ -176,11 +177,28 @@ public class LlmRestController {
      */
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
-        boolean available = llmService.isAvailable();
+        Map<String, Object> runtime = aiRuntimeStatusService.describe();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> llm = (Map<String, Object>) runtime.get("llm");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> memory = (Map<String, Object>) runtime.get("memory");
 
-        return ResponseEntity.ok(Map.of(
-                "status", available ? "healthy" : "degraded",
-                "llm_server_available", available));
+        boolean llmAvailable = Boolean.TRUE.equals(llm.get("available"));
+        boolean memoryEnabled = Boolean.TRUE.equals(memory.get("enabled")) && Boolean.TRUE.equals(memory.get("serviceEnabled"));
+        boolean memoryAvailable = Boolean.TRUE.equals(memory.get("available"));
+        boolean healthy = llmAvailable && (!memoryEnabled || memoryAvailable);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("status", healthy ? "healthy" : "degraded");
+        response.put("llm_server_available", llmAvailable);
+        response.put("memory_available", memoryAvailable);
+        response.put("memory_enabled", memoryEnabled);
+        response.put("full_local_ai_readiness", runtime.get("fullLocalAiReadiness"));
+        response.put("configured_provider", llm.get("configuredProvider"));
+        response.put("effective_provider", llm.get("effectiveProvider"));
+        response.put("configured_model", llm.get("configuredModel"));
+        response.put("effective_model", llm.get("effectiveModel"));
+        return ResponseEntity.status(healthy ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
     private LogSanitizer logSanitizer() {
@@ -197,13 +215,19 @@ public class LlmRestController {
             return authentication.getName();
         }
 
-        boolean internalOnly = authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch("SVC_INTERNAL"::equals);
-        if (internalOnly) {
+        if (isInternalRequest(authentication)) {
             return null;
         }
 
         return authentication.getName();
+    }
+
+    private boolean isInternalRequest(Authentication authentication) {
+        if (authentication == null || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("SVC_INTERNAL"::equals);
     }
 }

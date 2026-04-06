@@ -6,6 +6,7 @@ import org.jarvis.planner.client.AnalyticsClient;
 import org.jarvis.planner.client.PcControlActionClient;
 import org.jarvis.planner.model.Reminder;
 import org.jarvis.planner.model.ReminderType;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,12 @@ public class AutoActionService {
     private final ReminderService reminderService;
     private final Clock clock;
 
+    @Value("${planner.auto-actions.scheduler-enabled:false}")
+    private boolean schedulerEnabled;
+
+    @Value("${planner.auto-actions.user-id:}")
+    private String scheduledUserId;
+
     /**
      * Check every hour for automatic actions
      * Wrapped in try-catch to prevent scheduler death on database connection
@@ -35,9 +42,12 @@ public class AutoActionService {
     @Scheduled(cron = "0 0 * * * *") // Every hour at :00
     public void checkAndTriggerActions() {
         try {
-            log.debug("Checking for automatic actions...");
+            String userId = requireScheduledUserId();
+            if (userId == null) {
+                return;
+            }
 
-            String userId = "denis"; // TODO: Multi-user support
+            log.debug("Checking for automatic actions...");
 
             // Get analytics data
             Double avgSleep = analyticsClient.getAverageSleepHours(userId);
@@ -89,8 +99,11 @@ public class AutoActionService {
     public void startMusicPlaylist(String userId, String playlistType) {
         log.info("Starting {} playlist for user: {}", playlistType, userId);
 
-        // TODO: Integrate with music player (Spotify API, local player)
-        // playlistType: "WORK", "RELAX", "FOCUS", "WORKOUT"
+        String scenarioName = mapMusicScenario(playlistType);
+        boolean routed = pcControlActionClient.sendAction(userId, "SCENARIO", Map.of("name", scenarioName));
+        if (!routed) {
+            log.warn("Music scenario {} could not be routed to a desktop session for user {}", scenarioName, userId);
+        }
 
         notificationService.sendVoiceNotification(
                 userId,
@@ -141,10 +154,10 @@ public class AutoActionService {
     @Scheduled(cron = "0 0 * * * *") // Every hour
     public void checkBreakReminders() {
         try {
-            String userId = "denis";
-
-            // TODO: Track user active time via pc-control
-            // If active > 2 hours continuously → suggest break
+            String userId = requireScheduledUserId();
+            if (userId == null) {
+                return;
+            }
 
             log.debug("Checking break reminders for user: {}", userId);
         } catch (RuntimeException e) {
@@ -163,5 +176,30 @@ public class AutoActionService {
             case "FOCUS" -> "focus";
             default -> mode.trim().toLowerCase();
         };
+    }
+
+    private String mapMusicScenario(String playlistType) {
+        if (playlistType == null || playlistType.isBlank()) {
+            return "focus";
+        }
+        return switch (playlistType.trim().toUpperCase()) {
+            case "WORK", "FOCUS" -> "focus";
+            case "RELAX", "REST", "CHILL" -> "rest";
+            case "PARTY", "WORKOUT", "ENERGY" -> "party";
+            case "MORNING" -> "morning";
+            default -> "focus";
+        };
+    }
+
+    private String requireScheduledUserId() {
+        if (!schedulerEnabled) {
+            log.debug("Planner auto-action scheduler is disabled.");
+            return null;
+        }
+        if (scheduledUserId == null || scheduledUserId.isBlank()) {
+            log.warn("Planner auto-action scheduler is enabled but planner.auto-actions.user-id is empty.");
+            return null;
+        }
+        return scheduledUserId;
     }
 }

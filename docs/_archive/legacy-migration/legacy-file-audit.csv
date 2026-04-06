@@ -1,0 +1,29 @@
+path,category,decision,reason
+voicecommands.xml,core VoxCommando command tree,migrate_now,"Used as the primary source for voice asset references, URLs, and rule semantics."
+command_inventory_full.csv,command inventory,migrate_now,Used as the primary source for CSV command migration decisions.
+voicecommands.beforeApplyingConfig.xml,config snapshot,archive_only,Reference-only pre-change snapshot; not a runtime source for Jarvis 2.0.
+Devices.xml,device/plugin config,archive_only,Legacy device registry retained for forensic/reference use only.
+options.xml,global VoxCommando config,adapt_later,"Useful as a reference for thresholds and locale defaults, but not a runtime config format for the new stack."
+payloads/4directions.xml,payload vocabulary,adapt_later,"Good vocabulary material, but the repo does not yet consume the extracted YAML vocabulary at runtime."
+payloads/math.xml,payload vocabulary,adapt_later,"Good vocabulary material, but the repo does not yet consume the extracted YAML vocabulary at runtime."
+payloads/on_off.xml,payload vocabulary,adapt_later,"Good vocabulary material, but the repo does not yet consume the extracted YAML vocabulary at runtime."
+payloads/truefalse.xml,payload vocabulary,adapt_later,"Good vocabulary material, but the repo does not yet consume the extracted YAML vocabulary at runtime."
+payloads/payloadAllButtonNames.xml,IR/button dictionary,archive_only,Large reference dictionary kept for any future IR/remote-control integration.
+payloads/DxKeys.xml,DirectX key map,discard,Windows DirectX key table; not suitable for Linux-first runtime control.
+payloads/DxModKeys.xml,DirectX key modifiers,discard,Windows DirectX key table; not suitable for Linux-first runtime control.
+payloads/launchprograms.xml,legacy launcher map,discard,Contains Windows-specific absolute paths and launcher assumptions.
+UsbUirt/maps/MCE.xml,IR remote map,archive_only,"Potentially useful for future IR support, but not part of the current runtime."
+UsbUirt/maps/Scepter.xml,IR remote map,archive_only,"Potentially useful for future IR support, but not part of the current runtime."
+UsbUirt/maps/WH.xml,IR remote map,archive_only,"Potentially useful for future IR support, but not part of the current runtime."
+data/maps.db3,SQLite dump,archive_only,"Potentially useful for future IR/device mapping, but not part of the current runtime."
+data/sample.db3,SQLite sample dump,archive_only,"Reference-only sample data, not runtime logic."
+maps_dump.sql,SQL export,archive_only,Reference export from the legacy database.
+sample_dump.sql,SQL export,archive_only,Reference export from the legacy database.
+JRiver/Defaults.xml,plugin defaults,discard,Plugin-specific JRiver configuration with no Linux-first runtime value.
+xMySql/Defaults.xml,plugin defaults,discard,Plugin-specific xMySql configuration with no Linux-first runtime value.
+smarts/*.xsp,smart playlist definitions,archive_only,Useful only if a future media-center integration is revived.
+voxLog.txt,runtime log,archive_only,Forensic source used during audit; not migrated into runtime.
+C__JarvisAudit_input_fix.zip/fix/install_vosk_final.ps1,Windows install script,discard,"Windows PowerShell installer, not part of the Linux-first runtime."
+C__JarvisAudit_input_fix.zip/fix/run_install_vosk.bat,Windows install script,discard,"Windows batch installer, not part of the Linux-first runtime."
+for_windows_11_important.txt,operator notes,archive_only,Legacy notes retained for reference only.
+for_windows_11_tree.txt,operator notes,archive_only,Legacy notes retained for reference only.

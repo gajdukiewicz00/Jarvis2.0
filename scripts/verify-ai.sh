@@ -221,9 +221,16 @@ check_required_paths() {
     check_file "${PROJECT_ROOT}/README.md"
     check_file "${PROJECT_ROOT}/ARCHITECTURE.md"
     check_file "${PROJECT_ROOT}/RUNBOOK_LLM.md"
+    check_file "${PROJECT_ROOT}/AI_LAYER_REALITY.md"
+    check_file "${PROJECT_ROOT}/AI_ARCHITECTURE.md"
+    check_file "${PROJECT_ROOT}/AI_OPERATIONS.md"
+    check_file "${PROJECT_ROOT}/AI_GAPS.md"
     check_file "${PROJECT_ROOT}/docs/STATUS.md"
     check_file "${PROJECT_ROOT}/scripts/acceptance-ai.sh"
     check_file "${PROJECT_ROOT}/scripts/product/jarvis-run-acceptance.sh"
+    check_file "${PROJECT_ROOT}/scripts/setup-ai-local.sh"
+    check_file "${PROJECT_ROOT}/scripts/ai-local-smoke.sh"
+    check_file "${PROJECT_ROOT}/scripts/ai-gpu-smoke.sh"
     check_file "${PROJECT_ROOT}/scripts/llm-smoke.sh"
     check_file "${PROJECT_ROOT}/scripts/memory-smoke.sh"
     check_file "${PROJECT_ROOT}/apps/llm-service/src/main/resources/prompts/llm-orchestrator-system.txt"
@@ -319,6 +326,7 @@ check_repo_hygiene() {
         [[ "${path}" == docs/_archive/* ]] && continue
         [[ "${path}" == docs/legacy/* ]] && continue
         [[ "${path}" == scripts/legacy/* ]] && continue
+        [[ "${path}" == scripts/verify-ai.sh ]] && continue
         [[ "${path}" == apps/mobile-client/.gradle/* ]] && continue
         [[ "${path}" == *application-dev.yaml ]] && continue
         [[ "${path}" == *application-dev.yml ]] && continue

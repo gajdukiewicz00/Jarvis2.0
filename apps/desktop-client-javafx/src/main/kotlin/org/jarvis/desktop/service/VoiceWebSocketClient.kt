@@ -6,6 +6,8 @@ import okhttp3.*
 import okio.ByteString.Companion.toByteString
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.config.ResolvedDesktopConfig
+import org.jarvis.desktop.config.VoiceRecognitionLanguage
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
@@ -22,11 +24,14 @@ import java.util.concurrent.TimeUnit
  * audio is only sent during the LISTENING state.
  */
 class VoiceWebSocketClient(
-    private val url: String = AppConfig.voiceWebSocketUrl,
+    private val urlProvider: () -> String = { AppConfig.current().voiceWebSocketUrl },
     private val onStateChange: (String) -> Unit,
     private val onTranscript: (String, Boolean, String?) -> Unit, // text, isFinal, correlationId
     private val onResponse: (String, String?, Boolean) -> Unit,   // text, action, handled
-    private val onAudioReceived: (ByteArray) -> Unit
+    private val onAudioReceived: (ByteArray) -> Unit,
+    private val onSttStatusChanged: (available: Boolean, reason: String?) -> Unit = { _, _ -> },
+    private val onTtsStatusChanged: (available: Boolean, reason: String?) -> Unit = { _, _ -> },
+    private val authServiceFactory: () -> AuthService = { AuthService() }
 ) : WebSocketListener() {
 
     private val client = OkHttpClient.Builder()
@@ -35,9 +40,16 @@ class VoiceWebSocketClient(
         .build()
     private val logger = LoggerFactory.getLogger(VoiceWebSocketClient::class.java)
     private val messageFactory = VoiceWebSocketMessageFactory()
+    private val configListener: (ResolvedDesktopConfig) -> Unit = { config ->
+        handleResolvedConfigChange(config)
+    }
     
     private var webSocket: WebSocket? = null
-    private var isConnected = false
+    var isConnected = false
+        private set
+    @Volatile private var resolvedUrl: String = urlProvider()
+    @Volatile private var currentVoiceLanguage: String = AppConfig.current().voiceLanguage
+    private var configListenerRegistered = false
     
     /** Flag to control audio sending - set by VoiceSession based on current state */
     @Volatile var isSendingAllowed = false
@@ -49,16 +61,27 @@ class VoiceWebSocketClient(
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 5
     private var shouldReconnect = true
-    
+    private var authRefreshAttempts = 0
+    private val maxAuthRefreshAttempts = 1
+
     fun connect() {
         if (isConnected) return
-        
-        shouldReconnect = true
-        
-        val requestBuilder = Request.Builder()
-            .url(url)
 
-        val token = TokenManager.getAccessToken()
+        shouldReconnect = true
+        ensureConfigListener()
+        val config = AppConfig.current()
+        resolvedUrl = config.voiceWebSocketUrl
+        currentVoiceLanguage = config.voiceLanguage
+        Platform.runLater { onStateChange("CONNECTING") }
+
+        val requestBuilder = Request.Builder()
+            .url(resolvedUrl)
+
+        var token = TokenManager.getAccessToken()
+        if (token.isNullOrBlank() && !TokenManager.getRefreshToken().isNullOrBlank()) {
+            attemptTokenRefresh("missing access token before voice websocket connect")
+            token = TokenManager.getAccessToken()
+        }
         if (!token.isNullOrBlank()) {
             requestBuilder.addHeader("Authorization", "Bearer $token")
         } else {
@@ -82,7 +105,14 @@ class VoiceWebSocketClient(
 
         val request = requestBuilder.build()
         
-        logger.info("🔌 Connecting to Voice WebSocket: {}", url)
+        logger.info("🔌 Connecting to Voice WebSocket: {}", resolvedUrl)
+        logger.info(
+            "🔐 Voice WS auth context: tokenPresent={}, userId={}, username={}, roles={}",
+            !token.isNullOrBlank(),
+            userId ?: "",
+            username ?: "",
+            role ?: ""
+        )
         webSocket = client.newWebSocket(request, this)
     }
     
@@ -92,6 +122,47 @@ class VoiceWebSocketClient(
         webSocket = null
         isConnected = false
         onStateChange("DISCONNECTED")
+        removeConfigListener()
+    }
+
+    private fun handleEndpointChange(newUrl: String) {
+        if (newUrl == resolvedUrl) {
+            return
+        }
+
+        val previousUrl = resolvedUrl
+        resolvedUrl = newUrl
+        logger.info("Voice WebSocket endpoint updated: {} -> {}", previousUrl, newUrl)
+
+        if (!shouldReconnect && !isConnected) {
+            return
+        }
+
+        val existingSocket = webSocket
+        isConnected = false
+        webSocket = null
+        existingSocket?.close(1000, "Endpoint updated")
+
+        Thread {
+            Thread.sleep(200L)
+            if (shouldReconnect) {
+                connect()
+            }
+        }.start()
+    }
+
+    private fun ensureConfigListener() {
+        if (!configListenerRegistered) {
+            AppConfig.addListener(configListener)
+            configListenerRegistered = true
+        }
+    }
+
+    private fun removeConfigListener() {
+        if (configListenerRegistered) {
+            AppConfig.removeListener(configListener)
+            configListenerRegistered = false
+        }
     }
     
     private fun scheduleReconnect() {
@@ -137,12 +208,16 @@ class VoiceWebSocketClient(
             return
         }
         
-        val msg = buildJsonObject {
-            put("type", "START")
-            put("correlationId", correlationId)
-        }.toString()
-        
-        logger.info("🎤 Starting voice command, correlationId={}", correlationId)
+        val config = AppConfig.current()
+        currentVoiceLanguage = VoiceRecognitionLanguage.normalize(config.voiceLanguage)
+        val msg = messageFactory.startMessage(correlationId, currentVoiceLanguage)
+
+        logger.info(
+            "🎤 Starting voice command, correlationId={}, locale={}, voiceLanguage={}",
+            correlationId,
+            config.locale.toLanguageTag(),
+            currentVoiceLanguage
+        )
         webSocket?.send(msg)
     }
     
@@ -159,7 +234,7 @@ class VoiceWebSocketClient(
     fun sendConfig(config: Map<String, String>) {
         if (!isConnected || config.isEmpty()) return
         val message = messageFactory.configMessage(config)
-        logger.info("🎛️ Sending voice config: {}", config)
+        logger.info("🎛️ Sending voice config: payload={}", message)
         webSocket?.send(message)
     }
 
@@ -198,9 +273,17 @@ class VoiceWebSocketClient(
     override fun onOpen(webSocket: WebSocket, response: Response) {
         isConnected = true
         reconnectAttempts = 0 // Reset on successful connection
+        authRefreshAttempts = 0
         logger.info("🔌 Voice WS connected: ${response.request.url}")
         Platform.runLater { onStateChange("CONNECTED") }
-        sendConfig(mapOf("language" to AppConfig.voiceLanguage))
+        val config = AppConfig.current()
+        currentVoiceLanguage = VoiceRecognitionLanguage.normalize(config.voiceLanguage)
+        logger.info(
+            "🎛️ Voice WS initial recognition config: locale={}, voiceLanguage={}",
+            config.locale.toLanguageTag(),
+            currentVoiceLanguage
+        )
+        sendConfig(mapOf("language" to currentVoiceLanguage))
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
@@ -214,9 +297,14 @@ class VoiceWebSocketClient(
                     "STATE" -> {
                         val state = json["state"]?.jsonPrimitive?.content ?: "UNKNOWN"
                         val sttAvailable = json["sttAvailable"]?.jsonPrimitive?.booleanOrNull
+                        val ttsAvailable = json["ttsAvailable"]?.jsonPrimitive?.booleanOrNull
+                        val ttsReason = json["ttsReason"]?.jsonPrimitive?.contentOrNull
                         onStateChange(state)
-                        if (sttAvailable == false) {
-                            onStateChange("UNAVAILABLE: STT backend is not configured on the server")
+                        if (sttAvailable != null) {
+                            onSttStatusChanged(sttAvailable, null)
+                        }
+                        if (ttsAvailable != null) {
+                            onTtsStatusChanged(ttsAvailable, ttsReason)
                         }
                     }
                     "TRANSCRIPT_PARTIAL" -> {
@@ -238,7 +326,10 @@ class VoiceWebSocketClient(
                         logger.info("📢 Response: '{}', action={}, handled={}, correlationId={}", 
                             responseText, action, handled, msgCorrelationId)
                         if (action == "STT_UNAVAILABLE") {
-                            onStateChange("UNAVAILABLE: $responseText")
+                            onSttStatusChanged(false, responseText)
+                        }
+                        if (action == "TTS_UNAVAILABLE") {
+                            onTtsStatusChanged(false, responseText)
                         }
                         onResponse(responseText, action, handled)
                     }
@@ -279,12 +370,89 @@ class VoiceWebSocketClient(
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         isConnected = false
+        if (response?.code == 401 || response?.code == 403) {
+            val authMessage = "Voice WebSocket upgrade rejected with HTTP ${response.code}"
+            logger.warn("❌ {}. Attempting auth recovery.", authMessage)
+            if (handleUnauthorizedFailure(authMessage)) {
+                return
+            }
+        }
+
         logger.error("❌ Voice WS failure: {}, code={}", t.message, response?.code)
         Platform.runLater { onStateChange("ERROR: ${t.message}") }
-        
+
         // Auto-reconnect on failure
         if (shouldReconnect) {
             scheduleReconnect()
+        }
+    }
+
+    private fun handleUnauthorizedFailure(message: String): Boolean {
+        if (authRefreshAttempts < maxAuthRefreshAttempts && attemptTokenRefresh(message)) {
+            authRefreshAttempts++
+            logger.info("🔐 Voice WS token refresh succeeded, reconnecting immediately")
+            Platform.runLater { onStateChange("Re-authenticating voice session...") }
+            Thread {
+                Thread.sleep(300L)
+                if (shouldReconnect && !isConnected) {
+                    connect()
+                }
+            }.start()
+            return true
+        }
+
+        logger.warn("🔐 Voice WS auth recovery failed; moving voice channel to AUTH_REQUIRED")
+        Platform.runLater { onStateChange("AUTH_REQUIRED: voice session expired, login required") }
+        return true
+    }
+
+    private fun attemptTokenRefresh(reason: String): Boolean {
+        val refreshToken = TokenManager.getRefreshToken()
+        if (refreshToken.isNullOrBlank()) {
+            logger.warn("Cannot refresh Voice WS auth: refresh token missing ({})", reason)
+            TokenManager.clearTokens()
+            return false
+        }
+
+        return try {
+            logger.info("Refreshing Voice WS auth token ({})", reason)
+            val authResponse = authServiceFactory().refreshTokens(refreshToken)
+            TokenManager.saveTokens(
+                authResponse.accessToken,
+                authResponse.refreshToken,
+                authResponse.username,
+                authResponse.role
+            )
+            true
+        } catch (e: Exception) {
+            logger.error("Voice WS token refresh failed: {}", e.message, e)
+            TokenManager.clearTokens()
+            false
+        }
+    }
+
+    private fun handleResolvedConfigChange(config: ResolvedDesktopConfig) {
+        val normalizedLanguage = VoiceRecognitionLanguage.normalize(config.voiceLanguage)
+        val endpointChanged = config.voiceWebSocketUrl != resolvedUrl
+        val languageChanged = normalizedLanguage != currentVoiceLanguage
+
+        if (languageChanged) {
+            logger.info(
+                "Voice recognition language updated from desktop config: {} -> {} (locale={})",
+                currentVoiceLanguage,
+                normalizedLanguage,
+                config.locale.toLanguageTag()
+            )
+            currentVoiceLanguage = normalizedLanguage
+        }
+
+        if (endpointChanged) {
+            handleEndpointChange(config.voiceWebSocketUrl)
+            return
+        }
+
+        if (languageChanged && isConnected) {
+            sendConfig(mapOf("language" to currentVoiceLanguage))
         }
     }
 }

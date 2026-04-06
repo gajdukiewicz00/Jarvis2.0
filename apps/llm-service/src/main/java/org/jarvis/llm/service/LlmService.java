@@ -74,13 +74,25 @@ public class LlmService {
      * Now includes RAG (Retrieval-Augmented Generation) with long-term memory.
      */
     public ChatResponseDto processMessage(String sessionId, String userMessage, String correlationId) {
-        return processMessage(sessionId, null, userMessage, correlationId);
+        return processMessage(sessionId, null, userMessage, correlationId, true);
     }
 
     /**
      * Process user message with explicit delegated user context when available.
      */
     public ChatResponseDto processMessage(String sessionId, String userId, String userMessage, String correlationId) {
+        return processMessage(sessionId, userId, userMessage, correlationId, true);
+    }
+
+    /**
+     * Process user message with optional rate-limit bypass for trusted internal callers.
+     */
+    public ChatResponseDto processMessage(
+            String sessionId,
+            String userId,
+            String userMessage,
+            String correlationId,
+            boolean enforceRateLimit) {
         long startTime = System.currentTimeMillis();
         log.info("[{}] Processing message for session: {}", correlationId, sessionId);
 
@@ -97,10 +109,12 @@ public class LlmService {
                 : extractUserId(sessionId);
         long now = System.currentTimeMillis();
         long last = getLastRequestTime(effectiveUserId);
-        if (now - last < RATE_LIMIT_MS) {
+        if (enforceRateLimit && now - last < RATE_LIMIT_MS) {
             throw new RuntimeException("Rate limit exceeded. Please wait.");
         }
-        putLastRequestTime(effectiveUserId, now);
+        if (enforceRateLimit) {
+            putLastRequestTime(effectiveUserId, now);
+        }
 
         // Truncate input
         if (userMessage != null && userMessage.length() > MAX_INPUT_LENGTH) {
@@ -127,14 +141,20 @@ public class LlmService {
         // === RAG: Search long-term memory for relevant context ===
         String memoryContext = "";
         if (memoryEnabled) {
-            try {
-                memoryContext = memoryClient.searchContext(
-                        effectiveUserId, userMessage, memoryTopK, memoryMaxTokens, correlationId);
-                if (!memoryContext.isBlank()) {
-                    log.info("[{}] Memory context found: {} chars", correlationId, memoryContext.length());
-                }
-            } catch (RuntimeException e) {
-                log.warn("[{}] Memory search failed (continuing without memory): {}", correlationId, e.getMessage());
+            MemoryClient.SearchContextResult memoryResult = memoryClient.searchContext(
+                    effectiveUserId, userMessage, memoryTopK, memoryMaxTokens, correlationId);
+            memoryContext = memoryResult.contextText();
+            if (!memoryContext.isBlank()) {
+                log.info("[{}] Memory context found: {} chars (mode={})",
+                        correlationId,
+                        memoryContext.length(),
+                        memoryResult.retrievalMode());
+            }
+            if (memoryResult.degradedReason() != null && !memoryResult.degradedReason().isBlank()) {
+                log.warn("[{}] Memory retrieval degraded: mode={}, reason={}",
+                        correlationId,
+                        memoryResult.retrievalMode(),
+                        memoryResult.degradedReason());
             }
         }
 
@@ -392,7 +412,7 @@ public class LlmService {
      * Check if LLM server is available
      */
     public boolean isAvailable() {
-        return llmClient.isHealthy();
+        return llmClient.isHealthy() && (!memoryEnabled || memoryClient.isHealthy());
     }
 
     private String extractUserId(String sessionId) {

@@ -4,13 +4,14 @@ Supports: transformers (GPU/CPU), llama.cpp (GGUF, GPU)
 """
 import asyncio
 import logging
+import subprocess
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -26,8 +27,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def detect_gpu_status() -> tuple[bool, Optional[str], Optional[str]]:
+    """Detect GPU presence without requiring PyTorch."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return True, torch.version.cuda, torch.cuda.get_device_name(0)
+    except ImportError:
+        pass
+
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return True, None, result.stdout.strip().splitlines()[0]
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+    return False, None, None
+
+
 # Thread pool for blocking operations
-executor = ThreadPoolExecutor(max_workers=2)
+executor = ThreadPoolExecutor(max_workers=config.CHAT_WORKERS)
 
 
 # Request/Response models
@@ -61,7 +87,11 @@ class HealthResponse(BaseModel):
     status: str
     backend: str
     model_loaded: bool
+    configured_device: str
+    effective_device: str
     device: str
+    configured_n_gpu_layers: int
+    effective_n_gpu_layers: Optional[int] = None
     gpu_available: bool
     cuda_version: Optional[str] = None
     diagnostics: Optional[dict] = None
@@ -83,24 +113,15 @@ async def lifespan(app: FastAPI):
     
     try:
         # Log GPU status
-        try:
-            import torch
-            gpu_available = torch.cuda.is_available()
-            cuda_version = torch.version.cuda
-            device_name = torch.cuda.get_device_name(0) if gpu_available else "N/A"
-            
-            logger.info("=" * 60)
-            logger.info("STARTUP DIAGNOSTICS:")
-            logger.info(f"  torch.cuda.is_available() = {gpu_available}")
-            logger.info(f"  torch.version.cuda = {cuda_version}")
-            logger.info(f"  Backend: {config.LLM_BACKEND}")
-            if gpu_available:
-                logger.info(f"  GPU name = {device_name}")
-                vram_total = torch.cuda.get_device_properties(0).total_memory / 1e9
-                logger.info(f"  VRAM total = {vram_total:.2f} GB")
-            logger.info("=" * 60)
-        except ImportError:
-            logger.warning("PyTorch not available, cannot check GPU status")
+        gpu_available, cuda_version, device_name = detect_gpu_status()
+        logger.info("=" * 60)
+        logger.info("STARTUP DIAGNOSTICS:")
+        logger.info(f"  GPU available = {gpu_available}")
+        logger.info(f"  CUDA version = {cuda_version}")
+        logger.info(f"  Backend: {config.LLM_BACKEND}")
+        if device_name:
+            logger.info(f"  GPU name = {device_name}")
+        logger.info("=" * 60)
         
         # Validate config and load model
         config.validate()
@@ -143,21 +164,22 @@ if config.CORS_ALLOWED_ORIGINS:
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint with diagnostics"""
-    try:
-        import torch
-        gpu_available = torch.cuda.is_available()
-        cuda_version = torch.version.cuda if gpu_available else None
-    except ImportError:
-        gpu_available = False
-        cuda_version = None
+    gpu_available, cuda_version, _ = detect_gpu_status()
     
     diagnostics = model_loader.get_diagnostics() if model_loader.is_loaded() else None
+    effective_n_gpu_layers = None
+    if diagnostics:
+        effective_n_gpu_layers = diagnostics.get("effective_n_gpu_layers")
     
     return HealthResponse(
         status="healthy" if model_loader.is_loaded() else "unhealthy",
         backend=model_loader.backend_name,
         model_loaded=model_loader.is_loaded(),
+        configured_device=config.DEVICE,
+        effective_device=config.get_effective_device(),
         device=config.get_effective_device(),
+        configured_n_gpu_layers=config.N_GPU_LAYERS,
+        effective_n_gpu_layers=effective_n_gpu_layers,
         gpu_available=gpu_available,
         cuda_version=cuda_version,
         diagnostics=diagnostics
@@ -248,23 +270,31 @@ async def _handle_streaming_chat(request: ChatRequest, correlation_id: str):
     async def generate_stream():
         start_time = time.time()
         total_tokens = 0
-        
+
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-        prompt = chat_handler.format_prompt(messages)
-        
         max_tokens = request.max_tokens or config.MAX_TOKENS
         temperature = request.temperature or config.TEMPERATURE
-        
-        logger.info(f"[{correlation_id}] Streaming chat: prompt_len={len(prompt)}, max_tokens={max_tokens}")
+
+        logger.info(f"[{correlation_id}] Streaming chat: messages={len(messages)}, max_tokens={max_tokens}")
         
         try:
             # Yield SSE events
-            for token in model_loader.generate_stream(
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=config.TOP_P
-            ):
+            stream = (
+                model_loader.chat_stream(
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=config.TOP_P
+                )
+                if model_loader.supports_chat_messages()
+                else model_loader.generate_stream(
+                    prompt=chat_handler.format_prompt(messages),
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=config.TOP_P
+                )
+            )
+            for token in stream:
                 total_tokens += 1
                 # SSE format: data: {json}\n\n
                 yield f"data: {token}\n\n"
@@ -293,17 +323,22 @@ async def _handle_streaming_chat(request: ChatRequest, correlation_id: str):
 @app.get("/")
 async def root():
     """Root endpoint with server info"""
-    try:
-        import torch
-        gpu_available = torch.cuda.is_available()
-    except ImportError:
-        gpu_available = False
+    gpu_available, _, _ = detect_gpu_status()
     
     return {
         "service": "Jarvis LLM Server",
         "version": "2.0.0",
         "backend": model_loader.backend_name,
+        "model": model_loader.model_name,
+        "configured_device": config.DEVICE,
+        "effective_device": config.get_effective_device(),
         "device": config.get_effective_device(),
+        "configured_n_gpu_layers": config.N_GPU_LAYERS,
+        "effective_n_gpu_layers": (
+            model_loader.get_diagnostics().get("effective_n_gpu_layers")
+            if model_loader.is_loaded()
+            else None
+        ),
         "gpu_available": gpu_available,
         "streaming_enabled": config.ENABLE_STREAMING,
         "status": "running" if model_loader.is_loaded() else "loading"
@@ -318,6 +353,9 @@ async def diagnostics():
     # Add server config
     diag["config"] = {
         "backend": config.LLM_BACKEND,
+        "configured_device": config.DEVICE,
+        "effective_device": config.get_effective_device(),
+        "configured_n_gpu_layers": config.N_GPU_LAYERS,
         "max_new_tokens": config.MAX_NEW_TOKENS,
         "max_generation_seconds": config.MAX_GENERATION_SECONDS,
         "streaming_enabled": config.ENABLE_STREAMING,

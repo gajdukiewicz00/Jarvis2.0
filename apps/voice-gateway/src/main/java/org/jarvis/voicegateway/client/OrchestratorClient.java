@@ -8,6 +8,12 @@ public interface OrchestratorClient {
      * Send raw text command to orchestrator (legacy method).
      */
     void sendCommand(String text);
+
+    /**
+     * Send raw text command and return the orchestrator reply when the caller
+     * needs an actual assistant response instead of a fire-and-forget ack.
+     */
+    String sendCommandWithResponse(String text);
     
     /**
      * Send structured intent to orchestrator for execution.

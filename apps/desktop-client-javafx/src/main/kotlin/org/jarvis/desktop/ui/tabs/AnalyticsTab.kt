@@ -6,6 +6,7 @@ import javafx.scene.control.*
 import javafx.scene.layout.GridPane
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
+import org.jarvis.desktop.config.AppConfig
 
 class AnalyticsTab(private val apiClient: ApiClient) {
     val tab = Tab("Analytics")
@@ -121,7 +122,7 @@ class AnalyticsTab(private val apiClient: ApiClient) {
                         e is org.jarvis.desktop.api.AccessDeniedException ->
                             "✗ Access denied. Check authorization configuration or user roles."
                         errorMessage.contains("Connection refused") || errorMessage.contains("not available") ->
-                            "✗ Server unavailable. Please start the API gateway (http://localhost:8080)"
+                            "✗ Server unavailable. Please start the API gateway (${AppConfig.apiGatewayBaseUrl})"
                         errorMessage.contains("not found (404)") ->
                             "✗ Analytics service not deployed. Start it with the local runtime."
                         else ->
@@ -144,7 +145,7 @@ class AnalyticsTab(private val apiClient: ApiClient) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
                 expensesByMonthArea.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                    "Server unavailable.\nPlease start the API gateway\n(http://localhost:8080)"
+                    "Server unavailable.\nPlease start the API gateway\n(${AppConfig.apiGatewayBaseUrl})"
                 } else {
                     "Error: $errorMessage"
                 }
@@ -163,7 +164,7 @@ class AnalyticsTab(private val apiClient: ApiClient) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
                 expensesByCategoryArea.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                    "Server unavailable.\nPlease start the API gateway\n(http://localhost:8080)"
+                    "Server unavailable.\nPlease start the API gateway\n(${AppConfig.apiGatewayBaseUrl})"
                 } else {
                     "Error: $errorMessage"
                 }
@@ -182,7 +183,7 @@ class AnalyticsTab(private val apiClient: ApiClient) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
                 timeStatsArea.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                    "Server unavailable.\nPlease start the API gateway\n(http://localhost:8080)"
+                    "Server unavailable.\nPlease start the API gateway\n(${AppConfig.apiGatewayBaseUrl})"
                 } else {
                     "Error: $errorMessage"
                 }
@@ -201,7 +202,7 @@ class AnalyticsTab(private val apiClient: ApiClient) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
                 calendarStatsArea.text = if (errorMessage.contains("Connection refused") || errorMessage.contains("not available")) {
-                    "Server unavailable.\nPlease start the API gateway\n(http://localhost:8080)"
+                    "Server unavailable.\nPlease start the API gateway\n(${AppConfig.apiGatewayBaseUrl})"
                 } else {
                     "Error: $errorMessage"
                 }

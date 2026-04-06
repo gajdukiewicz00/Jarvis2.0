@@ -5,9 +5,9 @@ Prod-grade one-click запуск Jarvis через иконку. Никаких
 ## Быстрый старт (UI-first)
 
 1. Открой меню приложений и запусти **Jarvis**.
-2. Нажми **Start All**.
-3. Если нужно — Launcher сам попросит пароль администратора через GUI (pkexec).
-4. Когда статус станет **READY** или **DEGRADED**, нажми **Start Desktop**.
+2. Desktop entry поднимет canonical wrapper `~/.jarvis/app/bin/jarvis-launcher.sh`.
+3. Wrapper делегирует в актуальный repo launcher, если workspace доступен, и при необходимости сам пересоберёт `launcher-javafx` и `desktop-client-javafx`.
+4. Launcher auto-start'ит полный локальный стек; кнопки **Start All** и **Start Desktop** остаются как ручной fallback/diagnostics surface.
 
 ## Desktop integration (launcher icon)
 
@@ -15,6 +15,7 @@ Prod-grade one-click запуск Jarvis через иконку. Никаких
 - Создается **только** на install-этапе (idempotent), runtime его не трогает.
 - Инсталлятор удаляет legacy/duplicate entries в стандартных каталогах (user + system).
 - Exec указывает на wrapper: `~/.jarvis/app/bin/jarvis-launcher.sh`.
+- Wrapper является стабильным shim'ом: при наличии repo он передаёт управление в `scripts/product/jarvis-launcher.sh` из workspace, чтобы GUI не запускал устаревшую копию из `~/.jarvis/app`.
 - Icon — абсолютный путь: `~/.jarvis/app/assets/icons/jarvis.png`.
 
 ## Если иконки дублируются
@@ -42,8 +43,10 @@ LLM и Memory — опциональные (по умолчанию выключ
 
 ```
 Launcher UI
- ├─> проверяет зависимости, секреты, TLS, /etc/hosts
- ├─> запускает jarvis-launch.sh
+ ├─> desktop entry вызывает стабильный wrapper в ~/.jarvis/app
+ ├─> wrapper резолвит repo source of truth и обновляет launcher/desktop JAR при drift
+ ├─> launcher проверяет зависимости, секреты, TLS, /etc/hosts
+ ├─> launcher запускает local runtime (`scripts/runtime-up.sh`) when repo is available, otherwise installed product path
  ├─> ждёт READY/DEGRADED
  └─> запускает Desktop UI
 ```

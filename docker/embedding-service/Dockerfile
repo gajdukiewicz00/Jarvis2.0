@@ -11,6 +11,8 @@ ARG CUDA_VERSION=cu124
 ENV CUDA_VERSION=cu124
 ENV HF_HOME=/app/.cache/huggingface
 ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence-transformers
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_DEFAULT_TIMEOUT=240
 
 # System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -48,4 +50,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 USER 10001:10001
 
 CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5001"]
-

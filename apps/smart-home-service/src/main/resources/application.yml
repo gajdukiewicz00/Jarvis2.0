@@ -1,6 +1,11 @@
 server:
-  port: 8086
+  port: ${JARVIS_SMART_HOME_PORT:8086}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_SMART_HOME_SSL_ENABLED:false}
+    key-store: ${JARVIS_SMART_HOME_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_SMART_HOME_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_SMART_HOME_KEYSTORE_TYPE:PKCS12}
 
 spring:
   lifecycle:

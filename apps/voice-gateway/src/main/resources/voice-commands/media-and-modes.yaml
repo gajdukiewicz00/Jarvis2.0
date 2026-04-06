@@ -1,0 +1,147 @@
+commands:
+  - id: rule_play_music
+    matchers:
+      - type: exact
+        values:
+          - "включи музыку"
+          - "play music"
+      - type: contains
+        values:
+          - "запусти музыку"
+          - "turn on some music"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://music.youtube.com/"
+    response:
+      key: pleasant_listening_sir
+
+  - id: rule_play_radio
+    matchers:
+      - type: exact
+        values:
+          - "включи радио"
+          - "play radio"
+      - type: contains
+        values:
+          - "запусти радио"
+          - "turn on the radio"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://radio.garden/"
+    response:
+      key: pleasant_listening_sir
+
+  - id: rule_pause_media
+    matchers:
+      - type: exact
+        values:
+          - "пауза"
+          - "pause"
+      - type: contains
+        values:
+          - "поставь на паузу"
+          - "stop the music"
+    action:
+      target: pc_control
+      name: PAUSE
+    response:
+      key: affirmative
+
+  - id: rule_next_track
+    matchers:
+      - type: exact
+        values:
+          - "следующий трек"
+          - "next track"
+      - type: alias
+        values:
+          - "следующий"
+          - "next"
+      - type: contains
+        values:
+          - "включи следующий трек"
+          - "skip this song"
+    action:
+      target: pc_control
+      name: NEXT
+    response:
+      key: affirmative
+
+  - id: rule_previous_track
+    matchers:
+      - type: exact
+        values:
+          - "предыдущий трек"
+          - "previous track"
+      - type: alias
+        values:
+          - "предыдущий"
+          - "previous"
+      - type: contains
+        values:
+          - "включи предыдущий трек"
+          - "go to previous track"
+    action:
+      target: pc_control
+      name: PREV
+    response:
+      key: affirmative
+
+  - id: rule_work_mode
+    matchers:
+      - type: exact
+        values:
+          - "за работу"
+          - "work mode"
+      - type: contains
+        values:
+          - "рабочий режим"
+          - "начинаем работать"
+          - "time to work"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: work
+    response:
+      key: loading_sir
+
+  - id: rule_rest_mode
+    matchers:
+      - type: exact
+        values:
+          - "режим отдыха"
+          - "rest mode"
+      - type: contains
+        values:
+          - "я хочу отдохнуть"
+          - "relax mode"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: rest
+    response:
+      key: rest_mode
+
+  - id: rule_game_mode
+    matchers:
+      - type: exact
+        values:
+          - "игровой режим"
+          - "game mode"
+      - type: contains
+        values:
+          - "включи игровой режим"
+          - "gaming mode"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: game
+    response:
+      key: game_voice_control_activated

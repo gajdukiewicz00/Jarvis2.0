@@ -9,6 +9,7 @@ import org.jarvis.pccontrol.service.impl.InMemoryPcScenarioRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -20,6 +21,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
@@ -98,5 +100,33 @@ class PcActionExecutionServiceTest {
         assertEquals(PcActionExecutionStatus.SUCCESS, result.status());
         assertEquals(15, result.details().get("delta"));
         assertEquals("+", result.details().get("direction"));
+    }
+
+    @Test
+    void executeLegacyBrowserScenarioUsesWindowAndMouseSteps() throws Exception {
+        PcActionResult result = service.execute(new PcActionRequest("SCENARIO", Map.of("name", "legacy_browser_maximize")));
+
+        assertTrue(result.success());
+        assertEquals(PcActionExecutionStatus.SUCCESS, result.status());
+
+        InOrder inOrder = inOrder(systemControlService);
+        inOrder.verify(systemControlService).maximizeWindow("Opera");
+        inOrder.verify(systemControlService).leftClick();
+    }
+
+    @Test
+    void executeLegacyDrawingScenarioUsesMouseDragSteps() throws Exception {
+        PcActionResult result = service.execute(new PcActionRequest("SCENARIO", Map.of("name", "legacy_draw_circle")));
+
+        assertTrue(result.success());
+        assertEquals(PcActionExecutionStatus.SUCCESS, result.status());
+
+        InOrder inOrder = inOrder(systemControlService);
+        inOrder.verify(systemControlService).moveMouseAbsolute(531, 64);
+        inOrder.verify(systemControlService).leftClick();
+        inOrder.verify(systemControlService).moveMouseAbsolute(158, 213);
+        inOrder.verify(systemControlService).leftButtonDown();
+        inOrder.verify(systemControlService).moveMouseAbsolute(447, 473);
+        inOrder.verify(systemControlService).leftButtonUp();
     }
 }

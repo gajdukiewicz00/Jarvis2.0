@@ -1,0 +1,137 @@
+default: TTS
+
+rules:
+  - action: wake_response
+    ru: ru/system/always_at_service_sir
+
+  - action: small_talk_jarvis
+    ru: ru/assistant/at_your_service_sir
+
+  - action: are_you_there
+    ru: ru/system/always_at_service_sir
+
+  - action: greeting
+    ru: ru/assistant/hello_i_am_jarvis
+
+  - action: morning_greeting
+    ru: ru/assistant/good_morning
+
+  - action: thanks
+    ru: ru/system/always_at_service_sir
+
+  - action: volume_up
+    ru: ru/system/yes_sir
+
+  - action: volume_down
+    ru: ru/system/yes_sir
+
+  - action: ack_success
+    ru: ru/assistant/request_completed_sir
+
+  - action: ack_generic
+    ru: ru/system/yes_sir_alt
+
+  - action: ack_start
+    ru: ru/assistant/loading_sir
+
+  - action: open_url
+    ru: ru/assistant/loading_sir
+
+  - action: open_news
+    ru: ru/assistant/news_update
+
+  - action: open_app
+    ru: ru/assistant/loading_sir
+
+  - action: open_browser
+    ru: ru/assistant/loading_sir
+
+  - action: open_youtube
+    ru: ru/assistant/loading_sir
+
+  - action: open_terminal
+    ru: ru/assistant/loading_sir
+
+  - action: clipboard_copy
+    ru: ru/system/yes_sir_alt
+
+  - action: clipboard_paste
+    ru: ru/system/yes_sir_alt
+
+  - action: undo_action
+    ru: ru/system/affirmative
+
+  - action: switch_window
+    ru: ru/system/yes_sir_alt
+
+  - action: close_window
+    ru: ru/assistant/request_completed_sir
+
+  - action: refresh_page
+    ru: ru/system/yes_sir_alt
+
+  - action: navigate_back
+    ru: ru/system/yes_sir_alt
+
+  - action: navigate_forward
+    ru: ru/system/yes_sir_alt
+
+  - action: show_desktop
+    ru: ru/system/yes_sir_alt
+
+  - action: open_settings
+    ru: ru/system/yes_sir
+
+  - action: switch_language
+    ru: ru/system/yes_sir_alt
+
+  - action: screenshot
+    ru: ru/system/yes_sir_alt
+
+  - action: sleep_mode
+    ru: ru/system/rest_mode
+
+  - action: monitor_off
+    ru: ru/system/rest_mode
+
+  - action: network_check
+    ru: ru/diagnostics/internet_check
+
+  - action: what_doing
+    ru: ru/assistant/running_diagnostics
+
+  - action: welcome_home
+    ru: ru/assistant/welcome_back
+
+  - action: standby_mode
+    ru: ru/system/rest_mode
+
+  - action: play_music
+    ru: ru/media/pleasant_listening_sir
+
+  - action: play_radio
+    ru: ru/media/pleasant_listening_sir
+
+  - action: work_mode
+    ru: ru/assistant/loading_sir
+
+  - action: rest_mode
+    ru: ru/system/rest_mode
+
+  - action: protocol_cozy_evening
+    ru: ru/media/pleasant_listening_sir
+
+  - action: protocol_guests
+    ru: ru/assistant/loading_sir
+
+  - action: protocol_holiday
+    ru: ru/media/pleasant_listening_sir
+
+  - action: protocol_morning
+    ru: ru/assistant/good_morning
+
+  - action: protocol_leaving
+    ru: ru/system/rest_mode
+
+  - action: game_mode
+    ru: ru/scenarios/game_voice_control_activated

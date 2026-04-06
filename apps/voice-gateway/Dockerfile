@@ -11,9 +11,9 @@ WORKDIR /app
 RUN addgroup -g 1000 jarvis && \
     adduser -u 1000 -G jarvis -s /bin/sh -D jarvis
 
-COPY target/*.jar app.jar
+COPY apps/voice-gateway/target/*.jar app.jar
 
-# Copy Vosk models if present
+# Copy repo-local speech models if present
 COPY --chown=jarvis:jarvis models/ /app/models/
 
 RUN chown -R jarvis:jarvis /app

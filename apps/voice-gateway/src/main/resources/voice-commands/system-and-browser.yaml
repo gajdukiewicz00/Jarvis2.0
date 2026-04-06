@@ -1,0 +1,461 @@
+commands:
+  - id: rule_open_yandex
+    matchers:
+      - type: exact
+        values:
+          - "открой яндекс"
+          - "запусти яндекс"
+          - "зайди в яндекс"
+          - "открой дзен"
+          - "запусти дзен"
+      - type: alias
+        values:
+          - "яндекс"
+          - "дзен"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://dzen.ru/"
+    response:
+      key: loading_sir
+
+  - id: rule_open_vk
+    matchers:
+      - type: exact
+        values:
+          - "открой вк"
+          - "открой вконтакте"
+          - "запусти вконтакте"
+      - type: alias
+        values:
+          - "вк"
+          - "вконтакте"
+          - "вэка"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://vk.com/feed"
+    response:
+      key: loading_sir
+
+  - id: rule_open_translator
+    matchers:
+      - type: exact
+        values:
+          - "открой переводчик"
+          - "запусти переводчик"
+          - "мне нужен перевод"
+      - type: alias
+        values:
+          - "переводчик"
+      - type: contains
+        values:
+          - "переведи"
+          - "открой перевод"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://translate.yandex.ru/?from=tableau_yabro"
+    response:
+      key: loading_sir
+
+  - id: rule_open_spotify
+    matchers:
+      - type: exact
+        values:
+          - "открой спотифай"
+          - "запусти спотифай"
+      - type: alias
+        values:
+          - "спотифай"
+          - "споти"
+          - "spotify"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://open.spotify.com/"
+    response:
+      key: loading_sir
+
+  - id: rule_open_pikabu
+    matchers:
+      - type: exact
+        values:
+          - "открой пикабу"
+          - "запусти пикабу"
+      - type: alias
+        values:
+          - "пикабу"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://pikabu.ru/"
+    response:
+      key: loading_sir
+
+  - id: rule_open_twitter
+    matchers:
+      - type: exact
+        values:
+          - "открой твиттер"
+          - "запусти твиттер"
+          - "открой x"
+      - type: alias
+        values:
+          - "твиттер"
+          - "твитер"
+          - "twitter"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://twitter.com/"
+    response:
+      key: loading_sir
+
+  - id: rule_open_facebook
+    matchers:
+      - type: exact
+        values:
+          - "открой фейсбук"
+          - "запусти фейсбук"
+      - type: alias
+        values:
+          - "фейсбук"
+          - "фэйсбук"
+          - "facebook"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.facebook.com/"
+    response:
+      key: loading_sir
+
+  - id: rule_open_instagram
+    matchers:
+      - type: exact
+        values:
+          - "открой инстаграм"
+          - "запусти инстаграм"
+          - "открой инстаграмм"
+      - type: alias
+        values:
+          - "инстаграм"
+          - "инстаграмм"
+          - "инста"
+          - "instagram"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.instagram.com/"
+    response:
+      key: loading_sir
+
+  - id: rule_open_wikipedia
+    matchers:
+      - type: exact
+        values:
+          - "открой википедию"
+          - "запусти википедию"
+      - type: alias
+        values:
+          - "википедия"
+          - "википедию"
+          - "вики"
+          - "wikipedia"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://ru.wikipedia.org/wiki/Заглавная_страница"
+    response:
+      key: loading_sir
+
+  - id: rule_open_tiktok
+    matchers:
+      - type: exact
+        values:
+          - "открой тик ток"
+          - "запусти тик ток"
+          - "открой тикток"
+      - type: alias
+        values:
+          - "тик ток"
+          - "тикток"
+          - "tiktok"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.tiktok.com/@miguel_jrr"
+    response:
+      key: loading_sir
+
+  - id: rule_undo_action
+    matchers:
+      - type: exact
+        values:
+          - "отмена действия"
+          - "отмени действие"
+          - "отмени"
+          - "отменить"
+          - "undo"
+      - type: contains
+        values:
+          - "undo that"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+z"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_switch_window
+    matchers:
+      - type: exact
+        values:
+          - "другое окно"
+          - "смени окно"
+          - "сменить окно"
+          - "переключи окно"
+          - "switch window"
+      - type: contains
+        values:
+          - "other window"
+          - "alt tab"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+Tab"
+    response:
+      key: affirmative
+
+  - id: rule_refresh_page
+    matchers:
+      - type: exact
+        values:
+          - "обнови страницу"
+          - "обновить страницу"
+          - "перезагрузи страницу"
+          - "refresh page"
+          - "reload"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "F5"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_navigate_back
+    matchers:
+      - type: exact
+        values:
+          - "назад"
+          - "вернись назад"
+          - "go back"
+          - "navigate back"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+Left"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_navigate_forward
+    matchers:
+      - type: exact
+        values:
+          - "вперед"
+          - "вперед"
+          - "вернись вперед"
+          - "go forward"
+          - "navigate forward"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+Right"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_find_in_page
+    matchers:
+      - type: exact
+        values:
+          - "найди элемент"
+          - "найди на странице"
+          - "поиск на странице"
+          - "find on page"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+f"
+    response:
+      key: affirmative
+
+  - id: rule_focus_address_bar
+    matchers:
+      - type: exact
+        values:
+          - "адрес страницы"
+          - "открой адрес страницы"
+          - "выдели адрес страницы"
+          - "перейди в адресную строку"
+          - "focus address bar"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+l"
+    response:
+      key: affirmative
+
+  - id: rule_system_search
+    matchers:
+      - type: exact
+        values:
+          - "поиск по системе"
+          - "поиск в системе"
+          - "найди в системе"
+          - "system search"
+      - type: contains
+        values:
+          - "search system"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Super+s"
+    response:
+      key: affirmative
+
+  - id: rule_open_settings
+    matchers:
+      - type: exact
+        values:
+          - "открой параметры"
+          - "открой настройки"
+          - "open settings"
+          - "settings"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Super+i"
+    response:
+      key: loading_sir
+
+  - id: rule_delete_selection
+    matchers:
+      - type: exact
+        values:
+          - "удали"
+          - "удали это"
+          - "сотри"
+          - "delete this"
+          - "delete selection"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Delete"
+    response:
+      key: affirmative
+
+  - id: rule_press_enter
+    matchers:
+      - type: exact
+        values:
+          - "энтер"
+          - "нажми энтер"
+          - "отправь"
+          - "press enter"
+          - "hit enter"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Return"
+    response:
+      key: affirmative
+
+  - id: rule_switch_language
+    matchers:
+      - type: exact
+        values:
+          - "смени язык"
+          - "смени раскладку"
+          - "сменить язык"
+          - "сменить раскладку"
+          - "switch language"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+Shift"
+    response:
+      key: affirmative
+
+  - id: rule_rename_item
+    matchers:
+      - type: exact
+        values:
+          - "смени имя выбранного элемента"
+          - "переименуй"
+          - "переименовать"
+          - "rename item"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "F2"
+    response:
+      key: affirmative
+
+  - id: rule_network_check
+    matchers:
+      - type: exact
+        values:
+          - "проверь скорость интернета"
+          - "узнай скорость интернета"
+          - "скажи скорость интернета"
+          - "check internet speed"
+      - type: contains
+        values:
+          - "run network speed test"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://fast.com/"
+    response:
+      key: internet_check
+
+  - id: rule_set_volume_max
+    matchers:
+      - type: exact
+        values:
+          - "громкость на максимум"
+          - "громкость на полную"
+          - "звук на максимум"
+          - "max volume"
+          - "full volume"
+    action:
+      target: pc_control
+      name: SET_VOLUME
+      params:
+        level: 100
+    response:
+      key: yes_sir

@@ -3,8 +3,9 @@ package org.jarvis.desktop.service
 import javafx.application.Platform
 import kotlinx.serialization.json.*
 import okhttp3.*
-import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.auth.TokenManager
+import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
@@ -17,7 +18,7 @@ import java.util.concurrent.TimeUnit
  * - {"type": "PC_ACTION", "action": "MEDIA_CONTROL", "params": {"action": "NEXT"}}
  */
 class PcControlWebSocketClient(
-    private val url: String = AppConfig.pcControlWebSocketUrl,
+    private val urlProvider: () -> String = { AppConfig.current().pcControlWebSocketUrl },
     private val systemControl: SystemControlService,
     private val onStatusChange: (String) -> Unit = {}
 ) : WebSocketListener() {
@@ -73,6 +74,10 @@ class PcControlWebSocketClient(
                         ?: "application"
                     "Open app: $app"
                 }
+                "OPEN_URL" -> {
+                    val url = params["url"]?.jsonPrimitive?.contentOrNull ?: "url"
+                    "Open url: $url"
+                }
                 else -> action.replace('_', ' ')
                     .lowercase()
                     .replaceFirstChar { it.titlecase() }
@@ -90,6 +95,9 @@ class PcControlWebSocketClient(
 
     private val logger = LoggerFactory.getLogger(PcControlWebSocketClient::class.java)
     private val json = Json { ignoreUnknownKeys = true }
+    private val configListener: (ResolvedDesktopConfig) -> Unit = { config ->
+        handleEndpointChange(config.pcControlWebSocketUrl)
+    }
     
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -100,18 +108,23 @@ class PcControlWebSocketClient(
     private var isConnected = false
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 5
+    @Volatile private var resolvedUrl: String = urlProvider()
+    private var configListenerRegistered = false
     
     fun connect() {
         if (isConnected) {
             logger.debug("Already connected to PC Control WebSocket")
             return
         }
+
+        ensureConfigListener()
+        resolvedUrl = urlProvider()
         
-        logger.info("🔌 Connecting to PC Control WebSocket: $url")
+        logger.info("🔌 Connecting to PC Control WebSocket: $resolvedUrl")
         updateStatus("Connecting...")
         
         val requestBuilder = Request.Builder()
-            .url(url)
+            .url(resolvedUrl)
 
         val token = TokenManager.getAccessToken()
         if (!token.isNullOrBlank()) {
@@ -130,6 +143,7 @@ class PcControlWebSocketClient(
         webSocket = null
         isConnected = false
         updateStatus("Disconnected")
+        removeConfigListener()
     }
     
     fun isConnected(): Boolean = isConnected
@@ -205,11 +219,16 @@ class PcControlWebSocketClient(
                             ?: return@runLater
                         systemControl.openApp(app)
                     }
+                    "OPEN_URL" -> {
+                        val url = params["url"]?.jsonPrimitive?.content ?: return@runLater
+                        systemControl.openUrl(url)
+                    }
                     
                     // Hotkeys
                     "HOTKEY", "KEY" -> {
                         val keys = params["keys"]?.jsonPrimitive?.content 
-                            ?: params["combination"]?.jsonPrimitive?.content 
+                            ?: params["combination"]?.jsonPrimitive?.content
+                            ?: params["keyCombination"]?.jsonPrimitive?.content
                             ?: return@runLater
                         systemControl.executeHotkey(keys)
                     }
@@ -238,6 +257,13 @@ class PcControlWebSocketClient(
                             ?: params["scenario"]?.jsonPrimitive?.content 
                             ?: return@runLater
                         systemControl.executeScenario(scenario)
+                    }
+                    "SYSTEM_COMMAND" -> {
+                        when (params["command"]?.jsonPrimitive?.content?.lowercase()) {
+                            "sleep" -> systemControl.sleepMode()
+                            "monitor_off" -> systemControl.turnMonitorOff()
+                            else -> Result.failure(IllegalArgumentException("Unknown system command"))
+                        }
                     }
                     "WORK_MODE" -> systemControl.executeScenario("work")
                     "REST_MODE" -> systemControl.executeScenario("rest")
@@ -327,5 +353,39 @@ class PcControlWebSocketClient(
     
     private fun updateStatus(status: String) {
         Platform.runLater { onStatusChange(status) }
+    }
+
+    private fun handleEndpointChange(newUrl: String) {
+        if (newUrl == resolvedUrl) {
+            return
+        }
+
+        val previousUrl = resolvedUrl
+        resolvedUrl = newUrl
+        logger.info("PC Control WebSocket endpoint updated: {} -> {}", previousUrl, newUrl)
+
+        val existingSocket = webSocket
+        isConnected = false
+        webSocket = null
+        existingSocket?.close(1000, "Endpoint updated")
+
+        Thread {
+            Thread.sleep(200L)
+            connect()
+        }.start()
+    }
+
+    private fun ensureConfigListener() {
+        if (!configListenerRegistered) {
+            AppConfig.addListener(configListener)
+            configListenerRegistered = true
+        }
+    }
+
+    private fun removeConfigListener() {
+        if (configListenerRegistered) {
+            AppConfig.removeListener(configListener)
+            configListenerRegistered = false
+        }
     }
 }

@@ -1,0 +1,79 @@
+# Media control intents — migrated from the legacy "Диджей" and "яндекс музыка" groups.
+
+intent_group: media_control
+description: "Music and radio control derived from legacy VoxCommando rules"
+
+commands:
+  - id: play_music_generic
+    phrases_ru:
+      - "включи музыку"
+      - "поставь музыку"
+      - "запусти музыку"
+      - "включи музыку в яндекс"
+    phrases_en:
+      - "play music"
+      - "play some music"
+      - "start music"
+    action: PLAY_MUSIC
+
+  - id: play_genre_ambient
+    phrases_ru:
+      - "включи атмосферную музыку"
+      - "атмосферная музыка"
+      - "включи эмбиент"
+    phrases_en:
+      - "play ambient"
+      - "ambient music"
+    action: PLAY_MUSIC
+    params:
+      url: "https://open.spotify.com/search/ambient"
+
+  - id: play_genre_rock
+    phrases_ru:
+      - "включи рок"
+      - "рок музыка"
+      - "поставь рок"
+    phrases_en:
+      - "play rock"
+      - "rock music"
+    action: PLAY_MUSIC
+    params:
+      url: "https://open.spotify.com/search/rock"
+
+  - id: play_genre_phonk
+    phrases_ru:
+      - "включи фонк"
+      - "фонк"
+    phrases_en:
+      - "play phonk"
+      - "play funk"
+    action: PLAY_MUSIC
+    params:
+      url: "https://open.spotify.com/search/phonk"
+
+  - id: play_radio
+    phrases_ru:
+      - "включи радио"
+      - "включи радио хиты"
+    phrases_en:
+      - "play radio"
+      - "turn on radio"
+    action: PLAY_RADIO
+    params:
+      url: "https://radio.garden/"
+
+  - id: toggle_music
+    phrases_ru:
+      - "пауза пуск"
+      - "пауза или пуск"
+    phrases_en:
+      - "toggle music"
+      - "play pause"
+    action: MEDIA_TOGGLE
+
+  - id: pause_yandex_music
+    phrases_ru:
+      - "выключи музыку в яндекс"
+    phrases_en:
+      - "stop yandex music"
+    action: PAUSE

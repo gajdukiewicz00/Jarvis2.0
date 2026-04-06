@@ -29,10 +29,42 @@ public interface SystemControlService {
     // App control
     void openApp(String appName) throws IOException;
 
+    void openUrl(String url) throws IOException;
+
     void executeHotkey(String keyCombination) throws IOException, InterruptedException;
+
+    void focusWindow(String title) throws IOException, InterruptedException;
+
+    void closeWindow(String title) throws IOException, InterruptedException;
+
+    void minimizeWindow(String title) throws IOException, InterruptedException;
+
+    void maximizeWindow(String title) throws IOException, InterruptedException;
+
+    void normalizeWindow(String title) throws IOException, InterruptedException;
+
+    void moveMouseAbsolute(int x, int y) throws IOException, InterruptedException;
+
+    void leftClick() throws IOException, InterruptedException;
+
+    void rightClick() throws IOException, InterruptedException;
+
+    void leftButtonDown() throws IOException, InterruptedException;
+
+    void leftButtonUp() throws IOException, InterruptedException;
+
+    void emptyTrash() throws IOException, InterruptedException;
+
+    void openOpticalDrive() throws IOException, InterruptedException;
+
+    void closeOpticalDrive() throws IOException, InterruptedException;
 
     // Notifications
     void sendNotification(String title, String message) throws IOException, InterruptedException;
+
+    void sleep() throws IOException, InterruptedException;
+
+    void turnMonitorOff() throws IOException, InterruptedException;
 
     void beep();
 }

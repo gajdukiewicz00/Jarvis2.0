@@ -13,6 +13,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.SocketTimeoutException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -217,9 +218,24 @@ public class LlmClient {
      * Returns false immediately if LLM is disabled.
      */
     public boolean isHealthy() {
+        return getHealth().available();
+    }
+
+    public LlmServerHealth getHealth() {
         if (!enabled) {
             log.warn("LLM health check: DISABLED (jarvis.llm.enabled=false)");
-            return false;
+            return new LlmServerHealth(
+                    false,
+                    "disabled",
+                    null,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Collections.emptyMap(),
+                    "jarvis.llm.enabled=false");
         }
 
         String url = llmServerUrl + "/health";
@@ -234,30 +250,80 @@ public class LlmClient {
                 Map<?, ?> body = response.getBody();
                 Object status = body.get("status");
                 Object modelLoaded = body.get("model_loaded");
-                
-                // healthy if status=="healthy" OR model_loaded==true
+                @SuppressWarnings("unchecked")
+                Map<String, Object> diagnostics = body.get("diagnostics") instanceof Map<?, ?>
+                        ? (Map<String, Object>) body.get("diagnostics")
+                        : Collections.emptyMap();
+
                 boolean isHealthy = "healthy".equals(status) || Boolean.TRUE.equals(modelLoaded);
-                
+
                 log.info("LLM health check <- {} in {}ms: status={}, model_loaded={}, result={}",
                         response.getStatusCode().value(), elapsed, status, modelLoaded, isHealthy);
                 
                 logHealthStateChange(isHealthy, url, null);
-                return isHealthy;
+                return new LlmServerHealth(
+                        isHealthy,
+                        stringValue(status),
+                        stringValue(body.get("backend")),
+                        Boolean.TRUE.equals(modelLoaded),
+                        stringValue(body.get("device")),
+                        booleanValue(body.get("gpu_available")),
+                        stringValue(body.get("cuda_version")),
+                        stringValue(diagnostics.get("model_name")),
+                        stringValue(diagnostics.get("model_path")),
+                        diagnostics,
+                        null);
             }
 
             long elapsed2 = System.currentTimeMillis() - startTime;
             log.warn("LLM health check <- INVALID RESPONSE in {}ms: status={}, body={}",
                     elapsed2, response.getStatusCode(), response.getBody());
             logHealthStateChange(false, url, "invalid response: " + response.getStatusCode());
-            return false;
+            return new LlmServerHealth(
+                    false,
+                    "invalid-response",
+                    null,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Collections.emptyMap(),
+                    "invalid response: " + response.getStatusCode());
 
         } catch (RuntimeException e) {
             long elapsed = System.currentTimeMillis() - startTime;
             log.warn("LLM health check <- EXCEPTION in {}ms: {} - {}", 
                     elapsed, e.getClass().getSimpleName(), e.getMessage());
             logHealthStateChange(false, url, e.getClass().getSimpleName() + ": " + e.getMessage());
-            return false;
+            return new LlmServerHealth(
+                    false,
+                    "error",
+                    null,
+                    false,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    Collections.emptyMap(),
+                    e.getClass().getSimpleName() + ": " + e.getMessage());
         }
+    }
+
+    private String stringValue(Object value) {
+        return value != null ? value.toString() : null;
+    }
+
+    private Boolean booleanValue(Object value) {
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        if (value instanceof String stringValue) {
+            return Boolean.parseBoolean(stringValue);
+        }
+        return null;
     }
 
     private void logHealthStateChange(boolean isHealthy, String url, String errorMsg) {
@@ -288,5 +354,19 @@ public class LlmClient {
         public LlmClientException(String message, Throwable cause) {
             super(message, cause);
         }
+    }
+
+    public record LlmServerHealth(
+            boolean available,
+            String status,
+            String backend,
+            boolean modelLoaded,
+            String device,
+            Boolean gpuAvailable,
+            String cudaVersion,
+            String modelName,
+            String modelPath,
+            Map<String, Object> diagnostics,
+            String error) {
     }
 }

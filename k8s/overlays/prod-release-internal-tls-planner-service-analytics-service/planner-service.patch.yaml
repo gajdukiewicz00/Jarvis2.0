@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-planner-service-analytics-service: planner-service-analytics-service-v1
+    spec:
+      containers:
+        - name: planner-service
+          env:
+            - name: ANALYTICS_URL
+              value: https://analytics-service.jarvis.svc.cluster.local:8087
+            - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-planner-service-analytics-service
+                  key: truststore-password
+            - name: JAVA_TOOL_OPTIONS
+              value: -Djavax.net.ssl.trustStore=/tls-analytics/jarvis-internal-truststore.jks -Djavax.net.ssl.trustStorePassword=$(JARVIS_JAVA_TRUSTSTORE_PASSWORD)
+          volumeMounts:
+            - name: internal-tls-planner-service-analytics-service
+              mountPath: /tls-analytics
+              readOnly: true
+      volumes:
+        - name: internal-tls-planner-service-analytics-service
+          secret:
+            secretName: jarvis-internal-tls-planner-service-analytics-service
+            items:
+              - key: truststore.jks
+                path: jarvis-internal-truststore.jks
+              - key: ca.crt
+                path: ca.crt

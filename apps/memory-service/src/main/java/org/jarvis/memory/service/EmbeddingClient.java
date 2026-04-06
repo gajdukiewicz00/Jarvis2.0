@@ -2,9 +2,11 @@ package org.jarvis.memory.service;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.time.Duration;
 import java.util.List;
@@ -25,6 +27,7 @@ public class EmbeddingClient {
             @Value("${memory.embedding.timeout-ms:30000}") long timeoutMs) {
         this.webClient = WebClient.builder()
                 .baseUrl(serviceUrl)
+                .defaultHeader("Accept", MediaType.APPLICATION_JSON_VALUE)
                 .build();
         this.timeout = Duration.ofMillis(timeoutMs);
         
@@ -41,8 +44,9 @@ public class EmbeddingClient {
             EmbedSingleResponse response = webClient.post()
                     .uri("/embed/single")
                     .header("X-Correlation-ID", correlationId)
-                    .bodyValue(Map.of("text", text))
+                    .bodyValue(Map.of("text", text, "input_type", "query"))
                     .retrieve()
+                    .onStatus(HttpStatusCode::isError, clientResponse -> clientResponse.createException())
                     .bodyToMono(EmbedSingleResponse.class)
                     .timeout(timeout)
                     .block();
@@ -54,6 +58,9 @@ public class EmbeddingClient {
             log.debug("[{}] Embedding complete: dim={}", correlationId, response.embedding.size());
             return response.embedding;
             
+        } catch (WebClientResponseException e) {
+            log.error("[{}] Embedding service returned {}: {}", correlationId, e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Failed to get embedding: " + e.getStatusCode().value(), e);
         } catch (RuntimeException e) {
             log.error("[{}] Embedding failed: {}", correlationId, e.getMessage());
             throw new RuntimeException("Failed to get embedding: " + e.getMessage(), e);
@@ -70,8 +77,9 @@ public class EmbeddingClient {
             EmbedBatchResponse response = webClient.post()
                     .uri("/embed")
                     .header("X-Correlation-ID", correlationId)
-                    .bodyValue(Map.of("texts", texts))
+                    .bodyValue(Map.of("texts", texts, "input_type", "passage"))
                     .retrieve()
+                    .onStatus(HttpStatusCode::isError, clientResponse -> clientResponse.createException())
                     .bodyToMono(EmbedBatchResponse.class)
                     .timeout(timeout)
                     .block();
@@ -83,6 +91,9 @@ public class EmbeddingClient {
             log.debug("[{}] Batch embedding complete: {} embeddings", correlationId, response.embeddings.size());
             return response.embeddings;
             
+        } catch (WebClientResponseException e) {
+            log.error("[{}] Batch embedding service returned {}: {}", correlationId, e.getStatusCode(), e.getResponseBodyAsString());
+            throw new RuntimeException("Failed to get batch embeddings: " + e.getStatusCode().value(), e);
         } catch (RuntimeException e) {
             log.error("[{}] Batch embedding failed: {}", correlationId, e.getMessage());
             throw new RuntimeException("Failed to get batch embeddings: " + e.getMessage(), e);
@@ -93,19 +104,36 @@ public class EmbeddingClient {
      * Check if embedding service is healthy
      */
     public boolean isHealthy() {
+        return getHealth().healthy();
+    }
+
+    public EmbeddingServiceHealth getHealth() {
         try {
-            Map response = webClient.get()
+            HealthResponse response = webClient.get()
                     .uri("/health")
                     .retrieve()
-                    .bodyToMono(Map.class)
+                    .onStatus(HttpStatusCode::isError, clientResponse -> clientResponse.createException())
+                    .bodyToMono(HealthResponse.class)
                     .timeout(Duration.ofSeconds(5))
                     .block();
-            
-            return response != null && "healthy".equals(response.get("status"));
-            
+
+            if (response == null) {
+                return new EmbeddingServiceHealth(false, "unknown", null, null, "empty health response");
+            }
+
+            return new EmbeddingServiceHealth(
+                    "healthy".equalsIgnoreCase(response.status),
+                    response.status,
+                    response.model_name,
+                    response.embedding_dim,
+                    null);
+
+        } catch (WebClientResponseException e) {
+            log.warn("Embedding service health check returned {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            return new EmbeddingServiceHealth(false, "error", null, null, "http " + e.getStatusCode().value());
         } catch (RuntimeException e) {
             log.warn("Embedding service health check failed: {}", e.getMessage());
-            return false;
+            return new EmbeddingServiceHealth(false, "error", null, null, e.getMessage());
         }
     }
 
@@ -124,6 +152,19 @@ public class EmbeddingClient {
         public int count;
         public int processing_time_ms;
     }
-}
 
+    private static class HealthResponse {
+        public String status;
+        public String model_name;
+        public Integer embedding_dim;
+    }
+
+    public record EmbeddingServiceHealth(
+            boolean healthy,
+            String status,
+            String modelName,
+            Integer dimension,
+            String error) {
+    }
+}
 

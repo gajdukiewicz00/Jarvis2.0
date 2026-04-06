@@ -9,6 +9,7 @@ import javafx.scene.shape.Circle
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.audio.AudioPlayer
 import org.jarvis.desktop.audio.AudioRecorder
+import org.jarvis.desktop.config.PorcupineAccessKeyResolver
 import org.jarvis.desktop.model.VoiceActionAvailability
 import org.jarvis.desktop.model.VoiceEventClassifier
 import org.jarvis.desktop.model.VoiceRuntimeState
@@ -22,7 +23,9 @@ import org.jarvis.desktop.service.VoiceWebSocketClient
 import org.jarvis.desktop.service.WakeWordDetector
 import ai.picovoice.porcupine.Porcupine.BuiltInKeyword
 import org.slf4j.LoggerFactory
-import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 /**
  * Voice control tab with proper session state machine.
@@ -114,6 +117,9 @@ class VoiceTab(
                 Platform.runLater {
                     transcriptionArea.appendText("Error: $reason\n")
                 }
+            },
+            voiceTransportReady = {
+                voiceWebSocketClient.isConnected
             }
         )
         
@@ -129,7 +135,6 @@ class VoiceTab(
                     Platform.runLater { statusLabel.text = "Connected" }
                 } else if (state == "DISCONNECTED") {
                     Platform.runLater { statusLabel.text = "Disconnected" }
-                    // Cancel any active session on disconnect
                     voiceSession.cancelSession("WebSocket disconnected")
                 }
             },
@@ -137,7 +142,6 @@ class VoiceTab(
                 Platform.runLater {
                     if (isFinal) {
                         transcriptionArea.appendText("$text\n")
-                        // CRITICAL: Notify session about final transcript to stop recording
                         voiceSession.onFinalTranscript(text, correlationId)
                     }
                 }
@@ -149,9 +153,20 @@ class VoiceTab(
                 }
             },
             onAudioReceived = { audioData ->
-                // Notify session that TTS is starting before playing
                 voiceSession.onTtsPlaybackStarted()
                 audioPlayer.play(audioData)
+            },
+            onSttStatusChanged = { available, reason ->
+                logger.info("STT status changed: available={}, reason={}", available, reason)
+                if (::voiceControlService.isInitialized) {
+                    voiceControlService.onSttAvailabilityChanged(available, reason)
+                }
+            },
+            onTtsStatusChanged = { available, reason ->
+                logger.info("TTS status changed: available={}, reason={}", available, reason)
+                if (::voiceControlService.isInitialized) {
+                    voiceControlService.onTtsAvailabilityChanged(available, reason)
+                }
             }
         )
         
@@ -344,19 +359,20 @@ class VoiceTab(
 
     private fun startAlwaysListening() {
         try {
-            val accessKey = System.getenv("PORCUPINE_ACCESS_KEY")
+            val accessKey = PorcupineAccessKeyResolver.resolve()
             
             if (accessKey == null || accessKey.isBlank()) {
                 Platform.runLater {
                     val alert = Alert(Alert.AlertType.WARNING)
                     alert.title = "Wake Word Detection Unavailable"
-                    alert.headerText = "PORCUPINE_ACCESS_KEY not set"
+                    alert.headerText = "Porcupine access key not configured"
                     alert.contentText = """
                         Wake word detection requires a Porcupine access key.
                         
                         To enable this feature:
                         1. Get a free access key from https://console.picovoice.ai
                         2. Set environment variable: export PORCUPINE_ACCESS_KEY="your-key"
+                           or save it in secrets/secrets.env
                         3. Restart the application
                         
                         You can still use "Manual Talk" button for voice commands.
@@ -366,10 +382,10 @@ class VoiceTab(
                 return
             }
             
-            // Try to use custom Russian model first, fallback to built-in English "jarvis"
-            val modelPath = javaClass.getResource("/models/jarvis_ru.ppn")?.path
+            // Try the repo-committed Russian model first, fallback to built-in English "jarvis"
+            val modelPath = resolveWakeWordModelPath()
             
-            wakeWordDetector = if (modelPath != null && File(modelPath).exists()) {
+            wakeWordDetector = if (modelPath != null) {
                 logger.info("Using custom Russian model: {}", modelPath)
                 WakeWordDetector(
                     accessKey = accessKey,
@@ -458,6 +474,28 @@ class VoiceTab(
         }
         
         logger.info("🔇 Always listening mode deactivated")
+    }
+
+    private fun resolveWakeWordModelPath(): String? {
+        val resource = javaClass.getResource("/models/jarvis_ru.ppn") ?: return null
+
+        return try {
+            if (resource.protocol == "file") {
+                Path.of(resource.toURI()).toString()
+            } else {
+                val tmpDir = Path.of(System.getenv("JARVIS_TMP_DIR") ?: System.getProperty("java.io.tmpdir"))
+                Files.createDirectories(tmpDir)
+                val tempFile = Files.createTempFile(tmpDir, "jarvis-ru-", ".ppn")
+                javaClass.getResourceAsStream("/models/jarvis_ru.ppn")?.use { input ->
+                    Files.copy(input, tempFile, StandardCopyOption.REPLACE_EXISTING)
+                } ?: return null
+                tempFile.toFile().deleteOnExit()
+                tempFile.toString()
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to resolve bundled wake-word model path", e)
+            null
+        }
     }
 
     /**

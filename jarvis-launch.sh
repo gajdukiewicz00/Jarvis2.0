@@ -14,6 +14,7 @@ K8S_DIR="${PROJECT_DIR}/k8s"
 NAMESPACE="jarvis"
 
 JARVIS_HOME="${HOME}/.jarvis"
+JARVIS_MODELS_DIR="${JARVIS_MODELS_DIR:-${PROJECT_DIR}/models}"
 TLS_DIR="${JARVIS_HOME}/tls"
 SECRETS_FILE="${JARVIS_HOME}/secrets/secrets.env"
 LOG_DIR="${JARVIS_LOG_DIR:-${JARVIS_HOME}/logs}"
@@ -630,7 +631,7 @@ ensure_ingress_routing
 info "Ensuring namespace..."
 ensure_namespace
 
-mkdir -p "${JARVIS_HOME}/models"
+mkdir -p "${JARVIS_MODELS_DIR}"
 
 info "Ensuring secrets..."
 ensure_secrets
@@ -687,7 +688,7 @@ if [ -d "${K8S_DIR}/overlays/prod" ]; then
     init_image_config
     OVERLAY_PATH="$(prepare_prod_overlay)"
     trap '[[ -n "${OVERLAY_PATH:-}" && -d "${OVERLAY_PATH}" ]] && rm -rf "${OVERLAY_PATH}"' EXIT
-    MODELS_PATH="${JARVIS_HOME}/models"
+    MODELS_PATH="${JARVIS_MODELS_DIR}"
     MODELS_PATH_ENV_FILE="${OVERLAY_PATH}/models-path.env"
     printf "JARVIS_MODELS_PATH=%s\n" "${MODELS_PATH}" > "${MODELS_PATH_ENV_FILE}"
     kubectl kustomize --load-restrictor=LoadRestrictionsNone "${OVERLAY_PATH}" | \

@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,8 +29,20 @@ public class UserGoal {
     @Column(length = 1000)
     private String description;
 
-    @Enumerated(EnumType.STRING)
-    private GoalStatus status;
+    @Column(length = 100)
+    private String category;
+
+    @Column(name = "target_value")
+    private BigDecimal targetValue;
+
+    @Column(name = "current_value")
+    private BigDecimal currentValue;
+
+    @Column(name = "target_date")
+    private LocalDate targetDate;
+
+    @Column(length = 50)
+    private String status;
 
     private LocalDateTime deadline;
 
@@ -40,19 +54,15 @@ public class UserGoal {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         if (status == null) {
-            status = GoalStatus.IN_PROGRESS;
+            status = "active";
+        }
+        if (currentValue == null) {
+            currentValue = BigDecimal.ZERO;
         }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-    }
-
-    public enum GoalStatus {
-        IN_PROGRESS,
-        COMPLETED,
-        ABANDONED,
-        ON_HOLD
     }
 }

@@ -52,7 +52,8 @@
         
         <!-- Security -->
         <module>apps/security-service</module>
-        
+        <module>apps/vision-service</module>
+
         <!-- LLM services -->
         <module>apps/llm-service</module>
         <module>apps/memory-service</module>
@@ -62,6 +63,7 @@
         
         <!-- Clients -->
         <module>apps/desktop-client-javafx</module>
+        <module>apps/desktop-app-javafx</module>
         <module>apps/launcher-javafx</module>
         
         <!-- REMOVED: apps/assistant-core (legacy, functionality moved to llm-service + orchestrator) -->

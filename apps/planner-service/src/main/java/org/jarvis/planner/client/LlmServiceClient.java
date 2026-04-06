@@ -7,7 +7,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * Client for llm-service
+ * Optional adapter to llm-service.
+ * Planner core must stay functional without it.
  */
 @Slf4j
 @Component
@@ -35,9 +36,8 @@ public class LlmServiceClient {
         }
     }
     
-    // Placeholder for LLM enhancement
     public String enhancePlanDescription(String userId, String planText) {
-        // TODO: Implement LLM-based plan enhancement
-        return planText; // For now, return as-is
+        throw new UnsupportedOperationException(
+                "Planner LLM enhancement is not implemented in planner-service; call llm-service directly");
     }
 }

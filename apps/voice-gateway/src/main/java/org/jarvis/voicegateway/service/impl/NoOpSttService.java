@@ -7,6 +7,8 @@ import org.jarvis.voicegateway.service.SttService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+
 /**
  * No-op STT service that acts as a fallback when no real STT backend is configured.
  *
@@ -30,6 +32,20 @@ public class NoOpSttService implements SttService {
 
     public boolean isAvailable() {
         return false;
+    }
+
+    @Override
+    public String providerId() {
+        return "noop";
+    }
+
+    @Override
+    public Map<String, Object> describeRuntime() {
+        return Map.of(
+                "configuredProvider", providerId(),
+                "status", "disabled",
+                "available", false,
+                "reason", STT_UNAVAILABLE_MESSAGE);
     }
 
     @Override

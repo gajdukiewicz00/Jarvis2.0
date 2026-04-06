@@ -120,9 +120,9 @@ public class FinanceService {
         return new BudgetStatusDTO(month.toString(), budgets);
     }
 
-    public BudgetDTO createBudget(BudgetDTO dto) {
+    public BudgetDTO createBudget(String userId, BudgetDTO dto) {
         Budget budget = new Budget();
-        budget.setUserId(dto.getUserId());
+        budget.setUserId(userId);
         budget.setCategory(dto.getCategory());
         budget.setLimitAmount(dto.getLimitAmount());
         budget.setCurrency(dto.getCurrency());
@@ -139,9 +139,9 @@ public class FinanceService {
                 .toList();
     }
 
-    public FinancialGoalDTO createGoal(FinancialGoalDTO dto) {
+    public FinancialGoalDTO createGoal(String userId, FinancialGoalDTO dto) {
         FinancialGoal goal = new FinancialGoal();
-        goal.setUserId(dto.getUserId());
+        goal.setUserId(userId);
         goal.setName(dto.getName());
         goal.setTargetAmount(dto.getTargetAmount());
         goal.setCurrentAmount(dto.getCurrentAmount());
@@ -157,9 +157,9 @@ public class FinanceService {
                 .toList();
     }
 
-    public RecurringTransactionDTO createRecurring(RecurringTransactionDTO dto) {
+    public RecurringTransactionDTO createRecurring(String userId, RecurringTransactionDTO dto) {
         RecurringTransaction transaction = new RecurringTransaction();
-        transaction.setUserId(dto.getUserId());
+        transaction.setUserId(userId);
         transaction.setAmount(dto.getAmount());
         transaction.setCurrency(dto.getCurrency());
         transaction.setCategory(dto.getCategory());

@@ -1,0 +1,79 @@
+commands:
+  - id: rule_home_alone_bookmark
+    matchers:
+      - type: exact
+        values:
+          - "я один дома"
+          - "дома никого"
+          - "мы одни"
+          - "i am home alone"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=PB-opnWtmVM"
+    response:
+      key: lonely_mode
+
+  - id: rule_motivation_bookmark
+    matchers:
+      - type: exact
+        values:
+          - "мне лень"
+          - "я не хочу"
+          - "я сомневаюсь"
+          - "i need motivation"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=whDg5qOS-wU"
+    response:
+      key: motivation_mode
+
+  - id: rule_bored_bookmark
+    matchers:
+      - type: exact
+        values:
+          - "мне скучно"
+          - "мне нечем заняться"
+          - "я не знаю чем себя занять"
+          - "i am bored"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://firstpersontetris.com"
+    response:
+      key: bored_game
+
+  - id: rule_sad_bookmark
+    matchers:
+      - type: exact
+        values:
+          - "мне грустно"
+          - "плохое настроение"
+          - "у меня нет настроения"
+          - "i am sad"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=NDjB1Zg9XjM"
+    response:
+      key: sad_playlist
+
+  - id: rule_melancholy_bookmark
+    matchers:
+      - type: exact
+        values:
+          - "хочу погрустить"
+          - "хочу поплакать"
+          - "хочу посидеть в спокойствии"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=t33pTfQYvRY"
+    response:
+      key: melancholy_playlist

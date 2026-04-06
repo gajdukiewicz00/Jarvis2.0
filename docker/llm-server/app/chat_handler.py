@@ -15,15 +15,10 @@ class ChatHandler:
     @staticmethod
     def format_prompt(messages: List[Dict[str, str]]) -> str:
         """
-        Format messages into a prompt for h2oGPT model
-        
-        h2oGPT uses Llama2 chat format:
-        <s>[INST] <<SYS>>
-        system message
-        <</SYS>>
-        
-        user message [/INST] assistant response </s>
-        <s>[INST] user message 2 [/INST]
+        Format messages into a simple prompt for prompt-only backends.
+
+        The local runtime uses native role-based chat for llama.cpp, so this
+        formatter is only a fallback for backends that still require raw text.
         
         Args:
             messages: List of message dicts with 'role' and 'content'
@@ -42,7 +37,7 @@ class ChatHandler:
             else:
                 conversation.append(msg)
         
-        # Build prompt
+        # Build a Llama2-style prompt as a compatibility fallback.
         for i, msg in enumerate(conversation):
             if msg["role"] == "user":
                 if i == 0 and system_message:
@@ -95,18 +90,23 @@ class ChatHandler:
         max_tokens = max_tokens or config.MAX_TOKENS
         temperature = temperature or config.TEMPERATURE
         
-        # Format prompt
-        prompt = ChatHandler.format_prompt(messages)
-        logger.debug(f"Formatted prompt: {prompt[:200]}...")
-        
-        # Generate response
         try:
-            reply, input_tokens, output_tokens = model_loader.generate(
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=config.TOP_P
-            )
+            if model_loader.supports_chat_messages():
+                reply, input_tokens, output_tokens = model_loader.chat(
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=config.TOP_P
+                )
+            else:
+                prompt = ChatHandler.format_prompt(messages)
+                logger.debug(f"Formatted prompt: {prompt[:200]}...")
+                reply, input_tokens, output_tokens = model_loader.generate(
+                    prompt=prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=config.TOP_P
+                )
             
             return {
                 "reply": reply,
@@ -114,7 +114,7 @@ class ChatHandler:
                     "input": input_tokens,
                     "output": output_tokens
                 },
-                "model": "h2oGPT-7B"
+                "model": model_loader.model_name
             }
             
         except Exception as e:

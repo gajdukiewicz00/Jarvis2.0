@@ -1,0 +1,244 @@
+group,command,decision,migrated_to,reason,actions
+Открытие сайтов,Яндекс,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,Ютуб,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,Вк,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,Переводчик,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,Гугл,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,спотифай,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,пикабу,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,твиттер,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,фейсбук,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,инстаграмм,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,википедия,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL
+Открытие сайтов,тик ток,migrate_now,intents/websites.yaml,Converted into YAML website bookmarks with Linux-safe OPEN_URL actions.,Sound.PlayStream; Launch.OpenURL; VC.Pause; OSD.ShowText
+Управление системой,Закрыть окно,migrate_now,intents/system-control.yaml#close_window,Mapped to a Linux-safe Alt+F4 desktop action.,Window.Close; Sound.PlayWav
+Управление системой,На весь экран,migrate_now,intents/system-control.yaml#fullscreen,Mapped to generic fullscreen hotkey handling.,Window.Maximize
+Управление системой,Норм окно,adapt_later,,Needs dedicated restore-window support instead of maximize/minimize toggles.,Window.Normalize
+Управление системой,Сверни окно,adapt_later,,Needs minimize-window intent wiring and UX confirmation.,Window.Minimize; Sound.PlayStream
+Управление системой,Вставить,migrate_now,intents/system-control.yaml#clipboard_paste,Mapped to clipboard hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Скопировать,migrate_now,intents/system-control.yaml#clipboard_copy,Mapped to clipboard hotkey execution.,InputKeys.Send; Sound.PlayStream
+Управление системой,Отмена действия,migrate_now,intents/system-control.yaml#undo_action,Mapped to undo hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Другое окно,migrate_now,intents/system-control.yaml#switch_window,Mapped to window switching hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Смена имени,migrate_now,intents/system-control.yaml#rename_item,Mapped to F2 rename hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Найди элемент,migrate_now,intents/system-control.yaml#find_in_page,Mapped to page search hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Обнови страницу,migrate_now,intents/system-control.yaml#refresh_page,Mapped to browser refresh hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Назад,migrate_now,intents/system-control.yaml#navigate_back,Mapped to browser back hotkey execution.,InputKeys.Send
+Управление системой,Вперёд,migrate_now,intents/system-control.yaml#navigate_forward,Mapped to browser forward hotkey execution.,InputKeys.Send
+Управление системой,Арес страницы,migrate_now,intents/system-control.yaml#focus_address_bar,Mapped to browser address-bar focus hotkey execution.,Sound.PlayStream; InputKeys.Send
+Управление системой,Повтори окно,adapt_later,,Meaning is ambiguous in the legacy profile and needs confirmation before wiring.,Sound.PlayStream; InputKeys.Send
+Управление системой,Поиск по системе,migrate_now,intents/system-control.yaml#system_search,Mapped to desktop search launcher action.,Sound.PlayStream; InputKeys.Send
+Управление системой,Открой параметры,migrate_now,intents/system-control.yaml#open_settings,Mapped to generic settings application launch.,Sound.PlayStream; InputKeys.Send
+Управление системой,Удали,migrate_now,intents/system-control.yaml#delete_selection,Mapped to delete key action.,Sound.PlayStream; InputKeys.Send
+Управление системой,Энтэр,migrate_now,intents/system-control.yaml#press_enter,Mapped to Enter key action.,Sound.PlayStream; InputKeys.Send
+Управление системой,Смени язык,migrate_now,intents/system-control.yaml#switch_language,Mapped to keyboard layout switch hotkey.,Sound.PlayStream; InputKeys.Send
+Управление системой,Клик,discard,,Coordinate-free click commands are too context-sensitive and unsafe to run blindly.,Sound.PlayStream; Mouse.LeftClick
+Управление системой,Управление звуком,discard,,"Legacy action bundle was an ambiguous Windows mixer macro, not a stable intent.",Sound.SetVol; Sound.PlayStream
+Управление системой,Выключи монитор,migrate_now,intents/system-control.yaml#monitor_off,Mapped to monitor-off system command handling.,Sound.PlayStream; Launch.RawParam
+Управление системой,Спящий режим,migrate_now,intents/system-control.yaml#sleep_mode,Mapped to suspend system command handling.,Sound.PlayStream; VC.Pause; System.Sleep
+Управление системой,очисти корзину,adapt_later,,Needs safe trash integration rather than destructive shell deletion.,Sound.PlayStream; Launch.RawParam
+Управление системой,создай новую папку,adapt_later,,"Needs context-aware file-manager automation, not a blind hotkey.",Sound.PlayStream; InputKeys.Send; VC.Pause; InputKeys.Send
+Управление системой,Рабочий стол,migrate_now,intents/system-control.yaml#show_desktop,Mapped to show-desktop hotkey execution.,InputKeys.Send
+Управление системой,открой дисковод,discard,,Optical-drive tray control is obsolete and not part of the Linux-first target UX.,Launch.RawParam
+Управление системой,закрой дисковод,discard,,Optical-drive tray control is obsolete and not part of the Linux-first target UX.,Launch.RawParam
+Управление системой,Сделай громче,migrate_now,BasicIntentHandler#VOLUME_UP,Merged into the existing volume-up intent family.,Sound.PlayStream
+Управление системой,сделай тише,migrate_now,BasicIntentHandler#VOLUME_DOWN,Merged into the existing volume-down intent family.,Sound.PlayStream
+Управление системой,Запусти автокликер,discard,,Windows-only automation hack; not acceptable runtime behavior.,Sound.PlayStream; Launch.RawParam; VC.Pause; InputKeys.Send; Window.Minimize
+Управление системой,выруби автокликер,discard,,Windows-only automation hack; not acceptable runtime behavior.,Sound.PlayStream; Window.Focus; VC.Pause; InputKeys.Send; Window.Close
+Управление системой,проверь скорость интернета,migrate_now,intents/system-control.yaml#network_check,Converted from mouse automation to opening a browser speed-test URL.,Sound.PlayStream; Launch.OpenURL; VC.Pause; Mouse.MoveAbsolute; Mouse.LeftClick
+Управление системой,Сделай скриншот,migrate_now,intents/system-control.yaml#take_screenshot,Mapped to screenshot hotkey execution.,Sound.PlayStream; Launch.OpenFile
+Протокололы,Уютный вечер,migrate_now,intents/protocols.yaml#cozy_evening,Mapped to a first-class desktop scenario.,Sound.PlayStream; Launch.OpenFile; VC.Pause; InputKeys.Send
+Протокололы,отмени протокол,adapt_later,,Needs scenario rollback semantics; current runtime only supports starting scenarios.,Sound.PlayStream; Window.Close
+Протокололы,У нас гости,migrate_now,intents/protocols.yaml#guests_mode,Mapped to a first-class desktop scenario.,Sound.PlayStream; Launch.OpenURL; VC.Pause; InputKeys.Send
+Протокололы," протокол чистый лист,чистый лист,протокол 10,убери все с робочего стола,очисти рабочий стол",migrate_now,intents/protocols.yaml#clean_slate,Mapped to a first-class desktop scenario.,Sound.PlayStream; Mouse.MoveAbsolute; Mouse.RightClick; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.MoveAbsolute; Mouse.LeftClick
+Протокололы,Отмени протокол чистый лист,adapt_later,,Needs scenario rollback semantics; current runtime only supports starting scenarios.,Sound.PlayStream; Mouse.MoveAbsolute; Mouse.RightClick; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.MoveAbsolute; Mouse.LeftClick
+Протокололы,новогоднее настроение,migrate_now,intents/protocols.yaml#holiday_mood,Mapped to a first-class desktop scenario.,Sound.PlayStream; Launch.OpenURL; VC.Pause; Launch.RawParam; VC.Pause; InputKeys.Send
+Общение,вызов,migrate_now,intents/conversation.yaml#wake_call,Mapped to wake/ready response.,Sound.PlayStream; VC.On
+Общение,доброе утро,migrate_now,intents/conversation.yaml#good_morning,Mapped to morning greeting response.,Sound.PlayStream
+Общение,что делаешь,migrate_now,intents/conversation.yaml#what_are_you_doing,Mapped to personality/status response.,Sound.PlayStream
+Общение,как дела,migrate_now,intents/conversation.yaml#how_are_you,Mapped to personality/status response.,Sound.PlayStream
+Общение,я вернулся,migrate_now,intents/conversation.yaml#im_back,Mapped to return-home response.,Sound.PlayStream; VC.Pause; Launch.OpenFile
+Общение,выключи приветствие ,adapt_later,,Needs a persisted user preference instead of a one-shot macro.,Sound.PlayStream; Window.Close
+Общение,я отдыхать,migrate_now,intents/conversation.yaml#go_to_sleep_jarvis,Mapped to standby/sleep response.,Sound.PlayStream
+Общение,есть новости?,migrate_now,intents/conversation.yaml#open_news,Mapped to browser-based news opening.,Sound.PlayStream
+Общение,включи новости,migrate_now,intents/conversation.yaml#open_news,Mapped to browser-based news opening.,Sound.PlayStream; Launch.OpenURL
+Общение,Джарвис шухер,migrate_now,intents/protocols.yaml#panic_mode,Mapped to the panic protocol scenario.,InputKeys.Send; Sound.SetVol
+Общение,Джарвис я один дома,adapt_later,,Needs a real presence/home-status model before wiring a scenario.,Sound.PlayStream; Launch.OpenURL
+Общение,за работу,migrate_now,intents/protocols.yaml#work_from_home,Mapped to the work-mode scenario.,Launch.OpenURL
+Общение,джарвис мне лень,migrate_now,intents/conversation.yaml#im_bored,Mapped into the boredom/suggestion intent family.,Launch.OpenURL
+Общение,мне скучно,migrate_now,intents/conversation.yaml#im_bored,Mapped into the boredom/suggestion intent family.,Sound.PlayStream; Launch.OpenURL; OSD.ShowText
+Общение,мне грустно,migrate_now,intents/conversation.yaml#im_sad,Mapped into the cheer-up intent family.,Sound.PlayStream; Launch.OpenURL; OSD.ShowText
+Общение,хочу погрустить,migrate_now,intents/conversation.yaml#im_sad,Mapped into the cheer-up intent family.,Sound.PlayStream; Launch.OpenURL; OSD.ShowText
+Общение,Я тебя люблю,migrate_now,intents/conversation.yaml#i_love_you,Mapped to the affection/acknowledgement response.,Sound.PlayStream
+Общение,Спасибо,migrate_now,BasicIntentHandler#THANKS,Merged into the existing thanks intent family.,Sound.PlayStream
+Общение,Привет,migrate_now,BasicIntentHandler#GREETING,Merged into the existing greeting intent family.,Sound.PlayStream
+Общение,что ты знаешь о космосе,adapt_later,,"Long-form knowledge answers belong in an explicit AI/knowledge path, not a fixed local rule.",Sound.PlayStream
+Общение,скажи рандомный факт,migrate_now,intents/conversation.yaml#tell_fact,Mapped to the random-fact response path.,Sound.PlayStream
+Общение,Орел или решка,adapt_later,,Needs explicit coin-flip logic and a deterministic response asset set.,Sound.PlayStream; VC.Pause; Sound.PlayStream
+Общение,расскажи сказку,adapt_later,,Needs story-mode orchestration and long-form voice handling.,Sound.PlayStream
+Общение,что ты знаешь о горе эверест,adapt_later,,"Long-form knowledge answers belong in an explicit AI/knowledge path, not a fixed local rule.",Sound.PlayStream
+Общение,есть ли жизнь на других планетах,adapt_later,,"Long-form knowledge answers belong in an explicit AI/knowledge path, not a fixed local rule.",Sound.PlayStream
+Общение,Джарвис не слушай,migrate_now,intents/conversation.yaml#go_to_sleep_jarvis,Mapped to standby/sleep response.,VC.Standby; Sound.PlayStream
+Управление Microsoft Word,Настройка шрифта,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Окно печати,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Найди и замени,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Вкладка вставка,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Вкладка дизайн,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Вкладка разметка страницы,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Поля,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Открой поиск в документе,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Перемещение курсора влево,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Перемещение курсора вправо,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Перемещение курсора вниз,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Перемещение курсора вверх,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,В начало строки,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,В конец строки,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,В начало документа,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,В конец документа,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+Управление Microsoft Word,Сохранить как,discard,,Microsoft Word macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Презентация в новом окне,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Новый слайд,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Удалить слайд,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Дублировать объект,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Группировать выделенные объекты,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Разгрупировать выделенные объекты,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Копировать форматирование,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Применить форматирование,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Гиперссылка,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Повтор последнего действия,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Слайд шоу,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Настройка слайд шоу,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Следующий слайд(в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Предыдущий слайд(в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Черный экран(скрыть на время) (в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Черный экран(скрыть на время) (в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Белый экран(скрыть на время) (в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Карандаш(в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Ластик(в режиме слайд шоу),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Сохранить презентацию как,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Полужирный,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Курсив,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Подчеркнутый,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Зачеркнутый,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Разместить параграф по центру,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Разместить параграф произвольно,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Разместить параграф по правому краю,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Разместить параграф по левому краю,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send
+PowerPoint,Настройки шрифта,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Настройки абзаца,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Добавить таблицу,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause
+PowerPoint,Добавить изображение,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Фотоальбом ,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Надпись ( в отдельном объекте),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Декорированная надпись,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Дата и время,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Параметры страниц,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Ориентация слайда,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Темы,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Темы (загрузить с пк),discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Сохрвнить текущую тему,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,(отдельно) Цвет темы,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,(отдельно) Шрифт темы,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,(отдельно) Стиль фона,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Схема перехода слайда,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Звук перехода слайда,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Скорость перехода слайда,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Просмотреть анимацию слайдов,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,Применить параметры переходов ко всем слайдам ,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send
+PowerPoint,убрать\скрыть линейку,discard,,PowerPoint macro/hotkey automation is Windows- and app-specific.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+Управление Ютубом,Остановка/ воспроизведение видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,Sound.PlayWav; InputKeys.Send
+Управление Ютубом,Перемотать вперед ( на 10 сек),adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,Sound.PlayWav; InputKeys.Send
+Управление Ютубом,Перемотать видео (на 10 сек назад),adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Следующее видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Предыдущее видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на начало видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 10% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 20% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 30% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 40% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 50% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 60% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 70% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 80% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Перемотать на 90% видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Полноэкранный режим,migrate_now,intents/system-control.yaml#fullscreen,Merged into the existing fullscreen intent family.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Субтитры,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,2 режима просмотра видео,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Мини-проигрыватель,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,InputKeys.Send; Sound.PlayWav
+Управление Ютубом,Звук,adapt_later,,Needs browser/video-surface-specific automation before it can be wired safely.,Sound.PlayWav; InputKeys.Send
+jarvis system,при запуске,adapt_later,,Needs a dedicated desktop feature instead of a VoxCommando-era macro.,Window.Close; Sound.PlayWav
+jarvis system,включи секундомер,adapt_later,,Needs a dedicated desktop feature instead of a VoxCommando-era macro.,Sound.PlayWav; Launch.OpenFile; VC.Pause; InputKeys.Send; VC.Pause; InputKeys.Send
+jarvis system,Круг,adapt_later,,Needs a dedicated desktop feature instead of a VoxCommando-era macro.,InputKeys.Send
+jarvis system,поставь будильник,adapt_later,,Needs a dedicated desktop feature instead of a VoxCommando-era macro.,Sound.PlayWav; Launch.OpenFile; VC.Pause; Window.Close
+jarvis system,поставь таймер,adapt_later,,Needs a dedicated desktop feature instead of a VoxCommando-era macro.,Sound.PlayWav; Launch.RawParam
+фильмы,включи фильм Железный человек,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Железный человек 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Невероятный халк,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Тор,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Первый мститель,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Мстители,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Железный человек 3,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Тор 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Первый мститель: Другая война,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Стражи Галактики,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Мстители: Эра Альтрона,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек-муравей,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Первый мститель: Противостояние,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Доктор Стрэндж,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Стражи Галактики 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек-паук: Возвращение домой,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Тор: Рагнарёк,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Чёрная Пантера,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Мстители: Война бесконечности,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек-муравей и Оса,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Капитан Марвел,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Мстители: Финал,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек-паук: Вдали от дома,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Новый Человек-паук,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Новый Человек паук 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек паук ,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек паук 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек паук 3,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Дэдпул,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Дэдпул 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Шан-Чи,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Человек паук Нет пути домой,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Логан,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Kingsman,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Люди в черном,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Kingsman 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Веном,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Пипец,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Чёрная Вдова,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Вечные,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Призрачный гонщик,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Веном 2,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Тор: Любовь и гром,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,включи фильм Морбиус,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL; VC.Pause
+фильмы,открой сверхестественное,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL
+фильмы,открой ходячие мертвецы,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL
+фильмы,открой сериал скорпион,archive_only,,"Bookmark/catalog content kept for later media-library work, not runtime-safe to wire now.",Sound.PlayWav; Launch.OpenURL
+фокус,разверни браузер,adapt_later,,Needs focus-existing-window support instead of opening a new app instance.,Window.Maximize; VC.Pause; Mouse.LeftClick
+рисунки,нарисуй круг,discard,,Coordinate-based drawing macros are screen-dependent and not production-safe.,Sound.PlayWav; Mouse.MoveAbsolute; Mouse.LeftClick; VC.Pause; Mouse.MoveAbsolute; Mouse.LeftButtonDown; Mouse.MoveAbsolute; Mouse.LeftButtonUp
+рисунки,нарисуй квадрат,discard,,Coordinate-based drawing macros are screen-dependent and not production-safe.,Sound.PlayWav; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.MoveAbsolute; Mouse.LeftButtonDown; VC.Pause; Mouse.MoveAbsolute; Mouse.LeftButtonUp
+рисунки,красный цвет,discard,,Coordinate-based drawing macros are screen-dependent and not production-safe.,Sound.PlayWav; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.LeftClick
+рисунки,Синий цвет,discard,,Coordinate-based drawing macros are screen-dependent and not production-safe.,Sound.PlayWav; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.LeftClick
+рисунки,желтый цвет,discard,,Coordinate-based drawing macros are screen-dependent and not production-safe.,Sound.PlayWav; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.LeftClick
+рисунки,нарисуй круг внутри квадрата,discard,,Coordinate-based drawing macros are screen-dependent and not production-safe.,Sound.PlayWav; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.MoveAbsolute; Mouse.LeftButtonDown; VC.Pause; Mouse.MoveAbsolute; Mouse.LeftButtonUp; VC.Pause; Mouse.MoveAbsolute; Mouse.LeftClick; Mouse.MoveAbsolute; Mouse.LeftButtonDown; VC.Pause; Mouse.MoveAbsolute; Mouse.LeftButtonUp
+Диджей,включи атмосферную музыку,migrate_now,intents/media-control.yaml,Converted into YAML media intents with URL/scenario-safe actions.,Launch.OpenURL; Sound.PlayWav; 
+Диджей,включи фонк,migrate_now,intents/media-control.yaml,Converted into YAML media intents with URL/scenario-safe actions.,Launch.OpenURL; Sound.PlayWav
+Диджей,включи рок,migrate_now,intents/media-control.yaml,Converted into YAML media intents with URL/scenario-safe actions.,Launch.OpenURL; Sound.PlayWav
+Диджей,включи ридио хиты,migrate_now,intents/media-control.yaml,Converted into YAML media intents with URL/scenario-safe actions.,Launch.OpenURL; Sound.PlayWav
+Диджей,включи радио,migrate_now,intents/media-control.yaml,Converted into YAML media intents with URL/scenario-safe actions.,Launch.OpenURL
+Диджей,включи музыку,migrate_now,intents/media-control.yaml,Converted into YAML media intents with URL/scenario-safe actions.,Launch.OpenURL; Sound.PlayWav
+яндекс музыка,включи музыку в яндекс,migrate_now,intents/media-control.yaml#play_music_generic,Mapped to the generic play-music flow with a Linux-safe URL target.,Sound.PlayStream; Launch.RawParam; VC.Pause; Window.Focus; VC.Pause; DxInput.KeyPress; VC.Pause; Sound.PlayStream; VC.Pause; Window.Minimize
+яндекс музыка,поставь лайк,adapt_later,,Needs a service-specific music-rating API; not portable enough for now.,Window.focus; DxInput.KeyPress; Sound.PlayStream; Window.Minimize
+яндекс музыка,поставь дизлайк,adapt_later,,Needs a service-specific music-rating API; not portable enough for now.,Window.Focus; VC.Pause; DxInput.KeyPress; Sound.PlayStream; VC.Pause; Window.Minimize
+яндекс музыка,следующий трек,migrate_now,BasicIntentHandler#MEDIA_NEXT,Merged into the existing next-track intent family.,Window.Focus; VC.Pause; DxInput.KeyPress; Sound.PlayStream; VC.Pause; Window.Minimize
+яндекс музыка,Предыдущий трек,migrate_now,BasicIntentHandler#MEDIA_PREV,Merged into the existing previous-track intent family.,Window.Focus; DxInput.KeyPress; Sound.PlayStream; Window.Minimize
+яндекс музыка,выключи музыку в яндекс,migrate_now,intents/media-control.yaml#pause_yandex_music,Mapped to a pause/stop media command.,Sound.PlayStream; Window.Minimize
+яндекс музыка,Пауза пуск,migrate_now,intents/media-control.yaml#toggle_music,Mapped to a play/pause toggle command.,Window.Focus; VC.Pause; DxInput.KeyPress; Sound.PlayStream; VC.Pause; Window.Minimize
+яндекс музыка,громче,migrate_now,BasicIntentHandler#VOLUME_UP,Merged into the existing volume-up intent family.,Window.Focus; DxInput.KeyPress; DxInput.KeyPress; Sound.PlayStream; Window.Minimize
+яндекс музыка,Тише,migrate_now,BasicIntentHandler#VOLUME_DOWN,Merged into the existing volume-down intent family.,Window.Focus; DxInput.KeyPress; DxInput.KeyPress; Sound.PlayStream; Window.Minimize
+диктовка текста,включи диктовку текста,adapt_later,,Needs continuous dictation/session mode support.,Sound.PlayStream; InputKeys.Send; VC.Standby
+диктовка текста,отправь,adapt_later,,Needs continuous dictation/session mode support.,Sound.PlayWav; InputKeys.Send; VC.Pause; InputKeys.Send; VC.On
+Игровой режим,Включи игровой режим,migrate_now,intents/protocols.yaml#game_mode,Mapped to a first-class desktop scenario.,Sound.PlayStream; VC.Pause; Launch.RawParam; Sound.PlayStream

@@ -1,0 +1,15 @@
+commands:
+  - id: test_regex_command
+    matchers:
+      - type: regex
+        values:
+          - "^режим ([0-9]+)$"
+    action:
+      target: internal
+      name: TEST_REGEX
+      params:
+        slot: "{1}"
+    response:
+      key: affirmative
+      text:
+        ru: "Есть."

@@ -177,6 +177,20 @@ class DesktopRuntimeMonitor(
             normalized.startsWith("Reconnecting", ignoreCase = true) -> {
                 updateVoice(status(ConnectionState.CONNECTING, normalized))
             }
+            normalized.startsWith("Re-authenticating", ignoreCase = true) ||
+                normalized.startsWith("CONNECTING", ignoreCase = true) -> {
+                updateVoice(status(ConnectionState.CONNECTING, normalized))
+            }
+            normalized.startsWith("AUTH_REQUIRED", ignoreCase = true) -> {
+                updateVoice(status(ConnectionState.DEGRADED, normalized))
+                recordEvent(EventSource.VOICE, EventSeverity.WARNING, "Voice authentication expired", normalized)
+            }
+            normalized.startsWith("UNAVAILABLE", ignoreCase = true) ||
+                normalized.startsWith("ERROR", ignoreCase = true) ||
+                normalized.startsWith("Connection failed", ignoreCase = true) -> {
+                updateVoice(status(ConnectionState.DEGRADED, normalized))
+                recordEvent(EventSource.VOICE, EventSeverity.WARNING, "Voice channel degraded", normalized)
+            }
             normalized.equals("LISTENING", ignoreCase = true) ||
                 normalized.equals("PROCESSING", ignoreCase = true) ||
                 normalized.equals("COOLDOWN", ignoreCase = true) ||

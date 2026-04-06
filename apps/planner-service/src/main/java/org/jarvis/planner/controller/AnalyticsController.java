@@ -24,11 +24,13 @@ public class AnalyticsController {
      * Get habit analysis
      */
     @GetMapping("/habits")
-    public ResponseEntity<Map<String, Object>> getHabits(Authentication authentication) {
+    public ResponseEntity<Map<String, Object>> getHabits(
+            Authentication authentication,
+            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
         String userId = authentication.getName();
-        log.info("GET habits analysis for user: {}", userId);
+        log.info("GET habits analysis for user: {}, smokeRunId={}", userId, smokeRunId);
         
-        Map<String, Object> analysis = habitAnalyzer.analyzeHabits(userId);
+        Map<String, Object> analysis = habitAnalyzer.analyzeHabits(userId, smokeRunId);
         return ResponseEntity.ok(analysis);
     }
     
@@ -36,11 +38,13 @@ public class AnalyticsController {
      * Get insights and recommendations
      */
     @GetMapping("/insights")
-    public ResponseEntity<Map<String, Object>> getInsights(Authentication authentication) {
+    public ResponseEntity<Map<String, Object>> getInsights(
+            Authentication authentication,
+            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
         String userId = authentication.getName();
-        log.info("GET insights for user: {}", userId);
+        log.info("GET insights for user: {}, smokeRunId={}", userId, smokeRunId);
         
-        Map<String, Object> insights = habitAnalyzer.analyzeHabits(userId);
+        Map<String, Object> insights = habitAnalyzer.analyzeHabits(userId, smokeRunId);
         
         // Add additional insights metadata
         insights.put("generatedAt", java.time.Instant.now().toString());

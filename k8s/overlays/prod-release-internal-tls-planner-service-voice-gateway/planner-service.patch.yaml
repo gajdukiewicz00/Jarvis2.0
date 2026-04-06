@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-planner-service-voice-gateway: planner-service-voice-gateway-v1
+    spec:
+      containers:
+        - name: planner-service
+          env:
+            - name: VOICE_GATEWAY_URL
+              value: https://voice-gateway.jarvis.svc.cluster.local:8081
+            - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-planner-service-voice-gateway
+                  key: truststore-password
+            - name: JAVA_TOOL_OPTIONS
+              value: -Djavax.net.ssl.trustStore=/tls-voice/jarvis-internal-truststore.jks -Djavax.net.ssl.trustStorePassword=$(JARVIS_JAVA_TRUSTSTORE_PASSWORD)
+          volumeMounts:
+            - name: internal-tls-planner-service-voice-gateway
+              mountPath: /tls-voice
+              readOnly: true
+      volumes:
+        - name: internal-tls-planner-service-voice-gateway
+          secret:
+            secretName: jarvis-internal-tls-planner-service-voice-gateway
+            items:
+              - key: truststore.jks
+                path: jarvis-internal-truststore.jks
+              - key: ca.crt
+                path: ca.crt

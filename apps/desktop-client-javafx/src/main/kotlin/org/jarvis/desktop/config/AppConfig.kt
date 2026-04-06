@@ -5,144 +5,98 @@ import java.util.Locale
 /**
  * Centralized application configuration for the desktop client.
  *
- * Persisted desktop settings take precedence over launcher defaults so a
- * developer can retarget the client without rewriting startup scripts.
+ * Active local runtime endpoints win by default unless the user explicitly
+ * pins a manual endpoint override in desktop settings.
  */
 object AppConfig {
-    private const val DEFAULT_API_GATEWAY = "https://api.jarvis.local"
-    private const val DEFAULT_VOICE_DOMAIN = "voice.jarvis.local"
-
     private val settingsStore: DesktopSettingsStore = PreferencesDesktopSettingsStore()
+    private val configService = DesktopConfigService(settingsStore)
+
+    fun current(): ResolvedDesktopConfig = configService.current()
+
+    fun reload(): ResolvedDesktopConfig = configService.reload()
 
     val apiGatewayBaseUrl: String
-        get() = resolveApiGatewayBaseUrl(System.getenv(), settingsStore.load())
+        get() = current().apiGatewayBaseUrl
 
     val apiBaseUrl: String
-        get() = "$apiGatewayBaseUrl/api/v1"
+        get() = current().apiBaseUrl
 
     val locale: Locale
-        get() = resolveLocale(System.getenv(), settingsStore.load())
+        get() = current().locale
 
     val voiceLanguage: String
-        get() = resolveVoiceLanguage(System.getenv(), locale)
+        get() = current().voiceLanguage
 
     val pcControlWebSocketUrl: String
-        get() = resolvePcControlWebSocketUrl(System.getenv(), settingsStore.load())
+        get() = current().pcControlWebSocketUrl
 
     val voiceWebSocketUrl: String
-        get() = resolveVoiceWebSocketUrl(System.getenv(), settingsStore.load())
+        get() = current().voiceWebSocketUrl
 
-    fun saveSettings(apiGatewayBaseUrl: String, locale: Locale) {
-        settingsStore.save(
-            DesktopSettings(
-                apiGatewayBaseUrl = normalizeBaseUrl(apiGatewayBaseUrl),
-                localeTag = normalizeLocaleTag(locale.toLanguageTag())
-            )
-        )
+    val apiGatewaySource: ConfigSource
+        get() = current().apiGatewaySource
+
+    val apiGatewayReason: String
+        get() = current().apiGatewayReason
+
+    val usesManualEndpointOverride: Boolean
+        get() = current().usesManualEndpointOverride
+
+    fun saveSettings(
+        apiGatewayBaseUrl: String,
+        locale: Locale,
+        manualEndpointOverride: Boolean = current().usesManualEndpointOverride
+    ): ResolvedDesktopConfig {
+        return configService.saveSettings(apiGatewayBaseUrl, locale, manualEndpointOverride)
+    }
+
+    fun addListener(listener: (ResolvedDesktopConfig) -> Unit) {
+        configService.addListener(listener)
+    }
+
+    fun removeListener(listener: (ResolvedDesktopConfig) -> Unit) {
+        configService.removeListener(listener)
+    }
+
+    internal fun resolve(environment: Map<String, String>, settings: DesktopSettings): ResolvedDesktopConfig {
+        return DesktopConfigResolver.resolve(environment, settings)
+    }
+
+    internal fun resolve(
+        environment: Map<String, String>,
+        settings: DesktopSettings,
+        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot?
+    ): ResolvedDesktopConfig {
+        return DesktopConfigResolver.resolve(environment, settings, localRuntimeEndpoint)
     }
 
     internal fun resolveApiGatewayBaseUrl(environment: Map<String, String>, settings: DesktopSettings): String {
-        val persistedBaseUrl = normalizeBaseUrl(settings.apiGatewayBaseUrl)
-        val baseUrl = persistedBaseUrl
-            ?: normalizeBaseUrl(environment["JARVIS_API_BASE_URL"])
-            ?: normalizeBaseUrl(environment["API_URL"])
-            ?: DEFAULT_API_GATEWAY
-
-        validateBaseUrl(baseUrl, environment, honorTlsEnv = persistedBaseUrl == null)
-        return baseUrl
+        return resolve(environment, settings).apiGatewayBaseUrl
     }
 
     internal fun resolvePcControlWebSocketUrl(environment: Map<String, String>, settings: DesktopSettings): String {
-        return normalizeWebSocketUrl(environment["JARVIS_PC_WS_URL"])
-            ?: "${wsBase(resolveApiGatewayBaseUrl(environment, settings))}/ws/pc-control"
+        return resolve(environment, settings).pcControlWebSocketUrl
     }
 
     internal fun resolveVoiceWebSocketUrl(environment: Map<String, String>, settings: DesktopSettings): String {
-        normalizeWebSocketUrl(environment["JARVIS_VOICE_WS_URL"])?.let { return it }
-
-        val baseUrl = resolveApiGatewayBaseUrl(environment, settings)
-        val explicitVoiceDomain = environment["JARVIS_VOICE_DOMAIN"]?.trim()?.takeIf { it.isNotEmpty() }
-        val useTls = baseUrl.startsWith("https://") || baseUrl.contains("jarvis.local")
-
-        if (explicitVoiceDomain != null) {
-            val scheme = if (useTls) "wss" else "ws"
-            return "$scheme://$explicitVoiceDomain/ws/voice"
-        }
-
-        return if (baseUrl.contains("api.jarvis.local")) {
-            "wss://$DEFAULT_VOICE_DOMAIN/ws/voice"
-        } else {
-            "${wsBase(baseUrl)}/ws/voice"
-        }
+        return resolve(environment, settings).voiceWebSocketUrl
     }
 
-    internal fun resolveVoiceLanguage(environment: Map<String, String>, locale: Locale): String {
-        environment["JARVIS_VOICE_LANGUAGE"]?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        return if (locale.language.equals("ru", ignoreCase = true)) "ru-RU" else "en-US"
+    internal fun resolveVoiceLanguage(environment: Map<String, String>, settings: DesktopSettings, locale: Locale): String {
+        return VoiceRecognitionLanguage.resolve(environment, settings, locale)
     }
 
-    private fun resolveLocale(environment: Map<String, String>, settings: DesktopSettings): Locale {
-        val localeTag = normalizeLocaleTag(settings.localeTag)
-            ?: normalizeLocaleTag(environment["JARVIS_LOCALE"])
-            ?: Locale.getDefault().toLanguageTag()
+    internal fun normalizeBaseUrl(url: String?): String? = DesktopConfigResolver.normalizeBaseUrl(url)
 
-        val locale = Locale.forLanguageTag(localeTag)
-        return if (locale.language.isBlank() || locale.language == "und") Locale.getDefault() else locale
-    }
+    internal fun normalizeLocaleTag(localeTag: String?): String? = DesktopConfigResolver.normalizeLocaleTag(localeTag)
 
-    private fun wsBase(baseUrl: String): String {
-        return when {
-            baseUrl.startsWith("https://") -> baseUrl.replaceFirst("^https".toRegex(), "wss")
-            baseUrl.startsWith("http://") -> baseUrl.replaceFirst("^http".toRegex(), "ws")
-            else -> {
-                if (baseUrl.contains("api.jarvis.local") || baseUrl.contains("voice.jarvis.local")) {
-                    baseUrl.replaceFirst("^http".toRegex(), "wss")
-                } else {
-                    baseUrl.replaceFirst("^http".toRegex(), "ws")
-                }
-            }
-        }
-    }
-
-    private fun normalizeBaseUrl(url: String?): String? {
-        return url?.trim()?.removeSuffix("/api/v1")?.trimEnd('/')?.takeIf { it.isNotBlank() }
-    }
-
-    private fun normalizeLocaleTag(localeTag: String?): String? {
-        return localeTag?.trim()?.takeIf { it.isNotEmpty() }
-    }
-
-    private fun normalizeWebSocketUrl(url: String?): String? {
-        return url?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }
-    }
-
-    private fun validateBaseUrl(
-        baseUrl: String,
-        environment: Map<String, String>,
-        honorTlsEnv: Boolean
-    ) {
-        val useTlsEnv = if (honorTlsEnv) {
-            environment["JARVIS_USE_TLS"]?.toBooleanStrictOrNull()
-        } else {
-            null
-        }
-        val inferredTls = baseUrl.startsWith("https://") || baseUrl.contains("jarvis.local")
-        val useTls = useTlsEnv ?: inferredTls
-        val hasJarvisDomain = baseUrl.contains("jarvis.local")
-
-        if (useTls && !baseUrl.startsWith("https://")) {
-            throw IllegalStateException(
-                "JARVIS_USE_TLS=true but API URL is not HTTPS: $baseUrl\n" +
-                    "TLS mode requires all external URLs to use https:// and wss://"
-            )
-        }
-
-        if (!useTls && hasJarvisDomain) {
-            throw IllegalStateException(
-                "JARVIS_USE_TLS=false but API URL contains jarvis.local domain: $baseUrl\n" +
-                    "jarvis.local domains require TLS. Set JARVIS_USE_TLS=true or use IP/port URL"
-            )
-        }
+    internal fun normalizePersistedSettings(
+        apiGatewayBaseUrl: String,
+        locale: Locale,
+        manualEndpointOverride: Boolean
+    ): DesktopSettings {
+        return DesktopConfigResolver.normalizePersistedSettings(apiGatewayBaseUrl, locale, manualEndpointOverride)
     }
 }
 

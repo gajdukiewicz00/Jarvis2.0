@@ -7,7 +7,7 @@
 #   ./scripts/convert-to-gguf.sh /path/to/hf-model /path/to/output.gguf [quantization]
 #
 # Example:
-#   ./scripts/convert-to-gguf.sh ~/models/h2ogpt-4096-llama2-7b-chat ~/models/h2ogpt-7b-q4.gguf Q4_K_M
+#   ./scripts/convert-to-gguf.sh models/llm/h2ogpt-4096-llama2-7b-chat models/llm/h2ogpt-7b-q4.gguf Q4_K_M
 #
 # Quantization options:
 #   Q4_K_M  - Recommended balance of speed/quality (default)
@@ -28,7 +28,7 @@ NC='\033[0m' # No Color
 # Check arguments
 if [ $# -lt 2 ]; then
     echo -e "${RED}Usage: $0 <hf-model-path> <output-gguf-path> [quantization]${NC}"
-    echo "Example: $0 ~/models/h2ogpt-4096-llama2-7b-chat ~/models/h2ogpt-7b-q4.gguf Q4_K_M"
+    echo "Example: $0 models/llm/h2ogpt-4096-llama2-7b-chat models/llm/h2ogpt-7b-q4.gguf Q4_K_M"
     exit 1
 fi
 
@@ -96,8 +96,7 @@ echo -e "${GREEN}=== Conversion complete! ===${NC}"
 ls -lh "$OUTPUT_PATH"
 echo ""
 echo "To use with Jarvis:"
-echo "  1) Copy model to ~/.jarvis/models"
+echo "  1) Place the model in models/llm"
 echo "  2) Set env if needed: LLM_BACKEND=llamacpp"
-echo "  3) Ensure GGUF_MODEL_PATH points to /models/$(basename $OUTPUT_PATH)"
-
+echo "  3) Ensure GGUF_MODEL_PATH points to /models/llm/$(basename $OUTPUT_PATH)"
 

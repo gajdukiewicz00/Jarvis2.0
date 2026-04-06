@@ -1,0 +1,24 @@
+# Boolean vocabulary — migrated from legacy VoxCommando on_off.xml + truefalse.xml
+# Used for smart-home toggles, confirmation dialogs, and binary state commands.
+
+toggle:
+  - value: "on"
+    numeric: 1
+    bool: true
+    phrases_ru: ["включить", "включи", "вруби", "врубить", "запусти", "активируй"]
+    phrases_en: ["on", "turn on", "enable", "activate"]
+
+  - value: "off"
+    numeric: 0
+    bool: false
+    phrases_ru: ["выключить", "выключи", "выруби", "вырубить", "отключи", "деактивируй"]
+    phrases_en: ["off", "turn off", "disable", "deactivate"]
+
+confirm:
+  - value: "yes"
+    phrases_ru: ["да", "правильно", "подтверждаю", "верно", "точно", "конечно", "ага"]
+    phrases_en: ["yes", "correct", "confirm", "right", "sure", "yeah", "yep"]
+
+  - value: "no"
+    phrases_ru: ["нет", "отмена", "отменить", "отмени", "неправильно", "неверно"]
+    phrases_en: ["no", "cancel", "wrong", "nope", "negative"]

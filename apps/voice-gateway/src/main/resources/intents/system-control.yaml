@@ -1,0 +1,252 @@
+# System control intents — migrated from the legacy "Управление системой" group.
+# Actions stay platform-neutral; orchestrator maps them to Linux-friendly hotkeys and commands.
+
+intent_group: system_control
+description: "Desktop control commands extracted from legacy VoxCommando rules"
+
+commands:
+  - id: clipboard_copy
+    phrases_ru:
+      - "скопировать"
+      - "скопируй"
+      - "скопируй текст"
+      - "копировать"
+    phrases_en:
+      - "copy"
+      - "copy text"
+      - "copy that"
+    action: CLIPBOARD_COPY
+
+  - id: clipboard_paste
+    phrases_ru:
+      - "вставить"
+      - "вставь"
+      - "вклеить"
+      - "вставь текст"
+    phrases_en:
+      - "paste"
+      - "paste text"
+    action: CLIPBOARD_PASTE
+
+  - id: undo_action
+    phrases_ru:
+      - "отмена действия"
+      - "отмени действия"
+      - "отмени"
+      - "отменить"
+    phrases_en:
+      - "undo"
+      - "undo that"
+      - "take it back"
+    action: UNDO_ACTION
+
+  - id: switch_window
+    phrases_ru:
+      - "другое окно"
+      - "смени окно"
+      - "смена окна"
+      - "сменить окно"
+      - "переключи окно"
+    phrases_en:
+      - "switch window"
+      - "other window"
+      - "alt tab"
+      - "next window"
+    action: SWITCH_WINDOW
+
+  - id: close_window
+    phrases_ru:
+      - "закрой окно"
+      - "закрой программу"
+      - "закрыть окно"
+      - "закрыть программу"
+    phrases_en:
+      - "close window"
+      - "close app"
+      - "close program"
+    action: CLOSE_WINDOW
+
+  - id: fullscreen
+    phrases_ru:
+      - "на весь экран"
+      - "разверни на максимум"
+      - "полноэкранный режим"
+    phrases_en:
+      - "fullscreen"
+      - "full screen"
+      - "go fullscreen"
+    action: FULLSCREEN
+
+  - id: refresh_page
+    phrases_ru:
+      - "обнови страницу"
+      - "обновить страницу"
+      - "перезагрузи страницу"
+      - "обновить"
+    phrases_en:
+      - "refresh"
+      - "reload"
+      - "refresh page"
+    action: REFRESH_PAGE
+
+  - id: navigate_back
+    phrases_ru:
+      - "назад"
+      - "вернись назад"
+      - "страницу назад"
+    phrases_en:
+      - "back"
+      - "go back"
+      - "navigate back"
+    action: NAVIGATE_BACK
+
+  - id: navigate_forward
+    phrases_ru:
+      - "вперёд"
+      - "вернись вперёд"
+      - "страницу вперёд"
+    phrases_en:
+      - "forward"
+      - "go forward"
+    action: NAVIGATE_FORWARD
+
+  - id: system_search
+    phrases_ru:
+      - "поиск по системе"
+      - "поиск в системе"
+      - "найди в системе"
+    phrases_en:
+      - "system search"
+      - "search system"
+    action: SYSTEM_SEARCH
+
+  - id: open_settings
+    phrases_ru:
+      - "открой параметры"
+      - "открыть параметры"
+      - "открой настройки"
+      - "настройки"
+    phrases_en:
+      - "open settings"
+      - "preferences"
+      - "settings"
+    action: OPEN_SETTINGS
+
+  - id: switch_language
+    phrases_ru:
+      - "смени язык"
+      - "смени раскладку"
+      - "сменить язык"
+      - "сменить раскладку"
+    phrases_en:
+      - "switch language"
+      - "change language"
+      - "switch keyboard"
+    action: SWITCH_LANGUAGE
+
+  - id: take_screenshot
+    phrases_ru:
+      - "сделай скриншот"
+      - "скриншот"
+      - "снимок экрана"
+      - "сделай снимок экрана"
+    phrases_en:
+      - "screenshot"
+      - "take screenshot"
+      - "screen capture"
+    action: SCREENSHOT
+
+  - id: sleep_mode
+    phrases_ru:
+      - "спящий режим"
+      - "в спящий режим"
+      - "усыпи компьютер"
+    phrases_en:
+      - "sleep mode"
+      - "go to sleep"
+      - "hibernate"
+    action: SLEEP_MODE
+
+  - id: network_check
+    phrases_ru:
+      - "проверь скорость интернета"
+      - "узнай скорость интернета"
+      - "скажи скорость интернета"
+    phrases_en:
+      - "check internet speed"
+      - "run network speed test"
+    action: NETWORK_CHECK
+    params:
+      url: "https://fast.com/"
+
+  - id: monitor_off
+    phrases_ru:
+      - "выключи монитор"
+      - "отключи монитор"
+      - "выключить монитор"
+      - "погаси экран"
+    phrases_en:
+      - "monitor off"
+      - "turn off monitor"
+      - "screen off"
+    action: MONITOR_OFF
+
+  - id: show_desktop
+    phrases_ru:
+      - "рабочий стол"
+      - "покажи рабочий стол"
+      - "на рабочий стол"
+    phrases_en:
+      - "show desktop"
+      - "go to desktop"
+    action: SHOW_DESKTOP
+
+  - id: find_in_page
+    phrases_ru:
+      - "найди элемент"
+      - "найди на странице"
+      - "поиск на странице"
+    phrases_en:
+      - "find on page"
+      - "find in page"
+    action: FIND_IN_PAGE
+
+  - id: focus_address_bar
+    phrases_ru:
+      - "адрес страницы"
+      - "выдели адрес страницы"
+      - "перейди в адресную строку"
+    phrases_en:
+      - "address bar"
+      - "focus address bar"
+    action: FOCUS_ADDRESS_BAR
+
+  - id: rename_item
+    phrases_ru:
+      - "смена имени"
+      - "переименуй"
+      - "переименовать"
+    phrases_en:
+      - "rename item"
+      - "rename this"
+    action: RENAME_ITEM
+
+  - id: delete_selection
+    phrases_ru:
+      - "удали"
+      - "удалить"
+      - "удали это"
+    phrases_en:
+      - "delete this"
+      - "delete selection"
+    action: DELETE_SELECTION
+
+  - id: press_enter
+    phrases_ru:
+      - "энтер"
+      - "нажми энтер"
+      - "подтверди ввод"
+    phrases_en:
+      - "press enter"
+      - "hit enter"
+    action: PRESS_ENTER

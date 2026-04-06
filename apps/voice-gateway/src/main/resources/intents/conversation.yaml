@@ -1,0 +1,126 @@
+# Conversation / small talk intents — migrated from the legacy "Общение" group.
+
+intent_group: conversation
+description: "Small talk, greetings, and personality responses from the legacy archive"
+
+commands:
+  - id: wake_call
+    phrases_ru:
+      - "вызов"
+      - "джарвис ты тут"
+      - "джарвис слушай"
+      - "ты на месте"
+    phrases_en:
+      - "jarvis are you there"
+      - "jarvis listen"
+    action: WAKE_RESPONSE
+
+  - id: good_morning
+    phrases_ru:
+      - "доброе утро"
+      - "доброе утро джарвис"
+      - "утро доброе джарвис"
+    phrases_en:
+      - "good morning"
+    action: MORNING_GREETING
+
+  - id: how_are_you
+    phrases_ru:
+      - "как дела"
+      - "как ты"
+      - "как настроение"
+      - "как самочувствие"
+    phrases_en:
+      - "how are you"
+      - "how is it going"
+    action: HOW_ARE_YOU
+
+  - id: what_are_you_doing
+    phrases_ru:
+      - "что делаешь"
+      - "чем занимаешься"
+      - "докладывай"
+    phrases_en:
+      - "what are you doing"
+      - "what are you up to"
+    action: WHAT_DOING
+
+  - id: im_back
+    phrases_ru:
+      - "я вернулся"
+      - "я снова тут"
+      - "я дома"
+      - "джарвис я вернулся"
+    phrases_en:
+      - "i am back"
+      - "i'm home"
+    action: WELCOME_HOME
+
+  - id: im_bored
+    phrases_ru:
+      - "мне скучно"
+      - "джарвис мне лень"
+      - "мне лень"
+      - "мне нечем заняться"
+      - "я не знаю чем себя занять"
+    phrases_en:
+      - "i am bored"
+      - "what should i do"
+    action: BORED
+
+  - id: im_sad
+    phrases_ru:
+      - "мне грустно"
+      - "хочу погрустить"
+      - "плохое настроение"
+    phrases_en:
+      - "i'm sad"
+      - "feeling down"
+    action: CHEER_UP
+
+  - id: i_love_you
+    phrases_ru:
+      - "я тебя люблю"
+      - "люблю тебя"
+      - "ты самый классный"
+      - "ты умничка"
+    phrases_en:
+      - "i love you"
+      - "you are the best"
+    action: LOVE_RESPONSE
+
+  - id: tell_fact
+    phrases_ru:
+      - "скажи рандомный факт"
+      - "расскажи факт"
+      - "интересный факт"
+    phrases_en:
+      - "tell me a fact"
+      - "random fact"
+    action: RANDOM_FACT
+
+  - id: open_news
+    phrases_ru:
+      - "есть новости"
+      - "что нового"
+      - "включи новости"
+      - "сегодня были важные новости"
+    phrases_en:
+      - "open the news"
+      - "show the news"
+    action: OPEN_NEWS
+    params:
+      url: "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FtVnVHZ0pCVlNnQVAB?hl=ru&gl=RU&ceid=RU:ru"
+
+  - id: go_to_sleep_jarvis
+    phrases_ru:
+      - "я отдыхать"
+      - "джарвис не слушай"
+      - "не слушай"
+      - "замолчи"
+      - "иди спать"
+    phrases_en:
+      - "stop listening"
+      - "go to sleep"
+      - "be quiet"
+    action: STANDBY_MODE

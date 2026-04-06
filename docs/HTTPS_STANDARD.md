@@ -1,240 +1,533 @@
-# 🔒 HTTPS / TLS as Product Standard
+# HTTPS / TLS Standard
 
-**Дата:** 2025-01-27  
-**Статус:** Зафиксировано как обязательный стандарт  
-**Итерация:** Iteration 7
+Last verified: **2026-03-23**
 
----
+This document is the TLS source of truth for the in-scope backend.
 
-## 📋 Требования
+It distinguishes three different models on purpose:
 
-### 1. Внешний трафик — только HTTPS/WSS
-- ✅ ВСЕ внешние запросы к API Gateway — только HTTPS
-- ✅ WebSocket соединения — только WSS
-- ✅ HTTP разрешён ТОЛЬКО для readiness/liveness внутри кластера
+- `edge TLS`: TLS terminates at ingress or another public entrypoint
+- `internal TLS`: service-to-service traffic inside the runtime/cluster also uses HTTPS
+- `mTLS`: both sides of an internal connection authenticate each other with client/server certificates
 
-### 2. TLS терминирование
-- ✅ TLS терминируется в API Gateway / Ingress
-- ✅ Внутри кластера сервисы общаются по HTTP (ClusterIP)
-- ✅ Внешний доступ — только через HTTPS
+Do not treat those as interchangeable.
 
-### 3. Self-signed CA для локального продукта
-- ✅ CA + certs генерируются при первом запуске launcher'ом
-- ✅ CA устанавливается в Ubuntu trust store (`/usr/local/share/ca-certificates/`)
-- ✅ Certs передаются в Kubernetes через Secret (`jarvis-tls`)
-- ✅ CA обновляется через `update-ca-certificates`
+## Current Model
 
-### 4. Стандартные домены
-- ✅ `api.jarvis.local` — API Gateway
-- ✅ `voice.jarvis.local` — Voice Gateway
-- ✅ Скрипт добавляет их в `/etc/hosts` (IP хоста)
+### 1. Edge TLS
 
-### 5. UI не отключает SSL verification
-- ✅ Desktop client использует HTTPS БЕЗ `-k` / `trust-all`
-- ✅ Desktop client использует CA из trust store
-- ✅ НЕТ отключения SSL verification в коде
+This is implemented and verified.
 
-### 6. HTTP только для readiness/liveness
-- ✅ `/actuator/health` доступен по HTTP внутри кластера
-- ✅ Внешний доступ к health — через HTTPS
+- External REST entrypoint: `https://api.jarvis.local`
+- External voice websocket entrypoint: `wss://voice.jarvis.local/ws/voice`
+- Kubernetes ingress terminates TLS with secret `jarvis-tls`
+- HTTP to HTTPS redirect is enforced by ingress
+- `api-gateway` now honors forwarded headers with `server.forward-headers-strategy=framework`
 
----
+Verified in this environment:
 
-## 🏗️ Архитектура
+- `http://api.jarvis.local/...` returns `308` to `https://api.jarvis.local/...`
+- `https://api.jarvis.local/actuator/health` returns `200`
+- authenticated `wss://voice.jarvis.local/ws/voice` handshake succeeds
 
+### 2. Internal TLS
+
+This is partially implemented and verified in twenty-one narrow internal HTTPS hops.
+
+Implemented and verified now:
+
+- local runtime can serve the public gateway over HTTPS/WSS with `JARVIS_USE_TLS=true`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-nlp`
+  migrates `api-gateway -> nlp-service` from HTTP to HTTPS
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-planner-api-gateway`
+  layers on top of the first slice and migrates `planner-service -> api-gateway`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-orchestrator-api-gateway`
+  layers on top of the second slice and migrates `orchestrator -> api-gateway`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-voice-gateway-api-gateway`
+  layers on top of the third slice and migrates `voice-gateway -> api-gateway`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-ingress-api-gateway`
+  layers on top of the fourth slice and migrates `ingress -> api-gateway`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-security-service`
+  layers on top of the ingress slice and migrates `api-gateway -> security-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-analytics-service`
+  layers on top of the security-service slice and migrates `api-gateway -> analytics-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-pc-control`
+  layers on top of the analytics slice and migrates `api-gateway -> pc-control`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-life-tracker`
+  layers on top of the pc-control slice and migrates `api-gateway -> life-tracker`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-smart-home-service`
+  layers on top of the life-tracker slice and migrates `api-gateway -> smart-home-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-orchestrator`
+  layers on top of the smart-home slice and migrates `api-gateway -> orchestrator`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-voice-gateway`
+  layers on top of the orchestrator slice and migrates `api-gateway -> voice-gateway`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-voice-gateway-orchestrator`
+  layers on top of the gateway/voice slice and migrates `voice-gateway -> orchestrator`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-analytics-service-life-tracker`
+  layers on top of the voice/orchestrator slice and migrates `analytics-service -> life-tracker`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-orchestrator-nlp-service`
+  layers on top of the analytics/life-tracker slice and migrates `orchestrator -> nlp-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-planner-service-analytics-service`
+  layers on top of the orchestrator/nlp slice and migrates `planner-service -> analytics-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-api-gateway-planner-service`
+  layers on top of the planner/analytics slice and migrates `api-gateway -> planner-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-planner-service-voice-gateway`
+  layers on top of the gateway/planner slice and migrates `planner-service -> voice-gateway`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-voice-gateway-smart-home-service`
+  layers on top of the planner/voice slice and migrates `voice-gateway -> smart-home-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-orchestrator-smart-home-service`
+  layers on top of the voice/smart-home slice and migrates `orchestrator -> smart-home-service`
+- the dedicated overlay `k8s/overlays/prod-release-internal-tls-orchestrator-pc-control`
+  layers on top of the orchestrator/smart-home slice and migrates `orchestrator -> pc-control`
+- the promoted overlay `k8s/overlays/prod-release-internal-tls-verified`
+  carries forward that exact twenty-one-hop state as one first-class deploy target
+- in that overlay:
+  - `nlp-service` serves HTTPS only on port `8082`
+  - `api-gateway` talks to `https://nlp-service.jarvis.svc.cluster.local:8082`
+  - `nlp-service` liveness/readiness/startup probes use HTTPS
+  - trust is provided by secret `jarvis-internal-tls-api-gateway-nlp`
+- in the second overlay:
+  - `api-gateway` keeps internal HTTP on `8080` for non-migrated callers
+  - `api-gateway` also serves internal HTTPS on `8443`
+  - `planner-service` talks to `https://api-gateway.jarvis.svc.cluster.local:8443`
+  - `api-gateway` liveness/readiness/startup probes use HTTPS on `8443`
+  - trust is provided by secret `jarvis-internal-tls-planner-api-gateway`
+- in the third overlay:
+  - `api-gateway` reuses the existing internal HTTPS listener on `8443`
+  - `orchestrator` talks to `https://api-gateway.jarvis.svc.cluster.local:8443`
+  - trust is provided by secret `jarvis-internal-tls-orchestrator-api-gateway`
+- in the fourth overlay:
+  - `api-gateway` still reuses the existing internal HTTPS listener on `8443`
+  - `voice-gateway` talks to `https://api-gateway.jarvis.svc.cluster.local:8443`
+  - trust is provided by secret `jarvis-internal-tls-voice-gateway-api-gateway`
+- in the fifth overlay:
+  - `jarvis-ingress` uses `nginx.ingress.kubernetes.io/backend-protocol: HTTPS`
+  - every `jarvis-ingress` backend for `api-gateway` points to `8443`
+  - `api-gateway` still reuses the existing internal HTTPS listener on `8443`
+  - edge HTTPS and WSS continue to work through ingress after the migration
+- in the sixth overlay:
+  - `security-service` serves HTTPS only on port `8088`
+  - `api-gateway` talks to `https://security-service.jarvis.svc.cluster.local:8088`
+  - `security-service` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `security-service` is provided by secret
+    `jarvis-internal-tls-api-gateway-security-service`
+- in the seventh overlay:
+  - `analytics-service` serves HTTPS only on port `8087`
+  - `api-gateway` talks to `https://analytics-service.jarvis.svc.cluster.local:8087`
+  - `analytics-service` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `analytics-service` is provided by secret
+    `jarvis-internal-tls-api-gateway-analytics-service`
+- in the eighth overlay:
+  - `pc-control` serves HTTPS only on port `8084`
+  - `api-gateway` talks to `https://pc-control.jarvis.svc.cluster.local:8084`
+  - `pc-control` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `pc-control` is provided by secret
+    `jarvis-internal-tls-api-gateway-pc-control`
+- in the ninth overlay:
+  - `life-tracker` serves HTTPS only on port `8085`
+  - `api-gateway` talks to `https://life-tracker.jarvis.svc.cluster.local:8085`
+  - `life-tracker` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `life-tracker` is provided by secret
+    `jarvis-internal-tls-api-gateway-life-tracker`
+- in the tenth overlay:
+  - `smart-home-service` serves HTTPS only on port `8086`
+  - `api-gateway` talks to `https://smart-home-service.jarvis.svc.cluster.local:8086`
+  - `smart-home-service` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `smart-home-service` is provided by secret
+    `jarvis-internal-tls-api-gateway-smart-home-service`
+- in the eleventh overlay:
+  - `orchestrator` serves HTTPS only on port `8083`
+  - `api-gateway` talks to `https://orchestrator.jarvis.svc.cluster.local:8083`
+  - `orchestrator` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `orchestrator` is provided by secret
+    `jarvis-internal-tls-api-gateway-orchestrator`
+- in the twelfth overlay:
+  - `voice-gateway` serves HTTPS only on port `8081`
+  - `api-gateway` talks to `https://voice-gateway.jarvis.svc.cluster.local:8081`
+  - `voice-gateway` liveness/readiness probes use HTTPS
+  - `api-gateway` reuses the existing Jarvis CA trust mounted for the first slice
+  - trust and keystore material for `voice-gateway` is provided by secret
+    `jarvis-internal-tls-api-gateway-voice-gateway`
+- the verified commands for that slice are:
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-nlp.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-nlp.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-nlp.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-nlp.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-planner-api-gateway.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-planner-api-gateway.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-planner-api-gateway.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-planner-api-gateway.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-orchestrator-api-gateway.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-orchestrator-api-gateway.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-orchestrator-api-gateway.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-orchestrator-api-gateway.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-voice-gateway-api-gateway.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-voice-gateway-api-gateway.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-voice-gateway-api-gateway.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-voice-gateway-api-gateway.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-ingress-api-gateway.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-ingress-api-gateway.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-security-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-security-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-security-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-security-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-analytics-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-analytics-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-analytics-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-analytics-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-pc-control.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-pc-control.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-pc-control.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-pc-control.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-life-tracker.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-life-tracker.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-life-tracker.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-life-tracker.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-voice-gateway.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-voice-gateway.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-voice-gateway.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-voice-gateway.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-voice-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-voice-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-voice-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-voice-gateway-orchestrator.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-analytics-service-life-tracker.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-analytics-service-life-tracker.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-analytics-service-life-tracker.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-analytics-service-life-tracker.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-orchestrator-nlp-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-orchestrator-nlp-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-orchestrator-nlp-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-orchestrator-nlp-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-planner-service-analytics-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-planner-service-analytics-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-planner-service-analytics-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-planner-service-analytics-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-api-gateway-planner-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-api-gateway-planner-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-api-gateway-planner-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-api-gateway-planner-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-planner-service-voice-gateway.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-planner-service-voice-gateway.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-planner-service-voice-gateway.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-planner-service-voice-gateway.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-voice-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-voice-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-voice-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-voice-gateway-smart-home-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-orchestrator-smart-home-service.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-orchestrator-smart-home-service.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-orchestrator-smart-home-service.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-orchestrator-smart-home-service.sh`
+  - `./scripts/product/jarvis-generate-internal-tls-orchestrator-pc-control.sh`
+  - `./scripts/product/jarvis-apply-internal-tls-orchestrator-pc-control.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-orchestrator-pc-control.sh`
+  - `./scripts/product/jarvis-smoke-internal-tls-orchestrator-pc-control.sh`
+  - `./scripts/product/jarvis-deploy-prod-internal-tls-verified.sh`
+  - `./scripts/product/jarvis-smoke-prod-internal-tls-verified.sh`
+
+Prepared now:
+
+- local certificate generation creates:
+  - `~/.jarvis/tls/jarvis-ca.crt`
+  - `~/.jarvis/tls/jarvis.crt`
+  - `~/.jarvis/tls/jarvis.key`
+  - `~/.jarvis/tls/jarvis-keystore.p12`
+  - `~/.jarvis/tls/jarvis-cacerts.jks`
+- the shared server certificate now includes:
+  - edge DNS names
+  - `localhost` / `127.0.0.1`
+  - backend service DNS SANs for a future internal-TLS migration
+- local runtime smoke follows `https://127.0.0.1:8080` and `wss://127.0.0.1:8080/...` when that mode is enabled
+
+Remaining and intentionally not closed in this pass:
+
+### Category A — Real Next Closures After Contract Work
+
+- `planner-service -> user-profile`
+  placeholder client with fake goal data; no real planner/user-profile contract
+  was migrated yet
+- `planner-service -> life-tracker`
+  health-only placeholder client; no real planner/life-tracker DTO contract was
+  migrated yet
+
+### Category B — Closeable Only After Service Strategy / Rollout Redesign
+
+- `user-profile` listener and probes on `8089`
+  changing the service itself now would require either a dual-listener rollout
+  or a coordinated cutover for remaining consumers, including the excluded
+  `llm-service -> user-profile` path
+
+### Category C — Optional / Model-Adjacent
+
+- `memory-service -> embedding-service`
+  optional model-adjacent path, still HTTP while those workloads stay scaled to
+  zero in the promoted overlay
+
+### Category D — Explicitly Excluded From The Current Verified Scope
+
+- excluded stack:
+  `llm-service -> llm-server`, `llm-service -> memory-service`,
+  `llm-service -> user-profile`
+
+### 3. Full mTLS
+
+This is not implemented.
+
+Missing for mTLS:
+
+- per-service certificates or SPIFFE-like identities
+- client certificate presentation on internal calls
+- mutual certificate validation policy between services
+- cert rotation/distribution machinery for workload identities
+
+## Current Boundary
+
+### Kubernetes / prod-like path
+
+- Edge TLS: `yes`
+- Internal TLS: `partial`
+- mTLS: `no`
+
+Default `prod-release` traffic model:
+
+```text
+External client
+  -> HTTPS / WSS
+Ingress
+  -> HTTP
+api-gateway
+  -> HTTP / WS
+backend services
 ```
-External Client (Desktop UI)
-    ↓ HTTPS (api.jarvis.local:443)
-    ↓
-Ingress / API Gateway (TLS termination)
-    ↓ HTTP (внутри кластера)
-    ↓
-Backend Services (ClusterIP, HTTP)
+
+Verified incremental internal-TLS slices:
+
+```text
+External client
+  -> HTTPS / WSS
+Ingress
+  -> HTTPS
+api-gateway
+  -> HTTPS
+nlp-service
 ```
 
----
+```text
+planner-service
+  -> HTTPS
+api-gateway
+  -> HTTPS
+nlp-service
+```
 
-## 📝 Реализация (Iteration 7)
+```text
+orchestrator
+  -> HTTPS
+api-gateway
+```
 
-### 1. Генерация CA и certs
+```text
+voice-gateway
+  -> HTTPS
+api-gateway
+```
 
-**Скрипт:** `scripts/product/jarvis-generate-certs.sh`
+```text
+ingress-nginx
+  -> HTTPS
+api-gateway
+```
+
+```text
+api-gateway
+  -> HTTPS
+security-service
+```
+
+```text
+api-gateway
+  -> HTTPS
+analytics-service
+```
+
+Everything outside those seven migrated hops still remains HTTP.
+
+### Local runtime path
+
+Two supported modes now exist:
+
+- direct local HTTP mode:
+  - `JARVIS_USE_TLS=false`
+  - public gateway URL: `http://127.0.0.1:8080`
+  - websocket URL: `ws://127.0.0.1:8080/ws/voice`
+- local self-signed HTTPS mode:
+  - `JARVIS_USE_TLS=true`
+  - public gateway URL: `https://127.0.0.1:8080`
+  - websocket URL: `wss://127.0.0.1:8080/ws/voice`
+  - requires certificate material from `scripts/product/jarvis-generate-certs.sh`
+
+This local TLS mode secures the public gateway hop only. The backend services behind
+that gateway remain plain HTTP unless a separate internal TLS migration is completed.
+
+## Certificate Material
+
+Generate local CA, edge certs, local gateway keystore, and Java truststore:
 
 ```bash
-#!/bin/bash
-# Генерирует:
-# - CA private key: ~/.jarvis/tls/jarvis-ca.key
-# - CA certificate: ~/.jarvis/tls/jarvis-ca.crt
-# - Server private key: ~/.jarvis/tls/jarvis.key
-# - Server certificate: ~/.jarvis/tls/jarvis.crt (CN=api.jarvis.local, SAN=voice.jarvis.local)
+./scripts/product/jarvis-generate-certs.sh
 ```
 
-### 2. Установка CA в trust store
+If your local certificate predates the expanded SAN set for future internal TLS
+migration, the script warns and you can refresh it explicitly with:
 
 ```bash
-# Копировать CA в trust store
-sudo cp ~/.jarvis/tls/jarvis-ca.crt /usr/local/share/ca-certificates/jarvis-ca.crt
-sudo update-ca-certificates
+./scripts/product/jarvis-generate-certs.sh --force
 ```
 
-### 3. Добавление доменов в /etc/hosts
+Optional system trust install:
 
 ```bash
-# Добавить в /etc/hosts (требует sudo)
+sudo ./scripts/product/jarvis-install-tls.sh
+```
+
+Optional hosts setup for edge ingress names:
+
+```bash
 sudo ./scripts/product/jarvis-setup-hosts.sh
 ```
 
-### 4. Kubernetes Secret
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: jarvis-tls
-  namespace: jarvis
-type: kubernetes.io/tls
-data:
-  tls.crt: <base64 encoded server cert>
-  tls.key: <base64 encoded server key>
-```
-
-### 5. Ingress с TLS
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: jarvis-ingress
-  namespace: jarvis
-spec:
-  tls:
-    - hosts:
-        - api.jarvis.local
-        - voice.jarvis.local
-      secretName: jarvis-tls
-  rules:
-    - host: api.jarvis.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: api-gateway
-                port:
-                  number: 8080
-```
-
-### 6. Desktop Client обновление
-
-**Файл:** `apps/desktop-client-javafx/src/main/kotlin/org/jarvis/desktop/config/AppConfig.kt`
-
-```kotlin
-val apiGatewayBaseUrl: String by lazy {
-    val env = System.getenv("JARVIS_API_BASE_URL")
-        ?: System.getenv("API_URL")
-    (env?.takeIf { it.isNotBlank() } ?: "https://api.jarvis.local").trimEnd('/')
-}
-```
-
-**Важно:** НЕТ `-k`, НЕТ `trust-all`, используется системный trust store.
-
----
-
-## 🔍 Проверка (Verification Pack)
-
-### Команды:
+Kubernetes ingress TLS secret:
 
 ```bash
-# 1. CA в trust store
-openssl x509 -in /usr/local/share/ca-certificates/jarvis-ca.crt -text -noout
-
-# 2. Домены в /etc/hosts
-grep "jarvis.local" /etc/hosts
-
-# 3. TLS secret в K8s
-kubectl -n jarvis get secret jarvis-tls
-
-# 4. HTTPS endpoint (БЕЗ -k)
-curl --cacert /usr/local/share/ca-certificates/jarvis-ca.crt \
-  https://api.jarvis.local/actuator/health
-
-# 5. openssl проверка
-echo | openssl s_client -connect api.jarvis.local:443 \
-  -CAfile /usr/local/share/ca-certificates/jarvis-ca.crt 2>&1 | \
-  grep -E "Verify return code|CN="
+kubectl -n jarvis create secret tls jarvis-tls \
+  --cert="$HOME/.jarvis/tls/jarvis.crt" \
+  --key="$HOME/.jarvis/tls/jarvis.key" \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-### Ожидаемый результат:
+## Verification
 
-- ✅ CA certificate валиден
-- ✅ Домены в /etc/hosts
-- ✅ jarvis-tls secret существует
-- ✅ `curl https://api.jarvis.local` работает БЕЗ `-k`
-- ✅ `openssl s_client` показывает `Verify return code: 0 (ok)`
+### Edge HTTPS / WSS
 
----
+```bash
+curl -I http://api.jarvis.local/actuator/health
+curl --cacert "$HOME/.jarvis/tls/jarvis-ca.crt" https://api.jarvis.local/actuator/health
+```
 
-## ⚠️ Важные замечания
+For WSS validation, use an authenticated websocket client or the verified local
+runtime smoke path below.
 
-1. **CA должен быть установлен ДО первого запуска UI** — иначе SSL verification упадёт
-2. **Домены должны быть в /etc/hosts ДО первого запуска** — иначе DNS не резолвится
-3. **Launcher должен проверять наличие CA и доменов** — если нет, установить автоматически
-4. **При обновлении CA** — нужно перезапустить `update-ca-certificates` и перезапустить UI
+Practical repo checks:
 
----
+- ingress redirect and TLS secret: `k8s/base/ingress.yaml`
+- deployment runbook: `DEPLOYMENT_INSTRUCTIONS.md`
+- cluster deployment details: `k8s/README.md`
 
-## 📋 DoD (Iteration 7) - Чёткие критерии
+### Local gateway HTTPS / WSS
 
-### 1. Домены настроены
-- ✅ `api.jarvis.local` добавлен в `/etc/hosts` (IP хоста)
-- ✅ `voice.jarvis.local` добавлен в `/etc/hosts` (IP хоста)
-- ✅ Проверка: `grep "jarvis.local" /etc/hosts` показывает оба домена
+```bash
+JARVIS_USE_TLS=true ENABLE_LLM=false ./scripts/runtime-up.sh
+JARVIS_USE_TLS=true JARVIS_RUNTIME_SMOKE_SKIP_LLM=true JARVIS_SKIP_BUILD=true ./scripts/runtime-smoke.sh
+```
 
-### 2. TLS Secret в Kubernetes
-- ✅ `jarvis-tls` secret существует в namespace `jarvis`
-- ✅ Secret содержит ключи: `tls.crt` и `tls.key`
-- ✅ Проверка: `kubectl -n jarvis get secret jarvis-tls`
-- ✅ Проверка: `kubectl -n jarvis describe secret jarvis-tls` показывает оба ключа
+## What Still Uses HTTP
 
-### 3. CA в trust store
-- ✅ CA certificate установлен в `/usr/local/share/ca-certificates/jarvis-ca.crt`
-- ✅ CA обновлён через `update-ca-certificates`
-- ✅ Проверка: `openssl x509 -in /usr/local/share/ca-certificates/jarvis-ca.crt -text -noout` работает
-- ✅ Проверка: `openssl verify -CAfile /usr/local/share/ca-certificates/jarvis-ca.crt <server-cert>` проходит
+These are still plain HTTP by design today:
 
-### 4. HTTPS работает без -k
-- ✅ `curl --cacert /usr/local/share/ca-certificates/jarvis-ca.crt https://api.jarvis.local/actuator/health` возвращает 200
-- ✅ `curl https://api.jarvis.local/actuator/health` работает БЕЗ `-k` (использует системный trust store)
-- ✅ `openssl s_client -connect api.jarvis.local:443 -CAfile /usr/local/share/ca-certificates/jarvis-ca.crt` показывает `Verify return code: 0 (ok)`
-- ✅ НЕТ ошибок SSL verification
+### Category A — Real Next Closures After Contract Work
 
-### 5. HTTP → HTTPS redirect
-- ✅ Ingress настроен с redirect HTTP → HTTPS
-- ✅ `curl -L http://api.jarvis.local/actuator/health` редиректит на HTTPS
-- ✅ Проверка: `curl -I http://api.jarvis.local/actuator/health` показывает `301` или `308` redirect
+- `planner-service -> user-profile`
+- `planner-service -> life-tracker`
 
-### 6. UI не отключает SSL verification
-- ✅ Desktop client НЕ использует `-k` / `trust-all` / `disableSSLVerification`
-- ✅ Desktop client использует системный trust store
-- ✅ Проверка: `grep -r "trust.*all\|disable.*ssl\|-k\|insecure" apps/desktop-client-javafx/src/` возвращает (пусто)
-- ✅ Проверка: `grep -r "https://api.jarvis.local" apps/desktop-client-javafx/src/` находит использование HTTPS
+### Category B — Closeable Only After Service Strategy / Rollout Redesign
 
-### 7. HTTP только для readiness/liveness
-- ✅ `/actuator/health` доступен по HTTP внутри кластера (ClusterIP)
-- ✅ Внешний доступ к `/actuator/health` — только через HTTPS
-- ✅ Проверка: `curl http://api.jarvis.local/actuator/health` редиректит на HTTPS (не работает напрямую)
+- `user-profile` listener and probes on `8089`
 
----
+### Category C — Optional / Model-Adjacent
 
-## ✅ Итоговый DoD Checklist
+- optional `memory-service -> embedding-service`
 
-- [ ] `api.jarvis.local` в `/etc/hosts`
-- [ ] `voice.jarvis.local` в `/etc/hosts`
-- [ ] `jarvis-tls` secret существует в K8s
-- [ ] CA в `/usr/local/share/ca-certificates/jarvis-ca.crt`
-- [ ] `curl https://api.jarvis.local` работает БЕЗ `-k`
-- [ ] `openssl s_client` показывает `Verify return code: 0 (ok)`
-- [ ] HTTP → HTTPS redirect работает
-- [ ] Desktop client НЕ отключает SSL verification
-- [ ] HTTP только для readiness/liveness внутри кластера
+### Category D — Explicitly Excluded From The Current Verified Scope
+
+- excluded `llm-service -> llm-server`, `llm-service -> memory-service`, and
+  `llm-service -> user-profile`
+
+Also outside the promoted runtime claim and still HTTP:
+
+- local direct service ports such as `planner-service:8092`, `life-tracker:8085`, `analytics-service:8087`
+- internal port-forward acceptance paths such as `scripts/product/jarvis-run-acceptance.sh`
+
+That is an internal-TLS gap, not an edge-TLS gap.
+
+## Safe Claims
+
+Claims that are accurate now:
+
+- external backend access is HTTPS/WSS-complete
+- ingress redirect behavior is enforced
+- websocket access works over WSS
+- local runtime can expose the gateway over self-signed HTTPS/WSS
+- twenty-one internal HTTPS hops are verified:
+  `ingress -> api-gateway`, `api-gateway -> nlp-service`,
+  `planner-service -> api-gateway`, `orchestrator -> api-gateway`,
+  `voice-gateway -> api-gateway`, `api-gateway -> security-service`,
+  `api-gateway -> analytics-service`, `api-gateway -> pc-control`,
+  `api-gateway -> life-tracker`, `api-gateway -> smart-home-service`,
+  `api-gateway -> orchestrator`, `api-gateway -> voice-gateway`,
+  `voice-gateway -> orchestrator`, `analytics-service -> life-tracker`,
+  `orchestrator -> nlp-service`, `planner-service -> analytics-service`,
+  `api-gateway -> planner-service`, `planner-service -> voice-gateway`,
+  `voice-gateway -> smart-home-service`, `orchestrator -> smart-home-service`,
+  and `orchestrator -> pc-control`
+- the promoted overlay `k8s/overlays/prod-release-internal-tls-verified`
+  reuses those same twenty-one verified hops without adding a twenty-second hop
+
+Claims that are not accurate now:
+
+- “the full backend is on internal TLS”
+- “the cluster uses end-to-end HTTPS”
+- “the platform has mTLS between services”
+
+## Migration Path To Internal TLS
+
+Recommended order:
+
+1. introduce a separate internal-TLS overlay instead of silently changing the current `prod` behavior
+2. keep the twenty-one verified narrow slices on their dedicated overlays:
+   `ingress -> api-gateway`, `api-gateway -> nlp-service`,
+   `planner-service -> api-gateway`, `orchestrator -> api-gateway`,
+   `voice-gateway -> api-gateway`, `api-gateway -> security-service`,
+   `api-gateway -> analytics-service`, `api-gateway -> pc-control`,
+   `api-gateway -> life-tracker`, `api-gateway -> smart-home-service`,
+   `api-gateway -> orchestrator`, `api-gateway -> voice-gateway`,
+   `voice-gateway -> orchestrator`, `analytics-service -> life-tracker`,
+   `orchestrator -> nlp-service`, `planner-service -> analytics-service`,
+   `api-gateway -> planner-service`, `planner-service -> voice-gateway`,
+   `voice-gateway -> smart-home-service`, `orchestrator -> smart-home-service`,
+   and `orchestrator -> pc-control`
+3. use `k8s/overlays/prod-release-internal-tls-verified` as the promoted
+   release-grade deploy target for that carried-forward twenty-one-hop state
+4. leave the remaining HTTP only where it is currently explicit and justified:
+   category A planner placeholder contracts, category B `user-profile`
+   listener/probes, category C optional model-adjacent memory traffic, and
+   category D excluded LLM stack
+5. then repeat the secret/truststore/probe pattern service by service
+6. move service URLs from `http://service:port` to `https://service.namespace.svc.cluster.local:port`
+7. validate each rollout and only then consider per-service certs and mTLS
+
+Do not call the system “mTLS-enabled” until step 6 is complete.

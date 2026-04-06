@@ -34,6 +34,19 @@ public class SearchResponse {
     private int estimatedTokens;
 
     /**
+     * Retrieval path that produced the response.
+     * semantic = pgvector similarity
+     * lexical-fallback = deterministic text ranking after semantic miss
+     */
+    private String retrievalMode;
+
+    /**
+     * Non-empty only when the response is degraded compared with the canonical
+     * semantic path.
+     */
+    private String degradedReason;
+
+    /**
      * Total chunks searched
      */
     private int totalChunksSearched;
@@ -54,6 +67,5 @@ public class SearchResponse {
         private OffsetDateTime createdAt;
     }
 }
-
 
 

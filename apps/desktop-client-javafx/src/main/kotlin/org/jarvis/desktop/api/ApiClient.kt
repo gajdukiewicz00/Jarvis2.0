@@ -1,6 +1,8 @@
 package org.jarvis.desktop.api
 
 import org.jarvis.desktop.auth.TokenManager
+import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.service.AuthService
 import org.slf4j.LoggerFactory
 import java.io.IOException
@@ -14,7 +16,7 @@ import java.net.UnknownHostException
  * API client for making HTTP requests with JWT authentication.
  */
 class ApiClient(
-    private val baseUrl: String,
+    private val configProvider: () -> ResolvedDesktopConfig = AppConfig::current,
     private val authService: AuthService? = null
 ) {
     private val logger = LoggerFactory.getLogger(ApiClient::class.java)
@@ -32,6 +34,7 @@ class ApiClient(
     }
 
     private fun executeGet(endpoint: String): String {
+        val baseUrl = configProvider().apiBaseUrl
         val url = URL("$baseUrl$endpoint")
         val connection = url.openConnection() as HttpURLConnection
 
@@ -79,6 +82,7 @@ class ApiClient(
     }
 
     private fun executePost(endpoint: String, body: String): String {
+        val baseUrl = configProvider().apiBaseUrl
         val url = URL("$baseUrl$endpoint")
         val connection = url.openConnection() as HttpURLConnection
 
@@ -139,6 +143,7 @@ class ApiClient(
     }
 
     private fun executeMultipart(endpoint: String, filename: String, fileBytes: ByteArray): String {
+        val baseUrl = configProvider().apiBaseUrl
         val boundary = "----WebKitFormBoundary" + System.currentTimeMillis()
         val url = URL(baseUrl + endpoint)
         val connection = url.openConnection() as HttpURLConnection

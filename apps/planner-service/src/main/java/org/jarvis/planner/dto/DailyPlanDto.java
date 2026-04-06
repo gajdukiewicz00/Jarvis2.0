@@ -19,6 +19,11 @@ public class DailyPlanDto {
     private Map<String, List<String>> blocks = new HashMap<>(); // morning, work, evening
     private List<TaskDto> tasksForDay = new ArrayList<>();
     private boolean confirmed;
+    private String planningMode;
+    private List<String> dataSources = new ArrayList<>();
+    private String focusGoal;
+    private List<String> habitAnchors = new ArrayList<>();
+    private List<String> priorityCategories = new ArrayList<>();
     
     public void addBlock(String blockName, List<String> activities) {
         blocks.put(blockName, activities);

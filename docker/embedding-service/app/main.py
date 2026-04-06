@@ -2,6 +2,7 @@
 FastAPI application for Embedding Service
 Provides vector embeddings using multilingual-e5-small
 """
+from enum import Enum
 import logging
 import time
 import uuid
@@ -10,7 +11,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import config
 from .embedder import embedder
@@ -23,10 +24,32 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class InputType(str, Enum):
+    QUERY = "query"
+    PASSAGE = "passage"
+
+
 # Request/Response models
 class EmbedRequest(BaseModel):
     """Embedding request"""
-    texts: List[str] = Field(..., description="List of texts to embed", min_length=1)
+    texts: List[str] = Field(
+        ...,
+        description="List of texts to embed",
+        min_length=1,
+        max_length=config.MAX_REQUEST_TEXTS,
+    )
+    input_type: InputType = Field(default=InputType.QUERY, description="Embedding mode for E5 models")
+
+    @field_validator("texts")
+    @classmethod
+    def validate_texts(cls, texts: List[str]) -> List[str]:
+        cleaned = []
+        for text in texts:
+            normalized = text.strip()
+            if not normalized:
+                raise ValueError("texts must not contain blank values")
+            cleaned.append(normalized)
+        return cleaned
 
 
 class EmbedResponse(BaseModel):
@@ -35,12 +58,22 @@ class EmbedResponse(BaseModel):
     model: str = Field(..., description="Model used")
     dimension: int = Field(..., description="Embedding dimension")
     count: int = Field(..., description="Number of embeddings")
+    input_type: InputType = Field(..., description="Embedding mode used")
     processing_time_ms: int = Field(..., description="Processing time in milliseconds")
 
 
 class SingleEmbedRequest(BaseModel):
     """Single text embedding request"""
     text: str = Field(..., description="Text to embed")
+    input_type: InputType = Field(default=InputType.QUERY, description="Embedding mode for E5 models")
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, text: str) -> str:
+        normalized = text.strip()
+        if not normalized:
+            raise ValueError("text must not be blank")
+        return normalized
 
 
 class SingleEmbedResponse(BaseModel):
@@ -48,15 +81,20 @@ class SingleEmbedResponse(BaseModel):
     embedding: List[float] = Field(..., description="Embedding vector")
     model: str = Field(..., description="Model used")
     dimension: int = Field(..., description="Embedding dimension")
+    input_type: InputType = Field(..., description="Embedding mode used")
     processing_time_ms: int = Field(..., description="Processing time in milliseconds")
 
 
 class HealthResponse(BaseModel):
     """Health check response"""
+    model_config = ConfigDict(protected_namespaces=())
+
     status: str
     model_loaded: bool
     model_name: str
     embedding_dim: int
+    max_batch_size: int
+    max_text_length: int
     cache_stats: dict
 
 
@@ -107,7 +145,9 @@ async def health_check():
         status="healthy" if embedder.is_loaded() else "unhealthy",
         model_loaded=embedder.is_loaded(),
         model_name=config.MODEL_NAME,
-        embedding_dim=config.EMBEDDING_DIM,
+        embedding_dim=stats["embedding_dim"],
+        max_batch_size=stats["max_batch_size"],
+        max_text_length=stats["max_text_length"],
         cache_stats={
             "size": stats["cache_size"],
             "max_size": stats["cache_max_size"],
@@ -136,7 +176,7 @@ async def embed_batch(
     try:
         start_time = time.time()
         
-        embeddings = embedder.embed_batch(request.texts)
+        embeddings = embedder.embed_batch(request.texts, request.input_type.value)
         
         processing_time = int((time.time() - start_time) * 1000)
         
@@ -145,8 +185,9 @@ async def embed_batch(
         return EmbedResponse(
             embeddings=embeddings,
             model=config.MODEL_NAME,
-            dimension=config.EMBEDDING_DIM,
+            dimension=embedder.get_stats()["embedding_dim"],
             count=len(embeddings),
+            input_type=request.input_type,
             processing_time_ms=processing_time
         )
         
@@ -171,14 +212,15 @@ async def embed_single(
     try:
         start_time = time.time()
         
-        embedding = embedder.embed_single(request.text)
+        embedding = embedder.embed_single(request.text, request.input_type.value)
         
         processing_time = int((time.time() - start_time) * 1000)
         
         return SingleEmbedResponse(
             embedding=embedding,
             model=config.MODEL_NAME,
-            dimension=config.EMBEDDING_DIM,
+            dimension=embedder.get_stats()["embedding_dim"],
+            input_type=request.input_type,
             processing_time_ms=processing_time
         )
         
@@ -194,7 +236,7 @@ async def root():
         "service": "Jarvis Embedding Service",
         "version": "1.0.0",
         "model": config.MODEL_NAME,
-        "dimension": config.EMBEDDING_DIM,
+        "dimension": embedder.get_stats()["embedding_dim"],
         "status": "running" if embedder.is_loaded() else "loading"
     }
 
@@ -210,5 +252,3 @@ async def clear_cache():
 async def get_stats():
     """Get service statistics"""
     return embedder.get_stats()
-
-

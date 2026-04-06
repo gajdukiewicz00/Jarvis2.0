@@ -45,11 +45,12 @@ class VoiceControlServiceTest {
         )
 
         wsClient = VoiceWebSocketClient(
-            url = "ws://localhost:0/ws/voice",
+            urlProvider = { "ws://localhost:0/ws/voice" },
             onStateChange = {},
             onTranscript = { _, _, _ -> },
             onResponse = { _, _, _ -> },
-            onAudioReceived = {}
+            onAudioReceived = {},
+            onSttStatusChanged = { _, _ -> }
         )
 
         service = VoiceControlService(
@@ -142,12 +143,19 @@ class VoiceControlServiceTest {
         service.onConnectionStateChanged("Reconnecting in 4s...")
         assertEquals(ConnectionPhase.RECONNECTING, service.currentState().connectionPhase)
 
+        service.onConnectionStateChanged("CONNECTING")
+        assertEquals(ConnectionPhase.CONNECTING, service.currentState().connectionPhase)
+
         service.onConnectionStateChanged("ERROR: server down")
         assertEquals(ConnectionPhase.FAILED, service.currentState().connectionPhase)
         assertEquals("server down", service.currentState().lastError)
 
         service.onConnectionStateChanged("Connection failed")
         assertEquals(ConnectionPhase.FAILED, service.currentState().connectionPhase)
+
+        service.onConnectionStateChanged("AUTH_REQUIRED: voice session expired, login required")
+        assertEquals(ConnectionPhase.FAILED, service.currentState().connectionPhase)
+        assertTrue(service.currentState().lastError!!.contains("login required"))
     }
 
     @Test
@@ -382,6 +390,73 @@ class VoiceControlServiceTest {
         service.onError("mic broken")
         service.onError("connection lost")
         assertEquals(before + 2, received.size)
+    }
+
+    // ── STT availability ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("initial state has sttAvailable=true")
+    fun initialSttAvailable() {
+        assertTrue(service.currentState().sttAvailable)
+    }
+
+    @Test
+    @DisplayName("initial state has ttsAvailable=true")
+    fun initialTtsAvailable() {
+        assertTrue(service.currentState().ttsAvailable)
+    }
+
+    @Test
+    @DisplayName("onSttAvailabilityChanged(false) sets sttAvailable=false and records reason")
+    fun sttUnavailableSetsFlag() {
+        service.onSttAvailabilityChanged(false, "No STT model loaded")
+        assertFalse(service.currentState().sttAvailable)
+        assertEquals("No STT model loaded", service.currentState().lastError)
+    }
+
+    @Test
+    @DisplayName("onSttAvailabilityChanged(true) restores sttAvailable without clearing unrelated errors")
+    fun sttAvailableRestored() {
+        service.onSttAvailabilityChanged(false, "No STT model loaded")
+        service.onSttAvailabilityChanged(true)
+        assertTrue(service.currentState().sttAvailable)
+    }
+
+    @Test
+    @DisplayName("sttAvailable=false keeps connection phase CONNECTED, not FAILED")
+    fun sttUnavailableDoesNotBreakConnection() {
+        service.onConnectionStateChanged("CONNECTED")
+        service.onSttAvailabilityChanged(false, "STT unavailable")
+        assertEquals(ConnectionPhase.CONNECTED, service.currentState().connectionPhase)
+        assertFalse(service.currentState().sttAvailable)
+    }
+
+    @Test
+    @DisplayName("pushToTalkStart returns null when STT is unavailable")
+    fun pttStartFailsWhenSttUnavailable() {
+        service.onConnectionStateChanged("CONNECTED")
+        service.refreshDevices()
+        service.onSttAvailabilityChanged(false, "No model")
+        assertNull(service.pushToTalkStart())
+    }
+
+    @Test
+    @DisplayName("repeated same STT status does not notify listeners")
+    fun repeatedSttStatusNoOp() {
+        val received = mutableListOf<VoiceRuntimeState>()
+        service.addListener { received += it }
+        val before = received.size
+
+        service.onSttAvailabilityChanged(true)
+        assertEquals(before, received.size, "same sttAvailable=true should not notify")
+    }
+
+    @Test
+    @DisplayName("onTtsAvailabilityChanged(false) sets ttsAvailable=false and records reason")
+    fun ttsUnavailableSetsFlag() {
+        service.onTtsAvailabilityChanged(false, "No TTS provider available")
+        assertFalse(service.currentState().ttsAvailable)
+        assertEquals("No TTS provider available", service.currentState().lastError)
     }
 
     @Test

@@ -127,6 +127,7 @@ public class ToolTodoController {
             @RequestAttribute("toolUserId") String userId,
             @Valid @RequestBody ListTodosRequest request) {
         TaskStatus status = request.getStatus();
+        log.info("Tool list_todos request for userId={}, status={}", userId, status);
         List<TaskDto> tasks = taskService.getTasks(userId, status);
 
         if (request.getFrom() == null && request.getTo() == null

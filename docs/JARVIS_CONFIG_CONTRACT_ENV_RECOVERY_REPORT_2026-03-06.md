@@ -11,7 +11,7 @@ Primary config/runtime blockers found during this recovery:
 
 Non-config findings discovered during verification:
 
-- `voice-gateway` is running, but `/models/vosk-model-small-ru-0.22` is absent in the mounted PVC, so Vosk STT is degraded.
+- `voice-gateway` is running, but `/models/stt/vosk/vosk-model-small-ru-0.22` is absent in the mounted PVC, so Vosk STT is degraded.
 - `analytics-service` overall `/actuator/health` is `DOWN` because its health indicator calls a protected life-tracker endpoint and gets `403`; this is not an env/secrets absence.
 
 ## 2. Expected Config Contract
@@ -37,7 +37,7 @@ Non-config findings discovered during verification:
 | `KUBECONFIG` / `~/.jarvis/kubeconfig` | launcher, scripts, kubectl | yes for local k8s ops | file path | file exists and valid; shell env not exported by default | runtime state | keep |
 | `jarvis-tls`, `~/.jarvis/tls/*`, `/etc/hosts` entries | ingress TLS and desktop/launcher trust | yes | certs / host mapping | already present | runtime state | keep |
 | `JARVIS_API_BASE_URL`, `JARVIS_USE_TLS`, `JARVIS_JAVA_TRUSTSTORE`, `JARVIS_JAVA_TRUSTSTORE_PASSWORD` | launcher + desktop | yes for TLS desktop flow | local config | already present via defaults / local files | launcher/runtime state | keep |
-| `PORCUPINE_ACCESS_KEY`, `jarvis_ru.ppn` | desktop always-listening wake word | optional | secret / model file | missing | human / external provider | ask human later |
+| `PORCUPINE_ACCESS_KEY`, `jarvis_ru.ppn` | desktop always-listening wake word | optional | secret / model file | `jarvis_ru.ppn` is committed in desktop resources; access key may be unset | repo for model / human for secret | ask human later |
 | `BOOTSTRAP_ADMIN_*` | `security-service` bootstrap admin | optional | secret/plain config | absent | human / template | leave unset |
 | `secrets/secrets.example.env` | first-boot secret contract | yes | template | missing before recovery | example template | restore from template |
 
@@ -50,7 +50,7 @@ Non-config findings discovered during verification:
 - Local `~/.jarvis/secrets/secrets.env` drifted from live `secret/jarvis-secrets`.
 - `voice-gateway` mounted `/models` PVC is empty; expected Vosk model paths are absent.
 - `llm-models-pvc` is `Pending`; optional LLM stack cannot start normally on this node.
-- `PORCUPINE_ACCESS_KEY` and custom wake-word model are not configured.
+- `PORCUPINE_ACCESS_KEY` is not configured; the repo-local custom wake-word model is committed.
 
 ## 4. Recovery Actions
 
@@ -67,8 +67,7 @@ Non-config findings discovered during verification:
 - `secrets/secrets.example.env` contains placeholders only, not real values.
 - Remaining placeholders / unknowns:
   - `PORCUPINE_ACCESS_KEY`
-  - custom wake-word model `jarvis_ru.ppn`
-  - actual Vosk model contents for `/models/vosk-model-small-ru-0.22`
+  - actual Vosk model contents for `/models/stt/vosk/vosk-model-small-ru-0.22`
   - LLM model payload for `llm-models-pvc`
   - GPU prerequisites if LLM GPU mode is required
 

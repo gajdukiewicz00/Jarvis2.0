@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-tracker
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-life-tracker: api-gateway-life-tracker-v1
+    spec:
+      containers:
+        - name: life-tracker
+          ports:
+            - containerPort: 8085
+              name: https
+          env:
+            - name: JARVIS_LIFE_TRACKER_SSL_ENABLED
+              value: "true"
+            - name: JARVIS_LIFE_TRACKER_KEYSTORE_PATH
+              value: /tls/life-tracker-keystore.p12
+            - name: JARVIS_LIFE_TRACKER_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-api-gateway-life-tracker
+                  key: keystore-password
+            - name: JARVIS_LIFE_TRACKER_KEYSTORE_TYPE
+              value: PKCS12
+          volumeMounts:
+            - name: internal-tls-api-gateway-life-tracker
+              mountPath: /tls
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8085
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8085
+              scheme: HTTPS
+      volumes:
+        - name: internal-tls-api-gateway-life-tracker
+          secret:
+            secretName: jarvis-internal-tls-api-gateway-life-tracker
+            items:
+              - key: life-tracker-keystore.p12
+                path: life-tracker-keystore.p12
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: life-tracker
+  namespace: jarvis
+spec:
+  ports:
+    - port: 8085
+      targetPort: 8085
+      name: https

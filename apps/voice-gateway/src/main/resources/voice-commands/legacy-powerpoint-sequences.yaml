@@ -1,0 +1,428 @@
+commands:
+  - id: rule_legacy_ppt_delete_slide
+    description: "Migrated legacy automation: PowerPoint / Удалить слайд"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "удалить слайд"
+          - "удалить лист"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_delete_slide
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_ppt_slide_show
+    description: "Migrated legacy automation: PowerPoint / Слайд шоу"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "слайд шоу"
+          - "запусти презентацию"
+          - "запусти слайд шоу"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_start_slide_show
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_slide_show_settings
+    description: "Migrated legacy automation: PowerPoint / Настройка слайд шоу"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "настройка слайд шоу"
+          - "настройки слайд шоу"
+          - "настройки показа слайдов"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_configure_slide_show
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_save_presentation_as
+    description: "Migrated legacy automation: PowerPoint / Сохранить презентацию как"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "сохранить презентацию как"
+          - "сохрани презентацию как"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_save_presentation_as
+    response:
+      key: yes_sir
+
+  - id: rule_legacy_ppt_strikethrough
+    description: "Migrated legacy automation: PowerPoint / Зачеркнутый"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "зачеркнутый"
+          - "зачеркни"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_strikethrough
+    response:
+      key: yes_sir
+
+  - id: rule_legacy_ppt_font_settings
+    description: "Migrated legacy automation: PowerPoint / Настройки шрифта"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "настройки шрифта"
+          - "таблица шрифта"
+          - "таблица шрифтов"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_font_settings
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_ppt_paragraph_settings
+    description: "Migrated legacy automation: PowerPoint / Настройки абзаца"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "настройки абзаца"
+          - "настрой абзац"
+          - "параметры абзаца"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_paragraph_settings
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_add_table
+    description: "Migrated legacy automation: PowerPoint / Добавить таблицу"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "добавить таблицу"
+          - "добавь таблицу"
+          - "создай таблицу"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_add_table
+    response:
+      key: affirmative
+
+  - id: rule_legacy_ppt_add_image
+    description: "Migrated legacy automation: PowerPoint / Добавить изображение"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "добавить изображение"
+          - "добавь изображение"
+          - "добавить картинку"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_add_image
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_photo_album
+    description: "Migrated legacy automation: PowerPoint / Фотоальбом"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "фотоальбом"
+          - "фото альбом"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_photo_album
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_text_box
+    description: "Migrated legacy automation: PowerPoint / Надпись ( в отдельном объекте)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "надпись ( в отдельном объекте)"
+          - "надпись в отдельном объекте"
+          - "добавить надпись"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_text_box
+    response:
+      key: yes_sir
+
+  - id: rule_legacy_ppt_word_art
+    description: "Migrated legacy automation: PowerPoint / Декорированная надпись"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "декорированная надпись"
+          - "красивая надпись"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_word_art
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_date_time
+    description: "Migrated legacy automation: PowerPoint / Дата и время"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "дата и время"
+          - "добавь дату и время"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_date_time
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_page_setup
+    description: "Migrated legacy automation: PowerPoint / Параметры страниц"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "параметры страниц"
+          - "параметры страницы"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_page_setup
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_slide_orientation
+    description: "Migrated legacy automation: PowerPoint / Ориентация слайда"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "ориентация слайда"
+          - "ориентация слайдов"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_slide_orientation
+    response:
+      key: affirmative
+
+  - id: rule_legacy_ppt_themes
+    description: "Migrated legacy automation: PowerPoint / Темы"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "темы"
+          - "список тем"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_themes
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_ppt_themes_from_pc
+    description: "Migrated legacy automation: PowerPoint / Темы (загрузить с пк)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "темы (загрузить с пк)"
+          - "загрузить тему с пк"
+          - "загрузить тему с диска"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_themes_from_pc
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_save_current_theme
+    description: "Migrated legacy automation: PowerPoint / Сохрвнить текущую тему"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "сохрвнить текущую тему"
+          - "сохранить текущую тему"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_save_current_theme
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_ppt_theme_colors
+    description: "Migrated legacy automation: PowerPoint / (отдельно) Цвет темы"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "(отдельно) цвет темы"
+          - "цвет темы"
+          - "цвета темы"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_theme_colors
+    response:
+      key: at_your_service_sir
+
+  - id: rule_legacy_ppt_theme_fonts
+    description: "Migrated legacy automation: PowerPoint / (отдельно) Шрифт темы"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "(отдельно) шрифт темы"
+          - "шрифт темы"
+          - "шрифты темы"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_theme_fonts
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_ppt_background_style
+    description: "Migrated legacy automation: PowerPoint / (отдельно) Стиль фона"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "(отдельно) стиль фона"
+          - "стиль фона"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_background_style
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_transition_scheme
+    description: "Migrated legacy automation: PowerPoint / Схема перехода слайда"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "схема перехода слайда"
+          - "переход слайдов"
+          - "схема перехода слайдов"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_transition_scheme
+    response:
+      key: yes_sir
+
+  - id: rule_legacy_ppt_transition_sound
+    description: "Migrated legacy automation: PowerPoint / Звук перехода слайда"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "звук перехода слайда"
+          - "звук перехода"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_transition_sound
+    response:
+      key: affirmative
+
+  - id: rule_legacy_ppt_transition_speed
+    description: "Migrated legacy automation: PowerPoint / Скорость перехода слайда"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "скорость перехода слайда"
+          - "скорость перехода"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_transition_speed
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_ppt_preview_animations
+    description: "Migrated legacy automation: PowerPoint / Просмотреть анимацию слайдов"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "просмотреть анимацию слайдов"
+          - "просмотр анимации слайдов"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_preview_animations
+    response:
+      key: affirmative
+
+  - id: rule_legacy_ppt_apply_transitions_all
+    description: "Migrated legacy automation: PowerPoint / Применить параметры переходов ко всем слайдам"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "применить параметры переходов ко всем слайдам"
+          - "параметры переходов ко всем слайдам"
+          - "параметры переходов на все слайды"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_ppt_apply_transitions_all
+    response:
+      key: request_completed_sir

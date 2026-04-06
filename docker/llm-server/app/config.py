@@ -1,9 +1,12 @@
 """
-Configuration for LLM Server with multi-backend support
-Supports: transformers, llamacpp
+Configuration for the local Jarvis LLM server.
+
+The local runtime prefers llama.cpp with a single GGUF model file.
+Transformers remains available for non-local experimentation.
 """
-import os
 import logging
+import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -12,13 +15,13 @@ class Config:
     """LLM Server configuration with ENV support"""
     
     # Backend selection: 'transformers' or 'llamacpp'
-    LLM_BACKEND: str = os.getenv("LLM_BACKEND", "transformers")
+    LLM_BACKEND: str = os.getenv("LLM_BACKEND", "llamacpp")
     
     # Model paths
     # For transformers: path to HuggingFace model directory
     MODEL_PATH: str = os.getenv("MODEL_PATH", "/models/h2ogpt-4096-llama2-7b-chat")
     # For llama.cpp: path to GGUF file
-    GGUF_MODEL_PATH: str = os.getenv("GGUF_MODEL_PATH", "/models/h2ogpt-7b-chat-q4_k_m.gguf")
+    GGUF_MODEL_PATH: str = os.getenv("GGUF_MODEL_PATH", "/models/llm/model.gguf")
     
     # Device: 'cuda', 'cpu', or 'auto' (auto-detect)
     DEVICE: str = os.getenv("DEVICE", "auto")
@@ -30,10 +33,13 @@ class Config:
     N_GPU_LAYERS: int = int(os.getenv("N_GPU_LAYERS", "-1"))  # -1 = all on GPU
     N_CTX: int = int(os.getenv("N_CTX", "4096"))  # Context window
     N_BATCH: int = int(os.getenv("N_BATCH", "512"))  # Batch size
-    
+    N_THREADS: int = int(os.getenv("N_THREADS", "6"))
+    CHAT_FORMAT: str | None = os.getenv("CHAT_FORMAT") or None
+
     # Server settings
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "5000"))
+    CHAT_WORKERS: int = int(os.getenv("CHAT_WORKERS", "1"))
     
     # Generation defaults
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "512"))
@@ -63,13 +69,41 @@ class Config:
     @classmethod
     def get_effective_device(cls) -> str:
         """Get effective device, resolving 'auto' to actual device"""
+        if cls.LLM_BACKEND == "llamacpp":
+            if cls.N_GPU_LAYERS == 0:
+                return "cpu"
+            if cls.DEVICE == "cpu":
+                return "cpu"
+            return "cuda" if cls.gpu_available() else "cpu"
+
         if cls.DEVICE == "auto":
             try:
                 import torch
                 return "cuda" if torch.cuda.is_available() else "cpu"
             except ImportError:
+                if cls.gpu_available():
+                    return "cuda"
                 return "cpu"
         return cls.DEVICE
+
+    @classmethod
+    def gpu_available(cls) -> bool:
+        """Best-effort GPU detection that works without PyTorch."""
+        try:
+            import torch
+            return torch.cuda.is_available()
+        except ImportError:
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                )
+                return result.returncode == 0 and bool(result.stdout.strip())
+            except (FileNotFoundError, subprocess.SubprocessError):
+                return False
     
     @classmethod
     def validate(cls) -> None:
@@ -84,7 +118,11 @@ class Config:
                 raise ValueError(f"Transformers model path does not exist: {cls.MODEL_PATH}")
         elif cls.LLM_BACKEND == "llamacpp":
             if not os.path.exists(cls.GGUF_MODEL_PATH):
-                raise ValueError(f"GGUF model path does not exist: {cls.GGUF_MODEL_PATH}")
+                raise ValueError(
+                    "GGUF model path does not exist: "
+                    f"{cls.GGUF_MODEL_PATH}. Download a 7B/8B instruct GGUF model "
+                    "into models/llm or set JARVIS_LLM_MODEL_PATH / GGUF_MODEL_PATH."
+                )
         
         # Validate quantization
         if cls.LLM_QUANT not in ["none", "4bit", "8bit"]:
@@ -111,11 +149,14 @@ class Config:
             logger.info(f"  n_gpu_layers: {cls.N_GPU_LAYERS}")
             logger.info(f"  n_ctx: {cls.N_CTX}")
             logger.info(f"  n_batch: {cls.N_BATCH}")
-        
+            logger.info(f"  n_threads: {cls.N_THREADS}")
+            logger.info(f"  chat_format: {cls.CHAT_FORMAT or 'auto'}")
+
         logger.info(f"  Max new tokens: {cls.MAX_NEW_TOKENS}")
         logger.info(f"  Max generation seconds: {cls.MAX_GENERATION_SECONDS}")
         logger.info(f"  Streaming enabled: {cls.ENABLE_STREAMING}")
         logger.info(f"  Warmup enabled: {cls.ENABLE_WARMUP}")
+        logger.info(f"  Chat workers: {cls.CHAT_WORKERS}")
         logger.info("=" * 60)
 
 

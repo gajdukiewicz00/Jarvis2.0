@@ -2,10 +2,14 @@ package org.jarvis.voicegateway.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jarvis.voicegateway.client.OrchestratorClient;
+import org.jarvis.voicegateway.rules.RuleBasedVoiceCommandService;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
 import org.jarvis.voicegateway.service.SttService;
 import org.jarvis.voicegateway.service.TtsService;
+import org.jarvis.voicegateway.rules.VoiceCommandActionDispatcher;
 import org.jarvis.voicegateway.service.intent.IntentService;
+import org.jarvis.voicegateway.voice.VoiceOutputService;
+import org.jarvis.voicegateway.voice.WavResponseRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +20,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,9 +34,17 @@ import static org.mockito.Mockito.when;
 class VoiceWebSocketHandlerNotificationTest {
 
     @Mock
-    private TtsService ttsService;
+    private VoiceOutputService voiceOutputService;
     @Mock
     private SttService sttService;
+    @Mock
+    private TtsService ttsService;
+    @Mock
+    private RuleBasedVoiceCommandService ruleBasedVoiceCommandService;
+    @Mock
+    private VoiceCommandActionDispatcher voiceCommandActionDispatcher;
+    @Mock
+    private WavResponseRegistry wavResponseRegistry;
     @Mock
     private IntentService intentService;
     @Mock
@@ -47,14 +61,22 @@ class VoiceWebSocketHandlerNotificationTest {
     @BeforeEach
     void setUp() throws Exception {
         handler = new VoiceWebSocketHandler(
-                ttsService,
+                voiceOutputService,
                 sttService,
+                ttsService,
+                ruleBasedVoiceCommandService,
+                voiceCommandActionDispatcher,
+                wavResponseRegistry,
                 intentService,
                 orchestratorClient,
                 new ObjectMapper());
 
         when(sttService.createSession(any())).thenReturn(recognitionSession);
-        when(ttsService.synthesize(any(), any(), any(), any(), any())).thenReturn(new byte[] {1, 2, 3});
+        when(ttsService.describeRuntime()).thenReturn(Map.of(
+                "available", true,
+                "status", "available",
+                "reason", "ready"));
+        when(voiceOutputService.resolveAndGetAudio(any(), any(), any(), any(), any())).thenReturn(new byte[] {1, 2, 3});
         ReflectionTestUtils.setField(handler, "defaultLanguage", "ru-RU");
 
         connectSession(userOneSession, "voice-user-1", "user-1");
@@ -74,6 +96,21 @@ class VoiceWebSocketHandlerNotificationTest {
         verify(userTwoSession, never()).sendMessage(argThat(message ->
                 message instanceof TextMessage textMessage
                         && textMessage.getPayload().contains("\"action\":\"NOTIFY\"")));
+    }
+
+    @Test
+    void sendNotificationToUserCountsTextDeliveryWhenAudioSynthesisFails() throws Exception {
+        when(voiceOutputService.resolveAndGetAudio(any(), any(), any(), any(), any()))
+                .thenThrow(new RuntimeException("tts unavailable"));
+
+        int delivered = handler.sendNotificationToUser("user-1", "Только текст", "ru-RU");
+
+        assertEquals(1, delivered);
+        verify(userOneSession).sendMessage(argThat(message ->
+                message instanceof TextMessage textMessage
+                        && textMessage.getPayload().contains("\"action\":\"NOTIFY\"")
+                        && textMessage.getPayload().contains("Только текст")));
+        verify(userOneSession, never()).sendMessage(any(BinaryMessage.class));
     }
 
     private void connectSession(WebSocketSession session, String sessionId, String userId) throws Exception {

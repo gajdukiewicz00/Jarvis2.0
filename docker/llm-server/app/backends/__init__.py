@@ -3,7 +3,13 @@ LLM Backends for Jarvis
 Supports: transformers (default), llamacpp
 """
 from .base import LLMBackend
-from .transformers_backend import TransformersBackend
+
+try:
+    from .transformers_backend import TransformersBackend
+    TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    TRANSFORMERS_AVAILABLE = False
+    TransformersBackend = None
 
 # Optional llama.cpp backend
 try:
@@ -13,7 +19,12 @@ except ImportError:
     LLAMACPP_AVAILABLE = False
     LlamaCppBackend = None
 
-__all__ = ["LLMBackend", "TransformersBackend", "LlamaCppBackend", "LLAMACPP_AVAILABLE"]
-
+__all__ = [
+    "LLMBackend",
+    "TransformersBackend",
+    "TRANSFORMERS_AVAILABLE",
+    "LlamaCppBackend",
+    "LLAMACPP_AVAILABLE",
+]
 
 

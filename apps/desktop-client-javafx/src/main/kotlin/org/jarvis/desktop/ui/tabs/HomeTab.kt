@@ -21,6 +21,7 @@ class HomeTab(
     private val onRefreshRuntime: () -> Unit = {}
 ) {
     val tab = Tab("Home")
+    private val accountLabel = Label()
     private val overallLabel = Label()
     private val backendLabel = Label()
     private val voiceLabel = Label()
@@ -38,9 +39,8 @@ class HomeTab(
             style = "-fx-font-size: 20px; -fx-font-weight: bold;"
         })
 
-        content.children.add(Label(
-            "Signed in as ${TokenManager.getUsername() ?: "unknown"} • API ${AppConfig.apiGatewayBaseUrl}"
-        ).apply {
+        accountLabel.text = "Signed in as ${TokenManager.getUsername() ?: "unknown"} • API ${AppConfig.apiGatewayBaseUrl}"
+        content.children.add(accountLabel.apply {
             style = "-fx-text-fill: #555;"
         })
 
@@ -84,6 +84,11 @@ class HomeTab(
 
         runtimeMonitor.addListener { snapshot ->
             Platform.runLater { render(snapshot) }
+        }
+        AppConfig.addListener { config ->
+            Platform.runLater {
+                accountLabel.text = "Signed in as ${TokenManager.getUsername() ?: "unknown"} • API ${config.apiGatewayBaseUrl}"
+            }
         }
     }
 

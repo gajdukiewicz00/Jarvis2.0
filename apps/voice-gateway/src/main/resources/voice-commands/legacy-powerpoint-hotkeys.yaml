@@ -1,0 +1,336 @@
+commands:
+  - id: rule_legacy_ppt_238
+    description: "Migrated legacy hotkey: PowerPoint / Презентация в новом окне"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "презентация в новом окне"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+n"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_236
+    description: "Migrated legacy hotkey: PowerPoint / Новый слайд"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "новый слайд"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+m"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_247
+    description: "Migrated legacy hotkey: PowerPoint / Дублировать объект"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "дублировать объект"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+d"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_239
+    description: "Migrated legacy hotkey: PowerPoint / Группировать выделенные объекты"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "группировать выделенные объекты"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+g"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_249
+    description: "Migrated legacy hotkey: PowerPoint / Разгрупировать выделенные объекты"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "разгрупировать выделенные объекты"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+ctrl+g"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_243
+    description: "Migrated legacy hotkey: PowerPoint / Копировать форматирование"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "копировать форматирование"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+shift+c"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_246
+    description: "Migrated legacy hotkey: PowerPoint / Применить форматирование"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "применить форматирование"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+shift+v"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_254
+    description: "Migrated legacy hotkey: PowerPoint / Гиперссылка"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "гиперссылка"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+k"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_263
+    description: "Migrated legacy hotkey: PowerPoint / Повтор последнего действия"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "повтор последнего действия"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+y"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_320
+    description: "Migrated legacy hotkey: PowerPoint / Следующий слайд(в режиме слайд шоу)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "следующий слайд(в режиме слайд шоу)"
+          - "следующий слайд в режиме слайд шоу"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+n"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_290
+    description: "Migrated legacy hotkey: PowerPoint / Предыдущий слайд(в режиме слайд шоу)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "предыдущий слайд(в режиме слайд шоу)"
+          - "предыдущий слайд в режиме слайд шоу"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+p"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_273
+    description: "Migrated legacy hotkey: PowerPoint / Черный экран(скрыть на время) (в режиме слайд шоу)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "черный экран(скрыть на время) (в режиме слайд шоу)"
+          - "черный экран в режиме слайд шоу"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+b"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_309
+    description: "Migrated legacy hotkey: PowerPoint / Белый экран(скрыть на время) (в режиме слайд шоу)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "белый экран(скрыть на время) (в режиме слайд шоу)"
+          - "белый экран в режиме слайд шоу"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "shift+w"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_292
+    description: "Migrated legacy hotkey: PowerPoint / Карандаш(в режиме слайд шоу)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "карандаш(в режиме слайд шоу)"
+          - "карандаш в режиме слайд шоу"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+p"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_311
+    description: "Migrated legacy hotkey: PowerPoint / Ластик(в режиме слайд шоу)"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "ластик(в режиме слайд шоу)"
+          - "ластик в режиме слайд шоу"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+e"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_261
+    description: "Migrated legacy hotkey: PowerPoint / Полужирный"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "полужирный"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+b"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_248
+    description: "Migrated legacy hotkey: PowerPoint / Курсив"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "курсив"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+i"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_296
+    description: "Migrated legacy hotkey: PowerPoint / Подчеркнутый"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "подчеркнутый"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+u"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_306
+    description: "Migrated legacy hotkey: PowerPoint / Разместить параграф по центру"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "разместить параграф по центру"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+e"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_285
+    description: "Migrated legacy hotkey: PowerPoint / Разместить параграф произвольно"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "разместить параграф произвольно"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+j"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_275
+    description: "Migrated legacy hotkey: PowerPoint / Разместить параграф по правому краю"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "разместить параграф по правому краю"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+r"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_ppt_270
+    description: "Migrated legacy hotkey: PowerPoint / Разместить параграф по левому краю"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "разместить параграф по левому краю"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+l"
+    response:
+      key: yes_sir_alt

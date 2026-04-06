@@ -1,0 +1,61 @@
+commands:
+  - id: rule_play_ambient_mix
+    matchers:
+      - type: exact
+        values:
+          - "включи атмосферную музыку"
+          - "атмосферная музыка"
+          - "включи спокойную музыку"
+          - "play ambient music"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=Nb4x9SYicqs&list=PLanN2Gpt9lNGy7wBiMM1Iba6i_jI6uKTD&pp=gAQBiAQB8AUB"
+    response:
+      key: pleasant_listening_sir
+
+  - id: rule_play_phonk_mix
+    matchers:
+      - type: exact
+        values:
+          - "включи фонк"
+          - "фонк музыка"
+          - "play phonk"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=dJKTNreuJMI&list=PLanN2Gpt9lNHaAetAfTQYnujXuJiippkV&pp=gAQBiAQB8AUB"
+    response:
+      key: pleasant_listening_sir
+
+  - id: rule_play_rock_mix
+    matchers:
+      - type: exact
+        values:
+          - "включи рок"
+          - "рок музыка"
+          - "play rock"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=NjvaRFnfeFI&list=PLanN2Gpt9lNFv-DLRNTMQEX9-YHLnMgb6&pp=gAQBiAQB8AUB"
+    response:
+      key: pleasant_listening_sir
+
+  - id: rule_play_radio_hits
+    matchers:
+      - type: exact
+        values:
+          - "включи радио хиты"
+          - "включи ридио хиты"
+          - "play hit radio"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=f1NAD1nQdu0&list=PLanN2Gpt9lNGo1QxY3MlagEt4CLAYz3lM&pp=gAQBiAQB8AUB"
+    response:
+      key: pleasant_listening_sir

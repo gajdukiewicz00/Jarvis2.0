@@ -4,6 +4,7 @@ import ai.picovoice.porcupine.Porcupine
 import ai.picovoice.porcupine.PorcupineException
 import ai.picovoice.porcupine.Porcupine.BuiltInKeyword
 import javafx.application.Platform
+import org.jarvis.desktop.config.PorcupineCompatibility
 import javax.sound.sampled.*
 
 /**
@@ -92,6 +93,11 @@ class WakeWordDetector(
             println("Wake word detector started")
             
         } catch (e: PorcupineException) {
+            val compatibilityMessage = PorcupineCompatibility.describeInitializationFailure(e.message)
+            if (compatibilityMessage != null && compatibilityMessage != e.message?.trim()) {
+                System.err.println("Failed to initialize Porcupine: $compatibilityMessage")
+                throw IllegalStateException(compatibilityMessage, e)
+            }
             System.err.println("Failed to initialize Porcupine: ${e.message}")
             // Don't crash UI: just propagate to caller to switch to manual push-to-talk
             throw e

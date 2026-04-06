@@ -1,0 +1,332 @@
+commands:
+  - id: rule_legacy_window_normalize
+    description: "Migrated legacy automation: Управление системой / Норм окно"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "норм окно"
+          - "нормализуй окно"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_window_normalize
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_window_minimize
+    description: "Migrated legacy automation: Управление системой / Сверни окно"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "сверни окно"
+          - "свернуть окно"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_window_minimize
+    response:
+      key: affirmative
+
+  - id: rule_legacy_mouse_left_click
+    description: "Migrated legacy automation: Управление системой / Клик"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "клик"
+          - "кликни"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_mouse_left_click
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_set_volume_dynamic
+    description: "Migrated legacy automation: Управление системой / Управление звуком"
+    priority: -5
+    matchers:
+      - type: regex
+        values:
+          - "^(?:громкость|звук) на ([0-9]{1,3})(?: процент(?:а|ов)?)?$"
+          - "^(?:прикрути|убавь|добавь|прикрутить|убавить|добавить) на ([0-9]{1,3})(?: процент(?:а|ов)?)?$"
+    action:
+      target: pc_control
+      name: SET_VOLUME
+      params:
+        level: "{1}"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_empty_trash
+    description: "Migrated legacy automation: Управление системой / очисти корзину"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "очисти корзину"
+          - "сотри корзину"
+          - "удали файлы с корзины"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_empty_trash
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_create_new_folder
+    description: "Migrated legacy automation: Управление системой / создай новую папку"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "создай новую папку"
+          - "новую папку создай"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_create_new_folder
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_open_optical_drive
+    description: "Migrated legacy automation: Управление системой / открой дисковод"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "открой дисковод"
+          - "открой сдром"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_open_optical_drive
+    response:
+      key: affirmative
+
+  - id: rule_legacy_close_optical_drive
+    description: "Migrated legacy automation: Управление системой / закрой дисковод"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "закрой дисковод"
+          - "закрой сдром"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_close_optical_drive
+    response:
+      key: affirmative
+
+  - id: rule_legacy_clean_slate_cancel
+    description: "Migrated legacy automation: Протокололы / Отмени протокол чистый лист"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "отмени протокол чистый лист"
+          - "отмени чистый лист"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_clean_slate_cancel
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_cycle_f4
+    description: "Migrated legacy automation: jarvis system / Круг"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "круг"
+          - "оборот"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "F4"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_browser_maximize
+    description: "Migrated legacy automation: фокус / разверни браузер"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "разверни браузер"
+          - "сфокусируйся на браузере"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_browser_maximize
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_draw_circle
+    description: "Migrated legacy automation: рисунки / нарисуй круг"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "нарисуй круг"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_draw_circle
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_draw_square
+    description: "Migrated legacy automation: рисунки / нарисуй квадрат"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "нарисуй квадрат"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_draw_square
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_draw_red
+    description: "Migrated legacy automation: рисунки / красный цвет"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "красный цвет"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_draw_red
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_draw_blue
+    description: "Migrated legacy automation: рисунки / Синий цвет"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "синий цвет"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_draw_blue
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_draw_yellow
+    description: "Migrated legacy automation: рисунки / желтый цвет"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "желтый цвет"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_draw_yellow
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_draw_circle_inside_square
+    description: "Migrated legacy automation: рисунки / нарисуй круг внутри квадрата"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "нарисуй круг внутри квадрата"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_draw_circle_inside_square
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_yandex_like
+    description: "Migrated legacy automation: яндекс музыка / поставь лайк"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "поставь лайк"
+          - "лайк в яндекс"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_yandex_like
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_yandex_dislike
+    description: "Migrated legacy automation: яндекс музыка / поставь дизлайк"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "поставь дизлайк"
+          - "дизлайк в яндекс"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_yandex_dislike
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_yandex_minimize
+    description: "Migrated legacy automation: яндекс музыка / выключи музыку в яндекс"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "выключи музыку в яндекс"
+          - "закрой музыку в яндекс"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_yandex_minimize
+    response:
+      key: affirmative
+
+  - id: rule_legacy_yandex_pause_play
+    description: "Migrated legacy automation: яндекс музыка / Пауза пуск"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "пауза пуск"
+          - "поставь на паузу музыку в яндекс"
+          - "продолжи музыку в яндекс"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: legacy_yandex_pause_play
+    response:
+      key: yes_sir_alt

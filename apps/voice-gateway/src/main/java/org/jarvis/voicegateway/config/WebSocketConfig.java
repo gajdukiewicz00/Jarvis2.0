@@ -46,7 +46,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
         ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
         container.setMaxBinaryMessageBufferSize(1024 * 1024);  // 1MB for audio chunks
         container.setMaxTextMessageBufferSize(64 * 1024);      // 64KB for text messages
-        container.setMaxSessionIdleTimeout(300000L);           // 5 minutes idle timeout
+        // Keep long-lived desktop voice sessions alive; the client already sends pings.
+        container.setMaxSessionIdleTimeout(0L);                // Disable container idle timeout
         container.setAsyncSendTimeout(30000L);                 // 30 seconds async send timeout
         return container;
     }

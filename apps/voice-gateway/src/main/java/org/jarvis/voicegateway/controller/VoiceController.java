@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.client.OrchestratorClient;
 import org.jarvis.voicegateway.service.SttService;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -12,7 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
@@ -21,68 +20,32 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class VoiceController {
 
+    private static final String DEFAULT_LANGUAGE = "ru-RU";
+
     private final SttService sttService;
     private final OrchestratorClient orchestratorClient;
 
     @PostMapping("/transcribe")
-    public ResponseEntity<Map<String, Object>> transcribeAudio(@RequestParam("file") MultipartFile file) {
-        Map<String, Object> response = new HashMap<>();
+    public ResponseEntity<Map<String, Object>> transcribeAudio(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "language", required = false) String languageCode) throws IOException {
+        log.info("Received audio file: {} (size: {} bytes)", file.getOriginalFilename(), file.getSize());
 
-        try {
-            log.info("Received audio file: {} (size: {} bytes)", file.getOriginalFilename(), file.getSize());
-
-            // Validate file
-            if (file.isEmpty()) {
-                response.put("success", false);
-                response.put("error", "File is empty");
-                return ResponseEntity.badRequest().body(response);
-            }
-
-            byte[] fileData = file.getBytes();
-
-            // Validate WAV format and extract PCM data
-            WavValidationResult validation = validateAndExtractWav(fileData);
-            if (!validation.isValid()) {
-                response.put("success", false);
-                response.put("error", validation.getError());
-                return ResponseEntity.badRequest().body(response);
-            }
-
-            log.info("WAV validation successful: {}Hz, {} channel(s), PCM",
-                    validation.getSampleRate(), validation.getChannels());
-
-            // Transcribe using Vosk
-            String transcribedText = sttService.transcribe(validation.getPcmData(), "ru");
-            log.info("Transcribed text: {}", transcribedText);
-
-            // Forward to orchestrator
-            try {
-                orchestratorClient.sendCommand(transcribedText);
-                log.info("Forwarded to orchestrator: {}", transcribedText);
-            } catch (RuntimeException e) {
-                log.warn("Failed to forward to orchestrator: {}", e.getMessage());
-            }
-
-            response.put("success", true);
-            response.put("text", transcribedText);
-            return ResponseEntity.ok(response);
-
-        } catch (IOException e) {
-            log.error("Failed to read audio file", e);
-            response.put("success", false);
-            response.put("error", "Failed to read audio file: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        } catch (IllegalArgumentException e) {
-            log.error("Transcription failed - invalid input", e);
-            response.put("success", false);
-            response.put("error", "Transcription failed: " + e.getMessage());
-            return ResponseEntity.badRequest().body(response);
-        } catch (RuntimeException e) {
-            log.error("Transcription failed", e);
-            response.put("success", false);
-            response.put("error", "Transcription failed: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
         }
+
+        byte[] fileData = file.getBytes();
+
+        WavValidationResult validation = validateAndExtractWav(fileData);
+        if (!validation.isValid()) {
+            throw new IllegalArgumentException(validation.getError());
+        }
+
+        log.info("WAV validation successful: {}Hz, {} channel(s), PCM",
+                validation.getSampleRate(), validation.getChannels());
+
+        return transcribePcm(validation.getPcmData(), effectiveLanguage(languageCode), true);
     }
 
     /**
@@ -174,24 +137,85 @@ public class VoiceController {
     }
 
     @PostMapping(value = "/transcribe/stream", consumes = "application/octet-stream")
-    public String transcribeStream(java.io.InputStream inputStream) throws IOException {
-        log.info("Received audio stream");
-        byte[] bytes = inputStream.readAllBytes();
-        String text = sttService.transcribe(bytes, "ru");
-        log.info("Transcribed text: {}", text);
-        orchestratorClient.sendCommand(text);
-        return text;
+    public ResponseEntity<Map<String, Object>> transcribeStream(
+            java.io.InputStream inputStream,
+            @RequestParam(value = "language", required = false) String languageCode) throws IOException {
+        String effectiveLanguage = effectiveLanguage(languageCode);
+        log.info("Received audio stream, language={}", effectiveLanguage);
+        return transcribePcm(inputStream.readAllBytes(), effectiveLanguage, false);
     }
 
     @PostMapping("/command")
     public String processTextCommand(@RequestBody TextCommandRequest request) {
         log.info("Received text command: {}", request.text());
-        // Forward to Orchestrator
-        orchestratorClient.sendCommand(request.text());
-        return "Processed: " + request.text();
+        return orchestratorClient.sendCommandWithResponse(request.text());
     }
 
     public record TextCommandRequest(String text) {
+    }
+
+    private String effectiveLanguage(String languageCode) {
+        if (languageCode == null || languageCode.isBlank()) {
+            return DEFAULT_LANGUAGE;
+        }
+        return languageCode.trim();
+    }
+
+    private ResponseEntity<Map<String, Object>> transcribePcm(
+            byte[] pcmData, String languageCode, boolean wavValidated) {
+        String transcribedText = sttService.transcribe(pcmData, languageCode);
+        log.info("Transcribed text: {}", transcribedText);
+
+        if (transcribedText == null || transcribedText.isBlank()) {
+            return ResponseEntity.unprocessableEntity().body(buildTranscriptionResponse(
+                    false,
+                    "",
+                    languageCode,
+                    false,
+                    wavValidated,
+                    "NO_SPEECH_RECOGNIZED",
+                    "No speech recognized in the supplied audio"));
+        }
+
+        boolean forwardedToOrchestrator = false;
+        try {
+            orchestratorClient.sendCommand(transcribedText);
+            forwardedToOrchestrator = true;
+            log.info("Forwarded transcript to orchestrator: {}", transcribedText);
+        } catch (RuntimeException e) {
+            log.warn("Failed to forward transcript to orchestrator: {}", e.getMessage());
+        }
+
+        return ResponseEntity.ok(buildTranscriptionResponse(
+                true,
+                transcribedText,
+                languageCode,
+                forwardedToOrchestrator,
+                wavValidated,
+                null,
+                null));
+    }
+
+    private Map<String, Object> buildTranscriptionResponse(
+            boolean success,
+            String text,
+            String languageCode,
+            boolean forwardedToOrchestrator,
+            boolean wavValidated,
+            String errorCode,
+            String errorMessage) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("success", success);
+        response.put("text", text);
+        response.put("languageCode", languageCode);
+        response.put("forwardedToOrchestrator", forwardedToOrchestrator);
+        response.put("wavValidated", wavValidated);
+        response.put("stt", sttService.describeRuntime());
+        if (errorCode != null) {
+            response.put("errorCode", errorCode);
+            response.put("error", errorMessage);
+        }
+        return response;
     }
 
     // Helper class for WAV validation results

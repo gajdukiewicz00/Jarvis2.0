@@ -1,0 +1,3048 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--A VoxCommando Payload file-->
+<PayloadsRoot>
+    <payload>
+        <value>-</value>
+        <phrase>Minus</phrase>
+    </payload>
+    <payload>
+        <value>#</value>
+        <phrase>#, pound key, number sign</phrase>
+    </payload>
+    <payload>
+        <value>*</value>
+        <phrase>asterisk, star</phrase>
+    </payload>
+    <payload>
+        <value>0</value>
+        <phrase>0</phrase>
+    </payload>
+    <payload>
+        <value>1</value>
+        <phrase>1</phrase>
+    </payload>
+    <payload>
+        <value>10</value>
+        <phrase>10</phrase>
+    </payload>
+    <payload>
+        <value>10+</value>
+        <phrase>10 +</phrase>
+    </payload>
+    <payload>
+        <value>100+</value>
+        <phrase>100 +</phrase>
+    </payload>
+    <payload>
+        <value>12</value>
+        <phrase>12</phrase>
+    </payload>
+    <payload>
+        <value>13</value>
+        <phrase>13</phrase>
+    </payload>
+    <payload>
+        <value>14</value>
+        <phrase>14</phrase>
+    </payload>
+    <payload>
+        <value>15</value>
+        <phrase>15</phrase>
+    </payload>
+    <payload>
+        <value>16</value>
+        <phrase>16</phrase>
+    </payload>
+    <payload>
+        <value>16:09</value>
+        <phrase>16:09</phrase>
+    </payload>
+    <payload>
+        <value>2</value>
+        <phrase>2</phrase>
+    </payload>
+    <payload>
+        <value>20+</value>
+        <phrase>20 +</phrase>
+    </payload>
+    <payload>
+        <value>3</value>
+        <phrase>3</phrase>
+    </payload>
+    <payload>
+        <value>3D</value>
+        <phrase>3 D</phrase>
+    </payload>
+    <payload>
+        <value>4</value>
+        <phrase>4</phrase>
+    </payload>
+    <payload>
+        <value>5</value>
+        <phrase>5</phrase>
+    </payload>
+    <payload>
+        <value>6</value>
+        <phrase>6</phrase>
+    </payload>
+    <payload>
+        <value>6-ChInput</value>
+        <phrase>6 Channel Input</phrase>
+    </payload>
+    <payload>
+        <value>7</value>
+        <phrase>7</phrase>
+    </payload>
+    <payload>
+        <value>7-CHInput</value>
+        <phrase>7 Channel Input</phrase>
+    </payload>
+    <payload>
+        <value>7CHStereo</value>
+        <phrase>7 Channel Stereo</phrase>
+    </payload>
+    <payload>
+        <value>8</value>
+        <phrase>8</phrase>
+    </payload>
+    <payload>
+        <value>9</value>
+        <phrase>9</phrase>
+    </payload>
+    <payload>
+        <value>A</value>
+        <phrase>A</phrase>
+    </payload>
+    <payload>
+        <value>A/BProgram</value>
+        <phrase>A/B Program</phrase>
+    </payload>
+    <payload>
+        <value>A/Green</value>
+        <phrase>A/Green</phrase>
+    </payload>
+    <payload>
+        <value>A/VSelect</value>
+        <phrase>A/V Select</phrase>
+    </payload>
+    <payload>
+        <value>A-BRepeat</value>
+        <phrase>A-B Repeat</phrase>
+    </payload>
+    <payload>
+        <value>AddFav</value>
+        <phrase>Add Fav</phrase>
+    </payload>
+    <payload>
+        <value>AddFavs</value>
+        <phrase>Add Favourites</phrase>
+    </payload>
+    <payload>
+        <value>Advance</value>
+        <phrase>Advance</phrase>
+    </payload>
+    <payload>
+        <value>AllBassDown</value>
+        <phrase>All Bass Down</phrase>
+    </payload>
+    <payload>
+        <value>AllBassUp</value>
+        <phrase>All Bass Up</phrase>
+    </payload>
+    <payload>
+        <value>AllOff</value>
+        <phrase>All Off</phrase>
+    </payload>
+    <payload>
+        <value>AllOn</value>
+        <phrase>All On</phrase>
+    </payload>
+    <payload>
+        <value>AllTrebleDown</value>
+        <phrase>All Treble Down</phrase>
+    </payload>
+    <payload>
+        <value>AllTrebleUp</value>
+        <phrase>All Treble Up</phrase>
+    </payload>
+    <payload>
+        <value>AM</value>
+        <phrase>AM</phrase>
+    </payload>
+    <payload>
+        <value>AM/FM</value>
+        <phrase>AM/FM</phrase>
+    </payload>
+    <payload>
+        <value>AMS</value>
+        <phrase>AMS</phrase>
+    </payload>
+    <payload>
+        <value>AnalogueMenu</value>
+        <phrase>Analogue Menu</phrase>
+    </payload>
+    <payload>
+        <value>ANGLE</value>
+        <phrase>ANGLE</phrase>
+    </payload>
+    <payload>
+        <value>Antenna</value>
+        <phrase>Antenna</phrase>
+    </payload>
+    <payload>
+        <value>AntennaEast</value>
+        <phrase>Antenna East</phrase>
+    </payload>
+    <payload>
+        <value>ArrowDown</value>
+        <phrase>Arrow Down</phrase>
+    </payload>
+    <payload>
+        <value>ArrowLeft</value>
+        <phrase>Arrow Left</phrase>
+    </payload>
+    <payload>
+        <value>ArrowRight</value>
+        <phrase>Arrow Right</phrase>
+    </payload>
+    <payload>
+        <value>ArrowUp</value>
+        <phrase>Arrow Up</phrase>
+    </payload>
+    <payload>
+        <value>Aspect</value>
+        <phrase>Aspect</phrase>
+    </payload>
+    <payload>
+        <value>Asterisk</value>
+        <phrase>Asterisk</phrase>
+    </payload>
+    <payload>
+        <value>Audio</value>
+        <phrase>Audio</phrase>
+    </payload>
+    <payload>
+        <value>Audio2</value>
+        <phrase>Audio 2</phrase>
+    </payload>
+    <payload>
+        <value>Audio3</value>
+        <phrase>Audio 3</phrase>
+    </payload>
+    <payload>
+        <value>AudioDelay</value>
+        <phrase>Audio Delay</phrase>
+    </payload>
+    <payload>
+        <value>AudioSource</value>
+        <phrase>Audio Source</phrase>
+    </payload>
+    <payload>
+        <value>Autoformat</value>
+        <phrase>Auto format</phrase>
+    </payload>
+    <payload>
+        <value>AutoSearch</value>
+        <phrase>Auto Search</phrase>
+    </payload>
+    <payload>
+        <value>AutoSync</value>
+        <phrase>Auto Sync</phrase>
+    </payload>
+    <payload>
+        <value>AutoTracking</value>
+        <phrase>Auto Tracking</phrase>
+    </payload>
+    <payload>
+        <value>AutoTuningDown</value>
+        <phrase>Auto Tuning Down</phrase>
+    </payload>
+    <payload>
+        <value>AutoTuningUp</value>
+        <phrase>Auto Tuning Up</phrase>
+    </payload>
+    <payload>
+        <value>Aux</value>
+        <phrase>Aux</phrase>
+    </payload>
+    <payload>
+        <value>Aux2</value>
+        <phrase>Aux 2</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset0</value>
+        <phrase>AV Preset 0</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset1</value>
+        <phrase>AV Preset 1</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset10</value>
+        <phrase>AV Preset 10</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset2</value>
+        <phrase>AV Preset 2</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset3</value>
+        <phrase>AV Preset 3</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset4</value>
+        <phrase>AV Preset 4</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset5</value>
+        <phrase>AV Preset 5</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset6</value>
+        <phrase>AV Preset 6</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset7</value>
+        <phrase>AV Preset 7</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset8</value>
+        <phrase>AV Preset 8</phrase>
+    </payload>
+    <payload>
+        <value>AVPreset9</value>
+        <phrase>AV Preset 9</phrase>
+    </payload>
+    <payload>
+        <value>B</value>
+        <phrase>B</phrase>
+    </payload>
+    <payload>
+        <value>B/Red</value>
+        <phrase>B/Red</phrase>
+    </payload>
+    <payload>
+        <value>Back</value>
+        <phrase>Back</phrase>
+    </payload>
+    <payload>
+        <value>Background</value>
+        <phrase>Background</phrase>
+    </payload>
+    <payload>
+        <value>Balance</value>
+        <phrase>Balance</phrase>
+    </payload>
+    <payload>
+        <value>BalanceLeft</value>
+        <phrase>Balance Left</phrase>
+    </payload>
+    <payload>
+        <value>BalanceRight</value>
+        <phrase>Balance Right</phrase>
+    </payload>
+    <payload>
+        <value>Band</value>
+        <phrase>Band</phrase>
+    </payload>
+    <payload>
+        <value>BandAM</value>
+        <phrase>Band AM</phrase>
+    </payload>
+    <payload>
+        <value>BandFM</value>
+        <phrase>Band FM</phrase>
+    </payload>
+    <payload>
+        <value>Bandwidth</value>
+        <phrase>Bandwidth</phrase>
+    </payload>
+    <payload>
+        <value>Bass</value>
+        <phrase>Bass</phrase>
+    </payload>
+    <payload>
+        <value>BassBoost</value>
+        <phrase>Bass Boost</phrase>
+    </payload>
+    <payload>
+        <value>BassDown</value>
+        <phrase>Bass Down</phrase>
+    </payload>
+    <payload>
+        <value>BassMinus</value>
+        <phrase>Bass Minus</phrase>
+    </payload>
+    <payload>
+        <value>BassPlus</value>
+        <phrase>Bass Plus</phrase>
+    </payload>
+    <payload>
+        <value>BassUp</value>
+        <phrase>Bass Up</phrase>
+    </payload>
+    <payload>
+        <value>Blank</value>
+        <phrase>Blank</phrase>
+    </payload>
+    <payload>
+        <value>Blue</value>
+        <phrase>Blue</phrase>
+    </payload>
+    <payload>
+        <value>Bluray</value>
+        <phrase>Bluray</phrase>
+    </payload>
+    <payload>
+        <value>Bright</value>
+        <phrase>Bright</phrase>
+    </payload>
+    <payload>
+        <value>Brightness</value>
+        <phrase>Brightness</phrase>
+    </payload>
+    <payload>
+        <value>BrightnessDown</value>
+        <phrase>Brightness Down</phrase>
+    </payload>
+    <payload>
+        <value>BrightnessMinus</value>
+        <phrase>Brightness Minus</phrase>
+    </payload>
+    <payload>
+        <value>BrightnessPlus</value>
+        <phrase>Brightness Plus</phrase>
+    </payload>
+    <payload>
+        <value>BrightnessUp</value>
+        <phrase>Brightness Up</phrase>
+    </payload>
+    <payload>
+        <value>Browse</value>
+        <phrase>Browse</phrase>
+    </payload>
+    <payload>
+        <value>Browser</value>
+        <phrase>Browser</phrase>
+    </payload>
+    <payload>
+        <value>Button0</value>
+        <phrase>Button 0</phrase>
+    </payload>
+    <payload>
+        <value>Button1</value>
+        <phrase>Button 1</phrase>
+    </payload>
+    <payload>
+        <value>Button10</value>
+        <phrase>Button 10</phrase>
+    </payload>
+    <payload>
+        <value>Button11</value>
+        <phrase>Button 11</phrase>
+    </payload>
+    <payload>
+        <value>Button12</value>
+        <phrase>Button 12</phrase>
+    </payload>
+    <payload>
+        <value>Button13</value>
+        <phrase>Button 13</phrase>
+    </payload>
+    <payload>
+        <value>Button14</value>
+        <phrase>Button 14</phrase>
+    </payload>
+    <payload>
+        <value>Button15</value>
+        <phrase>Button 15</phrase>
+    </payload>
+    <payload>
+        <value>Button16</value>
+        <phrase>Button 16</phrase>
+    </payload>
+    <payload>
+        <value>Button2</value>
+        <phrase>Button 2</phrase>
+    </payload>
+    <payload>
+        <value>Button3</value>
+        <phrase>Button 3</phrase>
+    </payload>
+    <payload>
+        <value>Button4</value>
+        <phrase>Button 4</phrase>
+    </payload>
+    <payload>
+        <value>Button5</value>
+        <phrase>Button 5</phrase>
+    </payload>
+    <payload>
+        <value>Button6</value>
+        <phrase>Button 6</phrase>
+    </payload>
+    <payload>
+        <value>Button7</value>
+        <phrase>Button 7</phrase>
+    </payload>
+    <payload>
+        <value>Button8</value>
+        <phrase>Button 8</phrase>
+    </payload>
+    <payload>
+        <value>Button9</value>
+        <phrase>Button 9</phrase>
+    </payload>
+    <payload>
+        <value>Buy</value>
+        <phrase>Buy</phrase>
+    </payload>
+    <payload>
+        <value>C</value>
+        <phrase>C</phrase>
+    </payload>
+    <payload>
+        <value>Calendar</value>
+        <phrase>Calendar</phrase>
+    </payload>
+    <payload>
+        <value>Camera</value>
+        <phrase>Camera</phrase>
+    </payload>
+    <payload>
+        <value>Camera0</value>
+        <phrase>Camera 0</phrase>
+    </payload>
+    <payload>
+        <value>Camera1</value>
+        <phrase>Camera 1</phrase>
+    </payload>
+    <payload>
+        <value>Camera10</value>
+        <phrase>Camera 10</phrase>
+    </payload>
+    <payload>
+        <value>Camera2</value>
+        <phrase>Camera 2</phrase>
+    </payload>
+    <payload>
+        <value>Camera3</value>
+        <phrase>Camera 3</phrase>
+    </payload>
+    <payload>
+        <value>Camera4</value>
+        <phrase>Camera 4</phrase>
+    </payload>
+    <payload>
+        <value>Camera5</value>
+        <phrase>Camera 5</phrase>
+    </payload>
+    <payload>
+        <value>Camera6</value>
+        <phrase>Camera 6</phrase>
+    </payload>
+    <payload>
+        <value>Camera7</value>
+        <phrase>Camera 7</phrase>
+    </payload>
+    <payload>
+        <value>Camera8</value>
+        <phrase>Camera 8</phrase>
+    </payload>
+    <payload>
+        <value>Camera9</value>
+        <phrase>Camera 9</phrase>
+    </payload>
+    <payload>
+        <value>CameraAngle</value>
+        <phrase>Camera Angle</phrase>
+    </payload>
+    <payload>
+        <value>CameraMode</value>
+        <phrase>Camera Mode</phrase>
+    </payload>
+    <payload>
+        <value>Cancel</value>
+        <phrase>Cancel</phrase>
+    </payload>
+    <payload>
+        <value>CatalogueOn/Off</value>
+        <phrase>Catalogue On/Off</phrase>
+    </payload>
+    <payload>
+        <value>CategoryDown</value>
+        <phrase>Category Down</phrase>
+    </payload>
+    <payload>
+        <value>CategoryUp</value>
+        <phrase>Category Up</phrase>
+    </payload>
+    <payload>
+        <value>CC</value>
+        <phrase>CC</phrase>
+    </payload>
+    <payload>
+        <value>CD</value>
+        <phrase>CD</phrase>
+    </payload>
+    <payload>
+        <value>CD2</value>
+        <phrase>CD 2</phrase>
+    </payload>
+    <payload>
+        <value>CDSynch</value>
+        <phrase>CD Synch</phrase>
+    </payload>
+    <payload>
+        <value>CDR</value>
+        <phrase>CDR</phrase>
+    </payload>
+    <payload>
+        <value>CDR/Tape</value>
+        <phrase>CDR/Tape</phrase>
+    </payload>
+    <payload>
+        <value>Center</value>
+        <phrase>Center</phrase>
+    </payload>
+    <payload>
+        <value>CenterDown</value>
+        <phrase>Center Down</phrase>
+    </payload>
+    <payload>
+        <value>CenterLevelDown</value>
+        <phrase>Center Level Down</phrase>
+    </payload>
+    <payload>
+        <value>CenterLevelUp</value>
+        <phrase>Center Level Up</phrase>
+    </payload>
+    <payload>
+        <value>CenterMinus</value>
+        <phrase>Center Minus</phrase>
+    </payload>
+    <payload>
+        <value>CenterMode</value>
+        <phrase>Center Mode</phrase>
+    </payload>
+    <payload>
+        <value>CenterPlus</value>
+        <phrase>Center Plus</phrase>
+    </payload>
+    <payload>
+        <value>CenterUp</value>
+        <phrase>Center Up</phrase>
+    </payload>
+    <payload>
+        <value>CenterVolumeDown</value>
+        <phrase>Center Volume Down</phrase>
+    </payload>
+    <payload>
+        <value>CenterVolumeUp</value>
+        <phrase>Center Volume Up</phrase>
+    </payload>
+    <payload>
+        <value>CH-</value>
+        <phrase>CH -</phrase>
+    </payload>
+    <payload>
+        <value>CH+</value>
+        <phrase>CH +</phrase>
+    </payload>
+    <payload>
+        <value>Chan/Page-</value>
+        <phrase>Chan/Page-</phrase>
+    </payload>
+    <payload>
+        <value>Chan/Page+</value>
+        <phrase>Chan/Page+</phrase>
+    </payload>
+    <payload>
+        <value>Channel-</value>
+        <phrase>Channel -</phrase>
+    </payload>
+    <payload>
+        <value>Channel+</value>
+        <phrase>Channel +</phrase>
+    </payload>
+    <payload>
+        <value>Channel0</value>
+        <phrase>Channel 0</phrase>
+    </payload>
+    <payload>
+        <value>Channel1</value>
+        <phrase>Channel 1</phrase>
+    </payload>
+    <payload>
+        <value>Channel10</value>
+        <phrase>Channel 10</phrase>
+    </payload>
+    <payload>
+        <value>Channel11</value>
+        <phrase>Channel 11</phrase>
+    </payload>
+    <payload>
+        <value>Channel12</value>
+        <phrase>Channel 12</phrase>
+    </payload>
+    <payload>
+        <value>Channel13</value>
+        <phrase>Channel 13</phrase>
+    </payload>
+    <payload>
+        <value>Channel14</value>
+        <phrase>Channel 14</phrase>
+    </payload>
+    <payload>
+        <value>Channel15</value>
+        <phrase>Channel 15</phrase>
+    </payload>
+    <payload>
+        <value>Channel16</value>
+        <phrase>Channel 16</phrase>
+    </payload>
+    <payload>
+        <value>Channel2</value>
+        <phrase>Channel 2</phrase>
+    </payload>
+    <payload>
+        <value>Channel3</value>
+        <phrase>Channel 3</phrase>
+    </payload>
+    <payload>
+        <value>Channel4</value>
+        <phrase>Channel 4</phrase>
+    </payload>
+    <payload>
+        <value>Channel5</value>
+        <phrase>Channel 5</phrase>
+    </payload>
+    <payload>
+        <value>Channel6</value>
+        <phrase>Channel 6</phrase>
+    </payload>
+    <payload>
+        <value>Channel7</value>
+        <phrase>Channel 7</phrase>
+    </payload>
+    <payload>
+        <value>Channel8</value>
+        <phrase>Channel 8</phrase>
+    </payload>
+    <payload>
+        <value>Channel9</value>
+        <phrase>Channel 9</phrase>
+    </payload>
+    <payload>
+        <value>ChannelDown</value>
+        <phrase>Channel Down</phrase>
+    </payload>
+    <payload>
+        <value>Channelenter</value>
+        <phrase>Channel enter</phrase>
+    </payload>
+    <payload>
+        <value>Channellist/Viewfavourites</value>
+        <phrase>Channel list / View favourites</phrase>
+    </payload>
+    <payload>
+        <value>Channelreturn</value>
+        <phrase>Channel return</phrase>
+    </payload>
+    <payload>
+        <value>ChannelSelect</value>
+        <phrase>Channel Select</phrase>
+    </payload>
+    <payload>
+        <value>ChannelUp</value>
+        <phrase>Channel Up</phrase>
+    </payload>
+    <payload>
+        <value>ChannelVolumeDown</value>
+        <phrase>Channel Volume Down</phrase>
+    </payload>
+    <payload>
+        <value>ChannelVolumeUp</value>
+        <phrase>Channel Volume Up</phrase>
+    </payload>
+    <payload>
+        <value>Channel/PageDown</value>
+        <phrase>Channel/Page Down</phrase>
+    </payload>
+    <payload>
+        <value>Channel/PageUp</value>
+        <phrase>Channel/Page Up</phrase>
+    </payload>
+    <payload>
+        <value>ChapterDown</value>
+        <phrase>Chapter Down</phrase>
+    </payload>
+    <payload>
+        <value>ChapterUp</value>
+        <phrase>Chapter Up</phrase>
+    </payload>
+    <payload>
+        <value>Check</value>
+        <phrase>Check</phrase>
+    </payload>
+    <payload>
+        <value>Check/Confirm</value>
+        <phrase>Check/Confirm</phrase>
+    </payload>
+    <payload>
+        <value>ChildLock</value>
+        <phrase>Child Lock</phrase>
+    </payload>
+    <payload>
+        <value>CinemaMode</value>
+        <phrase>Cinema Mode</phrase>
+    </payload>
+    <payload>
+        <value>Clear</value>
+        <phrase>Clear</phrase>
+    </payload>
+    <payload>
+        <value>Close</value>
+        <phrase>Close</phrase>
+    </payload>
+    <payload>
+        <value>ClosedCaption</value>
+        <phrase>Closed Caption</phrase>
+    </payload>
+    <payload>
+        <value>Coax</value>
+        <phrase>Coax</phrase>
+    </payload>
+    <payload>
+        <value>Color</value>
+        <phrase>Color</phrase>
+    </payload>
+    <payload>
+        <value>ColorDown</value>
+        <phrase>Color Down</phrase>
+    </payload>
+    <payload>
+        <value>ColorTempDown</value>
+        <phrase>Color Temp Down</phrase>
+    </payload>
+    <payload>
+        <value>ColorTempUp</value>
+        <phrase>Color Temp Up</phrase>
+    </payload>
+    <payload>
+        <value>ColorUp</value>
+        <phrase>Color Up</phrase>
+    </payload>
+    <payload>
+        <value>Component</value>
+        <phrase>Component</phrase>
+    </payload>
+    <payload>
+        <value>Component1</value>
+        <phrase>Component 1</phrase>
+    </payload>
+    <payload>
+        <value>Component2</value>
+        <phrase>Component 2</phrase>
+    </payload>
+    <payload>
+        <value>Component3</value>
+        <phrase>Component 3</phrase>
+    </payload>
+    <payload>
+        <value>Component4</value>
+        <phrase>Component 4</phrase>
+    </payload>
+    <payload>
+        <value>Component5</value>
+        <phrase>Component 5</phrase>
+    </payload>
+    <payload>
+        <value>Computer</value>
+        <phrase>Computer</phrase>
+    </payload>
+    <payload>
+        <value>Concert</value>
+        <phrase>Concert</phrase>
+    </payload>
+    <payload>
+        <value>Confirm</value>
+        <phrase>Confirm</phrase>
+    </payload>
+    <payload>
+        <value>Context</value>
+        <phrase>Context</phrase>
+    </payload>
+    <payload>
+        <value>Continue</value>
+        <phrase>Continue</phrase>
+    </payload>
+    <payload>
+        <value>Contrast</value>
+        <phrase>Contrast</phrase>
+    </payload>
+    <payload>
+        <value>ContrastDown</value>
+        <phrase>Contrast Down</phrase>
+    </payload>
+    <payload>
+        <value>ContrastMinus</value>
+        <phrase>Contrast Minus</phrase>
+    </payload>
+    <payload>
+        <value>ContrastPlus</value>
+        <phrase>Contrast Plus</phrase>
+    </payload>
+    <payload>
+        <value>ContrastUp</value>
+        <phrase>Contrast Up</phrase>
+    </payload>
+    <payload>
+        <value>Counter</value>
+        <phrase>Counter</phrase>
+    </payload>
+    <payload>
+        <value>CursorDown</value>
+        <phrase>Cursor Down</phrase>
+    </payload>
+    <payload>
+        <value>Cursordown-navigation</value>
+        <phrase>Cursor down - navigation</phrase>
+    </payload>
+    <payload>
+        <value>CursorEnter</value>
+        <phrase>Cursor Enter</phrase>
+    </payload>
+    <payload>
+        <value>CursorLeft</value>
+        <phrase>Cursor Left</phrase>
+    </payload>
+    <payload>
+        <value>CursorRight</value>
+        <phrase>Cursor Right</phrase>
+    </payload>
+    <payload>
+        <value>CursorSelect</value>
+        <phrase>Cursor Select</phrase>
+    </payload>
+    <payload>
+        <value>CursorUp</value>
+        <phrase>Cursor Up</phrase>
+    </payload>
+    <payload>
+        <value>Cyan</value>
+        <phrase>Cyan</phrase>
+    </payload>
+    <payload>
+        <value>D</value>
+        <phrase>D</phrase>
+    </payload>
+    <payload>
+        <value>Daily/Weekly</value>
+        <phrase>Daily/Weekly</phrase>
+    </payload>
+    <payload>
+        <value>DAT</value>
+        <phrase>DAT</phrase>
+    </payload>
+    <payload>
+        <value>DateDown</value>
+        <phrase>Date Down</phrase>
+    </payload>
+    <payload>
+        <value>DateUp</value>
+        <phrase>Date Up</phrase>
+    </payload>
+    <payload>
+        <value>DayDown</value>
+        <phrase>Day Down</phrase>
+    </payload>
+    <payload>
+        <value>DayMinus</value>
+        <phrase>Day Minus</phrase>
+    </payload>
+    <payload>
+        <value>DayPlus</value>
+        <phrase>Day Plus</phrase>
+    </payload>
+    <payload>
+        <value>DayUp</value>
+        <phrase>Day Up</phrase>
+    </payload>
+    <payload>
+        <value>DBS</value>
+        <phrase>DBS</phrase>
+    </payload>
+    <payload>
+        <value>DEF</value>
+        <phrase>DEF</phrase>
+    </payload>
+    <payload>
+        <value>DefaultMenuSelect</value>
+        <phrase>Default Menu Select</phrase>
+    </payload>
+    <payload>
+        <value>Delay</value>
+        <phrase>Delay</phrase>
+    </payload>
+    <payload>
+        <value>DelayDown</value>
+        <phrase>Delay Down</phrase>
+    </payload>
+    <payload>
+        <value>DelayUp</value>
+        <phrase>Delay Up</phrase>
+    </payload>
+    <payload>
+        <value>Delimiter</value>
+        <phrase>Delimiter</phrase>
+    </payload>
+    <payload>
+        <value>Digest</value>
+        <phrase>Digest</phrase>
+    </payload>
+    <payload>
+        <value>Digit0</value>
+        <phrase>Digit 0</phrase>
+    </payload>
+    <payload>
+        <value>Digit1</value>
+        <phrase>Digit 1</phrase>
+    </payload>
+    <payload>
+        <value>Digit10</value>
+        <phrase>Digit 10</phrase>
+    </payload>
+    <payload>
+        <value>Digit10Plus</value>
+        <phrase>Digit 10 Plus</phrase>
+    </payload>
+    <payload>
+        <value>Digit10+</value>
+        <phrase>Digit 10+</phrase>
+    </payload>
+    <payload>
+        <value>Digit11</value>
+        <phrase>Digit 11</phrase>
+    </payload>
+    <payload>
+        <value>Digit12</value>
+        <phrase>Digit 12</phrase>
+    </payload>
+    <payload>
+        <value>Digit13</value>
+        <phrase>Digit 13</phrase>
+    </payload>
+    <payload>
+        <value>Digit14</value>
+        <phrase>Digit 14</phrase>
+    </payload>
+    <payload>
+        <value>Digit15</value>
+        <phrase>Digit 15</phrase>
+    </payload>
+    <payload>
+        <value>Digit16</value>
+        <phrase>Digit 16</phrase>
+    </payload>
+    <payload>
+        <value>Digit2</value>
+        <phrase>Digit 2</phrase>
+    </payload>
+    <payload>
+        <value>Digit3</value>
+        <phrase>Digit 3</phrase>
+    </payload>
+    <payload>
+        <value>Digit4</value>
+        <phrase>Digit 4</phrase>
+    </payload>
+    <payload>
+        <value>Digit5</value>
+        <phrase>Digit 5</phrase>
+    </payload>
+    <payload>
+        <value>Digit6</value>
+        <phrase>Digit 6</phrase>
+    </payload>
+    <payload>
+        <value>Digit7</value>
+        <phrase>Digit 7</phrase>
+    </payload>
+    <payload>
+        <value>Digit8</value>
+        <phrase>Digit 8</phrase>
+    </payload>
+    <payload>
+        <value>Digit9</value>
+        <phrase>Digit 9</phrase>
+    </payload>
+    <payload>
+        <value>Digitseperator</value>
+        <phrase>Digit seperator</phrase>
+    </payload>
+    <payload>
+        <value>Digital</value>
+        <phrase>Digital</phrase>
+    </payload>
+    <payload>
+        <value>DigitalInput</value>
+        <phrase>Digital Input</phrase>
+    </payload>
+    <payload>
+        <value>DigitalTape</value>
+        <phrase>Digital Tape</phrase>
+    </payload>
+    <payload>
+        <value>Dimmer</value>
+        <phrase>Dimmer</phrase>
+    </payload>
+    <payload>
+        <value>Direct</value>
+        <phrase>Direct</phrase>
+    </payload>
+    <payload>
+        <value>DirectGuide</value>
+        <phrase>Direct Guide</phrase>
+    </payload>
+    <payload>
+        <value>DirectPlayer</value>
+        <phrase>Direct Player</phrase>
+    </payload>
+    <payload>
+        <value>Direct/Stereo</value>
+        <phrase>Direct/Stereo</phrase>
+    </payload>
+    <payload>
+        <value>Disarm</value>
+        <phrase>Disarm</phrase>
+    </payload>
+    <payload>
+        <value>Disc</value>
+        <phrase>Disc</phrase>
+    </payload>
+    <payload>
+        <value>Disc-</value>
+        <phrase>Disc -</phrase>
+    </payload>
+    <payload>
+        <value>Disc+</value>
+        <phrase>Disc +</phrase>
+    </payload>
+    <payload>
+        <value>Disc1</value>
+        <phrase>Disc 1</phrase>
+    </payload>
+    <payload>
+        <value>Disc2</value>
+        <phrase>Disc 2</phrase>
+    </payload>
+    <payload>
+        <value>Disc3</value>
+        <phrase>Disc 3</phrase>
+    </payload>
+    <payload>
+        <value>Disc4</value>
+        <phrase>Disc 4</phrase>
+    </payload>
+    <payload>
+        <value>Disc5</value>
+        <phrase>Disc 5</phrase>
+    </payload>
+    <payload>
+        <value>Disc6</value>
+        <phrase>Disc 6</phrase>
+    </payload>
+    <payload>
+        <value>DiscDown</value>
+        <phrase>Disc Down</phrase>
+    </payload>
+    <payload>
+        <value>DiscExchange</value>
+        <phrase>Disc Exchange</phrase>
+    </payload>
+    <payload>
+        <value>DiscMinus</value>
+        <phrase>Disc Minus</phrase>
+    </payload>
+    <payload>
+        <value>DiscNext</value>
+        <phrase>Disc Next</phrase>
+    </payload>
+    <payload>
+        <value>DISCPLUS</value>
+        <phrase>DISC PLUS</phrase>
+    </payload>
+    <payload>
+        <value>DiscPrevious</value>
+        <phrase>Disc Previous</phrase>
+    </payload>
+    <payload>
+        <value>DiscSelectMinus</value>
+        <phrase>Disc Select Minus</phrase>
+    </payload>
+    <payload>
+        <value>DiscSelectPlus</value>
+        <phrase>Disc Select Plus</phrase>
+    </payload>
+    <payload>
+        <value>DiscSkip</value>
+        <phrase>Disc Skip</phrase>
+    </payload>
+    <payload>
+        <value>DiscUp</value>
+        <phrase>Disc Up</phrase>
+    </payload>
+    <payload>
+        <value>DiscreteOff</value>
+        <phrase>Discrete Off</phrase>
+    </payload>
+    <payload>
+        <value>DiscreteOn</value>
+        <phrase>Discrete On</phrase>
+    </payload>
+    <payload>
+        <value>DISPLAY</value>
+        <phrase>DISPLAY</phrase>
+    </payload>
+    <payload>
+        <value>DNR</value>
+        <phrase>DNR</phrase>
+    </payload>
+    <payload>
+        <value>Dolby/DTSSurround</value>
+        <phrase>Dolby / DTS Surround</phrase>
+    </payload>
+    <payload>
+        <value>Down</value>
+        <phrase>Down</phrase>
+    </payload>
+    <payload>
+        <value>DownArrow</value>
+        <phrase>Down Arrow</phrase>
+    </payload>
+    <payload>
+        <value>DSS</value>
+        <phrase>DSS</phrase>
+    </payload>
+    <payload>
+        <value>DTS</value>
+        <phrase>DTS</phrase>
+    </payload>
+    <payload>
+        <value>DTVguide</value>
+        <phrase>DTV guide</phrase>
+    </payload>
+    <payload>
+        <value>DTVinfo</value>
+        <phrase>DTV info</phrase>
+    </payload>
+    <payload>
+        <value>DualScreen</value>
+        <phrase>Dualscreen</phrase>
+    </payload>
+    <payload>
+        <value>Dub</value>
+        <phrase>Dub</phrase>
+    </payload>
+    <payload>
+        <value>DVD</value>
+        <phrase>DVD</phrase>
+    </payload>
+    <payload>
+        <value>DVDAngle</value>
+        <phrase>DVD Angle</phrase>
+    </payload>
+    <payload>
+        <value>DVDAngle(F)</value>
+        <phrase>DVD Angle (F)</phrase>
+    </payload>
+    <payload>
+        <value>DVDAudio</value>
+        <phrase>DVD Audio</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit2</value>
+        <phrase>DVD Digit 2</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit3</value>
+        <phrase>DVD Digit 3</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit4</value>
+        <phrase>DVD Digit 4</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit5</value>
+        <phrase>DVD Digit 5</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit6</value>
+        <phrase>DVD Digit 6</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit8</value>
+        <phrase>DVD Digit 8</phrase>
+    </payload>
+    <payload>
+        <value>DVDDigit9</value>
+        <phrase>DVD Digit 9</phrase>
+    </payload>
+    <payload>
+        <value>DVDMenu</value>
+        <phrase>DVD Menu</phrase>
+    </payload>
+    <payload>
+        <value>DVDSubtitle(G)</value>
+        <phrase>DVD Subtitle (G)</phrase>
+    </payload>
+    <payload>
+        <value>DVDR</value>
+        <phrase>DVDR</phrase>
+    </payload>
+    <payload>
+        <value>DVI</value>
+        <phrase>DVI</phrase>
+    </payload>
+    <payload>
+        <value>E</value>
+        <phrase>E</phrase>
+    </payload>
+    <payload>
+        <value>Edit</value>
+        <phrase>Edit</phrase>
+    </payload>
+    <payload>
+        <value>Edittitle</value>
+        <phrase>Edit title</phrase>
+    </payload>
+    <payload>
+        <value>EhomeFlag</value>
+        <phrase>Ehome Flag</phrase>
+    </payload>
+    <payload>
+        <value>EHomeFlag-start</value>
+        <phrase>EHome Flag - start</phrase>
+    </payload>
+    <payload>
+        <value>Eject</value>
+        <phrase>Eject</phrase>
+    </payload>
+    <payload>
+        <value>e-mail</value>
+        <phrase>e-mail</phrase>
+    </payload>
+    <payload>
+        <value>End</value>
+        <phrase>End</phrase>
+    </payload>
+    <payload>
+        <value>Enter</value>
+        <phrase>Enter</phrase>
+    </payload>
+    <payload>
+        <value>EPG</value>
+        <phrase>EPG</phrase>
+    </payload>
+    <payload>
+        <value>EPGGuide</value>
+        <phrase>EPG Guide</phrase>
+    </payload>
+    <payload>
+        <value>EQ</value>
+        <phrase>EQ</phrase>
+    </payload>
+    <payload>
+        <value>Exit</value>
+        <phrase>Exit</phrase>
+    </payload>
+    <payload>
+        <value>Expand</value>
+        <phrase>Expand</phrase>
+    </payload>
+    <payload>
+        <value>External1</value>
+        <phrase>External 1</phrase>
+    </payload>
+    <payload>
+        <value>External2</value>
+        <phrase>External 2</phrase>
+    </payload>
+    <payload>
+        <value>External3</value>
+        <phrase>External 3</phrase>
+    </payload>
+    <payload>
+        <value>External4</value>
+        <phrase>External 4</phrase>
+    </payload>
+    <payload>
+        <value>External5</value>
+        <phrase>External 5</phrase>
+    </payload>
+    <payload>
+        <value>FStep</value>
+        <phrase>F Step</phrase>
+    </payload>
+    <payload>
+        <value>FanHigh</value>
+        <phrase>Fan High</phrase>
+    </payload>
+    <payload>
+        <value>FanLow</value>
+        <phrase>Fan Low</phrase>
+    </payload>
+    <payload>
+        <value>FanMedium</value>
+        <phrase>Fan Medium</phrase>
+    </payload>
+    <payload>
+        <value>FanSpeed</value>
+        <phrase>Fan Speed</phrase>
+    </payload>
+    <payload>
+        <value>FastForward</value>
+        <phrase>Fast Forward</phrase>
+    </payload>
+    <payload>
+        <value>FastForwardtoindex</value>
+        <phrase>Fast Forward to index</phrase>
+    </payload>
+    <payload>
+        <value>FastRunForward</value>
+        <phrase>Fast Run Forward</phrase>
+    </payload>
+    <payload>
+        <value>FastRunReverse</value>
+        <phrase>Fast Run Reverse</phrase>
+    </payload>
+    <payload>
+        <value>FavA</value>
+        <phrase>Fav A</phrase>
+    </payload>
+    <payload>
+        <value>FavB</value>
+        <phrase>Fav B</phrase>
+    </payload>
+    <payload>
+        <value>FavC</value>
+        <phrase>Fav C</phrase>
+    </payload>
+    <payload>
+        <value>FavD</value>
+        <phrase>Fav D</phrase>
+    </payload>
+    <payload>
+        <value>Favorite</value>
+        <phrase>Favorite</phrase>
+    </payload>
+    <payload>
+        <value>FavoriteChannelDown</value>
+        <phrase>Favorite Channel Down</phrase>
+    </payload>
+    <payload>
+        <value>FavoriteChannelUp</value>
+        <phrase>Favorite Channel Up</phrase>
+    </payload>
+    <payload>
+        <value>Favourite</value>
+        <phrase>Favourite</phrase>
+    </payload>
+    <payload>
+        <value>Favourites</value>
+        <phrase>Favourites</phrase>
+    </payload>
+    <payload>
+        <value>FF(Space)</value>
+        <phrase>FF (Space)</phrase>
+    </payload>
+    <payload>
+        <value>FFWD</value>
+        <phrase>FFWD</phrase>
+    </payload>
+    <payload>
+        <value>Finalize</value>
+        <phrase>Finalize</phrase>
+    </payload>
+    <payload>
+        <value>FineTune</value>
+        <phrase>Fine Tune</phrase>
+    </payload>
+    <payload>
+        <value>FLLevelDown</value>
+        <phrase>FL Level Down</phrase>
+    </payload>
+    <payload>
+        <value>FLLevelUp</value>
+        <phrase>FL Level Up</phrase>
+    </payload>
+    <payload>
+        <value>Flat</value>
+        <phrase>Flat</phrase>
+    </payload>
+    <payload>
+        <value>FM</value>
+        <phrase>FM</phrase>
+    </payload>
+    <payload>
+        <value>FocusDown</value>
+        <phrase>Focus Down</phrase>
+    </payload>
+    <payload>
+        <value>FocusUp</value>
+        <phrase>Focus Up</phrase>
+    </payload>
+    <payload>
+        <value>Format</value>
+        <phrase>Format</phrase>
+    </payload>
+    <payload>
+        <value>FormatScroll</value>
+        <phrase>Format Scroll</phrase>
+    </payload>
+    <payload>
+        <value>Forward</value>
+        <phrase>Forward</phrase>
+    </payload>
+    <payload>
+        <value>FRLevelDown</value>
+        <phrase>FR Level Down</phrase>
+    </payload>
+    <payload>
+        <value>FRLevelUp</value>
+        <phrase>FR Level Up</phrase>
+    </payload>
+    <payload>
+        <value>FrameForward</value>
+        <phrase>Frame Forward</phrase>
+    </payload>
+    <payload>
+        <value>FrameReverse</value>
+        <phrase>Frame Reverse</phrase>
+    </payload>
+    <payload>
+        <value>Freeze</value>
+        <phrase>Freeze</phrase>
+    </payload>
+    <payload>
+        <value>Front</value>
+        <phrase>Front</phrase>
+    </payload>
+    <payload>
+        <value>F-Search</value>
+        <phrase>F-Search</phrase>
+    </payload>
+    <payload>
+        <value>F-Step</value>
+        <phrase>F-Step</phrase>
+    </payload>
+    <payload>
+        <value>FunctionA</value>
+        <phrase>Function A</phrase>
+    </payload>
+    <payload>
+        <value>FunctionB</value>
+        <phrase>Function B</phrase>
+    </payload>
+    <payload>
+        <value>FunctionC</value>
+        <phrase>Function C</phrase>
+    </payload>
+    <payload>
+        <value>FunctionD</value>
+        <phrase>Function D</phrase>
+    </payload>
+    <payload>
+        <value>Game</value>
+        <phrase>Game</phrase>
+    </payload>
+    <payload>
+        <value>GameMode</value>
+        <phrase>Game Mode</phrase>
+    </payload>
+    <payload>
+        <value>Games</value>
+        <phrase>Games</phrase>
+    </payload>
+    <payload>
+        <value>GEQ</value>
+        <phrase>GEQ</phrase>
+    </payload>
+    <payload>
+        <value>GoTo</value>
+        <phrase>GoTo</phrase>
+    </payload>
+    <payload>
+        <value>GotoLive</value>
+        <phrase>Goto Live</phrase>
+    </payload>
+    <payload>
+        <value>Gotoon</value>
+        <phrase>Goto on</phrase>
+    </payload>
+    <payload>
+        <value>Gotostandby/Systemstandby</value>
+        <phrase>Goto standby / System standby</phrase>
+    </payload>
+    <payload>
+        <value>Green</value>
+        <phrase>Green</phrase>
+    </payload>
+    <payload>
+        <value>GUIDE</value>
+        <phrase>GUIDE</phrase>
+    </payload>
+    <payload>
+        <value>Guide(Xboxlogo)</value>
+        <phrase>Guide (Xbox logo)</phrase>
+    </payload>
+    <payload>
+        <value>Hall</value>
+        <phrase>Hall</phrase>
+    </payload>
+    <payload>
+        <value>HDD</value>
+        <phrase>HDD</phrase>
+    </payload>
+    <payload>
+        <value>HDMI</value>
+        <phrase>HDMI</phrase>
+    </payload>
+    <payload>
+        <value>HDMI1</value>
+        <phrase>HDMI 1</phrase>
+    </payload>
+    <payload>
+        <value>HDMI2</value>
+        <phrase>HDMI 2</phrase>
+    </payload>
+    <payload>
+        <value>HDMI3</value>
+        <phrase>HDMI 3</phrase>
+    </payload>
+    <payload>
+        <value>HDMI4</value>
+        <phrase>HDMI 4</phrase>
+    </payload>
+    <payload>
+        <value>HDMI5</value>
+        <phrase>HDMI 5</phrase>
+    </payload>
+    <payload>
+        <value>HDTV</value>
+        <phrase>HDTV</phrase>
+    </payload>
+    <payload>
+        <value>Heat</value>
+        <phrase>Heat</phrase>
+    </payload>
+    <payload>
+        <value>Help</value>
+        <phrase>Help</phrase>
+    </payload>
+    <payload>
+        <value>Hold</value>
+        <phrase>Hold</phrase>
+    </payload>
+    <payload>
+        <value>Home</value>
+        <phrase>Home</phrase>
+    </payload>
+    <payload>
+        <value>HVACCold</value>
+        <phrase>HVAC Cold</phrase>
+    </payload>
+    <payload>
+        <value>HVACWindSelect</value>
+        <phrase>HVAC Wind Select</phrase>
+    </payload>
+    <payload>
+        <value>Index</value>
+        <phrase>Index</phrase>
+    </payload>
+    <payload>
+        <value>Index-</value>
+        <phrase>Index -</phrase>
+    </payload>
+    <payload>
+        <value>IndexDown</value>
+        <phrase>Index Down</phrase>
+    </payload>
+    <payload>
+        <value>IndexMark</value>
+        <phrase>Index Mark</phrase>
+    </payload>
+    <payload>
+        <value>IndexNext</value>
+        <phrase>Index Next</phrase>
+    </payload>
+    <payload>
+        <value>IndexPrevious</value>
+        <phrase>Index Previous</phrase>
+    </payload>
+    <payload>
+        <value>IndexScan</value>
+        <phrase>Index Scan</phrase>
+    </payload>
+    <payload>
+        <value>IndexUp</value>
+        <phrase>Index Up</phrase>
+    </payload>
+    <payload>
+        <value>Index+</value>
+        <phrase>Index+</phrase>
+    </payload>
+    <payload>
+        <value>Info</value>
+        <phrase>Info</phrase>
+    </payload>
+    <payload>
+        <value>Infopanel/StatusOSD</value>
+        <phrase>Info panel / Status OSD</phrase>
+    </payload>
+    <payload>
+        <value>Information</value>
+        <phrase>Information</phrase>
+    </payload>
+    <payload>
+        <value>Input</value>
+        <phrase>Input</phrase>
+    </payload>
+    <payload>
+        <value>Input1</value>
+        <phrase>Input 1</phrase>
+    </payload>
+    <payload>
+        <value>Input2</value>
+        <phrase>Input 2</phrase>
+    </payload>
+    <payload>
+        <value>Input3</value>
+        <phrase>Input 3</phrase>
+    </payload>
+    <payload>
+        <value>Input4</value>
+        <phrase>Input 4</phrase>
+    </payload>
+    <payload>
+        <value>Input5</value>
+        <phrase>Input 5</phrase>
+    </payload>
+    <payload>
+        <value>Input6</value>
+        <phrase>Input 6</phrase>
+    </payload>
+    <payload>
+        <value>Input8</value>
+        <phrase>Input 8</phrase>
+    </payload>
+    <payload>
+        <value>Input9</value>
+        <phrase>Input 9</phrase>
+    </payload>
+    <payload>
+        <value>InputAux</value>
+        <phrase>Input Aux</phrase>
+    </payload>
+    <payload>
+        <value>InputAux1</value>
+        <phrase>Input Aux 1</phrase>
+    </payload>
+    <payload>
+        <value>InputAux2</value>
+        <phrase>Input Aux 2</phrase>
+    </payload>
+    <payload>
+        <value>InputCD</value>
+        <phrase>Input CD</phrase>
+    </payload>
+    <payload>
+        <value>InputCDR</value>
+        <phrase>Input CDR</phrase>
+    </payload>
+    <payload>
+        <value>InputComponent</value>
+        <phrase>Input Component</phrase>
+    </payload>
+    <payload>
+        <value>InputComponent1</value>
+        <phrase>Input Component 1</phrase>
+    </payload>
+    <payload>
+        <value>InputComponent2</value>
+        <phrase>Input Component 2</phrase>
+    </payload>
+    <payload>
+        <value>InputComponent3</value>
+        <phrase>Input Component 3</phrase>
+    </payload>
+    <payload>
+        <value>InputComponent4</value>
+        <phrase>Input Component 4</phrase>
+    </payload>
+    <payload>
+        <value>InputDVD</value>
+        <phrase>Input DVD</phrase>
+    </payload>
+    <payload>
+        <value>InputMode</value>
+        <phrase>Input Mode</phrase>
+    </payload>
+    <payload>
+        <value>InputModeAnalog</value>
+        <phrase>Input Mode Analog</phrase>
+    </payload>
+    <payload>
+        <value>InputModeAuto</value>
+        <phrase>Input Mode Auto</phrase>
+    </payload>
+    <payload>
+        <value>InputModeDTS</value>
+        <phrase>Input Mode DTS</phrase>
+    </payload>
+    <payload>
+        <value>InputModeExt.In</value>
+        <phrase>Input Mode Ext.In</phrase>
+    </payload>
+    <payload>
+        <value>InputModePCM</value>
+        <phrase>Input Mode P C M</phrase>
+    </payload>
+    <payload>
+        <value>InputScroll</value>
+        <phrase>Input Scroll</phrase>
+    </payload>
+    <payload>
+        <value>InputToggle</value>
+        <phrase>Input Toggle</phrase>
+    </payload>
+    <payload>
+        <value>InputTuner</value>
+        <phrase>Input Tuner</phrase>
+    </payload>
+    <payload>
+        <value>InputVCR</value>
+        <phrase>Input VCR</phrase>
+    </payload>
+    <payload>
+        <value>InputVCR1</value>
+        <phrase>Input VCR 1</phrase>
+    </payload>
+    <payload>
+        <value>InputVideo</value>
+        <phrase>Input Video</phrase>
+    </payload>
+    <payload>
+        <value>InputVideo1</value>
+        <phrase>Input Video 1</phrase>
+    </payload>
+    <payload>
+        <value>InstantReplay</value>
+        <phrase>Instant Replay</phrase>
+    </payload>
+    <payload>
+        <value>InstantSearch</value>
+        <phrase>Instant Search</phrase>
+    </payload>
+    <payload>
+        <value>Interactive</value>
+        <phrase>Interactive</phrase>
+    </payload>
+    <payload>
+        <value>IntroScan</value>
+        <phrase>Intro Scan</phrase>
+    </payload>
+    <payload>
+        <value>IRadio</value>
+        <phrase>IRadio</phrase>
+    </payload>
+    <payload>
+        <value>ITR</value>
+        <phrase>ITR</phrase>
+    </payload>
+    <payload>
+        <value>Jazz</value>
+        <phrase>Jazz</phrase>
+    </payload>
+    <payload>
+        <value>JazzClub</value>
+        <phrase>Jazz Club</phrase>
+    </payload>
+    <payload>
+        <value>JKL</value>
+        <phrase>J K L</phrase>
+    </payload>
+    <payload>
+        <value>Jump</value>
+        <phrase>Jump</phrase>
+    </payload>
+    <payload>
+        <value>JumpBackwardsX</value>
+        <phrase>Jump Backwards X</phrase>
+    </payload>
+    <payload>
+        <value>KaraokeOnOff</value>
+        <phrase>Karaoke On Off</phrase>
+    </payload>
+    <payload>
+        <value>KaraokeVocal</value>
+        <phrase>Karaoke Vocal</phrase>
+    </payload>
+    <payload>
+        <value>KeystoneDown</value>
+        <phrase>Keystone Down</phrase>
+    </payload>
+    <payload>
+        <value>Language</value>
+        <phrase>Language</phrase>
+    </payload>
+    <payload>
+        <value>Last</value>
+        <phrase>Last</phrase>
+    </payload>
+    <payload>
+        <value>LastPlay</value>
+        <phrase>Last Play</phrase>
+    </payload>
+    <payload>
+        <value>LD</value>
+        <phrase>LD</phrase>
+    </payload>
+    <payload>
+        <value>Left</value>
+        <phrase>Left</phrase>
+    </payload>
+    <payload>
+        <value>LeftArrow</value>
+        <phrase>Left Arrow</phrase>
+    </payload>
+    <payload>
+        <value>LeftClick</value>
+        <phrase>Left Click</phrase>
+    </payload>
+    <payload>
+        <value>LevelDown</value>
+        <phrase>Level Down</phrase>
+    </payload>
+    <payload>
+        <value>Light</value>
+        <phrase>Light</phrase>
+    </payload>
+    <payload>
+        <value>Live</value>
+        <phrase>Live</phrase>
+    </payload>
+    <payload>
+        <value>LNB</value>
+        <phrase>LNB</phrase>
+    </payload>
+    <payload>
+        <value>Loudness</value>
+        <phrase>Loudness</phrase>
+    </payload>
+    <payload>
+        <value>MainFreeze</value>
+        <phrase>Main Freeze</phrase>
+    </payload>
+    <payload>
+        <value>MainZoneAudioDelayUp</value>
+        <phrase>Main Zone Audio Delay Up</phrase>
+    </payload>
+    <payload>
+        <value>MainZoneOn</value>
+        <phrase>Main Zone On</phrase>
+    </payload>
+    <payload>
+        <value>MarkFavourite</value>
+        <phrase>Mark favourite</phrase>
+    </payload>
+    <payload>
+        <value>MasterLower</value>
+        <phrase>Master Lower</phrase>
+    </payload>
+    <payload>
+        <value>MasterVolumeDown</value>
+        <phrase>Master Volume Down</phrase>
+    </payload>
+    <payload>
+        <value>Matrix</value>
+        <phrase>Matrix</phrase>
+    </payload>
+    <payload>
+        <value>MD</value>
+        <phrase>MD</phrase>
+    </payload>
+    <payload>
+        <value>MediaCenterOn</value>
+        <phrase>Media Center On</phrase>
+    </payload>
+    <payload>
+        <value>Menu</value>
+        <phrase>Menu</phrase>
+    </payload>
+    <payload>
+        <value>MENUMAIN</value>
+        <phrase>MENU MAIN</phrase>
+    </payload>
+    <payload>
+        <value>MenuUp</value>
+        <phrase>Menu Up</phrase>
+    </payload>
+    <payload>
+        <value>Mix</value>
+        <phrase>Mix</phrase>
+    </payload>
+    <payload>
+        <value>Monitor</value>
+        <phrase>Monitor</phrase>
+    </payload>
+    <payload>
+        <value>Movie</value>
+        <phrase>Movie</phrase>
+    </payload>
+    <payload>
+        <value>Multi</value>
+        <phrase>Multi</phrase>
+    </payload>
+    <payload>
+        <value>MultiPresetUp</value>
+        <phrase>Multi Preset Up</phrase>
+    </payload>
+    <payload>
+        <value>MusicMode</value>
+        <phrase>Music Mode</phrase>
+    </payload>
+    <payload>
+        <value>Mute</value>
+        <phrase>Mute</phrase>
+    </payload>
+    <payload>
+        <value>MuteToggle</value>
+        <phrase>Mute Toggle</phrase>
+    </payload>
+    <payload>
+        <value>MyPictures</value>
+        <phrase>My Pictures</phrase>
+    </payload>
+    <payload>
+        <value>MyApps</value>
+        <phrase>My Apps</phrase>
+    </payload>
+    <payload>
+        <value>Natural</value>
+        <phrase>Natural</phrase>
+    </payload>
+    <payload>
+        <value>Next</value>
+        <phrase>Next</phrase>
+    </payload>
+    <payload>
+        <value>NextDay</value>
+        <phrase>Next Day</phrase>
+    </payload>
+    <payload>
+        <value>NextSource</value>
+        <phrase>Next source</phrase>
+    </payload>
+    <payload>
+        <value>NextSpeaker</value>
+        <phrase>Next Speaker</phrase>
+    </payload>
+    <payload>
+        <value>NextTrack</value>
+        <phrase>Next track</phrase>
+    </payload>
+    <payload>
+        <value>Night</value>
+        <phrase>Night</phrase>
+    </payload>
+    <payload>
+        <value>NightMode</value>
+        <phrase>Night Mode</phrase>
+    </payload>
+    <payload>
+        <value>NormalPicture</value>
+        <phrase>Normal Picture</phrase>
+    </payload>
+    <payload>
+        <value>Num0</value>
+        <phrase>Num 0</phrase>
+    </payload>
+    <payload>
+        <value>Num1</value>
+        <phrase>Num 1</phrase>
+    </payload>
+    <payload>
+        <value>Num13</value>
+        <phrase>Num 13</phrase>
+    </payload>
+    <payload>
+        <value>Num14</value>
+        <phrase>Num 14</phrase>
+    </payload>
+    <payload>
+        <value>Num2</value>
+        <phrase>Num 2</phrase>
+    </payload>
+    <payload>
+        <value>Num3</value>
+        <phrase>Num 3</phrase>
+    </payload>
+    <payload>
+        <value>Num4</value>
+        <phrase>Num 4</phrase>
+    </payload>
+    <payload>
+        <value>Num5</value>
+        <phrase>Num 5</phrase>
+    </payload>
+    <payload>
+        <value>Num6</value>
+        <phrase>Num 6</phrase>
+    </payload>
+    <payload>
+        <value>Num7</value>
+        <phrase>Num 7</phrase>
+    </payload>
+    <payload>
+        <value>Num8</value>
+        <phrase>Num 8</phrase>
+    </payload>
+    <payload>
+        <value>Num9</value>
+        <phrase>Num 9</phrase>
+    </payload>
+    <payload>
+        <value>Number0</value>
+        <phrase>Number 0</phrase>
+    </payload>
+    <payload>
+        <value>Number1</value>
+        <phrase>Number 1</phrase>
+    </payload>
+    <payload>
+        <value>Number10</value>
+        <phrase>Number 10</phrase>
+    </payload>
+    <payload>
+        <value>Number11</value>
+        <phrase>Number 11</phrase>
+    </payload>
+    <payload>
+        <value>Number12</value>
+        <phrase>Number 12</phrase>
+    </payload>
+    <payload>
+        <value>Number2</value>
+        <phrase>Number 2</phrase>
+    </payload>
+    <payload>
+        <value>Number3</value>
+        <phrase>Number 3</phrase>
+    </payload>
+    <payload>
+        <value>Number4</value>
+        <phrase>Number 4</phrase>
+    </payload>
+    <payload>
+        <value>Number5</value>
+        <phrase>Number 5</phrase>
+    </payload>
+    <payload>
+        <value>Number6</value>
+        <phrase>Number 6</phrase>
+    </payload>
+    <payload>
+        <value>Number7</value>
+        <phrase>Number 7</phrase>
+    </payload>
+    <payload>
+        <value>Number8</value>
+        <phrase>Number 8</phrase>
+    </payload>
+    <payload>
+        <value>Number9</value>
+        <phrase>Number 9</phrase>
+    </payload>
+    <payload>
+        <value>Off</value>
+        <phrase>Off</phrase>
+    </payload>
+    <payload>
+        <value>On/Off</value>
+        <phrase>On/Off</phrase>
+    </payload>
+    <payload>
+        <value>OpenClose</value>
+        <phrase>Open Close</phrase>
+    </payload>
+    <payload>
+        <value>Orchestra</value>
+        <phrase>Orchestra</phrase>
+    </payload>
+    <payload>
+        <value>Oscillate</value>
+        <phrase>Oscillate</phrase>
+    </payload>
+    <payload>
+        <value>OSD</value>
+        <phrase>OSD</phrase>
+    </payload>
+    <payload>
+        <value>P&lt;P</value>
+        <phrase>P&lt;P</phrase>
+    </payload>
+    <payload>
+        <value>Page-</value>
+        <phrase>Page -</phrase>
+    </payload>
+    <payload>
+        <value>Page+</value>
+        <phrase>Page +</phrase>
+    </payload>
+    <payload>
+        <value>PageDown</value>
+        <phrase>Page Down</phrase>
+    </payload>
+    <payload>
+        <value>PageUp</value>
+        <phrase>Page Up</phrase>
+    </payload>
+    <payload>
+        <value>ParentalLock</value>
+        <phrase>Parental Lock</phrase>
+    </payload>
+    <payload>
+        <value>Pause</value>
+        <phrase>Pause</phrase>
+    </payload>
+    <payload>
+        <value>Pause/Freeze</value>
+        <phrase>Pause/Freeze</phrase>
+    </payload>
+    <payload>
+        <value>Pause/Still</value>
+        <phrase>Pause/Still</phrase>
+    </payload>
+    <payload>
+        <value>PayPerView</value>
+        <phrase>Pay Per View</phrase>
+    </payload>
+    <payload>
+        <value>PC</value>
+        <phrase>PC</phrase>
+    </payload>
+    <payload>
+        <value>Photos</value>
+        <phrase>Photos</phrase>
+    </payload>
+    <payload>
+        <value>PictureMenu</value>
+        <phrase>Picture Menu</phrase>
+    </payload>
+    <payload>
+        <value>PictureNavi</value>
+        <phrase>Picture Navi</phrase>
+    </payload>
+    <payload>
+        <value>Pictures</value>
+        <phrase>Pictures</phrase>
+    </payload>
+    <payload>
+        <value>PIPChannelDown</value>
+        <phrase>PIP Channel Down</phrase>
+    </payload>
+    <payload>
+        <value>PIPChannelUp</value>
+        <phrase>PIP Channel Up</phrase>
+    </payload>
+    <payload>
+        <value>PIPOff</value>
+        <phrase>PIP Off</phrase>
+    </payload>
+    <payload>
+        <value>PIPSource</value>
+        <phrase>PIP Source</phrase>
+    </payload>
+    <payload>
+        <value>PIPStepUp</value>
+        <phrase>PIP Step Up</phrase>
+    </payload>
+    <payload>
+        <value>Play</value>
+        <phrase>Play</phrase>
+    </payload>
+    <payload>
+        <value>PlayBackControl</value>
+        <phrase>Play Back Control</phrase>
+    </payload>
+    <payload>
+        <value>PlayFavs</value>
+        <phrase>Play Favs</phrase>
+    </payload>
+    <payload>
+        <value>PlayPause</value>
+        <phrase>Play Pause</phrase>
+    </payload>
+    <payload>
+        <value>PlayPauseToggle</value>
+        <phrase>Play Pause Toggle</phrase>
+    </payload>
+    <payload>
+        <value>PlayReverse</value>
+        <phrase>Play Reverse</phrase>
+    </payload>
+    <payload>
+        <value>PlayX2</value>
+        <phrase>Play X2</phrase>
+    </payload>
+    <payload>
+        <value>Play/Pause</value>
+        <phrase>Play/Pause</phrase>
+    </payload>
+    <payload>
+        <value>PoundSign</value>
+        <phrase>Pound Sign</phrase>
+    </payload>
+    <payload>
+        <value>Power</value>
+        <phrase>Power</phrase>
+    </payload>
+    <payload>
+        <value>PowerOff</value>
+        <phrase>Power Off</phrase>
+    </payload>
+    <payload>
+        <value>PowerOn</value>
+        <phrase>Power On</phrase>
+    </payload>
+    <payload>
+        <value>PowerToggle</value>
+        <phrase>Power Toggle</phrase>
+    </payload>
+    <payload>
+        <value>Pqrs</value>
+        <phrase>Pqrs</phrase>
+    </payload>
+    <payload>
+        <value>Prefs</value>
+        <phrase>Prefs</phrase>
+    </payload>
+    <payload>
+        <value>Preset</value>
+        <phrase>Preset</phrase>
+    </payload>
+    <payload>
+        <value>Preset0</value>
+        <phrase>Preset 0</phrase>
+    </payload>
+    <payload>
+        <value>Preset1</value>
+        <phrase>Preset 10</phrase>
+    </payload>
+    <payload>
+        <value>Preset2</value>
+        <phrase>Preset 2</phrase>
+    </payload>
+    <payload>
+        <value>Preset3</value>
+        <phrase>Preset 3</phrase>
+    </payload>
+    <payload>
+        <value>Previous</value>
+        <phrase>Previous</phrase>
+    </payload>
+    <payload>
+        <value>PreviousDay</value>
+        <phrase>Previous Day</phrase>
+    </payload>
+    <payload>
+        <value>Prog</value>
+        <phrase>Prog</phrase>
+    </payload>
+    <payload>
+        <value>ProgressiveScan</value>
+        <phrase>Progressive Scan</phrase>
+    </payload>
+    <payload>
+        <value>PTY</value>
+        <phrase>PTY</phrase>
+    </payload>
+    <payload>
+        <value>Purple</value>
+        <phrase>Purple</phrase>
+    </payload>
+    <payload>
+        <value>PVRMenu</value>
+        <phrase>PVR Menu</phrase>
+    </payload>
+    <payload>
+        <value>Quit</value>
+        <phrase>Quit</phrase>
+    </payload>
+    <payload>
+        <value>Radio</value>
+        <phrase>Radio</phrase>
+    </payload>
+    <payload>
+        <value>RandomGroupMode</value>
+        <phrase>Random Group Mode</phrase>
+    </payload>
+    <payload>
+        <value>RDSInfo</value>
+        <phrase>RDS Info</phrase>
+    </payload>
+    <payload>
+        <value>Rear</value>
+        <phrase>Rear</phrase>
+    </payload>
+    <payload>
+        <value>RearVolumeUp</value>
+        <phrase>Rear Volume Up</phrase>
+    </payload>
+    <payload>
+        <value>Recent</value>
+        <phrase>Recent</phrase>
+    </payload>
+    <payload>
+        <value>Record</value>
+        <phrase>Record</phrase>
+    </payload>
+    <payload>
+        <value>RepeatAB</value>
+        <phrase>Repeat A B</phrase>
+    </payload>
+    <payload>
+        <value>RepeatA-B</value>
+        <phrase>Repeat A-B</phrase>
+    </payload>
+    <payload>
+        <value>RepeatGroupPlayMode</value>
+        <phrase>Repeat Group Play Mode</phrase>
+    </payload>
+    <payload>
+        <value>RepeatTitlePlayMode</value>
+        <phrase>Repeat Title Play Mode</phrase>
+    </payload>
+    <payload>
+        <value>Replay</value>
+        <phrase>Replay</phrase>
+    </payload>
+    <payload>
+        <value>Return</value>
+        <phrase>Return</phrase>
+    </payload>
+    <payload>
+        <value>Reveal</value>
+        <phrase>Reveal</phrase>
+    </payload>
+    <payload>
+        <value>Reverse</value>
+        <phrase>Reverse</phrase>
+    </payload>
+    <payload>
+        <value>Rewindtoindex</value>
+        <phrase>Rewind to index</phrase>
+    </payload>
+    <payload>
+        <value>RGB</value>
+        <phrase>RGB</phrase>
+    </payload>
+    <payload>
+        <value>Right</value>
+        <phrase>Right</phrase>
+    </payload>
+    <payload>
+        <value>RightClick</value>
+        <phrase>Right Click</phrase>
+    </payload>
+    <payload>
+        <value>Rock</value>
+        <phrase>Rock</phrase>
+    </payload>
+    <payload>
+        <value>RotateLeft</value>
+        <phrase>Rotate Left</phrase>
+    </payload>
+    <payload>
+        <value>RotateRight</value>
+        <phrase>Rotate Right</phrase>
+    </payload>
+    <payload>
+        <value>Satellite</value>
+        <phrase>Satellite</phrase>
+    </payload>
+    <payload>
+        <value>SB/SBLLevelDown</value>
+        <phrase>SB/SBL Level Down</phrase>
+    </payload>
+    <payload>
+        <value>SB/SBLLevelUp</value>
+        <phrase>SB/SBL Level Up</phrase>
+    </payload>
+    <payload>
+        <value>SBRLevelUp</value>
+        <phrase>SBR Level Up</phrase>
+    </payload>
+    <payload>
+        <value>Scan</value>
+        <phrase>Scan</phrase>
+    </payload>
+    <payload>
+        <value>Scene1</value>
+        <phrase>Scene 1</phrase>
+    </payload>
+    <payload>
+        <value>Scene10</value>
+        <phrase>Scene 10</phrase>
+    </payload>
+    <payload>
+        <value>Scene11</value>
+        <phrase>Scene 11</phrase>
+    </payload>
+    <payload>
+        <value>Scene2</value>
+        <phrase>Scene 2</phrase>
+    </payload>
+    <payload>
+        <value>Scene3</value>
+        <phrase>Scene 3</phrase>
+    </payload>
+    <payload>
+        <value>Scene4</value>
+        <phrase>Scene 4</phrase>
+    </payload>
+    <payload>
+        <value>Scene5</value>
+        <phrase>Scene 5</phrase>
+    </payload>
+    <payload>
+        <value>Scene6</value>
+        <phrase>Scene 6</phrase>
+    </payload>
+    <payload>
+        <value>Scene7</value>
+        <phrase>Scene 7</phrase>
+    </payload>
+    <payload>
+        <value>Scene8</value>
+        <phrase>Scene 8</phrase>
+    </payload>
+    <payload>
+        <value>Scene9</value>
+        <phrase>Scene 9</phrase>
+    </payload>
+    <payload>
+        <value>ScreenSize</value>
+        <phrase>Screen Size</phrase>
+    </payload>
+    <payload>
+        <value>Scroll</value>
+        <phrase>Scroll</phrase>
+    </payload>
+    <payload>
+        <value>Select</value>
+        <phrase>Select</phrase>
+    </payload>
+    <payload>
+        <value>SelectVPS</value>
+        <phrase>Select VPS</phrase>
+    </payload>
+    <payload>
+        <value>Services</value>
+        <phrase>Services</phrase>
+    </payload>
+    <payload>
+        <value>Setup</value>
+        <phrase>Setup</phrase>
+    </payload>
+    <payload>
+        <value>Sharpness</value>
+        <phrase>Sharpness</phrase>
+    </payload>
+    <payload>
+        <value>SharpnessUp</value>
+        <phrase>Sharpness Up</phrase>
+    </payload>
+    <payload>
+        <value>Showview</value>
+        <phrase>Showview</phrase>
+    </payload>
+    <payload>
+        <value>Skip</value>
+        <phrase>SKIP</phrase>
+    </payload>
+    <payload>
+        <value>Skip-</value>
+        <phrase>Skip-</phrase>
+    </payload>
+    <payload>
+        <value>SkipAhead</value>
+        <phrase>Skip Ahead</phrase>
+    </payload>
+    <payload>
+        <value>Skipback</value>
+        <phrase>Skip back</phrase>
+    </payload>
+    <payload>
+        <value>SkipDown</value>
+        <phrase>Skip Down</phrase>
+    </payload>
+    <payload>
+        <value>SkipUp</value>
+        <phrase>Skip Up</phrase>
+    </payload>
+    <payload>
+        <value>SLLevelDown</value>
+        <phrase>SL Level Down</phrase>
+    </payload>
+    <payload>
+        <value>Sleep</value>
+        <phrase>Sleep</phrase>
+    </payload>
+    <payload>
+        <value>sleeptimer</value>
+        <phrase>sleep timer</phrase>
+    </payload>
+    <payload>
+        <value>SlowForward</value>
+        <phrase>Slow Forward</phrase>
+    </payload>
+    <payload>
+        <value>SlowRunReverse</value>
+        <phrase>Slow Run Reverse</phrase>
+    </payload>
+    <payload>
+        <value>Sound</value>
+        <phrase>Sound</phrase>
+    </payload>
+    <payload>
+        <value>SoundMode</value>
+        <phrase>Sound Mode</phrase>
+    </payload>
+    <payload>
+        <value>Source</value>
+        <phrase>Source</phrase>
+    </payload>
+    <payload>
+        <value>Speed</value>
+        <phrase>Speed</phrase>
+    </payload>
+    <payload>
+        <value>SpeedDown</value>
+        <phrase>Speed Down</phrase>
+    </payload>
+    <payload>
+        <value>SRLevelUp</value>
+        <phrase>SR Level Up</phrase>
+    </payload>
+    <payload>
+        <value>Stadium</value>
+        <phrase>Stadium</phrase>
+    </payload>
+    <payload>
+        <value>Standby/On</value>
+        <phrase>Standby/On</phrase>
+    </payload>
+    <payload>
+        <value>StartIDErase</value>
+        <phrase>Start ID Erase</phrase>
+    </payload>
+    <payload>
+        <value>StartIDRenumber</value>
+        <phrase>Start ID Renumber</phrase>
+    </payload>
+    <payload>
+        <value>StartIDWrite</value>
+        <phrase>Start ID Write</phrase>
+    </payload>
+    <payload>
+        <value>Step</value>
+        <phrase>Step</phrase>
+    </payload>
+    <payload>
+        <value>StepDown</value>
+        <phrase>Step Down</phrase>
+    </payload>
+    <payload>
+        <value>StepUp</value>
+        <phrase>Step Up</phrase>
+    </payload>
+    <payload>
+        <value>Stereo</value>
+        <phrase>Stereo</phrase>
+    </payload>
+    <payload>
+        <value>Stereo/Mono</value>
+        <phrase>Stereo/Mono</phrase>
+    </payload>
+    <payload>
+        <value>Still/Pause</value>
+        <phrase>Still/Pause</phrase>
+    </payload>
+    <payload>
+        <value>STOP</value>
+        <phrase>STOP</phrase>
+    </payload>
+    <payload>
+        <value>StoreOpen/Close</value>
+        <phrase>Store Open/Close</phrase>
+    </payload>
+    <payload>
+        <value>SubwooferUp</value>
+        <phrase>Subwoofer Up</phrase>
+    </payload>
+    <payload>
+        <value>SurroundDown</value>
+        <phrase>Surround Down</phrase>
+    </payload>
+    <payload>
+        <value>Surroundsound</value>
+        <phrase>Surround sound</phrase>
+    </payload>
+    <payload>
+        <value>SurroundUp</value>
+        <phrase>Surround Up</phrase>
+    </payload>
+    <payload>
+        <value>SWLevelDown</value>
+        <phrase>SW Level Down</phrase>
+    </payload>
+    <payload>
+        <value>SystemSetup</value>
+        <phrase>System Setup</phrase>
+    </payload>
+    <payload>
+        <value>SystemStandby</value>
+        <phrase>System Standby</phrase>
+    </payload>
+    <payload>
+        <value>Tape</value>
+        <phrase>Tape</phrase>
+    </payload>
+    <payload>
+        <value>Tape1-2</value>
+        <phrase>Tape 1-2</phrase>
+    </payload>
+    <payload>
+        <value>Teletext</value>
+        <phrase>Teletext</phrase>
+    </payload>
+    <payload>
+        <value>TemperatureUp</value>
+        <phrase>Temperature Up</phrase>
+    </payload>
+    <payload>
+        <value>ThumbsDown</value>
+        <phrase>Thumbs Down</phrase>
+    </payload>
+    <payload>
+        <value>TiltUp</value>
+        <phrase>Tilt Up</phrase>
+    </payload>
+    <payload>
+        <value>TimePage</value>
+        <phrase>Time Page</phrase>
+    </payload>
+    <payload>
+        <value>Time/text</value>
+        <phrase>Time/text</phrase>
+    </payload>
+    <payload>
+        <value>Timer</value>
+        <phrase>Timer</phrase>
+    </payload>
+    <payload>
+        <value>TimerStand-by</value>
+        <phrase>Timer Stand-by</phrase>
+    </payload>
+    <payload>
+        <value>TimerUp</value>
+        <phrase>Timer Up</phrase>
+    </payload>
+    <payload>
+        <value>Tint</value>
+        <phrase>Tint</phrase>
+    </payload>
+    <payload>
+        <value>TintUp</value>
+        <phrase>Tint Up</phrase>
+    </payload>
+    <payload>
+        <value>Title</value>
+        <phrase>Title</phrase>
+    </payload>
+    <payload>
+        <value>Track</value>
+        <phrase>Track</phrase>
+    </payload>
+    <payload>
+        <value>Track1</value>
+        <phrase>Track 1</phrase>
+    </payload>
+    <payload>
+        <value>Track2</value>
+        <phrase>Track 2</phrase>
+    </payload>
+    <payload>
+        <value>Track3</value>
+        <phrase>Track 3</phrase>
+    </payload>
+    <payload>
+        <value>Track4</value>
+        <phrase>Track 4</phrase>
+    </payload>
+    <payload>
+        <value>Track5</value>
+        <phrase>Track 5</phrase>
+    </payload>
+    <payload>
+        <value>TrackingUp</value>
+        <phrase>Tracking Up</phrase>
+    </payload>
+    <payload>
+        <value>TrebleUp</value>
+        <phrase>Treble Up</phrase>
+    </payload>
+    <payload>
+        <value>TuneUp</value>
+        <phrase>Tune Up</phrase>
+    </payload>
+    <payload>
+        <value>TunerPresetDown</value>
+        <phrase>Tuner Preset Down</phrase>
+    </payload>
+    <payload>
+        <value>TunerPresetUp</value>
+        <phrase>Tuner Preset Up</phrase>
+    </payload>
+    <payload>
+        <value>TunerShiftA</value>
+        <phrase>Tuner Shift A</phrase>
+    </payload>
+    <payload>
+        <value>TunerShiftB</value>
+        <phrase>Tuner Shift B</phrase>
+    </payload>
+    <payload>
+        <value>TunerShiftC</value>
+        <phrase>Tuner Shift C</phrase>
+    </payload>
+    <payload>
+        <value>TunerTuneUp</value>
+        <phrase>Tuner Tune Up</phrase>
+    </payload>
+    <payload>
+        <value>TunerTuningDown</value>
+        <phrase>Tuner Tuning Down</phrase>
+    </payload>
+    <payload>
+        <value>TuningDown</value>
+        <phrase>Tuning Down</phrase>
+    </payload>
+    <payload>
+        <value>TuningUp</value>
+        <phrase>Tuning Up</phrase>
+    </payload>
+    <payload>
+        <value>TUV</value>
+        <phrase>TUV</phrase>
+    </payload>
+    <payload>
+        <value>TV</value>
+        <phrase>TV</phrase>
+    </payload>
+    <payload>
+        <value>TVDigit7</value>
+        <phrase>TV Digit 7</phrase>
+    </payload>
+    <payload>
+        <value>TVDigit9</value>
+        <phrase>TV Digit 9</phrase>
+    </payload>
+    <payload>
+        <value>TVInput</value>
+        <phrase>TV Input</phrase>
+    </payload>
+    <payload>
+        <value>TVPowerOn</value>
+        <phrase>TV Power On</phrase>
+    </payload>
+    <payload>
+        <value>TV/Radio</value>
+        <phrase>TV/Radio</phrase>
+    </payload>
+    <payload>
+        <value>TV/VCR</value>
+        <phrase>TV/VCR</phrase>
+    </payload>
+    <payload>
+        <value>TV-TEXT/Subtitle</value>
+        <phrase>TV-TEXT/Subtitle</phrase>
+    </payload>
+    <payload>
+        <value>Up</value>
+        <phrase>Up</phrase>
+    </payload>
+    <payload>
+        <value>UpArrow</value>
+        <phrase>Up Arrow</phrase>
+    </payload>
+    <payload>
+        <value>Update</value>
+        <phrase>Update</phrase>
+    </payload>
+    <payload>
+        <value>V.AUX</value>
+        <phrase>V.AUX</phrase>
+    </payload>
+    <payload>
+        <value>VCR</value>
+        <phrase>VCR</phrase>
+    </payload>
+    <payload>
+        <value>VCR+</value>
+        <phrase>VCR+</phrase>
+    </payload>
+    <payload>
+        <value>VCR-1</value>
+        <phrase>VCR-1</phrase>
+    </payload>
+    <payload>
+        <value>VideoMute</value>
+        <phrase>Video Mute</phrase>
+    </payload>
+    <payload>
+        <value>VideoOnDemand</value>
+        <phrase>Video On Demand</phrase>
+    </payload>
+    <payload>
+        <value>View</value>
+        <phrase>View</phrase>
+    </payload>
+    <payload>
+        <value>Vol-</value>
+        <phrase>Vol-</phrase>
+    </payload>
+    <payload>
+        <value>Volume-</value>
+        <phrase>Volume-</phrase>
+    </payload>
+    <payload>
+        <value>VolumeDown</value>
+        <phrase>Volume Down</phrase>
+    </payload>
+    <payload>
+        <value>VolumeMinus</value>
+        <phrase>Volume Minus</phrase>
+    </payload>
+    <payload>
+        <value>VolumeMute</value>
+        <phrase>Volume Mute</phrase>
+    </payload>
+    <payload>
+        <value>VolumePlus</value>
+        <phrase>Volume Plus</phrase>
+    </payload>
+    <payload>
+        <value>VolumeUp</value>
+        <phrase>Volume Up</phrase>
+    </payload>
+    <payload>
+        <value>Volume+</value>
+        <phrase>Volume+</phrase>
+    </payload>
+    <payload>
+        <value>WeekDown</value>
+        <phrase>Week Down</phrase>
+    </payload>
+    <payload>
+        <value>WeekUp</value>
+        <phrase>Week Up</phrase>
+    </payload>
+    <payload>
+        <value>White</value>
+        <phrase>White</phrase>
+    </payload>
+    <payload>
+        <value>Whitecolour-Teletext</value>
+        <phrase>White colour - Teletext</phrase>
+    </payload>
+    <payload>
+        <value>WideScreen</value>
+        <phrase>Wide Screen</phrase>
+    </payload>
+    <payload>
+        <value>Widescreen</value>
+        <phrase>Widescreen</phrase>
+    </payload>
+    <payload>
+        <value>WorldWideWeb</value>
+        <phrase>World Wide Web</phrase>
+    </payload>
+    <payload>
+        <value>XM</value>
+        <phrase>XM</phrase>
+    </payload>
+    <payload>
+        <value>XMChannel0</value>
+        <phrase>XM Channel 0</phrase>
+    </payload>
+    <payload>
+        <value>Yellow</value>
+        <phrase>Yellow</phrase>
+    </payload>
+    <payload>
+        <value>Zone2CD</value>
+        <phrase>Zone2 CD</phrase>
+    </payload>
+    <payload>
+        <value>Zone2DVD</value>
+        <phrase>Zone2 DVD</phrase>
+    </payload>
+    <payload>
+        <value>Zone2Phono</value>
+        <phrase>Zone2 Phono</phrase>
+    </payload>
+    <payload>
+        <value>Zone2Tuner</value>
+        <phrase>Zone2 Tuner</phrase>
+    </payload>
+    <payload>
+        <value>Zone2V.AUX</value>
+        <phrase>Zone2 V.AUX</phrase>
+    </payload>
+    <payload>
+        <value>Zone3CDR/Tape</value>
+        <phrase>Zone3 CDR/Tape</phrase>
+    </payload>
+    <payload>
+        <value>Zone3DVD</value>
+        <phrase>Zone3 DVD</phrase>
+    </payload>
+    <payload>
+        <value>Zone3Tuner</value>
+        <phrase>Zone3 Tuner</phrase>
+    </payload>
+    <payload>
+        <value>Zone3V.AUX</value>
+        <phrase>Zone3 V.AUX</phrase>
+    </payload>
+    <payload>
+        <value>Zone3VRDown</value>
+        <phrase>Zone3 VR Down</phrase>
+    </payload>
+    <payload>
+        <value>Zone3VRUp</value>
+        <phrase>Zone3 VR Up</phrase>
+    </payload>
+    <payload>
+        <value>ZoomMinus</value>
+        <phrase>Zoom Minus</phrase>
+    </payload>
+    <payload>
+        <value>ZoomOut</value>
+        <phrase>Zoom Out</phrase>
+    </payload>
+</PayloadsRoot>

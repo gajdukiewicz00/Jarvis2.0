@@ -45,4 +45,6 @@ spec:
               entries:
                 - keyless:
                     issuer: https://token.actions.githubusercontent.com
+                    rekor:
+                      url: https://rekor.sigstore.dev
                     subjectRegExp: "^https://github.com/.+/.+/.github/workflows/.+@refs/tags/.+$"

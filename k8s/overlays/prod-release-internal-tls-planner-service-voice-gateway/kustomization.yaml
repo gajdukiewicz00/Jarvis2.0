@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis
+
+resources:
+  - ../prod-release-internal-tls-api-gateway-planner-service
+  - voice-gateway-ingress-from-planner.yaml
+
+patches:
+  - path: planner-service.patch.yaml
+  - path: planner-egress-internal.patch.yaml
+    target:
+      kind: NetworkPolicy
+      name: planner-egress-internal

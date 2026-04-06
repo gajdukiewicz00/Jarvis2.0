@@ -51,10 +51,10 @@ public class MemoryClient {
      * @param correlationId Correlation ID for tracing
      * @return Memory context or empty string if not available
      */
-    public String searchContext(String userId, String query, int topK, int maxTokens, String correlationId) {
+    public SearchContextResult searchContext(String userId, String query, int topK, int maxTokens, String correlationId) {
         if (!enabled) {
             log.debug("[{}] Memory service disabled, skipping search", correlationId);
-            return "";
+            return new SearchContextResult("", "disabled", 0, 0, "memory.service.enabled=false");
         }
 
         String url = memoryServiceUrl + "/memory/search";
@@ -86,15 +86,19 @@ public class MemoryClient {
                 log.info("[{}] Memory search: {} chunks in {}ms, tokens={}",
                         correlationId, body.chunks != null ? body.chunks.size() : 0, 
                         elapsed, body.estimatedTokens);
-                return body.contextText != null ? body.contextText : "";
+                return new SearchContextResult(
+                        body.contextText != null ? body.contextText : "",
+                        body.retrievalMode != null ? body.retrievalMode : "unknown",
+                        body.estimatedTokens,
+                        body.chunks != null ? body.chunks.size() : 0,
+                        body.degradedReason);
             }
 
-            log.warn("[{}] Memory search returned empty response", correlationId);
-            return "";
+            throw new MemoryClientException("Memory search returned an empty response");
 
         } catch (RuntimeException e) {
-            log.warn("[{}] Memory search failed (non-fatal): {}", correlationId, e.getMessage());
-            return "";
+            log.warn("[{}] Memory search failed: {}", correlationId, e.getMessage());
+            throw new MemoryClientException("Memory search failed: " + e.getMessage(), e);
         }
     }
 
@@ -133,7 +137,8 @@ public class MemoryClient {
             log.debug("[{}] Memory ingest queued", correlationId);
 
         } catch (RuntimeException e) {
-            log.warn("[{}] Memory ingest failed (non-fatal): {}", correlationId, e.getMessage());
+            log.warn("[{}] Memory ingest failed: {}", correlationId, e.getMessage());
+            throw new MemoryClientException("Memory ingest failed: " + e.getMessage(), e);
         }
     }
 
@@ -141,8 +146,22 @@ public class MemoryClient {
      * Check if memory service is healthy
      */
     public boolean isHealthy() {
+        return getHealth().available();
+    }
+
+    public MemoryServiceHealth getHealth() {
         if (!enabled) {
-            return false;
+            return new MemoryServiceHealth(
+                    false,
+                    "disabled",
+                    false,
+                    false,
+                    false,
+                    memoryServiceUrl,
+                    null,
+                    null,
+                    null,
+                    "memory.service.enabled=false");
         }
 
         try {
@@ -154,12 +173,35 @@ public class MemoryClient {
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
                     Map.class);
-            return response.getStatusCode().is2xxSuccessful() 
-                    && response.getBody() != null 
-                    && "healthy".equals(response.getBody().get("status"));
+
+            Map<?, ?> body = response.getBody();
+            boolean healthy = response.getStatusCode().is2xxSuccessful()
+                    && body != null
+                    && "healthy".equals(body.get("status"));
+            return new MemoryServiceHealth(
+                    healthy,
+                    body != null ? String.valueOf(body.get("status")) : "unknown",
+                    body != null && "up".equals(body.get("database")),
+                    body != null && "available".equals(body.get("pgvector")),
+                    body != null && "up".equals(body.get("embeddingService")),
+                    memoryServiceUrl,
+                    body != null && body.get("embeddingModel") != null ? String.valueOf(body.get("embeddingModel")) : null,
+                    body != null && body.get("embeddingDimension") instanceof Number number ? number.intValue() : null,
+                    body != null && body.get("embeddingError") != null ? String.valueOf(body.get("embeddingError")) : null,
+                    null);
         } catch (RuntimeException e) {
             log.debug("Memory service health check failed: {}", e.getMessage());
-            return false;
+            return new MemoryServiceHealth(
+                    false,
+                    "error",
+                    false,
+                    false,
+                    false,
+                    memoryServiceUrl,
+                    null,
+                    null,
+                    null,
+                    e.getMessage());
         }
     }
 
@@ -167,6 +209,8 @@ public class MemoryClient {
     private static class SearchResponse {
         public List<ChunkResult> chunks;
         public String contextText;
+        public String retrievalMode;
+        public String degradedReason;
         public int estimatedTokens;
         public int totalChunksSearched;
         public long processingTimeMs;
@@ -176,5 +220,36 @@ public class MemoryClient {
         public String id;
         public String text;
         public double similarity;
+    }
+
+    public record SearchContextResult(
+            String contextText,
+            String retrievalMode,
+            int estimatedTokens,
+            int chunkCount,
+            String degradedReason) {
+    }
+
+    public record MemoryServiceHealth(
+            boolean available,
+            String status,
+            boolean databaseUp,
+            boolean pgvectorAvailable,
+            boolean embeddingServiceUp,
+            String serviceUrl,
+            String embeddingModel,
+            Integer embeddingDimension,
+            String embeddingError,
+            String error) {
+    }
+
+    public static class MemoryClientException extends RuntimeException {
+        public MemoryClientException(String message, Throwable cause) {
+            super(message, cause);
+        }
+
+        public MemoryClientException(String message) {
+            super(message);
+        }
     }
 }

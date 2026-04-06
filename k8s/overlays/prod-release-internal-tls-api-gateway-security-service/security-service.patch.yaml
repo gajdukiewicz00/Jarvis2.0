@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-security-service: api-gateway-security-service-v1
+    spec:
+      containers:
+        - name: security-service
+          ports:
+            - containerPort: 8088
+              name: https
+          env:
+            - name: JARVIS_SECURITY_SSL_ENABLED
+              value: "true"
+            - name: JARVIS_SECURITY_KEYSTORE_PATH
+              value: /tls/security-service-keystore.p12
+            - name: JARVIS_SECURITY_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-api-gateway-security-service
+                  key: keystore-password
+            - name: JARVIS_SECURITY_KEYSTORE_TYPE
+              value: PKCS12
+          volumeMounts:
+            - name: internal-tls-api-gateway-security-service
+              mountPath: /tls
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8088
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8088
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8088
+              scheme: HTTPS
+      volumes:
+        - name: internal-tls-api-gateway-security-service
+          secret:
+            secretName: jarvis-internal-tls-api-gateway-security-service
+            items:
+              - key: security-service-keystore.p12
+                path: security-service-keystore.p12
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: security-service
+  namespace: jarvis
+spec:
+  ports:
+    - port: 8088
+      targetPort: 8088
+      name: https

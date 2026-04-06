@@ -1,0 +1,80 @@
+commands:
+  - id: rule_kitchen_light_on
+    matchers:
+      - type: exact
+        values:
+          - "включи свет на кухне"
+          - "turn on the kitchen light"
+      - type: contains
+        values:
+          - "включи кухонный свет"
+          - "kitchen light on"
+    action:
+      target: smart_home
+      name: TURN_ON
+      deviceId: kitchen_light
+    response:
+      key: yes_sir
+      text:
+        ru: "Включаю свет на кухне."
+        en: "Turning on the kitchen light."
+
+  - id: rule_kitchen_light_off
+    matchers:
+      - type: exact
+        values:
+          - "выключи свет на кухне"
+          - "turn off the kitchen light"
+      - type: contains
+        values:
+          - "выключи кухонный свет"
+          - "kitchen light off"
+    action:
+      target: smart_home
+      name: TURN_OFF
+      deviceId: kitchen_light
+    response:
+      key: request_completed_sir
+      text:
+        ru: "Выключаю свет на кухне."
+        en: "Turning off the kitchen light."
+
+  - id: rule_desk_lamp_on
+    matchers:
+      - type: exact
+        values:
+          - "включи настольную лампу"
+          - "turn on the desk lamp"
+      - type: contains
+        values:
+          - "настольная лампа включись"
+          - "desk lamp on"
+    action:
+      target: smart_home
+      name: TURN_ON
+      deviceId: desk_lamp
+    response:
+      key: yes_sir
+      text:
+        ru: "Включаю настольную лампу."
+        en: "Turning on the desk lamp."
+
+  - id: rule_desk_lamp_off
+    matchers:
+      - type: exact
+        values:
+          - "выключи настольную лампу"
+          - "turn off the desk lamp"
+      - type: contains
+        values:
+          - "настольная лампа выключись"
+          - "desk lamp off"
+    action:
+      target: smart_home
+      name: TURN_OFF
+      deviceId: desk_lamp
+    response:
+      key: request_completed_sir
+      text:
+        ru: "Выключаю настольную лампу."
+        en: "Turning off the desk lamp."

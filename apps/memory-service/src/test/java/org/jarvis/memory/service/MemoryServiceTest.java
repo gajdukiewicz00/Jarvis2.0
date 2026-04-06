@@ -6,6 +6,7 @@ import org.jarvis.memory.dto.SummarizeRequest;
 import org.jarvis.memory.entity.ConversationMessage;
 import org.jarvis.memory.entity.MemoryChunk;
 import org.jarvis.memory.entity.SessionSummary;
+import org.jarvis.memory.exception.MemoryDependencyUnavailableException;
 import org.jarvis.memory.repository.ConversationMessageRepository;
 import org.jarvis.memory.repository.MemoryChunkRepository;
 import org.jarvis.memory.repository.SessionSummaryRepository;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
@@ -27,6 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -98,10 +101,7 @@ class MemoryServiceTest {
     }
 
     @Test
-    void searchFallsBackToLexicalRankingWhenEmbeddingLookupFails() {
-        when(embeddingClient.embed(eq("lights timer"), eq("corr-search")))
-                .thenThrow(new RuntimeException("embedding unavailable"));
-
+    void searchFallsBackToLexicalRankingWhenSemanticQueryReturnsNoMatches() {
         MemoryChunk relevantChunk = MemoryChunk.builder()
                 .id(UUID.randomUUID())
                 .userId("user-123")
@@ -125,6 +125,10 @@ class MemoryServiceTest {
                 .updatedAt(OffsetDateTime.parse("2026-03-13T11:30:00Z"))
                 .build();
 
+        when(embeddingClient.embed(eq("lights timer"), eq("corr-search")))
+                .thenReturn(List.of(0.9f, 0.1f));
+        when(chunkRepository.findSimilarWithDistance(eq("user-123"), any(float[].class), eq(0.5d), any(Pageable.class)))
+                .thenReturn(List.of());
         when(chunkRepository.findByUserIdOrderByCreatedAtDesc("user-123"))
                 .thenReturn(List.of(relevantChunk, irrelevantChunk));
         when(summaryRepository.findByUserIdOrderByUpdatedAtDesc("user-123"))
@@ -145,6 +149,51 @@ class MemoryServiceTest {
         assertTrue(response.getChunks().size() >= 2);
         assertTrue(response.getChunks().get(0).getText().toLowerCase().contains("timer"));
         assertTrue(response.getContextText().toLowerCase().contains("lights"));
+    }
+
+    @Test
+    void searchFailsFastWhenEmbeddingLookupFails() {
+        when(embeddingClient.embed(eq("lights timer"), eq("corr-search")))
+                .thenThrow(new RuntimeException("embedding unavailable"));
+
+        MemoryDependencyUnavailableException exception = assertThrows(
+                MemoryDependencyUnavailableException.class,
+                () -> memoryService.search(SearchRequest.builder()
+                        .userId("user-123")
+                        .query("lights timer")
+                        .topK(3)
+                        .maxTokens(300)
+                        .build(), "corr-search"));
+
+        assertEquals("embedding-service", exception.getDependency());
+    }
+
+    @Test
+    void searchUsesSemanticResultsWhenPgvectorQuerySucceeds() {
+        MemoryChunk relevantChunk = MemoryChunk.builder()
+                .id(UUID.randomUUID())
+                .userId("user-123")
+                .chunkText("Denis is a backend engineer based in Warsaw.")
+                .createdAt(OffsetDateTime.parse("2026-03-13T10:00:00Z"))
+                .build();
+
+        when(embeddingClient.embed(eq("who is denis"), eq("corr-semantic")))
+                .thenReturn(List.of(0.9f, 0.1f));
+        when(chunkRepository.findSimilarWithDistance(eq("user-123"), any(float[].class), eq(0.5d), any(Pageable.class)))
+                .thenReturn(java.util.Collections.singletonList(new Object[]{relevantChunk, 0.08d}));
+        when(chunkRepository.countByUserId("user-123")).thenReturn(1L);
+        when(chunkingService.estimateTokens(any(String.class))).thenReturn(10);
+
+        SearchResponse response = memoryService.search(SearchRequest.builder()
+                .userId("user-123")
+                .query("who is denis")
+                .topK(3)
+                .maxTokens(300)
+                .build(), "corr-semantic");
+
+        assertEquals(1, response.getChunks().size());
+        assertEquals("Denis is a backend engineer based in Warsaw.", response.getChunks().get(0).getText());
+        assertTrue(response.getChunks().get(0).getSimilarity() > 0.9d);
     }
 
     private ConversationMessage message(String role, String content) {

@@ -42,16 +42,37 @@ fi
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 BACKEND_LOG="$LOG_DIR/backend_${TIMESTAMP}.log"
-CLIENT_LOG="$LOG_DIR/desktop-client_${TIMESTAMP}.log"
+CLIENT_LOG="$LOG_DIR/desktop-ui_${TIMESTAMP}.log"
+
+resolve_last_run_api_url() {
+  local summary="${HOME}/.jarvis/run/last-run.json"
+  [[ -f "${summary}" ]] || return 1
+
+  local status runtime_mode api_url
+  status="$(grep -oE '"status"[[:space:]]*:[[:space:]]*"[^"]+"' "${summary}" | sed -E 's/.*"([^"]+)"/\1/' | head -1)"
+  runtime_mode="$(grep -oE '"runtimeMode"[[:space:]]*:[[:space:]]*"[^"]+"' "${summary}" | sed -E 's/.*"([^"]+)"/\1/' | head -1)"
+  api_url="$(grep -oE '"apiUrl"[[:space:]]*:[[:space:]]*"[^"]+"' "${summary}" | sed -E 's/.*"([^"]+)"/\1/' | head -1)"
+
+  [[ "${runtime_mode}" == "local" ]] || return 1
+  [[ "${status}" != "stopped" ]] || return 1
+  [[ -n "${api_url}" ]] || return 1
+
+  printf '%s' "${api_url%/}"
+}
 
 backend_running=false
 BACKEND_SCRIPT="./jarvis-launch.sh"
 
 if [[ "${RUNTIME_MODE}" == "local" ]]; then
-  export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-http://127.0.0.1:8080}"
-  export JARVIS_USE_TLS="${JARVIS_USE_TLS:-false}"
+  LOCAL_RUNTIME_API_URL="$(resolve_last_run_api_url || true)"
+  export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-${LOCAL_RUNTIME_API_URL:-https://127.0.0.1:18080}}"
+  export JARVIS_USE_TLS="${JARVIS_USE_TLS:-$( [[ "${JARVIS_API_BASE_URL}" == https://* ]] && echo true || echo false )}"
   BACKEND_SCRIPT="./scripts/runtime-up.sh"
-  if curl -fsS "${JARVIS_API_BASE_URL}/actuator/health" >/dev/null 2>&1; then
+  CURL_ARGS=(-fsS)
+  if [[ "${JARVIS_API_BASE_URL}" == https://* && -f "${HOME}/.jarvis/tls/jarvis-ca.crt" ]]; then
+    CURL_ARGS+=(--cacert "${HOME}/.jarvis/tls/jarvis-ca.crt")
+  fi
+  if curl "${CURL_ARGS[@]}" "${JARVIS_API_BASE_URL}/actuator/health" >/dev/null 2>&1; then
     backend_running=true
   fi
 else
@@ -80,9 +101,13 @@ fi
 
 (
   cd "$JARVIS_HOME"
-  mvn -q -pl apps/desktop-client-javafx -DskipTests javafx:run
+  if [[ -f "apps/desktop-app-javafx/pom.xml" ]]; then
+    mvn -q -pl apps/desktop-app-javafx -am -DskipTests javafx:run
+  else
+    mvn -q -pl apps/desktop-client-javafx -DskipTests javafx:run
+  fi
 ) >"$CLIENT_LOG" 2>&1 &
-echo "Started desktop client. Log: $CLIENT_LOG"
+echo "Started desktop UI. Log: $CLIENT_LOG"
 if [[ -n "$TRUSTSTORE_PATH" ]]; then
   echo "Desktop truststore: $TRUSTSTORE_PATH"
 else

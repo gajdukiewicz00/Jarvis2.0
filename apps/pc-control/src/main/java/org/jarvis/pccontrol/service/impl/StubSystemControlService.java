@@ -78,12 +78,92 @@ public class StubSystemControlService implements SystemControlService {
     }
 
     @Override
+    public void openUrl(String url) throws IOException {
+        log.info("🌐 [STUB] Open url requested: {}", url);
+    }
+
+    @Override
     public void executeHotkey(String keyCombination) throws IOException, InterruptedException {
         log.info("⌨️ [STUB] Hotkey requested: {}", keyCombination);
     }
 
     @Override
+    public void focusWindow(String title) throws IOException, InterruptedException {
+        log.info("🪟 [STUB] Focus window requested: {}", title);
+    }
+
+    @Override
+    public void closeWindow(String title) throws IOException, InterruptedException {
+        log.info("🪟 [STUB] Close window requested: {}", title);
+    }
+
+    @Override
+    public void minimizeWindow(String title) throws IOException, InterruptedException {
+        log.info("🪟 [STUB] Minimize window requested: {}", title);
+    }
+
+    @Override
+    public void maximizeWindow(String title) throws IOException, InterruptedException {
+        log.info("🪟 [STUB] Maximize window requested: {}", title);
+    }
+
+    @Override
+    public void normalizeWindow(String title) throws IOException, InterruptedException {
+        log.info("🪟 [STUB] Normalize window requested: {}", title);
+    }
+
+    @Override
+    public void moveMouseAbsolute(int x, int y) throws IOException, InterruptedException {
+        log.info("🖱️ [STUB] Move mouse requested: {},{}", x, y);
+    }
+
+    @Override
+    public void leftClick() throws IOException, InterruptedException {
+        log.info("🖱️ [STUB] Left click requested");
+    }
+
+    @Override
+    public void rightClick() throws IOException, InterruptedException {
+        log.info("🖱️ [STUB] Right click requested");
+    }
+
+    @Override
+    public void leftButtonDown() throws IOException, InterruptedException {
+        log.info("🖱️ [STUB] Left button down requested");
+    }
+
+    @Override
+    public void leftButtonUp() throws IOException, InterruptedException {
+        log.info("🖱️ [STUB] Left button up requested");
+    }
+
+    @Override
+    public void emptyTrash() throws IOException, InterruptedException {
+        log.info("🗑️ [STUB] Empty trash requested");
+    }
+
+    @Override
+    public void openOpticalDrive() throws IOException, InterruptedException {
+        log.info("💿 [STUB] Open optical drive requested");
+    }
+
+    @Override
+    public void closeOpticalDrive() throws IOException, InterruptedException {
+        log.info("💿 [STUB] Close optical drive requested");
+    }
+
+    @Override
     public void sendNotification(String title, String message) throws IOException, InterruptedException {
         log.info("📢 [STUB] Notification requested - Title: '{}', Message: '{}'", title, message);
+    }
+
+    @Override
+    public void sleep() throws IOException, InterruptedException {
+        log.info("💤 [STUB] Sleep requested");
+    }
+
+    @Override
+    public void turnMonitorOff() throws IOException, InterruptedException {
+        log.info("🖥️ [STUB] Monitor off requested");
     }
 }

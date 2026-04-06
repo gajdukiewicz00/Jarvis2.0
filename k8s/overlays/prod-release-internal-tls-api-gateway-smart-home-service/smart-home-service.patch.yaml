@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-home-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-smart-home-service: api-gateway-smart-home-service-v1
+    spec:
+      containers:
+        - name: smart-home-service
+          ports:
+            - containerPort: 8086
+              name: https
+          env:
+            - name: JARVIS_SMART_HOME_SSL_ENABLED
+              value: "true"
+            - name: JARVIS_SMART_HOME_KEYSTORE_PATH
+              value: /tls/smart-home-service-keystore.p12
+            - name: JARVIS_SMART_HOME_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-api-gateway-smart-home-service
+                  key: keystore-password
+            - name: JARVIS_SMART_HOME_KEYSTORE_TYPE
+              value: PKCS12
+          volumeMounts:
+            - name: internal-tls-api-gateway-smart-home-service
+              mountPath: /tls
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8086
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8086
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8086
+              scheme: HTTPS
+      volumes:
+        - name: internal-tls-api-gateway-smart-home-service
+          secret:
+            secretName: jarvis-internal-tls-api-gateway-smart-home-service
+            items:
+              - key: smart-home-service-keystore.p12
+                path: smart-home-service-keystore.p12
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smart-home-service
+  namespace: jarvis
+spec:
+  ports:
+    - port: 8086
+      targetPort: 8086
+      name: https

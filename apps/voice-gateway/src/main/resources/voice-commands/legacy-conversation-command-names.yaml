@@ -1,0 +1,60 @@
+commands:
+  - id: rule_legacy_protocol_536
+    description: "Migrated legacy protocol command / отмени протокол"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "отмени протокол"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+F4"
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_conversation_664
+    description: "Migrated legacy conversation command / включи новости"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи новости"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FtVnVHZ0pCVlNnQVAB?hl=ru&gl=RU&ceid=RU:ru"
+    response:
+      key: news_update
+
+  - id: rule_legacy_conversation_515
+    description: "Migrated legacy conversation command / Джарвис я один дома"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "джарвис я один дома"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=PB-opnWtmVM"
+    response:
+      key: lonely_mode
+
+  - id: rule_legacy_conversation_529
+    description: "Migrated legacy conversation command / джарвис мне лень"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "джарвис мне лень"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/watch?v=whDg5qOS-wU"
+    response:
+      key: motivation_mode

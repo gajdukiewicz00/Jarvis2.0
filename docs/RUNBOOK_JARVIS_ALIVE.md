@@ -40,13 +40,16 @@ kubectl get ns jarvis
 ```bash
 kubectl get pods -n jarvis
 kubectl get deploy -n jarvis api-gateway voice-gateway nlp-service orchestrator pc-control security-service
-curl -k https://api.jarvis.local/actuator/health
+curl --cacert "$HOME/.jarvis/tls/jarvis-ca.crt" https://api.jarvis.local/actuator/health
 ```
 
 Если нужен smoke через internal path:
 ```bash
 ./scripts/product/jarvis-run-acceptance.sh
 ```
+
+Важно: `jarvis-run-acceptance.sh` использует `kubectl port-forward` к internal
+`api-gateway` service и проверяет internal HTTP path, а не edge HTTPS.
 
 Acceptance напрямую:
 ```bash

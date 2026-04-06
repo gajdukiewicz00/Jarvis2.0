@@ -7,7 +7,7 @@ import org.jarvis.planner.dto.DailyPlanDto;
 import org.springframework.stereotype.Service;
 
 /**
- * LLM-based enhancement for plans and recommendations
+ * Optional LLM adapter. This is not part of the planner domain core.
  */
 @Slf4j
 @Service
@@ -16,9 +16,6 @@ public class LlmEnhancementService {
 
     private final LlmServiceClient llmClient;
 
-    /**
-     * Enhance daily plan description with LLM
-     */
     public String enhancePlanDescription(String userId, DailyPlanDto plan) {
         log.info("Enhancing plan description for user: {}", userId);
 
@@ -31,39 +28,18 @@ public class LlmEnhancementService {
         return llmClient.enhancePlanDescription(userId, planText.toString());
     }
 
-    /**
-     * Generate email/document via LLM
-     */
     public String generateDocument(String userId, String documentType, String context) {
-        log.info("Generating {} for user: {}", documentType, userId);
-
-        // Placeholder: in future, call LLM with prompt engineering using documentType
-        // and context
-        // TODO: Implement actual LLM call
-        return "Документ будет сгенерирован через LLM. Тип: " + documentType;
+        throw new UnsupportedOperationException(
+                "Planner document generation is not implemented here; use llm-service directly");
     }
 
-    /**
-     * Smart context-aware recommendations
-     */
     public String generateSmartRecommendation(String userId, String context) {
-        log.info("Generating smart recommendation for user: {} with context: {}", userId, context);
-
-        // TODO: Call LLM with user context, habits, goals
-        return "Умная рекомендация на основе контекста и истории пользователя";
+        throw new UnsupportedOperationException(
+                "Planner smart recommendations are rule-based; optional LLM recommendations live outside planner core");
     }
 
-    /**
-     * Natural language task creation
-     */
     public String parseNaturalLanguageTask(String userId, String naturalLanguage) {
-        log.info("Parsing NL task for user: {}: {}", userId, naturalLanguage);
-
-        // TODO: Use LLM to extract: title, category, priority, dueDate from natural
-        // language
-        // Example: "Напомни позвонить маме завтра в 15:00"
-        // → Task(title="Позвонить маме", dueDate="tomorrow 15:00", category=CALLS)
-
-        return "Task будет создана из: " + naturalLanguage;
+        throw new UnsupportedOperationException(
+                "Natural-language task parsing is not implemented in planner-service; use llm-service directly");
     }
 }

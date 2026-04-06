@@ -1,0 +1,120 @@
+commands:
+  - id: rule_legacy_film_439
+    description: "Migrated legacy film command / включи фильм Первый мститель: Другая война"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм первый мститель: другая война"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/1603-pervyy-mstitel-drugaya-voyna-2014.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_452
+    description: "Migrated legacy film command / включи фильм Мстители: Эра Альтрона"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители: эра альтрона"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/9316-mstiteli-era-altrona-2015.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_410
+    description: "Migrated legacy film command / включи фильм Первый мститель: Противостояние"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм первый мститель: противостояние"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/12251-pervyy-mstitel-protivostoyanie-2016.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_438
+    description: "Migrated legacy film command / включи фильм Человек-паук: Возвращение домой"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек-паук: возвращение домой"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/23757-chelovek-pauk-vozvraschenie-domoy-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_433
+    description: "Migrated legacy film command / включи фильм Тор: Рагнарёк"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм тор: рагнарек"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/25923-tor-ragnarek-2017.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_400
+    description: "Migrated legacy film command / включи фильм Мстители: Война бесконечности"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители: война бесконечности"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/27480-mstiteli-voyna-beskonechnosti-2018.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_441
+    description: "Migrated legacy film command / включи фильм Мстители: Финал"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм мстители: финал"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/fiction/30651-mstiteli-final-2019.html"
+    response:
+      key: loading_sir
+
+  - id: rule_legacy_film_437
+    description: "Migrated legacy film command / включи фильм Человек-паук: Вдали от дома"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "включи фильм человек-паук: вдали от дома"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://rezka.ag/films/action/242-zheleznyy-chelovek-2008.html"
+    response:
+      key: loading_sir

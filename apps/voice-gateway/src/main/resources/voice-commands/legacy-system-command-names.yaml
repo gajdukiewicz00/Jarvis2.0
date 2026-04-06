@@ -1,0 +1,135 @@
+commands:
+  - id: rule_legacy_system_125
+    description: "Migrated legacy system command / Закрыть окно"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "закрыть окно"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+F4"
+    response:
+      key: request_completed_sir
+
+  - id: rule_legacy_system_178
+    description: "Migrated legacy system command / Вставить"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "вставить"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+v"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_system_204
+    description: "Migrated legacy system command / Скопировать"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "скопировать"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+c"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_system_134
+    description: "Migrated legacy system command / Смена имени"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "смена имени"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "F2"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_system_179
+    description: "Migrated legacy system command / Арес страницы"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "арес страницы"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+d"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_system_154
+    description: "Migrated legacy system command / Повтори окно"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "повтори окно"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+n"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_system_177
+    description: "Migrated legacy system command / Энтэр"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "энтэр"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Return"
+    response:
+      key: affirmative
+
+  - id: rule_legacy_system_582
+    description: "Migrated legacy system command / Сделай громче"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "сделай громче"
+    action:
+      target: pc_control
+      name: VOLUME_UP
+      params:
+        delta: 10
+    response:
+      key: yes_sir
+
+  - id: rule_legacy_system_583
+    description: "Migrated legacy system command / сделай тише"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "сделай тише"
+    action:
+      target: pc_control
+      name: VOLUME_DOWN
+      params:
+        delta: 10
+    response:
+      key: yes_sir

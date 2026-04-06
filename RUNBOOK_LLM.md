@@ -1,105 +1,116 @@
-# Jarvis 2.0 LLM Runbook (prod-only)
+# Jarvis Local LLM Runbook
 
-## 1. Overview
+## Overview
 
-The LLM subsystem consists of:
-- **llm-server** (Python/FastAPI): Runs the h2oGPT-7B model. Supports CPU/GPU.
-- **llm-service** (Java/Spring): Proxy, session management, prompt engineering.
-- **Orchestrator**: Uses `llm-service` as a fallback for unknown intents.
+The local LLM stack is:
 
-### LLM Feature Flag
+- `llm-server` - Python FastAPI inference worker using the repo's `llama.cpp` backend
+- `llm-service` - Java orchestration layer used by chat, dialog, and orchestrator fallback
+- `memory-service` + `embedding-service` - canonical long-term memory path for local mode
 
-LLM is disabled by default.
+The source-of-truth doc set is:
 
-| Env Variable | Default | Description |
-|--------------|---------|-------------|
-| `JARVIS_LLM_ENABLED` | `false` | Enable LLM for unknown intents |
-| `JARVIS_LLM_TIMEOUT_SECONDS` | `10` | Timeout for LLM calls |
-| `JARVIS_LLM_CB_FAILURE_THRESHOLD` | `3` | Circuit breaker failures |
-| `JARVIS_LLM_CB_RESET_SECONDS` | `60` | Circuit breaker cooldown |
+- `AI_LAYER_REALITY.md`
+- `AI_ARCHITECTURE.md`
+- `AI_OPERATIONS.md`
+- `AI_GAPS.md`
 
-## 2. Prerequisites
+The canonical local model root is `~/.jarvis/models/`.
 
-- NVIDIA GPU with drivers installed (optional)
-- Kubernetes cluster with NVIDIA device plugin (for GPU)
+## Recommended Model
 
-LLM works on CPU too (slower).
+- Format: `GGUF`
+- Baseline: `Qwen/Qwen2.5-3B-Instruct-GGUF`
+- Quantization: `q4_k_m`
+- Canonical file: `qwen2.5-3b-instruct-q4_k_m.gguf`
 
-## 3. Deploy (Kubernetes)
-
-```bash
-# Enable LLM stack
-ENABLE_LLM=true ./jarvis-launch.sh
-
-# Enable LLM + Memory
-ENABLE_LLM=true ENABLE_MEMORY=true ./jarvis-launch.sh
-
-# CPU fallback
-ENABLE_LLM=true ENABLE_GPU=false ./jarvis-launch.sh
-```
-
-### Models
-
-Place models in `~/.jarvis/models`:
-
-```
-~/.jarvis/models/
-├── h2ogpt-7b-chat-q4_k_m.gguf
-└── h2ogpt-4096-llama2-7b-chat/
-```
-
-## 4. Verification
-
-### Smoke test (port-forward)
+## One-Time Prep
 
 ```bash
-kubectl -n jarvis port-forward svc/llm-service 8091:8091
-LLM_SERVICE_URL=http://localhost:8091 ./scripts/llm-smoke.sh
+./scripts/setup-local.sh
+./scripts/setup-ai-local.sh
+./scripts/check-local-env.sh
 ```
 
-### AI tool acceptance (internal-only)
-
-Tool endpoints are internal-only. Acceptance runs through port-forward.
+## Start
 
 ```bash
-kubectl -n jarvis port-forward svc/api-gateway 8080:8080
-export JARVIS_API_BASE_URL="http://localhost:8080"
-export JARVIS_USER_ID="acceptance-user"
-scripts/acceptance-ai.sh
+ENABLE_LLM=true ENABLE_MEMORY=true ./scripts/runtime-up.sh
 ```
 
-Ingress should block tool routes without JWT:
+## Status And Verification
+
+Check runtime status:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" \
-  -H "Content-Type: application/json" \
-  -d '{}' \
-  https://api.jarvis.local/api/v1/tools/todo/list
+./scripts/runtime-status.sh
 ```
 
-Expected: `401` or `403`.
-
-### Orchestrator fallback
+Check inference health:
 
 ```bash
-curl -X POST https://api.jarvis.local/api/v1/orchestrator/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Tell me a joke about Java",
-    "language": "en",
-    "correlationId": "test-123"
-  }'
+curl http://127.0.0.1:15000/health
+curl http://127.0.0.1:8091/api/v1/llm/health
 ```
 
-## 5. Troubleshooting
+Run the canonical e2e AI smoke:
 
-- `Model path does not exist`: ensure the model is under `~/.jarvis/models`.
-- `GPU available: False`: check NVIDIA driver and device plugin in cluster.
-- `llm-service` 503/timeout: check `http://llm-server:5000/health` from inside the pod.
+```bash
+./scripts/ai-local-smoke.sh
+```
 
-## 6. Desktop launcher invariant
+Run the GPU verification smoke:
 
-- Desktop entry is install-only and idempotent.
-- Single file location: `~/.local/share/applications/jarvis.desktop` (Name: Jarvis).
-- Installer removes legacy/duplicate entries in standard user/system locations.
-- Runtime services and Launcher UI do not create or modify `.desktop` files.
+```bash
+JARVIS_AI_SKIP_SETUP=true JARVIS_SKIP_BUILD=true ./scripts/ai-gpu-smoke.sh
+```
+
+## Logs
+
+Local runtime logs live in:
+
+```text
+~/.jarvis/logs/local-runtime/
+```
+
+Most useful files:
+
+- `llm-server.log`
+- `llm-service.log`
+- `embedding-service.log`
+- `memory-service.log`
+- `llm-server-python-install.log`
+- `embedding-service-python-install.log`
+
+## Safe Local Defaults
+
+The local runtime now defaults to:
+
+- `llama.cpp` backend
+- `Qwen2.5 3B Instruct q4_k_m`
+- `llama-cpp-python==0.3.19`
+- `N_CTX=4096`
+- `N_BATCH=512`
+- `CHAT_WORKERS=1`
+- moderate CPU thread usage
+- canonical CPU baseline `N_GPU_LAYERS=0`
+- separately verified GPU smoke profile `N_GPU_LAYERS=-1` on `NVIDIA GeForce RTX 5070`
+
+These settings are meant for a single desktop machine that still needs to stay usable for coding and normal desktop work.
+
+## Common Failures
+
+- `No GGUF model was found under models/llm`
+  - Run `./scripts/setup-ai-local.sh`
+- `Multiple GGUF models were found`
+  - Set `JARVIS_LLM_MODEL_PATH` explicitly
+- `llm-server` health never becomes healthy
+  - Check `~/.jarvis/logs/local-runtime/llm-server.log`
+- `llama-cpp-python` install/import failure
+  - Check `~/.jarvis/logs/local-runtime/llm-server-python-install.log`
+- GPU smoke fails or GPU readiness is not verified
+  - Check `JARVIS_LLAMACPP_PACKAGE_SPEC` in `~/.jarvis/run/local-runtime/local.env`
+  - Re-run `./scripts/ai-gpu-smoke.sh`
+  - If GPU smoke does not pass, stay on the canonical CPU baseline (`N_GPU_LAYERS=0`)
+- `memory-service` fails on startup
+  - Check `embedding-service.log`, `memory-service.log`, and the managed pgvector container logs via `docker logs jarvis-local-postgres`

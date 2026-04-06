@@ -130,4 +130,62 @@ class OrchestratorUserRoutingTest {
                                 "message", "Kitchen Light is now on."),
                         "user-42"));
     }
+
+    @Test
+    void executeIntentPassesOpenUrlToGatewayWithHint() {
+        service = new OrchestratorServiceImpl(
+                nlpClient,
+                pcControlClient,
+                apiGatewayPcClient,
+                phraseProvider,
+                llmClient,
+                smartHomeClient,
+                new OrchestratorExecutorProperties());
+
+        when(phraseProvider.getPhrase(eq(PhraseContext.OPEN_URL), eq(Language.RU))).thenReturn("Загружаю, сэр.");
+
+        String response = service.executeIntent(
+                "open_url",
+                Map.of("url", "https://www.youtube.com/"),
+                "ru",
+                "corr-3",
+                "открой ютуб",
+                "user-42");
+
+        assertEquals("Загружаю, сэр.", response);
+        verify(apiGatewayPcClient).sendPcAction(
+                new ApiGatewayPcClient.PcActionRequest(
+                        "OPEN_URL",
+                        Map.of("url", "https://www.youtube.com/"),
+                        "user-42"));
+    }
+
+    @Test
+    void executeIntentPassesMonitorOffSystemCommandToGateway() {
+        service = new OrchestratorServiceImpl(
+                nlpClient,
+                pcControlClient,
+                apiGatewayPcClient,
+                phraseProvider,
+                llmClient,
+                smartHomeClient,
+                new OrchestratorExecutorProperties());
+
+        when(phraseProvider.getPhrase(eq(PhraseContext.MONITOR_OFF), eq(Language.RU))).thenReturn("Экран погашен.");
+
+        String response = service.executeIntent(
+                "monitor_off",
+                Map.of(),
+                "ru",
+                "corr-4",
+                "выключи монитор",
+                "user-42");
+
+        assertEquals("Экран погашен.", response);
+        verify(apiGatewayPcClient).sendPcAction(
+                new ApiGatewayPcClient.PcActionRequest(
+                        "SYSTEM_COMMAND",
+                        Map.of("command", "monitor_off"),
+                        "user-42"));
+    }
 }

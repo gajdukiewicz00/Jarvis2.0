@@ -8,7 +8,7 @@ import java.time.Clock
 import java.time.Duration
 
 class LocalRuntimeHealthProbe(
-    private val apiGatewayBaseUrl: String,
+    private val apiGatewayBaseUrlProvider: () -> String,
     private val fetcher: (URI) -> HttpResult = defaultFetcher(),
     private val clock: Clock = Clock.systemUTC()
 ) {
@@ -16,6 +16,7 @@ class LocalRuntimeHealthProbe(
     data class HttpResult(val statusCode: Int, val body: String)
 
     fun probe(): DesktopRuntimeMonitor.ConnectionStatus {
+        val apiGatewayBaseUrl = apiGatewayBaseUrlProvider()
         val uri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health")
         return try {
             val response = fetcher(uri)

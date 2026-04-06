@@ -48,6 +48,7 @@ public class PcControlController {
                         "NEXT",
                         "PREV",
                         "OPEN_APP",
+                        "OPEN_URL",
                         "HOTKEY",
                         "NOTIFY",
                         "SYSTEM_COMMAND",

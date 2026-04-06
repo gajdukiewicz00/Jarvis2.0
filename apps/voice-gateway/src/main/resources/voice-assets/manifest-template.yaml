@@ -1,0 +1,20 @@
+# Voice assets manifest template.
+# Fill after importing legacy .wav from archive.
+# id = path without .wav: {locale}/{category}/{filename}
+#
+# Categories:
+#   system   - wake, sleep, listening status
+#   assistant - greetings, thanks, acknowledgments
+#   diagnostics - errors, timeouts, retries
+#
+# Example entry:
+# - id: ru/system/wake_yes_sir
+#   locale: ru
+#   text: "Да, сэр."
+#   category: system
+#   tags: [wake, greeting]
+#   source: legacy
+#   quality: good
+#   status: active
+
+assets: []

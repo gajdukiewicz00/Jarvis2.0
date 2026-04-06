@@ -32,17 +32,19 @@ public class RestOrchestratorClient implements OrchestratorClient {
 
     @Override
     public void sendCommand(String text) {
-        log.info("Sending text command to Orchestrator: {}", text);
+        String targetUrl = orchestratorUrl + "/api/v1/orchestrator/execute";
+        log.info("Sending text command to Orchestrator via {}: {}", targetUrl, text);
         try {
             restClientBuilder.build()
                     .post()
-                    .uri(orchestratorUrl + "/api/v1/orchestrator/execute")
+                    .uri(targetUrl)
                     .header("Authorization",
                             "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("text", text))
                     .retrieve()
                     .toBodilessEntity();
+            log.info("Voice gateway orchestrator routed: targetUrl={}, mode=text", targetUrl);
         } catch (HttpStatusCodeException e) {
             log.warn("Orchestrator returned error status={} body={}", e.getStatusCode(), e.getResponseBodyAsString(),
                     e);
@@ -52,6 +54,35 @@ public class RestOrchestratorClient implements OrchestratorClient {
             log.error("Unexpected REST client error while calling orchestrator", e);
         } catch (RuntimeException e) {
             log.error("Unexpected runtime error while calling orchestrator", e);
+        }
+    }
+
+    @Override
+    public String sendCommandWithResponse(String text) {
+        String targetUrl = orchestratorUrl + "/api/v1/orchestrator/execute";
+        log.info("Sending text command with response to Orchestrator via {}: {}", targetUrl, text);
+        try {
+            String response = restClientBuilder.build()
+                    .post()
+                    .uri(targetUrl)
+                    .header("Authorization",
+                            "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("text", text))
+                    .retrieve()
+                    .body(String.class);
+            log.info("Voice gateway orchestrator routed: targetUrl={}, mode=text-response", targetUrl);
+            return response;
+        } catch (HttpStatusCodeException e) {
+            log.warn("Orchestrator returned error status={} body={}", e.getStatusCode(), e.getResponseBodyAsString(),
+                    e);
+            throw new RuntimeException("Failed to call orchestrator: " + e.getMessage(), e);
+        } catch (ResourceAccessException e) {
+            log.warn("Orchestrator is unreachable: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to call orchestrator: " + e.getMessage(), e);
+        } catch (RestClientException e) {
+            log.error("Unexpected REST client error while calling orchestrator", e);
+            throw new RuntimeException("Failed to call orchestrator: " + e.getMessage(), e);
         }
     }
 
@@ -69,6 +100,7 @@ public class RestOrchestratorClient implements OrchestratorClient {
     @Override
     public String sendIntent(String action, Map<String, Object> parameters, String language,
             String correlationId, String originalText, String userId) {
+        String targetUrl = orchestratorUrl + "/api/v1/orchestrator/execute";
         log.info("📤 Sending intent to Orchestrator: action={}, params={}, lang={}, correlationId={}, hasText={}",
                 action, parameters, language, correlationId, originalText != null);
 
@@ -95,7 +127,7 @@ public class RestOrchestratorClient implements OrchestratorClient {
 
             RestClient.RequestBodySpec request = restClientBuilder.build()
                     .post()
-                    .uri(orchestratorUrl + "/api/v1/orchestrator/execute")
+                    .uri(targetUrl)
                     .header("Authorization",
                             "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
                     .contentType(MediaType.APPLICATION_JSON);
@@ -110,6 +142,8 @@ public class RestOrchestratorClient implements OrchestratorClient {
                     .body(String.class);
 
             log.info("📥 Orchestrator response: '{}', correlationId={}", response, correlationId);
+            log.info("Voice gateway orchestrator routed: targetUrl={}, correlationId={}, mode=intent",
+                    targetUrl, correlationId);
             return response;
 
         } catch (HttpStatusCodeException e) {

@@ -1,12 +1,35 @@
 server:
-  port: 8084
+  port: ${JARVIS_PC_CONTROL_PORT:8084}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_PC_CONTROL_SSL_ENABLED:false}
+    key-store: ${JARVIS_PC_CONTROL_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_PC_CONTROL_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_PC_CONTROL_KEYSTORE_TYPE:PKCS12}
 
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
     name: pc-control
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:false}
+  cloud:
+    openfeign:
+      client:
+        config:
+          vision-service:
+            connect-timeout: ${JARVIS_VISION_SERVICE_CONNECT_TIMEOUT_MS:2000}
+            read-timeout: ${JARVIS_VISION_SERVICE_READ_TIMEOUT_MS:5000}
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
@@ -38,6 +61,8 @@ jarvis:
     queue: ${RABBITMQ_QUEUE_PC_CONTROL:pc-control.commands}
   kafka:
     topic: ${KAFKA_TOPIC_PC_CONTROL:jarvis.events.pc-control}
+  vision-service:
+    url: ${JARVIS_VISION_SERVICE_URL:http://localhost:8094}
   features:
     rabbitmq-enabled: ${FEATURE_RABBITMQ_PC_CONTROL:false}
     kafka-enabled: ${FEATURE_KAFKA_PC_CONTROL:false}
@@ -58,9 +83,39 @@ pc-control:
       - microsoft-edge
       - microsoft-edge-stable
     amixer-control: ${PC_CONTROL_AMIXER_CONTROL:Master}
+  security-monitoring:
+    enabled: ${PC_CONTROL_SECURITY_MONITORING_ENABLED:false}
+    sampling-interval: ${PC_CONTROL_SECURITY_MONITORING_SAMPLING_INTERVAL:2s}
+    similarity-threshold: ${PC_CONTROL_SECURITY_MONITORING_SIMILARITY_THRESHOLD:0.82}
+    consecutive-unknown-detections-required: ${PC_CONTROL_SECURITY_MONITORING_CONSECUTIVE_UNKNOWN:3}
+    cooldown-between-alerts: ${PC_CONTROL_SECURITY_MONITORING_COOLDOWN:10m}
+    evidence-directory: ${PC_CONTROL_SECURITY_MONITORING_EVIDENCE_DIR:${user.home}/.jarvis/security-monitoring/evidence}
+    webcam:
+      device-index: ${PC_CONTROL_SECURITY_MONITORING_WEBCAM_DEVICE_INDEX:0}
+      capture-width: ${PC_CONTROL_SECURITY_MONITORING_WEBCAM_WIDTH:640}
+      capture-height: ${PC_CONTROL_SECURITY_MONITORING_WEBCAM_HEIGHT:480}
+      warmup-frames: ${PC_CONTROL_SECURITY_MONITORING_WEBCAM_WARMUP_FRAMES:2}
+    screenshot:
+      enabled: ${PC_CONTROL_SECURITY_MONITORING_SCREENSHOT_ENABLED:true}
+    screen-analysis:
+      enabled: ${PC_CONTROL_SECURITY_MONITORING_SCREEN_ANALYSIS_ENABLED:true}
+    decision:
+      suspicious-score-threshold: ${PC_CONTROL_SECURITY_MONITORING_SUSPICIOUS_SCORE_THRESHOLD:45}
+      alert-score-threshold: ${PC_CONTROL_SECURITY_MONITORING_ALERT_SCORE_THRESHOLD:70}
+      high-risk-score-threshold: ${PC_CONTROL_SECURITY_MONITORING_HIGH_RISK_SCORE_THRESHOLD:85}
+      high-risk-observations-required: ${PC_CONTROL_SECURITY_MONITORING_HIGH_RISK_OBSERVATIONS_REQUIRED:2}
+    vision:
+      skip-on-unavailable: ${PC_CONTROL_SECURITY_MONITORING_SKIP_ON_VISION_UNAVAILABLE:true}
+    alert:
+      email:
+        enabled: ${PC_CONTROL_SECURITY_MONITORING_EMAIL_ENABLED:false}
+        from: ${PC_CONTROL_SECURITY_MONITORING_EMAIL_FROM:}
+        to:
+          - ${PC_CONTROL_SECURITY_MONITORING_EMAIL_TO:}
+        subject-prefix: ${PC_CONTROL_SECURITY_MONITORING_EMAIL_SUBJECT_PREFIX:[Jarvis Security]}
 
 security:
-  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:MEDIA_CONTROL,VOLUME_UP,VOLUME_DOWN,SET_VOLUME,VOLUME_SET,MUTE,UNMUTE,PLAY_PAUSE,PAUSE,NEXT,PREV,OPEN_APP,HOTKEY,NOTIFY,SYSTEM_COMMAND,SCENARIO}
+  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:MEDIA_CONTROL,VOLUME_UP,VOLUME_DOWN,SET_VOLUME,VOLUME_SET,MUTE,UNMUTE,PLAY_PAUSE,PAUSE,NEXT,PREV,OPEN_APP,OPEN_URL,HOTKEY,NOTIFY,SYSTEM_COMMAND,SCENARIO}
 
 # Actuator endpoints
 management:
@@ -83,4 +138,4 @@ logging:
   level:
     org.jarvis.pccontrol: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] [requestId=%X{requestId:-}] [correlationId=%X{correlationId:-}] %logger{36} - %msg%n"

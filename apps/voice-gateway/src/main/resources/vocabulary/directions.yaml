@@ -1,0 +1,22 @@
+# Directional vocabulary — migrated from legacy VoxCommando 4directions.xml
+# Used for navigation intents, smart-home control, and spatial commands.
+#
+# Format: each entry maps a canonical direction value to recognized phrases (RU + EN).
+# Phrase lists are comma-separated synonyms; first phrase is the primary.
+
+directions:
+  - value: up
+    phrases_ru: ["вверх", "наверх"]
+    phrases_en: ["up", "upward"]
+
+  - value: down
+    phrases_ru: ["вниз"]
+    phrases_en: ["down", "downward"]
+
+  - value: left
+    phrases_ru: ["влево", "налево"]
+    phrases_en: ["left"]
+
+  - value: right
+    phrases_ru: ["вправо", "направо"]
+    phrases_en: ["right"]

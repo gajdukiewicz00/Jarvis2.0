@@ -1,18 +1,20 @@
 # Embedding Service Dependencies
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 pydantic==2.5.0
+numpy<2,>=1.24.0
 
-# Sentence Transformers (includes torch CPU)
-# Исправлена версия для совместимости с huggingface_hub
+# Sentence Transformers on explicit CPU wheels to keep the image reproducible
+# and avoid pulling the large default CUDA dependency set during Docker builds.
+torch==2.6.0+cpu
 sentence-transformers==2.3.1
-huggingface-hub>=0.20.0
+huggingface-hub>=0.20.0,<1.0
 
 # Caching
 cachetools==5.3.2
 
 # HTTP client for health checks
 httpx==0.25.2
-
-
+pytest==8.3.5
 

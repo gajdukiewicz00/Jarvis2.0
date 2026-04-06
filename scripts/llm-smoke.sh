@@ -10,11 +10,34 @@
 # =============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JARVIS_HOME="${JARVIS_HOME:-${HOME}/.jarvis}"
+RUNTIME_ENV_FILE="${JARVIS_HOME}/run/local-runtime/local.env"
+if [[ -f "${RUNTIME_ENV_FILE}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${RUNTIME_ENV_FILE}"
+    set +a
+fi
+
 # Configuration
-LLM_SERVER_URL="${LLM_SERVER_URL:-http://localhost:5000}"
+LLM_SERVER_URL="${LLM_SERVER_URL:-http://localhost:15000}"
 LLM_SERVICE_URL="${LLM_SERVICE_URL:-http://localhost:8091}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-120}"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-10}"
+
+SERVICE_TOKEN=""
+if [[ -n "${SERVICE_JWT_SECRET:-}" ]] && [[ -f "${SCRIPT_DIR}/runtime/make_service_jwt.py" ]]; then
+    SERVICE_TOKEN="$(python3 "${SCRIPT_DIR}/runtime/make_service_jwt.py" \
+        --secret "${SERVICE_JWT_SECRET}" \
+        --subject "llm-smoke" \
+        --service "llm-smoke" 2>/dev/null || true)"
+fi
+
+SERVICE_AUTH_HEADERS=()
+if [[ -n "${SERVICE_TOKEN}" ]]; then
+    SERVICE_AUTH_HEADERS=(-H "Authorization: Bearer ${SERVICE_TOKEN}")
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -42,6 +65,8 @@ check_health() {
     status="$(curl -sS --max-time "$timeout" -o "$tmp" -w "%{http_code}" "$url" 2>/dev/null)" || status="000"
     local body
     body="$(cat "$tmp")"
+    LAST_STATUS="$status"
+    LAST_BODY="$body"
     rm -f "$tmp"
     
     if [ "$status" = "200" ]; then
@@ -115,7 +140,7 @@ echo ""
 echo -e "${YELLOW}[1/4] LLM Server Health Check${NC}"
 if check_health "llm-server" "${LLM_SERVER_URL}/health"; then
     # Check GPU status from response
-    if echo "$body" | grep -q '"gpu_available":\s*true'; then
+    if echo "${LAST_BODY}" | grep -Eq '"gpu_available"[[:space:]]*:[[:space:]]*true'; then
         echo -e "    ${GREEN}✓ GPU is available${NC}"
     else
         echo -e "    ${YELLOW}⚠ GPU not detected (running on CPU)${NC}"
@@ -172,6 +197,7 @@ EOF
 tmp1="$(mktemp)"
 status1="$(curl -sS --max-time "$TIMEOUT_SEC" -o "$tmp1" -w "%{http_code}" \
     -H "Content-Type: application/json" \
+    "${SERVICE_AUTH_HEADERS[@]}" \
     -X POST -d "$payload1" "${LLM_SERVICE_URL}/api/v1/llm/chat" 2>/dev/null)" || status1="000"
 rm -f "$tmp1"
 
@@ -195,6 +221,7 @@ EOF
     tmp2="$(mktemp)"
     status2="$(curl -sS --max-time "$TIMEOUT_SEC" -o "$tmp2" -w "%{http_code}" \
         -H "Content-Type: application/json" \
+        "${SERVICE_AUTH_HEADERS[@]}" \
         -X POST -d "$payload2" "${LLM_SERVICE_URL}/api/v1/llm/chat" 2>/dev/null)" || status2="000"
     body2="$(cat "$tmp2")"
     rm -f "$tmp2"

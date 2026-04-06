@@ -1,0 +1,255 @@
+commands:
+  - id: rule_legacy_word_256
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Настройка шрифта"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "настройка шрифта"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+shift+f"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_237
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Окно печати"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "окно печати"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+p"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_222
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Найди и замени"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "найди и замени"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+h"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_271
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Вкладка вставка"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "вкладка вставка"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+c"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_348
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Вкладка дизайн"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "вкладка дизайн"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+l"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_293
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Вкладка разметка страницы"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "вкладка разметка страницы"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+p"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_341
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Поля"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "поля"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Alt+k"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_244
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Открой поиск в документе"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "открой поиск в документе"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+f"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_357
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Перемещение курсора влево"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемещение курсора влево"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Left"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_251
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Перемещение курсора вправо"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемещение курсора вправо"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Right"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_277
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Перемещение курсора вниз"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемещение курсора вниз"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Down"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_278
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Перемещение курсора вверх"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "перемещение курсора вверх"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Up"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_292
+    description: "Migrated legacy hotkey: Управление Microsoft Word / В начало строки"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "в начало строки"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "Home"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_259
+    description: "Migrated legacy hotkey: Управление Microsoft Word / В конец строки"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "в конец строки"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "End"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_295
+    description: "Migrated legacy hotkey: Управление Microsoft Word / В начало документа"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "в начало документа"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+Home"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_255
+    description: "Migrated legacy hotkey: Управление Microsoft Word / В конец документа"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "в конец документа"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "ctrl+End"
+    response:
+      key: yes_sir_alt
+
+  - id: rule_legacy_word_287
+    description: "Migrated legacy hotkey: Управление Microsoft Word / Сохранить как"
+    priority: -5
+    matchers:
+      - type: exact
+        values:
+          - "сохранить как"
+    action:
+      target: pc_control
+      name: HOTKEY
+      params:
+        keyCombination: "F12"
+    response:
+      key: yes_sir_alt

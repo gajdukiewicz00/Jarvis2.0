@@ -17,7 +17,9 @@ OVERLAY_PATH="${1:-${PROJECT_ROOT}/k8s/overlays/prod}"
 PREFLIGHT_MODE="${K8S_PREFLIGHT_MODE:-client}"
 TOOLCHAIN_IMAGE="${K8S_PREFLIGHT_TOOLCHAIN_IMAGE:-bitnami/kubectl:latest}"
 K8S_NAMESPACE="${K8S_PREFLIGHT_NAMESPACE:-jarvis}"
-REQUIRED_SECRETS_RAW="${K8S_PREFLIGHT_REQUIRED_SECRETS:-jarvis-secrets}"
+REQUIRED_SECRETS_RAW="${K8S_PREFLIGHT_REQUIRED_SECRETS:-jarvis-secrets,jarvis-tls}"
+PRIMARY_SECRET_NAME="${K8S_PREFLIGHT_PRIMARY_SECRET_NAME:-jarvis-secrets}"
+REQUIRED_SECRET_KEYS_RAW="${K8S_PREFLIGHT_REQUIRED_SECRET_KEYS:-POSTGRES_USER,POSTGRES_PASSWORD,SPRING_DATASOURCE_USERNAME,SPRING_DATASOURCE_PASSWORD,JWT_SECRET,SERVICE_JWT_SECRET,SPRING_RABBITMQ_USERNAME,SPRING_RABBITMQ_PASSWORD,MQTT_USERNAME,MQTT_PASSWORD}"
 RENDER_OUTPUT="${K8S_PREFLIGHT_RENDER_OUTPUT:-/tmp/prod-render.yaml}"
 CORE_WORKLOADS_RAW="${K8S_PREFLIGHT_CORE_WORKLOADS:-api-gateway,orchestrator,security-service,voice-gateway,planner-service,life-tracker}"
 OPTIONAL_WORKLOADS_RAW="${K8S_PREFLIGHT_OPTIONAL_WORKLOADS:-llm-service,memory-service,embedding-service,llm-server}"
@@ -26,6 +28,7 @@ KYVERNO_EXCEPTION_LABEL_KEY="${K8S_PREFLIGHT_KYVERNO_EXCEPTION_LABEL_KEY:-securi
 KYVERNO_EXCEPTION_LABEL_VALUE="${K8S_PREFLIGHT_KYVERNO_EXCEPTION_LABEL_VALUE:-true}"
 CORE_DIGEST_POLICY_MODE="${K8S_PREFLIGHT_CORE_DIGEST_POLICY_MODE:-audit}"
 IFS=',' read -r -a REQUIRED_SECRETS <<< "${REQUIRED_SECRETS_RAW}"
+IFS=',' read -r -a REQUIRED_SECRET_KEYS <<< "${REQUIRED_SECRET_KEYS_RAW}"
 IFS=',' read -r -a CORE_WORKLOADS <<< "${CORE_WORKLOADS_RAW}"
 IFS=',' read -r -a OPTIONAL_WORKLOADS <<< "${OPTIONAL_WORKLOADS_RAW}"
 IFS=',' read -r -a CORE_SA_TOKEN_EXCEPTIONS <<< "${CORE_SA_TOKEN_EXCEPTIONS_RAW}"
@@ -39,6 +42,110 @@ require_cmd() {
 
 require_cmd grep
 require_cmd awk
+
+detect_kubeconfig_local() {
+  if [[ -n "${KUBECONFIG:-}" ]]; then
+    return 0
+  fi
+  if [[ -r "${HOME}/.jarvis/kubeconfig" ]]; then
+    export KUBECONFIG="${HOME}/.jarvis/kubeconfig"
+    echo "🔐 Using kubeconfig: ${KUBECONFIG}"
+    return 0
+  fi
+  if [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
+    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+    echo "🔐 Using kubeconfig: ${KUBECONFIG}"
+  fi
+}
+
+ensure_server_cluster_access_local() {
+  if [[ "${PREFLIGHT_MODE}" != "server" ]]; then
+    return 0
+  fi
+
+  detect_kubeconfig_local
+
+  local err_file
+  err_file="$(mktemp)"
+  if kubectl cluster-info >/dev/null 2>"${err_file}"; then
+    rm -f "${err_file}"
+    return 0
+  fi
+
+  echo "❌ Server preflight requires a reachable Kubernetes cluster and valid credentials"
+  sed 's/^/   /' "${err_file}"
+  rm -f "${err_file}"
+  echo "   Set KUBECONFIG explicitly or use K8S_PREFLIGHT_MODE=client for render-only validation."
+  exit 1
+}
+
+secret_exists_or_fail_local() {
+  local secret_name="$1"
+  local err_file
+  err_file="$(mktemp)"
+
+  if kubectl -n "${K8S_NAMESPACE}" get secret "${secret_name}" >/dev/null 2>"${err_file}"; then
+    rm -f "${err_file}"
+    return 0
+  fi
+
+  if grep -Eqi "not found" "${err_file}"; then
+    rm -f "${err_file}"
+    echo "❌ Required secret '${secret_name}' is missing in namespace '${K8S_NAMESPACE}'"
+    case "${secret_name}" in
+      jarvis-secrets)
+        echo "   Apply secrets first: ./scripts/product/jarvis-secrets-apply.sh"
+        ;;
+      jarvis-tls)
+        echo "   Create/apply the TLS secret before deploy: kubectl create secret tls jarvis-tls ..."
+        ;;
+    esac
+    exit 1
+  fi
+
+  echo "❌ Unable to query secret '${secret_name}' in namespace '${K8S_NAMESPACE}'"
+  sed 's/^/   /' "${err_file}"
+  rm -f "${err_file}"
+  echo "   Fix kubeconfig/cluster credentials before running server preflight."
+  exit 1
+}
+
+secret_key_exists_or_fail_local() {
+  local secret_name="$1"
+  local secret_key="$2"
+  local err_file
+  local value
+
+  err_file="$(mktemp)"
+  value="$(kubectl -n "${K8S_NAMESPACE}" get secret "${secret_name}" -o "jsonpath={.data.${secret_key}}" 2>"${err_file}" || true)"
+
+  if [[ -n "${value}" ]]; then
+    rm -f "${err_file}"
+    return 0
+  fi
+
+  if grep -Eqi "not found" "${err_file}"; then
+    echo "❌ Required secret '${secret_name}' is missing in namespace '${K8S_NAMESPACE}'"
+    case "${secret_name}" in
+      jarvis-secrets)
+        echo "   Apply secrets first: ./scripts/product/jarvis-secrets-apply.sh"
+        ;;
+      jarvis-tls)
+        echo "   Create/apply the TLS secret before deploy: kubectl create secret tls jarvis-tls ..."
+        ;;
+    esac
+  elif [[ -s "${err_file}" ]]; then
+    echo "❌ Unable to query key '${secret_key}' from secret '${secret_name}'"
+    sed 's/^/   /' "${err_file}"
+    echo "   Fix kubeconfig/cluster credentials before running server preflight."
+  else
+    echo "❌ Required key '${secret_key}' is missing from secret '${secret_name}' in namespace '${K8S_NAMESPACE}'"
+    echo "   Update your secrets env file and re-run: ./scripts/product/jarvis-secrets-apply.sh"
+  fi
+
+  rm -f "${err_file}"
+  exit 1
+}
 
 is_core_sa_token_exception() {
   local workload="$1"
@@ -594,6 +701,7 @@ validate_optional_replica_policy_local() {
 
 run_local_preflight() {
   local dry_run_flag="--dry-run=${PREFLIGHT_MODE}"
+  ensure_server_cluster_access_local
   ensure_required_secrets_exist_local
   render_overlay_local
   validate_render_output_local
@@ -614,34 +722,87 @@ ensure_required_secrets_exist_local() {
   fi
   echo "🔐 Verifying required secrets in namespace '${K8S_NAMESPACE}'..."
   for secret_name in "${REQUIRED_SECRETS[@]}"; do
-    if [[ -z "${secret_name// }" ]]; then
+    secret_name="${secret_name//[[:space:]]/}"
+    if [[ -z "${secret_name}" ]]; then
       continue
     fi
-    if ! kubectl -n "${K8S_NAMESPACE}" get secret "${secret_name}" >/dev/null 2>&1; then
-      echo "❌ Required secret '${secret_name}' is missing in namespace '${K8S_NAMESPACE}'"
-      echo "   Apply secrets first: ./scripts/product/jarvis-secrets-apply.sh"
-      exit 1
-    fi
+    secret_exists_or_fail_local "${secret_name}"
   done
+
+  if [[ -n "${PRIMARY_SECRET_NAME//[[:space:]]/}" && "${#REQUIRED_SECRET_KEYS[@]}" -gt 0 ]]; then
+    echo "🔐 Verifying required keys in secret '${PRIMARY_SECRET_NAME}'..."
+    for secret_key in "${REQUIRED_SECRET_KEYS[@]}"; do
+      secret_key="${secret_key//[[:space:]]/}"
+      if [[ -z "${secret_key}" ]]; then
+        continue
+      fi
+      secret_key_exists_or_fail_local "${PRIMARY_SECRET_NAME}" "${secret_key}"
+    done
+  fi
+}
+
+container_kube_mount_args() {
+  if [[ -r "${HOME}/.jarvis/kubeconfig" ]]; then
+    printf '%s\n' "-v" "${HOME}/.jarvis:/root/.jarvis:ro" "-e" "KUBECONFIG=/root/.jarvis/kubeconfig"
+  elif [[ -n "${KUBECONFIG:-}" && -r "${KUBECONFIG}" ]]; then
+    local host_kubeconfig
+    local container_kubeconfig
+    host_kubeconfig="$(cd "$(dirname "${KUBECONFIG}")" && pwd)/$(basename "${KUBECONFIG}")"
+    container_kubeconfig="/tmp/jarvis-preflight-kubeconfig"
+    printf '%s\n' "-v" "${host_kubeconfig}:${container_kubeconfig}:ro" "-e" "KUBECONFIG=${container_kubeconfig}"
+  fi
+}
+
+required_secret_keys_csv() {
+  local result=""
+  local secret_key
+  for secret_key in "${REQUIRED_SECRET_KEYS[@]}"; do
+    secret_key="${secret_key//[[:space:]]/}"
+    [[ -z "${secret_key}" ]] && continue
+    if [[ -n "${result}" ]]; then
+      result+=","
+    fi
+    result+="${secret_key}"
+  done
+  printf '%s' "${result}"
 }
 
 run_container_preflight() {
   require_cmd docker
   local dry_run_flag="--dry-run=${PREFLIGHT_MODE}"
   local secrets_csv="${REQUIRED_SECRETS_RAW}"
+  local secret_keys_csv
+  local mount_args=()
+
+  secret_keys_csv="$(required_secret_keys_csv)"
+  while IFS= read -r line; do
+    [[ -z "${line}" ]] && continue
+    mount_args+=("${line}")
+  done < <(container_kube_mount_args)
+
   echo "🧪 Running k8s preflight in container (${TOOLCHAIN_IMAGE})..."
   docker run --rm \
     -v "${PROJECT_ROOT}:${PROJECT_ROOT}" \
     -v "${HOME}/.kube:/root/.kube:ro" \
     -v "/tmp:/tmp" \
+    "${mount_args[@]}" \
     -w "${PROJECT_ROOT}" \
     -e "K8S_NAMESPACE=${K8S_NAMESPACE}" \
     -e "REQUIRED_SECRETS=${secrets_csv}" \
+    -e "PRIMARY_SECRET_NAME=${PRIMARY_SECRET_NAME}" \
+    -e "REQUIRED_SECRET_KEYS=${secret_keys_csv}" \
     -e "PREFLIGHT_MODE=${PREFLIGHT_MODE}" \
     -e "RENDER_OUTPUT=${RENDER_OUTPUT}" \
     "${TOOLCHAIN_IMAGE}" \
     sh -ec '
       secrets_csv="${REQUIRED_SECRETS}"
+      required_secret_keys="${REQUIRED_SECRET_KEYS}"
+      primary_secret_name="${PRIMARY_SECRET_NAME}"
+      if [ "${PREFLIGHT_MODE}" = "server" ] && ! kubectl cluster-info >/dev/null 2>&1; then
+        echo "❌ Server preflight requires a reachable Kubernetes cluster and valid credentials"
+        echo "   Set KUBECONFIG explicitly or use K8S_PREFLIGHT_MODE=client for render-only validation."
+        exit 1
+      fi
       if [ "${PREFLIGHT_MODE}" = "server" ]; then
         old_ifs="${IFS}"
         IFS=","
@@ -651,6 +812,14 @@ run_container_preflight() {
             exit 1
           fi
         done
+        if [ -n "${primary_secret_name}" ] && [ -n "${required_secret_keys}" ]; then
+          for secret_key in ${required_secret_keys}; do
+            if [ -n "${secret_key}" ] && [ -z "$(kubectl -n "${K8S_NAMESPACE}" get secret "${primary_secret_name}" -o "jsonpath={.data.${secret_key}}" 2>/dev/null)" ]; then
+              echo "❌ Required key '\''${secret_key}'\'' is missing from secret '\''${primary_secret_name}'\'' in namespace '\''${K8S_NAMESPACE}'\''"
+              exit 1
+            fi
+          done
+        fi
         IFS="${old_ifs}"
       fi
       kubectl kustomize "'"${OVERLAY_PATH}"'" > "${RENDER_OUTPUT}"

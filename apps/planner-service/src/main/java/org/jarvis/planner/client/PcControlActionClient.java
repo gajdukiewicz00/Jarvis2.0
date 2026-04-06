@@ -37,9 +37,18 @@ public class PcControlActionClient {
                     apiGatewayUrl + "/internal/pc-control/action",
                     request,
                     Map.class);
+            log.info("PC action {} routed via {} for user {} with status {}",
+                    action,
+                    apiGatewayUrl,
+                    userId,
+                    response.getStatusCodeValue());
             return response.getStatusCode().is2xxSuccessful();
         } catch (RestClientException e) {
-            log.warn("PC action {} failed for user {}: {}", action, userId, e.getMessage());
+            log.warn("PC action {} via {} failed for user {}: {}",
+                    action,
+                    apiGatewayUrl,
+                    userId,
+                    e.getMessage());
             return false;
         }
     }

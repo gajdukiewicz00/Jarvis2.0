@@ -4,6 +4,7 @@ import org.jarvis.orchestrator.config.ServiceAuthFeignConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 
 import java.util.Map;
 
@@ -14,7 +15,9 @@ import java.util.Map;
 public interface PcControlClient {
 
     @PostMapping("/api/v1/pc/action")
-    void executeAction(@RequestBody ActionRequest request);
+    void executeAction(
+            @RequestHeader("X-User-Id") String userId,
+            @RequestBody ActionRequest request);
 
     record ActionRequest(String actionType, Map<String, String> parameters) {
     }

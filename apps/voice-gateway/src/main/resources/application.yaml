@@ -1,6 +1,11 @@
 server:
-  port: 8081
+  port: ${JARVIS_VOICE_GATEWAY_PORT:8081}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_VOICE_GATEWAY_SSL_ENABLED:false}
+    key-store: ${JARVIS_VOICE_GATEWAY_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_VOICE_GATEWAY_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_VOICE_GATEWAY_KEYSTORE_TYPE:PKCS12}
 
 spring:
   lifecycle:
@@ -23,13 +28,16 @@ jarvis:
   stt:
     provider: ${JARVIS_STT_PROVIDER:vosk}
   vosk:
-    model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:/models/vosk-model-small-ru-0.22}
-    model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:/models/vosk-model-small-en-us-0.15}
+    model-path-ru: ${JARVIS_VOSK_MODEL_PATH_RU:${JARVIS_MODELS_DIR:models}/stt/vosk/vosk-model-small-ru-0.22}
+    model-path-en: ${JARVIS_VOSK_MODEL_PATH_EN:${JARVIS_MODELS_DIR:models}/stt/vosk/vosk-model-small-en-us-0.15}
     default-language: ${JARVIS_VOSK_DEFAULT_LANGUAGE:ru-RU}
     sample-rate: ${JARVIS_VOSK_SAMPLE_RATE:16000}
   voice:
     whisper:
-      model-path: ${JARVIS_VOICE_WHISPER_MODEL_PATH:models/ggml-small.bin}
+      model-path: ${JARVIS_VOICE_WHISPER_MODEL_PATH:${JARVIS_MODELS_DIR:models}/stt/whisper/ggml-small.bin}
+    # Hybrid voice: use pre-recorded .wav when available, TTS fallback
+    pre-recorded:
+      enabled: ${JARVIS_VOICE_PRE_RECORDED_ENABLED:true}
   orchestrator:
     url: ${JARVIS_ORCHESTRATOR_URL:http://orchestrator:8083}
 
@@ -38,6 +46,7 @@ tts:
   enabled: ${TTS_ENABLED:true}
   provider: ${TTS_PROVIDER:espeak}
   espeak:
+    binary-path: ${JARVIS_TTS_ESPEAK_BINARY:}
     voice: russian
     speed: 150
   google:
@@ -45,6 +54,18 @@ tts:
     language-code: ru-RU
     speaking-rate: 1.0
     pitch: 0.0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
 
 logging:
   level:

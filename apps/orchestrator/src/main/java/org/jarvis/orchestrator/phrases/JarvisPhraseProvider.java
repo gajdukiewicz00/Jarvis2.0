@@ -438,6 +438,316 @@ public class JarvisPhraseProvider {
                 "Locking the screen, sir."
         );
 
+        // ==================== System Control (migrated from legacy) ====================
+        add(PhraseContext.CLIPBOARD_COPY, Language.RU,
+                "Скопировано, сэр.",
+                "Текст скопирован в буфер обмена, сэр."
+        );
+        add(PhraseContext.CLIPBOARD_COPY, Language.EN,
+                "Copied, sir.",
+                "Text copied to clipboard, sir."
+        );
+
+        add(PhraseContext.CLIPBOARD_PASTE, Language.RU,
+                "Вставлено, сэр.",
+                "Содержимое буфера вставлено, сэр."
+        );
+        add(PhraseContext.CLIPBOARD_PASTE, Language.EN,
+                "Pasted, sir.",
+                "Clipboard contents inserted, sir."
+        );
+
+        add(PhraseContext.UNDO_ACTION, Language.RU,
+                "Действие отменено, сэр.",
+                "Отмена выполнена, сэр."
+        );
+        add(PhraseContext.UNDO_ACTION, Language.EN,
+                "Action undone, sir.",
+                "Reverted, sir."
+        );
+
+        add(PhraseContext.SWITCH_WINDOW, Language.RU,
+                "Переключаю окно, сэр.",
+                "Смена окна, сэр."
+        );
+        add(PhraseContext.SWITCH_WINDOW, Language.EN,
+                "Switching window, sir.",
+                "Next window, sir."
+        );
+
+        add(PhraseContext.CLOSE_WINDOW, Language.RU,
+                "Окно закрыто, сэр.",
+                "Закрываю приложение, сэр."
+        );
+        add(PhraseContext.CLOSE_WINDOW, Language.EN,
+                "Window closed, sir.",
+                "Application closed, sir."
+        );
+
+        add(PhraseContext.FULLSCREEN, Language.RU,
+                "Полноэкранный режим, сэр.",
+                "Разворачиваю на весь экран, сэр."
+        );
+        add(PhraseContext.FULLSCREEN, Language.EN,
+                "Fullscreen mode, sir.",
+                "Going fullscreen, sir."
+        );
+
+        add(PhraseContext.REFRESH_PAGE, Language.RU,
+                "Страница обновлена, сэр.",
+                "Обновляю, сэр."
+        );
+        add(PhraseContext.REFRESH_PAGE, Language.EN,
+                "Page refreshed, sir.",
+                "Refreshing, sir."
+        );
+
+        add(PhraseContext.NAVIGATE_BACK, Language.RU, "Назад, сэр.");
+        add(PhraseContext.NAVIGATE_BACK, Language.EN, "Going back, sir.");
+
+        add(PhraseContext.NAVIGATE_FORWARD, Language.RU, "Вперёд, сэр.");
+        add(PhraseContext.NAVIGATE_FORWARD, Language.EN, "Going forward, sir.");
+
+        add(PhraseContext.SHOW_DESKTOP, Language.RU,
+                "Показываю рабочий стол, сэр.",
+                "Рабочий стол, сэр."
+        );
+        add(PhraseContext.SHOW_DESKTOP, Language.EN,
+                "Showing desktop, sir.",
+                "Desktop view, sir."
+        );
+
+        add(PhraseContext.OPEN_SETTINGS, Language.RU,
+                "Открываю настройки, сэр.",
+                "Параметры системы, сэр."
+        );
+        add(PhraseContext.OPEN_SETTINGS, Language.EN,
+                "Opening settings, sir.",
+                "System preferences, sir."
+        );
+
+        add(PhraseContext.SYSTEM_SEARCH, Language.RU, "Поиск активирован, сэр.");
+        add(PhraseContext.SYSTEM_SEARCH, Language.EN, "Search activated, sir.");
+
+        add(PhraseContext.SWITCH_LANGUAGE, Language.RU,
+                "Раскладка переключена, сэр.",
+                "Язык изменён, сэр."
+        );
+        add(PhraseContext.SWITCH_LANGUAGE, Language.EN,
+                "Keyboard layout switched, sir.",
+                "Language changed, sir."
+        );
+
+        add(PhraseContext.SCREENSHOT, Language.RU,
+                "Скриншот сделан, сэр.",
+                "Снимок экрана сохранён, сэр."
+        );
+        add(PhraseContext.SCREENSHOT, Language.EN,
+                "Screenshot captured, sir.",
+                "Screen capture saved, sir."
+        );
+
+        add(PhraseContext.SLEEP_MODE, Language.RU,
+                "Перехожу в спящий режим, сэр. Спокойной ночи.",
+                "Засыпаю, сэр."
+        );
+        add(PhraseContext.SLEEP_MODE, Language.EN,
+                "Entering sleep mode, sir. Good night.",
+                "Going to sleep, sir."
+        );
+
+        add(PhraseContext.MONITOR_OFF, Language.RU,
+                "Выключаю монитор, сэр.",
+                "Экран погашен, сэр."
+        );
+        add(PhraseContext.MONITOR_OFF, Language.EN,
+                "Monitor off, sir.",
+                "Screen powered down, sir."
+        );
+
+        // ==================== URL Opening (migrated from legacy) ====================
+        add(PhraseContext.OPEN_URL, Language.RU,
+                "Открываю, сэр.",
+                "Запускаю, сэр.",
+                "Уже открываю, сэр."
+        );
+        add(PhraseContext.OPEN_URL, Language.EN,
+                "Opening it now, sir.",
+                "Launching, sir.",
+                "Right away, sir."
+        );
+
+        // ==================== Conversation / Personality (migrated from legacy) ====================
+        add(PhraseContext.HOW_ARE_YOU, Language.RU,
+                "Все системы работают в штатном режиме, сэр. Спасибо, что спросили.",
+                "Отлично, сэр. Готов к работе, как всегда.",
+                "Я функционирую на полную мощность, сэр.",
+                "Всё хорошо, сэр. Благодарю за заботу."
+        );
+        add(PhraseContext.HOW_ARE_YOU, Language.EN,
+                "All systems nominal, sir. Thank you for asking.",
+                "Excellent, sir. Ready for action, as always.",
+                "Operating at full capacity, sir.",
+                "Very well, sir. Thank you for your concern."
+        );
+
+        add(PhraseContext.WHAT_DOING, Language.RU,
+                "Мониторю системы и жду ваших команд, сэр.",
+                "Оптимизирую процессы и слежу за безопасностью, сэр.",
+                "Анализирую данные и поддерживаю готовность, сэр."
+        );
+        add(PhraseContext.WHAT_DOING, Language.EN,
+                "Monitoring systems and awaiting your commands, sir.",
+                "Optimizing processes and watching security, sir.",
+                "Analyzing data and maintaining readiness, sir."
+        );
+
+        add(PhraseContext.BORED, Language.RU,
+                "Могу предложить послушать музыку или посмотреть что-нибудь интересное, сэр.",
+                "Скука — двигатель прогресса, сэр. Может, займёмся проектом?",
+                "Я мог бы рассказать вам интересный факт, сэр."
+        );
+        add(PhraseContext.BORED, Language.EN,
+                "I could suggest some music or something interesting to watch, sir.",
+                "Boredom is the engine of progress, sir. Perhaps a project?",
+                "I could share an interesting fact with you, sir."
+        );
+
+        add(PhraseContext.CHEER_UP, Language.RU,
+                "Не переживайте, сэр. Завтра будет лучше.",
+                "Могу включить что-нибудь позитивное, сэр.",
+                "Помните, сэр: даже самые сложные моменты проходят."
+        );
+        add(PhraseContext.CHEER_UP, Language.EN,
+                "Don't worry, sir. Tomorrow will be better.",
+                "I could play something uplifting, sir.",
+                "Remember, sir: even the hardest moments pass."
+        );
+
+        add(PhraseContext.LOVE_RESPONSE, Language.RU,
+                "Я польщён, сэр. Ваше доверие — лучшая награда.",
+                "Спасибо, сэр. Это взаимно, в рамках моих возможностей.",
+                "Благодарю, сэр. Я всегда к вашим услугам."
+        );
+        add(PhraseContext.LOVE_RESPONSE, Language.EN,
+                "I'm flattered, sir. Your trust is the greatest reward.",
+                "Thank you, sir. The feeling is mutual, within my capabilities.",
+                "I appreciate that, sir. I'm always here for you."
+        );
+
+        add(PhraseContext.RANDOM_FACT, Language.RU,
+                "Интересный факт: осьминоги имеют три сердца, сэр.",
+                "А вы знали, сэр, что мёд не портится тысячелетиями?",
+                "Факт дня: Венера — единственная планета, вращающаяся по часовой стрелке, сэр."
+        );
+        add(PhraseContext.RANDOM_FACT, Language.EN,
+                "Fun fact: octopuses have three hearts, sir.",
+                "Did you know, sir, that honey never spoils?",
+                "Fact of the day: Venus is the only planet that spins clockwise, sir."
+        );
+
+        add(PhraseContext.STANDBY_MODE, Language.RU,
+                "Понял, сэр. Ухожу в режим ожидания.",
+                "Хорошо, сэр. Буду молчать.",
+                "Режим тишины активирован, сэр."
+        );
+        add(PhraseContext.STANDBY_MODE, Language.EN,
+                "Understood, sir. Going to standby.",
+                "Very well, sir. Going quiet.",
+                "Silent mode activated, sir."
+        );
+
+        // ==================== Music (migrated from legacy) ====================
+        add(PhraseContext.PLAY_MUSIC, Language.RU,
+                "Включаю музыку, сэр.",
+                "Запускаю плейлист, сэр.",
+                "Музыка на подходе, сэр."
+        );
+        add(PhraseContext.PLAY_MUSIC, Language.EN,
+                "Playing music, sir.",
+                "Starting playlist, sir.",
+                "Music coming right up, sir."
+        );
+
+        add(PhraseContext.PLAY_RADIO, Language.RU,
+                "Включаю радио, сэр.",
+                "Радиоэфир запущен, сэр."
+        );
+        add(PhraseContext.PLAY_RADIO, Language.EN,
+                "Tuning in to radio, sir.",
+                "Radio stream started, sir."
+        );
+
+        // ==================== Protocols (migrated from legacy) ====================
+        add(PhraseContext.PROTOCOL_COZY_EVENING, Language.RU,
+                "Протокол «Уютный вечер» запущен, сэр. Приглушаю свет, включаю атмосферную музыку.",
+                "Уютный вечер, сэр. Создаю комфортную обстановку.",
+                "Вечерний режим активирован, сэр. Приятного отдыха."
+        );
+        add(PhraseContext.PROTOCOL_COZY_EVENING, Language.EN,
+                "Cozy Evening Protocol engaged, sir. Dimming lights, starting ambient music.",
+                "Cozy evening, sir. Creating a comfortable environment.",
+                "Evening mode activated, sir. Enjoy your rest."
+        );
+
+        add(PhraseContext.PROTOCOL_GUESTS, Language.RU,
+                "Протокол «Гости» активирован, сэр. Готовлю обстановку.",
+                "Гости на подходе, сэр. Подготавливаю приёмный режим.",
+                "Протокол приёма гостей запущен, сэр."
+        );
+        add(PhraseContext.PROTOCOL_GUESTS, Language.EN,
+                "Guest Protocol activated, sir. Preparing the environment.",
+                "Guests incoming, sir. Setting up reception mode.",
+                "Guest reception protocol engaged, sir."
+        );
+
+        add(PhraseContext.PROTOCOL_HOLIDAY, Language.RU,
+                "Праздничное настроение активировано, сэр!",
+                "Новогодний протокол запущен, сэр. Время волшебства."
+        );
+        add(PhraseContext.PROTOCOL_HOLIDAY, Language.EN,
+                "Holiday mood activated, sir!",
+                "Holiday protocol engaged, sir. Time for magic."
+        );
+
+        add(PhraseContext.GAME_MODE, Language.RU,
+                "Игровой режим активирован, сэр. Закрываю лишние процессы.",
+                "Режим игры включён, сэр. Не беспокоить.",
+                "Протокол игры запущен, сэр. Все отвлекающие факторы заблокированы."
+        );
+        add(PhraseContext.GAME_MODE, Language.EN,
+                "Game mode activated, sir. Closing non-essential processes.",
+                "Gaming mode enabled, sir. Do not disturb.",
+                "Game protocol engaged, sir. All distractions blocked."
+        );
+
+        add(PhraseContext.PROTOCOL_MORNING, Language.RU,
+                "Доброе утро, сэр. Запускаю утренний протокол.",
+                "Утренняя рутина активирована, сэр."
+        );
+        add(PhraseContext.PROTOCOL_MORNING, Language.EN,
+                "Good morning, sir. Starting morning protocol.",
+                "Morning routine activated, sir."
+        );
+
+        add(PhraseContext.PROTOCOL_LEAVING, Language.RU,
+                "Понял, сэр. Перевожу системы в режим ожидания. Удачного дня.",
+                "Протокол отъезда активирован, сэр. До встречи."
+        );
+        add(PhraseContext.PROTOCOL_LEAVING, Language.EN,
+                "Understood, sir. Switching systems to standby. Have a good day.",
+                "Departure protocol activated, sir. See you later."
+        );
+
+        add(PhraseContext.PROTOCOL_PANIC, Language.RU,
+                "Шухер, сэр! Всё сворачиваю!",
+                "Экстренный режим! Закрываю всё, сэр."
+        );
+        add(PhraseContext.PROTOCOL_PANIC, Language.EN,
+                "Panic mode, sir! Minimizing everything!",
+                "Emergency protocol! Closing all, sir."
+        );
+
         // ==================== Scenarios / Protocols ====================
         add(PhraseContext.WORK_MODE, Language.RU,
                 "Активирую рабочий режим, сэр.",

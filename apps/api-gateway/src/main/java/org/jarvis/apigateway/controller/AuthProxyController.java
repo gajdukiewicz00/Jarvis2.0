@@ -45,10 +45,10 @@ public class AuthProxyController implements org.springframework.beans.factory.In
      */
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, Object> request) {
-        log.info("🎯 AuthProxyController.register() - User: {}", request.get("username"));
+        log.info("🎯 Proxying POST /auth/register to {} for user: {}", securityServiceUrl, request.get("username"));
         try {
             ResponseEntity<Map<String, Object>> response = authClient.register(request);
-            log.info("✅ Registration successful for: {}", request.get("username"));
+            log.info("✅ Registration successful for: {} via {}", request.get("username"), securityServiceUrl);
             return sanitizeUpstreamResponse(response);
         } catch (FeignException e) {
             return handleFeignError(e, "register");
@@ -61,9 +61,11 @@ public class AuthProxyController implements org.springframework.beans.factory.In
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, Object> request) {
-        log.info("🔐 Proxying POST /auth/login for user: {}", request.get("username"));
+        log.info("🔐 Proxying POST /auth/login to {} for user: {}", securityServiceUrl, request.get("username"));
         try {
-            return sanitizeUpstreamResponse(authClient.login(request));
+            ResponseEntity<Map<String, Object>> response = authClient.login(request);
+            log.info("✅ Login successful for: {} via {}", request.get("username"), securityServiceUrl);
+            return sanitizeUpstreamResponse(response);
         } catch (FeignException e) {
             return handleFeignError(e, "login");
         }
@@ -75,7 +77,7 @@ public class AuthProxyController implements org.springframework.beans.factory.In
      */
     @PostMapping("/refresh")
     public ResponseEntity<Map<String, Object>> refresh(@RequestBody Map<String, Object> request) {
-        log.info("🔄 Proxying POST /auth/refresh");
+        log.info("🔄 Proxying POST /auth/refresh to {}", securityServiceUrl);
         try {
             return sanitizeUpstreamResponse(authClient.refresh(request));
         } catch (FeignException e) {
@@ -90,7 +92,7 @@ public class AuthProxyController implements org.springframework.beans.factory.In
     @GetMapping("/me")
     public ResponseEntity<Map<String, Object>> me(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
-        log.info("Proxying GET /auth/me");
+        log.info("Proxying GET /auth/me to {}", securityServiceUrl);
         try {
             return sanitizeUpstreamResponse(authClient.me(authorization));
         } catch (FeignException e) {
@@ -113,8 +115,8 @@ public class AuthProxyController implements org.springframework.beans.factory.In
         String content = e.contentUTF8();
         
         // Log error without sensitive data (no JWT/secrets in logs)
-        log.warn("Auth operation '{}' failed with status {} (content length: {})", 
-                operation, e.status(), content != null ? content.length() : 0);
+        log.warn("Auth operation '{}' against {} failed with status {} (content length: {})",
+                operation, securityServiceUrl, e.status(), content != null ? content.length() : 0);
 
         // Try to forward JSON body if present
         if (content != null && !content.isBlank()) {

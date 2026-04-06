@@ -27,6 +27,8 @@
    - Download the `.ppn` file
    - Rename to: `jarvis_ru.ppn`
    - Save to: `apps/desktop-client-javafx/src/main/resources/models/`
+   - This repo-local classpath location is the canonical wake-word model path used by the desktop client
+   - Keep the `.ppn` major version aligned with `ai.picovoice:porcupine-java`
 
 ---
 
@@ -66,6 +68,7 @@ $env:PORCUPINE_ACCESS_KEY = "your-picovoice-access-key"
 ```bash
 mkdir -p apps/desktop-client-javafx/src/main/resources/models
 # Move downloaded jarvis_ru.ppn to this folder
+# If the repo already contains jarvis_ru.ppn, replace it only when you intentionally retrain the wake word
 ```
 
 ---

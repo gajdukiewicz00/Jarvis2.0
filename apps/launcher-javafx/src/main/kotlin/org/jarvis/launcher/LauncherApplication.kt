@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /**
  * JavaFX Application for Jarvis Launcher.
- * Provides GUI for starting/stopping backend and desktop client.
+ * Provides GUI for starting/stopping backend and launching the desktop UI.
  */
 class LauncherApplication : Application() {
     private val logger = LoggerFactory.getLogger(LauncherApplication::class.java)
@@ -149,6 +149,7 @@ class LauncherApplication : Application() {
                 updateStatusFromHealth(healthStatus)
             }
         }
+        appendLog("Launcher runtime target: ${JarvisPaths.describeRuntimeTarget()}")
         // Stage 5: Cleanup stale PIDs on startup
         cleanupStalePids()
 
@@ -310,9 +311,9 @@ class LauncherApplication : Application() {
         }
         
         Platform.runLater {
-            statusLabel.text = statusText
             updateStatus(newLauncherStatus)
             updateStatusBadge(newLauncherStatus)  // Stage 15: Update badge color
+            statusLabel.text = statusText
         }
     }
     
@@ -450,9 +451,9 @@ class LauncherApplication : Application() {
         // Stage 15: Add tooltips to all buttons
         startButton.tooltip = Tooltip("Start the Jarvis backend stack")
         stopButton.tooltip = Tooltip("Stop the Jarvis backend stack")
-        startAllButton.tooltip = Tooltip("Start backend and wait for READY, then start desktop client")
-        stopAllButton.tooltip = Tooltip("Stop desktop client and backend")
-        startDesktopButton.tooltip = Tooltip("Start the desktop client (requires backend READY)")
+        startAllButton.tooltip = Tooltip("Start backend and wait for READY, then start the desktop UI")
+        stopAllButton.tooltip = Tooltip("Stop desktop UI and backend")
+        startDesktopButton.tooltip = Tooltip("Start the desktop UI (prefers unified shell; requires backend READY)")
         
         openLogsButton = Button("Open Logs Folder")
         openLogsButton.tooltip = Tooltip("Open ~/.jarvis/logs/ in file manager")
@@ -593,8 +594,9 @@ class LauncherApplication : Application() {
                     if (processHandle != null && processHandle.isAlive) {
                         backendExpectedRunning.set(true)
                         Platform.runLater {
-                            updateStatus(LauncherStatus.READY)
-                            appendLog("Backend already running (PID: $pid)")
+                            updateStatus(LauncherStatus.STARTING)
+                            appendLog("Bootstrap process already running (PID: $pid); waiting for health checks")
+                            refreshHealthOnce()
                         }
                     } else {
                         // Stale PID file
@@ -621,8 +623,9 @@ class LauncherApplication : Application() {
         val existingRunner = processRunner.get()
         if (existingRunner != null && existingRunner.isRunning()) {
             backendExpectedRunning.set(true)
-            appendLog("Backend already running (PID: ${existingRunner.getPid()})")
-            updateStatus(LauncherStatus.READY)
+            appendLog("Bootstrap process already running (PID: ${existingRunner.getPid()}); waiting for health checks")
+            updateStatus(LauncherStatus.STARTING)
+            refreshHealthOnce()
             return
         }
         
@@ -644,8 +647,9 @@ class LauncherApplication : Application() {
                 } else {
                     // Process is actually running
                     backendExpectedRunning.set(true)
-                    appendLog("Backend already running (detected via PID file: $pid)")
-                    updateStatus(LauncherStatus.READY)
+                    appendLog("Bootstrap process already running (detected via PID file: $pid); waiting for health checks")
+                    updateStatus(LauncherStatus.STARTING)
+                    refreshHealthOnce()
                     return
                 }
             } catch (e: Exception) {
@@ -676,7 +680,8 @@ class LauncherApplication : Application() {
         updateStatus(LauncherStatus.STARTING)
         appendLog("Starting backend...")
         appendLog("Script: $launchScript")
-        
+        appendLog("Launch target: ${JarvisPaths.describeRuntimeTarget()}")
+
         val newRunner = ProcessRunner(
             logFile = JarvisPaths.backendLaunchLog,
             onOutput = { line ->
@@ -699,6 +704,7 @@ class LauncherApplication : Application() {
             if (!kubeConfig.isNullOrBlank()) {
                 envVars["KUBECONFIG"] = kubeConfig
             }
+            BackendLaunchLogSupport.writeBackendLaunchPreamble(launchScript, envVars)
             
             val future = newRunner.start(
                 scriptPath = launchScript,
@@ -713,6 +719,7 @@ class LauncherApplication : Application() {
                         backendExpectedRunning.set(false)
                         updateStatus(LauncherStatus.ERROR)
                         appendLog("ERROR: ${throwable.message}")
+                        BackendLaunchLogSupport.appendBackendLaunchLogLine("Bootstrap failed: ${throwable.message ?: "unknown error"}")
                         showError(
                             "Backend start failed",
                             "${throwable.message ?: "Unknown error"}\n\n" +
@@ -722,13 +729,15 @@ class LauncherApplication : Application() {
                     } else {
                         if (exitCode == 0) {
                             backendExpectedRunning.set(true)
-                            updateStatus(LauncherStatus.READY)
-                            appendLog("Backend started successfully")
-                            appendLog("Status: READY - You can now start Desktop")
+                            updateStatus(LauncherStatus.STARTING)
+                            appendLog("Backend bootstrap finished; waiting for service health before READY")
+                            BackendLaunchLogSupport.appendBackendLaunchLogLine("Bootstrap exit code: 0")
+                            refreshHealthOnce()
                         } else {
                             backendExpectedRunning.set(false)
                             updateStatus(LauncherStatus.ERROR)
                             appendLog("Backend exited with code: $exitCode")
+                            BackendLaunchLogSupport.appendBackendLaunchLogLine("Bootstrap exit code: $exitCode")
                             showError(
                                 "Backend failed",
                                 "Exit code: $exitCode\n\n" +
@@ -791,19 +800,27 @@ class LauncherApplication : Application() {
     private fun startDesktop() {
         // Stage 5: Check if desktop already running
         if (isDesktopRunning()) {
-            appendLog("Desktop client already running")
-            showError("Desktop already running", "Desktop client is already started. Check if window is open.")
+            appendLog("Desktop UI already running")
+            showError("Desktop already running", "Desktop UI is already started. Check if its window is open.")
             return
         }
         
         val desktopJar = JarvisPaths.getDesktopJar()
         
         if (!Files.exists(desktopJar)) {
-            showError("Desktop JAR not found", "Cannot find: $desktopJar\nPlease build desktop-client first:\nmvn -pl apps/desktop-client-javafx -DskipTests clean package")
+            showError(
+                "Desktop JAR not found",
+                "Cannot find desktop launch artifact: $desktopJar\n\n" +
+                    "Primary target: apps/desktop-app-javafx\n" +
+                    "Fallback target: apps/desktop-client-javafx\n\n" +
+                    "Build unified desktop shell first:\n" +
+                    "mvn -pl apps/desktop-app-javafx -am -DskipTests clean package"
+            )
             return
         }
         
-        appendLog("Starting desktop client...")
+        appendLog("Starting desktop UI...")
+        appendLog("Desktop launch artifact: ${desktopJar.fileName}")
         
         executor.execute {
             try {
@@ -825,10 +842,11 @@ class LauncherApplication : Application() {
                     .redirectOutput(ProcessBuilder.Redirect.appendTo(JarvisPaths.desktopLog.toFile()))
                     .redirectError(ProcessBuilder.Redirect.appendTo(JarvisPaths.desktopLog.toFile()))
                 val env = processBuilder.environment()
-                val apiBaseUrl = System.getenv("JARVIS_API_BASE_URL") ?: JarvisPaths.getApiGatewayUrl()
-                env.putIfAbsent("JARVIS_API_BASE_URL", apiBaseUrl)
-                env.putIfAbsent("JARVIS_USE_TLS", System.getenv("JARVIS_USE_TLS")
-                    ?: if (apiBaseUrl.startsWith("https://")) "true" else "false")
+                val apiBaseUrl = JarvisPaths.getApiGatewayUrl()
+                env["JARVIS_API_BASE_URL"] = apiBaseUrl
+                env["JARVIS_RUNTIME_MODE"] = JarvisPaths.getRuntimeMode()
+                env["JARVIS_USE_TLS"] = if (apiBaseUrl.startsWith("https://")) "true" else "false"
+                appendLog("Desktop endpoint target: $apiBaseUrl")
                 val process = processBuilder.start()
                 
                 // Stage 5: Save desktop PID
@@ -840,9 +858,9 @@ class LauncherApplication : Application() {
                     desktopProcessLock.unlock()
                 }
                 
-                appendLog("Desktop client started (PID: ${process.pid()})")
+                appendLog("Desktop UI started (PID: ${process.pid()})")
             } catch (e: Exception) {
-                logger.error("Failed to start desktop client", e)
+                logger.error("Failed to start desktop UI", e)
                 Platform.runLater {
                     appendLog("ERROR: ${e.message}")
                     showError("Desktop start failed", e.message ?: "Unknown error")
@@ -883,7 +901,7 @@ class LauncherApplication : Application() {
     }
     
     /**
-     * Stage 5: Stop desktop client.
+     * Stage 5: Stop desktop UI.
      */
     private fun stopDesktop() {
         executor.execute {
@@ -920,7 +938,7 @@ class LauncherApplication : Application() {
                     }
                     
                     if (isAlive) {
-                        appendLog("Stopping desktop client (PID: $pid)...")
+                        appendLog("Stopping desktop UI (PID: $pid)...")
                         try {
                             val processHandle = java.lang.ProcessHandle.of(pid).orElse(null)
                             processHandle?.destroy()
@@ -1842,22 +1860,39 @@ class LauncherApplication : Application() {
                 diagnostics.appendLine("")
                 diagnostics.appendLine("--- Launcher ---")
                 diagnostics.appendLine("Version: $version")
+                diagnostics.appendLine("Runtime target: ${JarvisPaths.describeRuntimeTarget()}")
                 diagnostics.appendLine("")
                 diagnostics.appendLine("--- System ---")
                 diagnostics.appendLine("OS: ${System.getProperty("os.name")} ${System.getProperty("os.version")}")
                 diagnostics.appendLine("Java: ${System.getProperty("java.version")}")
                 diagnostics.appendLine("")
                 
+                diagnostics.appendLine("--- Backend Bootstrap ---")
                 if (backendPid != null) {
                     val isAlive = try {
                         java.lang.ProcessHandle.of(backendPid).map { it.isAlive }.orElse(false)
                     } catch (e: Exception) {
                         false
                     }
-                    diagnostics.appendLine("--- Backend Status ---")
-                    diagnostics.appendLine("PID: $backendPid (${if (isAlive) "RUNNING" else "STOPPED"})")
-                    diagnostics.appendLine("")
+                    diagnostics.appendLine("Bootstrap PID: $backendPid (${if (isAlive) "RUNNING" else "STOPPED"})")
+                } else {
+                    diagnostics.appendLine("Bootstrap PID: Not running")
                 }
+                diagnostics.appendLine("Note: local runtime services may remain healthy after the bootstrap shell exits.")
+                diagnostics.appendLine("")
+
+                diagnostics.appendLine("--- Last Run Summary ---")
+                val lastRunSummary = JarvisPaths.loadRuntimeRunSummary()
+                if (lastRunSummary != null) {
+                    diagnostics.appendLine("status: ${lastRunSummary.status ?: "unknown"}")
+                    diagnostics.appendLine("runtimeMode: ${lastRunSummary.runtimeMode ?: "unknown"}")
+                    diagnostics.appendLine("apiUrl: ${lastRunSummary.apiUrl ?: "n/a"}")
+                    diagnostics.appendLine("voiceUrl: ${lastRunSummary.voiceUrl ?: "n/a"}")
+                    diagnostics.appendLine("timestamp: ${lastRunSummary.timestamp ?: "n/a"}")
+                } else {
+                    diagnostics.appendLine("missing")
+                }
+                diagnostics.appendLine("")
                 
                 if (healthStatus != null) {
                     diagnostics.appendLine("--- Health Status ---")
@@ -2057,7 +2092,7 @@ class LauncherApplication : Application() {
             }
         }
     }
-    
+
     private fun updateStatus(newStatus: LauncherStatus) {
         status.set(newStatus)
         statusLabel.text = newStatus.name

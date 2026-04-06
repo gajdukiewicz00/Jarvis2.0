@@ -1,6 +1,11 @@
 server:
-  port: 8088
+  port: ${JARVIS_SECURITY_PORT:8088}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_SECURITY_SSL_ENABLED:false}
+    key-store: ${JARVIS_SECURITY_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_SECURITY_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_SECURITY_KEYSTORE_TYPE:PKCS12}
 
 spring:
   application:

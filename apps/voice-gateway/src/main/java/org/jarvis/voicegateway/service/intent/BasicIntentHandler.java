@@ -2,6 +2,7 @@ package org.jarvis.voicegateway.service.intent;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.util.LanguageDetector;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -27,6 +28,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@Order(100)
 public class BasicIntentHandler implements IntentHandler {
 
     @Override
@@ -145,7 +147,7 @@ public class BasicIntentHandler implements IntentHandler {
         }
 
         // ==================== App Launch ====================
-        if (matchesAny(text, "открой браузер", "запусти браузер", "open browser", "launch browser")) {
+        if (matchesAny(text, "открой браузер", "запусти браузер", "вруби браузер", "open browser", "launch browser")) {
             log.info("✅ Matched OPEN_BROWSER, correlationId={}", correlationId);
             return intentResult("OPEN_BROWSER", lang, correlationId, Map.of("app", "browser"));
         }
@@ -155,23 +157,112 @@ public class BasicIntentHandler implements IntentHandler {
             return intentResult("OPEN_NOTEPAD", lang, correlationId, Map.of("app", "notepad"));
         }
         
-        if (matchesAny(text, "открой терминал", "terminal", "open terminal", "консоль", "открой консоль")) {
+        if (matchesAny(text, "открой терминал", "terminal", "open terminal", "консоль", "открой консоль", "запусти терминал")) {
             log.info("✅ Matched OPEN_TERMINAL, correlationId={}", correlationId);
             return intentResult("OPEN_TERMINAL", lang, correlationId, Map.of("app", "terminal"));
         }
         
-        if (matchesAny(text, "открой youtube", "ютуб", "ютьюб", "open youtube")) {
+        if (matchesAny(text, "открой youtube", "ютуб", "ютьюб", "ютубчик", "open youtube")) {
             log.info("✅ Matched OPEN_YOUTUBE, correlationId={}", correlationId);
             return intentResult("OPEN_YOUTUBE", lang, correlationId, Map.of("app", "youtube"));
         }
 
+        if (matchesAny(text, "открой спотифай", "споти", "спотифай", "spotify", "open spotify")) {
+            log.info("✅ Matched OPEN_URL(spotify), correlationId={}", correlationId);
+            return intentResult("OPEN_URL", lang, correlationId, Map.of("url", "https://open.spotify.com"));
+        }
+
+        if (matchesAny(text, "открой переводчик", "переводчик", "переведи", "translator", "open translator")) {
+            log.info("✅ Matched OPEN_URL(translator), correlationId={}", correlationId);
+            return intentResult("OPEN_URL", lang, correlationId, Map.of("url", "https://translate.google.com"));
+        }
+
+        if (matchesAny(text, "открой гугл", "гугл", "google", "open google")) {
+            log.info("✅ Matched OPEN_URL(google), correlationId={}", correlationId);
+            return intentResult("OPEN_URL", lang, correlationId, Map.of("url", "https://www.google.com"));
+        }
+
+        if (matchesAny(text, "открой вики", "википедия", "википедию", "wikipedia", "open wikipedia")) {
+            log.info("✅ Matched OPEN_URL(wikipedia), correlationId={}", correlationId);
+            return intentResult("OPEN_URL", lang, correlationId, Map.of("url", "https://en.wikipedia.org"));
+        }
+
+        if (matchesAny(text, "открой гитхаб", "гитхаб", "github", "open github")) {
+            log.info("✅ Matched OPEN_URL(github), correlationId={}", correlationId);
+            return intentResult("OPEN_URL", lang, correlationId, Map.of("url", "https://github.com"));
+        }
+
+        // ==================== System Control (migrated from legacy) ====================
+        if (matchesAny(text, "скопировать", "скопируй", "скопируй текст", "copy", "copy text", "copy that")) {
+            log.info("✅ Matched CLIPBOARD_COPY, correlationId={}", correlationId);
+            return intentResult("CLIPBOARD_COPY", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "вставить", "вставь", "вклеить", "paste", "paste text")) {
+            log.info("✅ Matched CLIPBOARD_PASTE, correlationId={}", correlationId);
+            return intentResult("CLIPBOARD_PASTE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "отмена действия", "отмени действия", "отмени", "отменить", "undo", "undo that")) {
+            log.info("✅ Matched UNDO_ACTION, correlationId={}", correlationId);
+            return intentResult("UNDO_ACTION", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "другое окно", "смени окно", "смена окна", "сменить окно", "переключи окно",
+                "switch window", "other window", "alt tab", "next window")) {
+            log.info("✅ Matched SWITCH_WINDOW, correlationId={}", correlationId);
+            return intentResult("SWITCH_WINDOW", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "закрой окно", "закрой программу", "закрыть окно", "close window", "close app")) {
+            log.info("✅ Matched CLOSE_WINDOW, correlationId={}", correlationId);
+            return intentResult("CLOSE_WINDOW", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "обнови страницу", "обновить", "перезагрузи страницу", "refresh", "reload")) {
+            log.info("✅ Matched REFRESH_PAGE, correlationId={}", correlationId);
+            return intentResult("REFRESH_PAGE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "рабочий стол", "покажи рабочий стол", "на рабочий стол", "show desktop", "desktop")) {
+            log.info("✅ Matched SHOW_DESKTOP, correlationId={}", correlationId);
+            return intentResult("SHOW_DESKTOP", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "открой параметры", "открой настройки", "настройки", "open settings", "settings")) {
+            log.info("✅ Matched OPEN_SETTINGS, correlationId={}", correlationId);
+            return intentResult("OPEN_SETTINGS", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "смени язык", "смени раскладку", "сменить язык", "смена языка",
+                "switch language", "change language")) {
+            log.info("✅ Matched SWITCH_LANGUAGE, correlationId={}", correlationId);
+            return intentResult("SWITCH_LANGUAGE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "сделай скриншот", "скриншот", "снимок экрана", "screenshot", "take screenshot")) {
+            log.info("✅ Matched SCREENSHOT, correlationId={}", correlationId);
+            return intentResult("SCREENSHOT", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "спящий режим", "в спящий режим", "усыпи компьютер", "sleep mode", "go to sleep")) {
+            log.info("✅ Matched SLEEP_MODE, correlationId={}", correlationId);
+            return intentResult("SLEEP_MODE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "выключи монитор", "отключи монитор", "погаси экран", "monitor off", "screen off")) {
+            log.info("✅ Matched MONITOR_OFF, correlationId={}", correlationId);
+            return intentResult("MONITOR_OFF", lang, correlationId, Map.of());
+        }
+
         // ==================== Window Controls ====================
-        if (matchesAny(text, "сверни окно", "сверни", "свернуть", "minimize window", "minimize")) {
+        if (matchesAny(text, "сверни окно", "сверни", "свернуть", "убери окно", "minimize window", "minimize")) {
             log.info("✅ Matched WINDOW_MINIMIZE, correlationId={}", correlationId);
             return intentResult("WINDOW_MINIMIZE", lang, correlationId, Map.of());
         }
         
-        if (matchesAny(text, "разверни окно", "разверни", "развернуть", "maximize window", "maximize")) {
+        if (matchesAny(text, "разверни окно", "разверни", "развернуть", "на весь экран", "разверни на максимум",
+                "maximize window", "maximize", "fullscreen")) {
             log.info("✅ Matched WINDOW_MAXIMIZE, correlationId={}", correlationId);
             return intentResult("WINDOW_MAXIMIZE", lang, correlationId, Map.of());
         }
@@ -182,12 +273,13 @@ public class BasicIntentHandler implements IntentHandler {
         }
 
         // ==================== Scenarios / Protocols ====================
-        if (matchesAny(text, "рабочий режим", "режим работы", "work mode", "working mode")) {
+        if (matchesAny(text, "рабочий режим", "режим работы", "за работу", "начинаем работать", "рабочий день",
+                "work mode", "working mode", "time to work")) {
             log.info("✅ Matched WORK_MODE, correlationId={}", correlationId);
             return intentResult("WORK_MODE", lang, correlationId, Map.of());
         }
         
-        if (matchesAny(text, "режим отдыха", "отдых", "отдохнуть", "rest mode", "relax mode", "relaxation")) {
+        if (matchesAny(text, "режим отдыха", "отдых", "отдохнуть", "я отдыхать", "rest mode", "relax mode")) {
             log.info("✅ Matched REST_MODE, correlationId={}", correlationId);
             return intentResult("REST_MODE", lang, correlationId, Map.of());
         }
@@ -205,6 +297,69 @@ public class BasicIntentHandler implements IntentHandler {
         if (matchesAny(text, "чистый лист", "всё закрой", "закрой всё", "clean slate", "shut down", "clean up")) {
             log.info("✅ Matched PROTOCOL_CLEAN_SLATE, correlationId={}", correlationId);
             return intentResult("CLEAN_SLATE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "уютный вечер", "протокол уютный вечер", "вечерний режим",
+                "cozy evening", "evening mode", "chill mode")) {
+            log.info("✅ Matched PROTOCOL_COZY_EVENING, correlationId={}", correlationId);
+            return intentResult("PROTOCOL_COZY_EVENING", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "у нас гости", "протокол гости", "приём гостей", "гости пришли",
+                "we have guests", "guests mode", "company's here")) {
+            log.info("✅ Matched PROTOCOL_GUESTS, correlationId={}", correlationId);
+            return intentResult("PROTOCOL_GUESTS", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "игровой режим", "включи игровой режим", "режим игры",
+                "game mode", "gaming mode")) {
+            log.info("✅ Matched GAME_MODE, correlationId={}", correlationId);
+            return intentResult("GAME_MODE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "джарвис шухер", "шухер", "panic", "emergency hide")) {
+            log.info("✅ Matched PROTOCOL_PANIC, correlationId={}", correlationId);
+            return intentResult("PROTOCOL_PANIC", lang, correlationId, Map.of());
+        }
+
+        // ==================== Conversation / Small Talk (migrated from legacy) ====================
+        if (matchesAny(text, "как дела", "как ты", "как поживаешь", "как жизнь",
+                "how are you", "how's it going", "what's up")) {
+            log.info("✅ Matched HOW_ARE_YOU, correlationId={}", correlationId);
+            return intentResult("HOW_ARE_YOU", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "что делаешь", "чем занимаешься", "чем занят",
+                "what are you doing", "what are you up to")) {
+            log.info("✅ Matched WHAT_DOING, correlationId={}", correlationId);
+            return intentResult("WHAT_DOING", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "я вернулся", "я дома", "я пришёл", "я пришел",
+                "i'm back", "i'm home", "i am back")) {
+            log.info("✅ Matched WELCOME_HOME, correlationId={}", correlationId);
+            return intentResult("WELCOME_HOME", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "мне скучно", "скучно", "что мне делать", "i'm bored", "bored")) {
+            log.info("✅ Matched BORED, correlationId={}", correlationId);
+            return intentResult("BORED", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "мне грустно", "грустно", "хочу погрустить", "i'm sad", "feeling down")) {
+            log.info("✅ Matched CHEER_UP, correlationId={}", correlationId);
+            return intentResult("CHEER_UP", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "я тебя люблю", "ты лучший", "люблю тебя", "i love you", "you're the best")) {
+            log.info("✅ Matched LOVE_RESPONSE, correlationId={}", correlationId);
+            return intentResult("LOVE_RESPONSE", lang, correlationId, Map.of());
+        }
+
+        if (matchesAny(text, "включи музыку", "поставь музыку", "запусти музыку",
+                "play music", "play some music")) {
+            log.info("✅ Matched PLAY_MUSIC, correlationId={}", correlationId);
+            return intentResult("PLAY_MUSIC", lang, correlationId, Map.of());
         }
 
         // ==================== Small Talk / Wake Acknowledgment ====================
@@ -318,12 +473,19 @@ public class BasicIntentHandler implements IntentHandler {
             "громче", "тише", "louder", "quieter", "volume", "звук", "mute",
             // Media
             "следующий", "предыдущий", "пауза", "стоп", "играй", "next", "prev", "play", "pause", "stop",
-            // Apps
-            "открой", "запусти", "open", "launch", "браузер", "browser", "terminal", "youtube",
+            // Apps / URLs
+            "открой", "запусти", "вруби", "open", "launch", "браузер", "browser", "terminal", "youtube",
+            "спотифай", "переводчик", "гугл", "вики", "гитхаб",
+            // System control
+            "скопируй", "вставь", "отмени", "обнови", "скриншот", "настройки",
+            "copy", "paste", "undo", "refresh", "screenshot", "settings",
             // Window
-            "сверни", "разверни", "minimize", "maximize", "lock",
+            "сверни", "разверни", "закрой", "minimize", "maximize", "lock", "close",
             // Scenarios
-            "режим", "mode", "вечеринка", "party", "чистый лист", "clean slate"
+            "режим", "mode", "вечеринка", "party", "чистый лист", "clean slate",
+            "гости", "шухер", "уютный", "игровой",
+            // Conversation triggers
+            "как дела", "мне скучно", "я вернулся", "люблю", "грустно", "музыку"
         };
         
         for (String keyword : actionKeywords) {

@@ -2,7 +2,8 @@ package org.jarvis.planner.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jarvis.planner.service.LlmEnhancementService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -16,10 +17,9 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/planner/llm")
 @RequiredArgsConstructor
+@ConditionalOnProperty(value = "planner.llm.enabled", havingValue = "true")
 public class LlmController {
-    
-    private final LlmEnhancementService llmService;
-    
+
     /**
      * Generate document via LLM
      */
@@ -31,12 +31,11 @@ public class LlmController {
     ) {
         String userId = authentication.getName();
         log.info("Generating {} for user: {}", documentType, userId);
-        
-        String result = llmService.generateDocument(userId, documentType, context);
-        
-        return ResponseEntity.ok(Map.of(
+
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of(
+            "status", "NOT_IMPLEMENTED",
             "documentType", documentType,
-            "content", result
+            "message", "planner-service does not expose placeholder LLM document generation anymore; use llm-service directly"
         ));
     }
     
@@ -50,12 +49,11 @@ public class LlmController {
     ) {
         String userId = authentication.getName();
         log.info("Parsing NL task for user: {}: {}", userId, naturalLanguage);
-        
-        String result = llmService.parseNaturalLanguageTask(userId, naturalLanguage);
-        
-        return ResponseEntity.ok(Map.of(
+
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(Map.of(
+            "status", "NOT_IMPLEMENTED",
             "input", naturalLanguage,
-            "parsed", result
+            "message", "planner-service does not expose placeholder LLM task parsing; use llm-service directly"
         ));
     }
 }

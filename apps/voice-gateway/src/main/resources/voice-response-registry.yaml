@@ -1,0 +1,656 @@
+responses:
+  - key: always_at_service_sir
+    assets:
+      ru: ru/system/always_at_service_sir
+    text:
+      ru: "Всегда к вашим услугам, сэр."
+      en: "Always at your service, sir."
+
+  - key: at_your_service_sir
+    assets:
+      ru: ru/assistant/at_your_service_sir
+    text:
+      ru: "К вашим услугам, сэр."
+      en: "At your service, sir."
+
+  - key: hello_i_am_jarvis
+    assets:
+      ru: ru/assistant/hello_i_am_jarvis
+    text:
+      ru: "Привет, я Джарвис."
+      en: "Hello. I am Jarvis."
+
+  - key: good_morning
+    assets:
+      ru: ru/assistant/good_morning
+    text:
+      ru: "Доброе утро."
+      en: "Good morning."
+
+  - key: loading_sir
+    assets:
+      ru: ru/assistant/loading_sir
+    text:
+      ru: "Загружаю, сэр."
+      en: "Loading, sir."
+
+  - key: request_completed_sir
+    assets:
+      ru: ru/assistant/request_completed_sir
+    text:
+      ru: "Запрос выполнен, сэр."
+      en: "Request completed, sir."
+
+  - key: yes_sir
+    assets:
+      ru: ru/system/yes_sir
+    text:
+      ru: "Да, сэр."
+      en: "Yes, sir."
+
+  - key: yes_sir_alt
+    assets:
+      ru: ru/system/yes_sir_alt
+    text:
+      ru: "Да, сэр."
+      en: "Yes, sir."
+
+  - key: affirmative
+    assets:
+      ru: ru/system/affirmative
+    text:
+      ru: "Есть."
+      en: "Affirmative."
+
+  - key: rest_mode
+    assets:
+      ru: ru/system/rest_mode
+    text:
+      ru: "Я отдыхать."
+      en: "Entering rest mode."
+
+  - key: news_update
+    assets:
+      ru: ru/assistant/news_update
+    text:
+      ru: "Открываю новости."
+      en: "Opening the news."
+
+  - key: running_diagnostics
+    assets:
+      ru: ru/assistant/running_diagnostics
+    text:
+      ru: "Начинаю диагностику системы."
+      en: "Running diagnostics."
+
+  - key: welcome_back
+    assets:
+      ru: ru/assistant/welcome_back
+    text:
+      ru: "С возвращением."
+      en: "Welcome back."
+
+  - key: pleasant_listening_sir
+    assets:
+      ru: ru/media/pleasant_listening_sir
+    text:
+      ru: "Приятного прослушивания, сэр."
+      en: "Enjoy listening, sir."
+
+  - key: game_voice_control_activated
+    assets:
+      ru: ru/scenarios/game_voice_control_activated
+    text:
+      ru: "Активирую игровой протокол."
+      en: "Activating game protocol."
+
+  - key: internet_check
+    assets:
+      ru: ru/diagnostics/internet_check
+    text:
+      ru: "Проверяю скорость интернета."
+      en: "Checking the internet speed."
+
+  - key: monitor_off_ack
+    text:
+      ru: "Гашу экран, сэр."
+      en: "Turning the screen off, sir."
+
+  - key: lonely_mode
+    text:
+      ru: "Подбираю компанию на фоне, сэр."
+      en: "Opening a little background company, sir."
+
+  - key: motivation_mode
+    text:
+      ru: "Подбираю мотивацию, сэр."
+      en: "Loading a motivation boost, sir."
+
+  - key: bored_game
+    text:
+      ru: "Есть идея, сэр. Открываю игру."
+      en: "I have an idea, sir. Opening a game."
+
+  - key: sad_playlist
+    text:
+      ru: "Подбираю что-нибудь под настроение."
+      en: "Opening something that fits the mood."
+
+  - key: melancholy_playlist
+    text:
+      ru: "Включаю спокойную подборку."
+      en: "Opening something calm."
+
+  - key: greeting_disabled
+    text:
+      ru: "Принято, сэр. Отключаю приветствие только для этой сессии."
+      en: "Understood, sir. Disabling the greeting for this session only."
+
+  - key: love_response
+    text:
+      ru: "Это взаимно, сэр."
+      en: "The feeling is mutual, sir."
+
+  - key: random_fact_legacy
+    text:
+      ru: "Сэр, у осьминога три сердца."
+      en: "Sir, an octopus has three hearts."
+
+  - key: coin_flip_heads
+    text:
+      ru: "Монета говорит: орел."
+      en: "The coin says: heads."
+
+  - key: fairy_tale_short
+    text:
+      ru: "Жил-был код, который однажды собрался с первого раза, и с тех пор его считали легендой."
+      en: "Once there was code that built on the first try, and it became a legend."
+
+  - key: cosmos_brief
+    text:
+      ru: "Космос только кажется тихим, сэр. В нем постоянно рождаются звезды и сталкиваются галактики."
+      en: "Space only looks quiet, sir. Stars are born and galaxies collide in it all the time."
+
+  - key: everest_brief
+    text:
+      ru: "Эверест выше восьми тысяч метров, и главная сложность там не подъем, а кислород и погода."
+      en: "Everest is over eight thousand meters high, and the real challenge there is oxygen and weather."
+
+  - key: alien_life_brief
+    text:
+      ru: "Прямых доказательств пока нет, сэр, но миров во Вселенной достаточно, чтобы вопрос оставался открытым."
+      en: "There is no direct proof yet, sir, but the universe has enough worlds to keep the question open."
+
+  - key: legacy_archive_clip_001
+    assets:
+      ru: legacy/archive/clip_001
+    text:
+      ru: "Архивный клип 001 из legacy-пака."
+
+  - key: legacy_archive_clip_002
+    assets:
+      ru: legacy/archive/clip_002
+    text:
+      ru: "Архивный клип 002 из legacy-пака."
+
+  - key: legacy_archive_clip_003
+    assets:
+      ru: legacy/archive/clip_003
+    text:
+      ru: "Архивный клип 003 из legacy-пака."
+
+  - key: legacy_archive_clip_004
+    assets:
+      ru: legacy/archive/clip_004
+    text:
+      ru: "Архивный клип 004 из legacy-пака."
+
+  - key: legacy_archive_clip_005
+    assets:
+      ru: legacy/archive/clip_005
+    text:
+      ru: "Архивный клип 005 из legacy-пака."
+
+  - key: legacy_archive_clip_006
+    assets:
+      ru: legacy/archive/clip_006
+    text:
+      ru: "Архивный клип 006 из legacy-пака."
+
+  - key: legacy_archive_clip_007
+    assets:
+      ru: legacy/archive/clip_007
+    text:
+      ru: "Архивный клип 007 из legacy-пака."
+
+  - key: legacy_archive_clip_008
+    assets:
+      ru: legacy/archive/clip_008
+    text:
+      ru: "Архивный клип 008 из legacy-пака."
+
+  - key: legacy_archive_clip_009
+    assets:
+      ru: legacy/archive/clip_009
+    text:
+      ru: "Архивный клип 009 из legacy-пака."
+
+  - key: legacy_archive_clip_010
+    assets:
+      ru: legacy/archive/clip_010
+    text:
+      ru: "Архивный клип 010 из legacy-пака."
+
+  - key: legacy_archive_clip_011
+    assets:
+      ru: legacy/archive/clip_011
+    text:
+      ru: "Архивный клип 011 из legacy-пака."
+
+  - key: legacy_archive_clip_012
+    assets:
+      ru: legacy/archive/clip_012
+    text:
+      ru: "Архивный клип 012 из legacy-пака."
+
+  - key: legacy_archive_clip_013
+    assets:
+      ru: legacy/archive/clip_013
+    text:
+      ru: "Архивный клип 013 из legacy-пака."
+
+  - key: legacy_archive_clip_014
+    assets:
+      ru: legacy/archive/clip_014
+    text:
+      ru: "Архивный клип 014 из legacy-пака."
+
+  - key: legacy_archive_clip_015
+    assets:
+      ru: legacy/archive/clip_015
+    text:
+      ru: "Архивный клип 015 из legacy-пака."
+
+  - key: legacy_archive_clip_016
+    assets:
+      ru: legacy/archive/clip_016
+    text:
+      ru: "Архивный клип 016 из legacy-пака."
+
+  - key: legacy_archive_clip_017
+    assets:
+      ru: legacy/archive/clip_017
+    text:
+      ru: "Архивный клип 017 из legacy-пака."
+
+  - key: legacy_archive_clip_018
+    assets:
+      ru: legacy/archive/clip_018
+    text:
+      ru: "Архивный клип 018 из legacy-пака."
+
+  - key: legacy_archive_clip_019
+    assets:
+      ru: legacy/archive/clip_019
+    text:
+      ru: "Архивный клип 019 из legacy-пака."
+
+  - key: legacy_archive_clip_020
+    assets:
+      ru: legacy/archive/clip_020
+    text:
+      ru: "Архивный клип 020 из legacy-пака."
+
+  - key: legacy_archive_clip_021
+    assets:
+      ru: legacy/archive/clip_021
+    text:
+      ru: "Архивный клип 021 из legacy-пака."
+
+  - key: legacy_archive_clip_022
+    assets:
+      ru: legacy/archive/clip_022
+    text:
+      ru: "Архивный клип 022 из legacy-пака."
+
+  - key: legacy_archive_clip_023
+    assets:
+      ru: legacy/archive/clip_023
+    text:
+      ru: "Архивный клип 023 из legacy-пака."
+
+  - key: legacy_archive_clip_024
+    assets:
+      ru: legacy/archive/clip_024
+    text:
+      ru: "Архивный клип 024 из legacy-пака."
+
+  - key: legacy_archive_clip_025
+    assets:
+      ru: legacy/archive/clip_025
+    text:
+      ru: "Архивный клип 025 из legacy-пака."
+
+  - key: legacy_archive_clip_026
+    assets:
+      ru: legacy/archive/clip_026
+    text:
+      ru: "Архивный клип 026 из legacy-пака."
+
+  - key: legacy_archive_clip_027
+    assets:
+      ru: legacy/archive/clip_027
+    text:
+      ru: "Архивный клип 027 из legacy-пака."
+
+  - key: legacy_archive_clip_028
+    assets:
+      ru: legacy/archive/clip_028
+    text:
+      ru: "Архивный клип 028 из legacy-пака."
+
+  - key: legacy_archive_clip_029
+    assets:
+      ru: legacy/archive/clip_029
+    text:
+      ru: "Архивный клип 029 из legacy-пака."
+
+  - key: legacy_archive_clip_030
+    assets:
+      ru: legacy/archive/clip_030
+    text:
+      ru: "Архивный клип 030 из legacy-пака."
+
+  - key: legacy_archive_clip_031
+    assets:
+      ru: legacy/archive/clip_031
+    text:
+      ru: "Архивный клип 031 из legacy-пака."
+
+  - key: legacy_archive_clip_032
+    assets:
+      ru: legacy/archive/clip_032
+    text:
+      ru: "Архивный клип 032 из legacy-пака."
+
+  - key: legacy_archive_clip_033
+    assets:
+      ru: legacy/archive/clip_033
+    text:
+      ru: "Архивный клип 033 из legacy-пака."
+
+  - key: legacy_archive_clip_034
+    assets:
+      ru: legacy/archive/clip_034
+    text:
+      ru: "Архивный клип 034 из legacy-пака."
+
+  - key: legacy_archive_clip_035
+    assets:
+      ru: legacy/archive/clip_035
+    text:
+      ru: "Архивный клип 035 из legacy-пака."
+
+  - key: legacy_archive_clip_036
+    assets:
+      ru: legacy/archive/clip_036
+    text:
+      ru: "Архивный клип 036 из legacy-пака."
+
+  - key: legacy_archive_clip_037
+    assets:
+      ru: legacy/archive/clip_037
+    text:
+      ru: "Архивный клип 037 из legacy-пака."
+
+  - key: legacy_archive_clip_038
+    assets:
+      ru: legacy/archive/clip_038
+    text:
+      ru: "Архивный клип 038 из legacy-пака."
+
+  - key: legacy_archive_clip_039
+    assets:
+      ru: legacy/archive/clip_039
+    text:
+      ru: "Архивный клип 039 из legacy-пака."
+
+  - key: legacy_archive_clip_040
+    assets:
+      ru: legacy/archive/clip_040
+    text:
+      ru: "Архивный клип 040 из legacy-пака."
+
+  - key: legacy_archive_clip_041
+    assets:
+      ru: legacy/archive/clip_041
+    text:
+      ru: "Архивный клип 041 из legacy-пака."
+
+  - key: legacy_archive_clip_042
+    assets:
+      ru: legacy/archive/clip_042
+    text:
+      ru: "Архивный клип 042 из legacy-пака."
+
+  - key: legacy_archive_clip_043
+    assets:
+      ru: legacy/archive/clip_043
+    text:
+      ru: "Архивный клип 043 из legacy-пака."
+
+  - key: legacy_archive_clip_044
+    assets:
+      ru: legacy/archive/clip_044
+    text:
+      ru: "Архивный клип 044 из legacy-пака."
+
+  - key: legacy_archive_clip_045
+    assets:
+      ru: legacy/archive/clip_045
+    text:
+      ru: "Архивный клип 045 из legacy-пака."
+
+  - key: legacy_archive_clip_046
+    assets:
+      ru: legacy/archive/clip_046
+    text:
+      ru: "Архивный клип 046 из legacy-пака."
+
+  - key: legacy_archive_clip_047
+    assets:
+      ru: legacy/archive/clip_047
+    text:
+      ru: "Архивный клип 047 из legacy-пака."
+
+  - key: legacy_archive_clip_048
+    assets:
+      ru: legacy/archive/clip_048
+    text:
+      ru: "Архивный клип 048 из legacy-пака."
+
+  - key: legacy_archive_clip_049
+    assets:
+      ru: legacy/archive/clip_049
+    text:
+      ru: "Архивный клип 049 из legacy-пака."
+
+  - key: legacy_archive_clip_050
+    assets:
+      ru: legacy/archive/clip_050
+    text:
+      ru: "Архивный клип 050 из legacy-пака."
+
+  - key: legacy_archive_clip_051
+    assets:
+      ru: legacy/archive/clip_051
+    text:
+      ru: "Архивный клип 051 из legacy-пака."
+
+  - key: legacy_archive_clip_052
+    assets:
+      ru: legacy/archive/clip_052
+    text:
+      ru: "Архивный клип 052 из legacy-пака."
+
+  - key: legacy_archive_clip_053
+    assets:
+      ru: legacy/archive/clip_053
+    text:
+      ru: "Архивный клип 053 из legacy-пака."
+
+  - key: legacy_archive_clip_054
+    assets:
+      ru: legacy/archive/clip_054
+    text:
+      ru: "Архивный клип 054 из legacy-пака."
+
+  - key: legacy_archive_clip_055
+    assets:
+      ru: legacy/archive/clip_055
+    text:
+      ru: "Архивный клип 055 из legacy-пака."
+
+  - key: legacy_archive_clip_056
+    assets:
+      ru: legacy/archive/clip_056
+    text:
+      ru: "Архивный клип 056 из legacy-пака."
+
+  - key: legacy_archive_clip_057
+    assets:
+      ru: legacy/archive/clip_057
+    text:
+      ru: "Архивный клип 057 из legacy-пака."
+
+  - key: legacy_archive_clip_058
+    assets:
+      ru: legacy/archive/clip_058
+    text:
+      ru: "Архивный клип 058 из legacy-пака."
+
+  - key: legacy_archive_clip_059
+    assets:
+      ru: legacy/archive/clip_059
+    text:
+      ru: "Архивный клип 059 из legacy-пака."
+
+  - key: legacy_archive_clip_060
+    assets:
+      ru: legacy/archive/clip_060
+    text:
+      ru: "Архивный клип 060 из legacy-пака."
+
+  - key: legacy_archive_clip_061
+    assets:
+      ru: legacy/archive/clip_061
+    text:
+      ru: "Архивный клип 061 из legacy-пака."
+
+  - key: legacy_archive_clip_062
+    assets:
+      ru: legacy/archive/clip_062
+    text:
+      ru: "Архивный клип 062 из legacy-пака."
+
+  - key: legacy_archive_clip_063
+    assets:
+      ru: legacy/archive/clip_063
+    text:
+      ru: "Архивный клип 063 из legacy-пака."
+
+  - key: legacy_archive_clip_064
+    assets:
+      ru: legacy/archive/clip_064
+    text:
+      ru: "Архивный клип 064 из legacy-пака."
+
+  - key: legacy_archive_clip_065
+    assets:
+      ru: legacy/archive/clip_065
+    text:
+      ru: "Архивный клип 065 из legacy-пака."
+
+  - key: legacy_archive_clip_066
+    assets:
+      ru: legacy/archive/clip_066
+    text:
+      ru: "Архивный клип 066 из legacy-пака."
+
+  - key: legacy_archive_clip_067
+    assets:
+      ru: legacy/archive/clip_067
+    text:
+      ru: "Архивный клип 067 из legacy-пака."
+
+  - key: legacy_archive_clip_068
+    assets:
+      ru: legacy/archive/clip_068
+    text:
+      ru: "Архивный клип 068 из legacy-пака."
+
+  - key: legacy_archive_clip_069
+    assets:
+      ru: legacy/archive/clip_069
+    text:
+      ru: "Архивный клип 069 из legacy-пака."
+
+  - key: legacy_archive_clip_070
+    assets:
+      ru: legacy/archive/clip_070
+    text:
+      ru: "Архивный клип 070 из legacy-пака."
+
+  - key: legacy_archive_clip_071
+    assets:
+      ru: legacy/archive/clip_071
+    text:
+      ru: "Архивный клип 071 из legacy-пака."
+
+  - key: legacy_archive_clip_072
+    assets:
+      ru: legacy/archive/clip_072
+    text:
+      ru: "Архивный клип 072 из legacy-пака."
+
+  - key: legacy_archive_clip_073
+    assets:
+      ru: legacy/archive/clip_073
+    text:
+      ru: "Архивный клип 073 из legacy-пака."
+
+  - key: legacy_archive_clip_074
+    assets:
+      ru: legacy/archive/clip_074
+    text:
+      ru: "Архивный клип 074 из legacy-пака."
+
+  - key: legacy_archive_clip_075
+    assets:
+      ru: legacy/archive/clip_075
+    text:
+      ru: "Архивный клип 075 из legacy-пака."
+
+  - key: legacy_archive_clip_076
+    assets:
+      ru: legacy/archive/clip_076
+    text:
+      ru: "Архивный клип 076 из legacy-пака."
+
+  - key: legacy_archive_clip_077
+    assets:
+      ru: legacy/archive/clip_077
+    text:
+      ru: "Архивный клип 077 из legacy-пака."
+
+  - key: legacy_archive_clip_078
+    assets:
+      ru: legacy/archive/clip_078
+    text:
+      ru: "Архивный клип 078 из legacy-пака."
+
+  - key: legacy_archive_clip_079
+    assets:
+      ru: legacy/archive/clip_079
+    text:
+      ru: "Архивный клип 079 из legacy-пака."

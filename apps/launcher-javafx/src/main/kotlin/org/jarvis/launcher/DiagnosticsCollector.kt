@@ -45,6 +45,7 @@ class DiagnosticsCollector {
                 // Launcher version
                 diagnostics.appendLine("--- Launcher ---")
                 diagnostics.appendLine("Version: $launcherVersion")
+                diagnostics.appendLine("Runtime target: ${JarvisPaths.describeRuntimeTarget()}")
                 diagnostics.appendLine("")
                 
                 // OS + Java
@@ -56,7 +57,7 @@ class DiagnosticsCollector {
                 diagnostics.appendLine("")
                 
                 // Backend status
-                diagnostics.appendLine("--- Backend Status ---")
+                diagnostics.appendLine("--- Backend Bootstrap ---")
                 if (backendPid != null) {
                     val isAlive = try {
                         java.lang.ProcessHandle.of(backendPid)
@@ -65,9 +66,23 @@ class DiagnosticsCollector {
                     } catch (e: Exception) {
                         false
                     }
-                    diagnostics.appendLine("PID: $backendPid (${if (isAlive) "RUNNING" else "STOPPED"})")
+                    diagnostics.appendLine("Bootstrap PID: $backendPid (${if (isAlive) "RUNNING" else "STOPPED"})")
                 } else {
-                    diagnostics.appendLine("PID: Not running")
+                    diagnostics.appendLine("Bootstrap PID: Not running")
+                }
+                diagnostics.appendLine("Note: local runtime services may remain healthy after the bootstrap shell exits.")
+                diagnostics.appendLine("")
+
+                diagnostics.appendLine("--- Last Run Summary ---")
+                val lastRunSummary = JarvisPaths.loadRuntimeRunSummary()
+                if (lastRunSummary != null) {
+                    diagnostics.appendLine("status: ${lastRunSummary.status ?: "unknown"}")
+                    diagnostics.appendLine("runtimeMode: ${lastRunSummary.runtimeMode ?: "unknown"}")
+                    diagnostics.appendLine("apiUrl: ${lastRunSummary.apiUrl ?: "n/a"}")
+                    diagnostics.appendLine("voiceUrl: ${lastRunSummary.voiceUrl ?: "n/a"}")
+                    diagnostics.appendLine("timestamp: ${lastRunSummary.timestamp ?: "n/a"}")
+                } else {
+                    diagnostics.appendLine("missing")
                 }
                 diagnostics.appendLine("")
                 
@@ -127,6 +142,23 @@ class DiagnosticsCollector {
                     val backendLog = JarvisPaths.backendLaunchLog
                     if (Files.exists(backendLog)) {
                         val lines = Files.readAllLines(backendLog)
+                        val startIndex = maxOf(0, lines.size - 100)
+                        lines.subList(startIndex, lines.size).forEach { line ->
+                            diagnostics.appendLine(SecurityUtils.maskSensitiveData(line, secretKeys))
+                        }
+                    } else {
+                        diagnostics.appendLine("File not found")
+                    }
+                } catch (e: Exception) {
+                    diagnostics.appendLine("Error reading: ${e.message}")
+                }
+                diagnostics.appendLine("")
+
+                diagnostics.appendLine("--- Last 100 lines: desktop.log (secrets masked) ---")
+                try {
+                    val desktopLog = JarvisPaths.desktopLog
+                    if (Files.exists(desktopLog)) {
+                        val lines = Files.readAllLines(desktopLog)
                         val startIndex = maxOf(0, lines.size - 100)
                         lines.subList(startIndex, lines.size).forEach { line ->
                             diagnostics.appendLine(SecurityUtils.maskSensitiveData(line, secretKeys))
@@ -199,4 +231,3 @@ class DiagnosticsCollector {
         executor.shutdown()
     }
 }
-

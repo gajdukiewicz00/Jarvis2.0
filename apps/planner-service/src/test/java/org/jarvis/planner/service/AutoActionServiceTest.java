@@ -83,4 +83,14 @@ class AutoActionServiceTest {
         assertEquals(Instant.parse("2026-03-13T10:40:00Z"), reminder.getReminderTime());
         assertEquals(ReminderType.ONCE, reminder.getReminderType());
     }
+
+    @Test
+    void startMusicPlaylistRoutesScenarioInsteadOfPretendingToControlMusic() {
+        when(pcControlActionClient.sendAction("user-9", "SCENARIO", Map.of("name", "party"))).thenReturn(true);
+
+        autoActionService.startMusicPlaylist("user-9", "PARTY");
+
+        verify(pcControlActionClient).sendAction("user-9", "SCENARIO", Map.of("name", "party"));
+        verify(notificationService).sendVoiceNotification("user-9", "Включаю плейлист для PARTY");
+    }
 }

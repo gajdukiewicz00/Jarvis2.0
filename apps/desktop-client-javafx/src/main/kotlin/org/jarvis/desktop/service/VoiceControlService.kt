@@ -168,6 +168,9 @@ class VoiceControlService(
                 rawState.removePrefix("ERROR:").removePrefix("ERROR").trim().ifEmpty { null }
             rawState.startsWith("UNAVAILABLE", ignoreCase = true) ->
                 rawState.removePrefix("UNAVAILABLE:").removePrefix("UNAVAILABLE").trim().ifEmpty { "Voice backend not reachable" }
+            rawState.startsWith("AUTH_REQUIRED", ignoreCase = true) ->
+                rawState.removePrefix("AUTH_REQUIRED:").removePrefix("AUTH_REQUIRED").trim()
+                    .ifEmpty { "Voice session expired. Please login again." }
             else -> null
         }
         mutate { current ->
@@ -183,6 +186,26 @@ class VoiceControlService(
             } else {
                 current.copy(connectionPhase = phase, lastError = error ?: current.lastError)
             }
+        }
+    }
+
+    fun onSttAvailabilityChanged(available: Boolean, reason: String? = null) {
+        mutate { current ->
+            if (current.sttAvailable == available) return@mutate current
+            current.copy(
+                sttAvailable = available,
+                lastError = if (!available) reason else current.lastError
+            )
+        }
+    }
+
+    fun onTtsAvailabilityChanged(available: Boolean, reason: String? = null) {
+        mutate { current ->
+            if (current.ttsAvailable == available) return@mutate current
+            current.copy(
+                ttsAvailable = available,
+                lastError = if (!available) reason else current.lastError
+            )
         }
     }
 
@@ -205,6 +228,9 @@ class VoiceControlService(
             s.equals("CONNECTED", ignoreCase = true) -> ConnectionPhase.CONNECTED
             s.equals("DISCONNECTED", ignoreCase = true) -> ConnectionPhase.DISCONNECTED
             s.startsWith("Reconnecting", ignoreCase = true) -> ConnectionPhase.RECONNECTING
+            s.startsWith("Re-authenticating", ignoreCase = true) -> ConnectionPhase.RECONNECTING
+            s.startsWith("CONNECTING", ignoreCase = true) -> ConnectionPhase.CONNECTING
+            s.startsWith("AUTH_REQUIRED", ignoreCase = true) -> ConnectionPhase.FAILED
             s.startsWith("UNAVAILABLE", ignoreCase = true) -> ConnectionPhase.FAILED
             s.startsWith("ERROR", ignoreCase = true) -> ConnectionPhase.FAILED
             s.startsWith("Connection failed", ignoreCase = true) -> ConnectionPhase.FAILED

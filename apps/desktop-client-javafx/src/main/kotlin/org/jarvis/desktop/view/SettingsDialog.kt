@@ -57,7 +57,10 @@ class SettingsDialog : Dialog<ButtonType>() {
             if (buttonType == ButtonType.OK) {
                 val selectedLanguage = languageComboBox.selectionModel.selectedItem
                 if (selectedLanguage != null) {
-                    AppConfig.saveSettings(serverUrlField.text, selectedLanguage.locale)
+                    AppConfig.saveSettings(
+                        apiGatewayBaseUrl = serverUrlField.text,
+                        locale = selectedLanguage.locale
+                    )
                     I18n.setLocale(selectedLanguage.locale)
                 }
             }

@@ -1,0 +1,24 @@
+# Action verb vocabulary — extracted from legacy VoxCommando phrase patterns.
+# These are the trigger verbs that precede a target noun in voice commands.
+# Example: "открой браузер" → verb="открой", target="браузер"
+#
+# Grouped by semantic intent. Used by intent parser to detect command structure.
+
+open_verbs:
+  phrases_ru: ["открой", "запусти", "зайди в", "открыть", "запустить", "зайти в",
+               "вруби", "врубить", "выведи", "покажи", "включи"]
+  phrases_en: ["open", "launch", "start", "show", "run", "fire up", "bring up"]
+
+close_verbs:
+  phrases_ru: ["закрой", "закрыть", "выключи", "выключить", "выруби", "вырубить",
+               "убери", "скрой", "сверни"]
+  phrases_en: ["close", "shut", "quit", "exit", "kill", "hide", "dismiss"]
+
+control_verbs:
+  phrases_ru: ["сделай", "сделать", "поставь", "поставить", "переключи", "переключить",
+               "смени", "сменить", "установи", "установить", "настрой", "настроить"]
+  phrases_en: ["set", "switch", "toggle", "change", "adjust", "configure"]
+
+search_verbs:
+  phrases_ru: ["найди", "найти", "поищи", "поискать", "загугли"]
+  phrases_en: ["find", "search", "look up", "google"]

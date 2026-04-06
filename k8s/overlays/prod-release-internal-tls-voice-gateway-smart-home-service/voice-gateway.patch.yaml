@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-voice-gateway-smart-home-service: voice-gateway-smart-home-service-v1
+    spec:
+      containers:
+        - name: voice-gateway
+          env:
+            - name: JARVIS_SMART_HOME_URL
+              value: https://smart-home-service.jarvis.svc.cluster.local:8086
+            - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-voice-gateway-smart-home-service
+                  key: truststore-password
+            - name: JAVA_TOOL_OPTIONS
+              value: -Djavax.net.ssl.trustStore=/tls-smart-home/jarvis-internal-truststore.jks -Djavax.net.ssl.trustStorePassword=$(JARVIS_JAVA_TRUSTSTORE_PASSWORD)
+          volumeMounts:
+            - name: internal-tls-voice-gateway-smart-home-service
+              mountPath: /tls-smart-home
+              readOnly: true
+      volumes:
+        - name: internal-tls-voice-gateway-smart-home-service
+          secret:
+            secretName: jarvis-internal-tls-voice-gateway-smart-home-service
+            items:
+              - key: truststore.jks
+                path: jarvis-internal-truststore.jks
+              - key: ca.crt
+                path: ca.crt

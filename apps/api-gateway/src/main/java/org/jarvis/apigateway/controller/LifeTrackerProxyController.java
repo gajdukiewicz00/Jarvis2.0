@@ -3,6 +3,7 @@ package org.jarvis.apigateway.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.apigateway.client.LifeTrackerClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,6 +17,8 @@ import java.util.Map;
 public class LifeTrackerProxyController {
 
     private final LifeTrackerClient lifeClient;
+    @Value("${services.life-tracker.url}")
+    private String lifeTrackerUrl;
 
     // Finance endpoints
     @PostMapping("/finance/expenses")
@@ -25,8 +28,10 @@ public class LifeTrackerProxyController {
     }
 
     @GetMapping("/finance/expenses")
-    public ResponseEntity<List<Map<String, Object>>> getExpenses() {
-        log.info("Proxying GET /api/v1/life/finance/expenses");
+    public ResponseEntity<List<Map<String, Object>>> getExpenses(
+            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
+        log.info("Proxying GET /api/v1/life/finance/expenses to {} (smokeRunId={})",
+                lifeTrackerUrl, smokeRunId != null ? smokeRunId : "none");
         return lifeClient.getExpenses();
     }
 

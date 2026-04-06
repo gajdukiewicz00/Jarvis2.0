@@ -1,6 +1,11 @@
 server:
-  port: 8087
+  port: ${JARVIS_ANALYTICS_PORT:8087}
   shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_ANALYTICS_SSL_ENABLED:false}
+    key-store: ${JARVIS_ANALYTICS_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_ANALYTICS_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_ANALYTICS_KEYSTORE_TYPE:PKCS12}
 
 spring:
   application:
@@ -8,8 +13,6 @@ spring:
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
-      - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration  
-      - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
   
   cloud:
     openfeign:
@@ -22,7 +25,7 @@ spring:
           life-tracker:
             connectTimeout: 5000
             readTimeout: 30000    # 30s for data fetching
-            loggerLevel: FULL
+            loggerLevel: BASIC
       circuitbreaker:
         enabled: true
 

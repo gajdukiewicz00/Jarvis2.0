@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice: api-gateway-nlp-v1
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: NLP_SERVICE_URL
+              value: https://nlp-service.jarvis.svc.cluster.local:8082
+            - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-api-gateway-nlp
+                  key: truststore-password
+            - name: JAVA_TOOL_OPTIONS
+              value: -Djavax.net.ssl.trustStore=/tls/jarvis-internal-truststore.jks -Djavax.net.ssl.trustStorePassword=$(JARVIS_JAVA_TRUSTSTORE_PASSWORD)
+          volumeMounts:
+            - name: internal-tls-api-gateway-nlp
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: internal-tls-api-gateway-nlp
+          secret:
+            secretName: jarvis-internal-tls-api-gateway-nlp
+            items:
+              - key: truststore.jks
+                path: jarvis-internal-truststore.jks
+              - key: ca.crt
+                path: ca.crt

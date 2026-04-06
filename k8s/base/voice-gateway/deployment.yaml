@@ -51,7 +51,9 @@ spec:
             - name: MANAGEMENT_HEALTH_RABBIT_ENABLED
               value: "false"
             - name: JARVIS_VOSK_MODEL_PATH_RU
-              value: /models/vosk-model-ru-0.42
+              value: /models/stt/vosk/vosk-model-small-ru-0.22
+            - name: JARVIS_VOSK_MODEL_PATH_EN
+              value: /models/stt/vosk/vosk-model-small-en-us-0.15
             - name: SPRING_AUTOCONFIGURE_EXCLUDE
               value: >-
                 org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,

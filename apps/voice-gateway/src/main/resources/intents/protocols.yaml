@@ -1,0 +1,104 @@
+# Protocol / scenario intents — migrated from the legacy "Протокололы" group.
+
+intent_group: protocols
+description: "Compound scenario protocols (Iron Man style)"
+
+commands:
+  - id: cozy_evening
+    phrases_ru:
+      - "уютный вечер"
+      - "протокол уютный вечер"
+      - "вечерний режим"
+    phrases_en:
+      - "cozy evening"
+      - "evening mode"
+      - "chill mode"
+    action: PROTOCOL_COZY_EVENING
+
+  - id: guests_mode
+    phrases_ru:
+      - "у нас гости"
+      - "протокол гости"
+      - "прием гостей"
+      - "гости пришли"
+    phrases_en:
+      - "we have guests"
+      - "guests mode"
+      - "guest protocol"
+    action: PROTOCOL_GUESTS
+
+  - id: clean_slate
+    phrases_ru:
+      - "протокол чистый лист"
+      - "чистый лист"
+      - "очисти рабочий стол"
+      - "убери все с рабочего стола"
+    phrases_en:
+      - "clean slate"
+      - "clear the desktop"
+    action: PROTOCOL_CLEAN_SLATE
+
+  - id: holiday_mood
+    phrases_ru:
+      - "новогоднее настроение"
+      - "протокол новый год"
+      - "праздничное настроение"
+    phrases_en:
+      - "holiday mood"
+      - "christmas mode"
+      - "new year mode"
+    action: PROTOCOL_HOLIDAY
+
+  - id: game_mode
+    phrases_ru:
+      - "игровой режим"
+      - "включи игровой режим"
+      - "режим игры"
+    phrases_en:
+      - "game mode"
+      - "gaming mode"
+      - "activate game mode"
+    action: GAME_MODE
+
+  - id: morning_routine
+    phrases_ru:
+      - "утренний протокол"
+      - "доброе утро протокол"
+      - "начни утро"
+    phrases_en:
+      - "morning routine"
+      - "morning protocol"
+      - "start the morning"
+    action: PROTOCOL_MORNING
+
+  - id: going_out
+    phrases_ru:
+      - "я ухожу"
+      - "я выхожу"
+      - "ухожу из дома"
+    phrases_en:
+      - "i'm leaving"
+      - "going out"
+      - "leaving home"
+    action: PROTOCOL_LEAVING
+
+  - id: work_from_home
+    phrases_ru:
+      - "за работу"
+      - "начинаем работать"
+      - "рабочий день"
+    phrases_en:
+      - "time to work"
+      - "start working"
+      - "work day"
+    action: WORK_MODE
+
+  - id: panic_mode
+    phrases_ru:
+      - "джарвис шухер"
+      - "шухер"
+      - "аварийный режим"
+    phrases_en:
+      - "panic"
+      - "emergency hide"
+    action: PROTOCOL_PANIC

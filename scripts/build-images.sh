@@ -279,7 +279,11 @@ build_images() {
             local image
             image="$(image_ref "${service}")"
             log_info "Building ${image}..."
-            docker_build "${image}" "apps/${service}"
+            if [[ "${service}" == "voice-gateway" ]]; then
+                docker_build "${image}" "${PROJECT_ROOT}" -f "apps/${service}/Dockerfile"
+            else
+                docker_build "${image}" "apps/${service}"
+            fi
             images+=("${image}")
         fi
     done

@@ -24,7 +24,7 @@ data class VoiceActionAvailability(
             val busy = state.isBusy
 
             return VoiceActionAvailability(
-                canPushToTalkStart = state.canStartSession && state.hasUsableInput,
+                canPushToTalkStart = state.canStartSession && state.hasUsableInput && state.sttAvailable,
 
                 canPushToTalkRelease = state.sessionState == VoiceState.LISTENING
                         && state.pushToTalkActive,

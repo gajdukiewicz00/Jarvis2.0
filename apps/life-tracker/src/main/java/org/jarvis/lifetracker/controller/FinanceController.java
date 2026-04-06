@@ -1,5 +1,6 @@
 package org.jarvis.lifetracker.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.lifetracker.domain.EntrySource;
@@ -9,7 +10,10 @@ import org.jarvis.lifetracker.dto.*;
 import org.jarvis.lifetracker.repository.ExpenseRepository;
 import org.jarvis.lifetracker.service.DTOMapper;
 import org.jarvis.lifetracker.service.FinanceService;
+import org.jarvis.lifetracker.util.UserContext;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -28,12 +32,11 @@ public class FinanceController {
 
     @PostMapping("/transaction")
     public ExpenseDTO addTransaction(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestBody TransactionRequest request) {
+            @RequestBody TransactionRequest request,
+            HttpServletRequest httpRequest) {
         log.info("Adding transaction: {}", request);
         Expense expense = new Expense();
-        String userId = headerUserId != null ? headerUserId : request.userId();
-        expense.setUserId(userId);
+        expense.setUserId(requireUserId(httpRequest));
         expense.setAmount(request.amount());
         expense.setCurrency(request.currency() != null ? request.currency() : "EUR");
         expense.setCategory(request.category());
@@ -49,89 +52,74 @@ public class FinanceController {
 
     @GetMapping("/transactions")
     public List<ExpenseDTO> getTransactions(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId,
             @RequestParam(required = false) LocalDateTime from,
             @RequestParam(required = false) LocalDateTime to,
             @RequestParam(required = false) String category,
-            @RequestParam(required = false) TransactionType type) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.listTransactions(resolvedUserId, from, to, category, type);
+            @RequestParam(required = false) TransactionType type,
+            HttpServletRequest httpRequest) {
+        return financeService.listTransactions(requireUserId(httpRequest), from, to, category, type);
     }
 
     @GetMapping("/summary/month")
     public FinanceSummaryDTO summarizeMonth(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId,
-            @RequestParam String month) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.summarizeMonth(resolvedUserId, YearMonth.parse(month));
+            @RequestParam String month,
+            HttpServletRequest httpRequest) {
+        return financeService.summarizeMonth(requireUserId(httpRequest), YearMonth.parse(month));
     }
 
     @GetMapping("/analysis/spending")
     public SpendingAnalysisDTO analyzeSpending(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId,
             @RequestParam LocalDateTime from,
             @RequestParam LocalDateTime to,
-            @RequestParam(required = false) String groupBy) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.analyzeSpending(resolvedUserId, from, to, groupBy);
+            @RequestParam(required = false) String groupBy,
+            HttpServletRequest httpRequest) {
+        return financeService.analyzeSpending(requireUserId(httpRequest), from, to, groupBy);
     }
 
     @GetMapping("/budget/status")
     public BudgetStatusDTO budgetStatus(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId,
-            @RequestParam String month) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.budgetStatus(resolvedUserId, YearMonth.parse(month));
+            @RequestParam String month,
+            HttpServletRequest httpRequest) {
+        return financeService.budgetStatus(requireUserId(httpRequest), YearMonth.parse(month));
     }
 
     @PostMapping("/budget")
-    public BudgetDTO createBudget(@RequestBody BudgetDTO request) {
-        return financeService.createBudget(request);
+    public BudgetDTO createBudget(@RequestBody BudgetDTO request, HttpServletRequest httpRequest) {
+        return financeService.createBudget(requireUserId(httpRequest), request);
     }
 
     @GetMapping("/budgets")
-    public List<BudgetDTO> listBudgets(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.listBudgets(resolvedUserId);
+    public List<BudgetDTO> listBudgets(HttpServletRequest httpRequest) {
+        return financeService.listBudgets(requireUserId(httpRequest));
     }
 
     @PostMapping("/goal")
-    public FinancialGoalDTO createGoal(@RequestBody FinancialGoalDTO request) {
-        return financeService.createGoal(request);
+    public FinancialGoalDTO createGoal(@RequestBody FinancialGoalDTO request, HttpServletRequest httpRequest) {
+        return financeService.createGoal(requireUserId(httpRequest), request);
     }
 
     @GetMapping("/goals")
-    public List<FinancialGoalDTO> listGoals(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.listGoals(resolvedUserId);
+    public List<FinancialGoalDTO> listGoals(HttpServletRequest httpRequest) {
+        return financeService.listGoals(requireUserId(httpRequest));
     }
 
     @PostMapping("/recurring")
-    public RecurringTransactionDTO createRecurring(@RequestBody RecurringTransactionDTO request) {
-        return financeService.createRecurring(request);
+    public RecurringTransactionDTO createRecurring(
+            @RequestBody RecurringTransactionDTO request,
+            HttpServletRequest httpRequest) {
+        return financeService.createRecurring(requireUserId(httpRequest), request);
     }
 
     @GetMapping("/recurring")
-    public List<RecurringTransactionDTO> listRecurring(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.listRecurring(resolvedUserId);
+    public List<RecurringTransactionDTO> listRecurring(HttpServletRequest httpRequest) {
+        return financeService.listRecurring(requireUserId(httpRequest));
     }
 
     @PostMapping("/expenses")
     public ExpenseDTO addExpense(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestBody ExpenseRequest request) {
-        return addTransaction(headerUserId, new TransactionRequest(
+            @RequestBody ExpenseRequest request,
+            HttpServletRequest httpRequest) {
+        return addTransaction(new TransactionRequest(
                 request.userId(),
                 BigDecimal.valueOf(request.amount()),
                 request.currency(),
@@ -140,15 +128,12 @@ public class FinanceController {
                 TransactionType.EXPENSE,
                 null,
                 null,
-                LocalDateTime.now()));
+                LocalDateTime.now()), httpRequest);
     }
 
     @GetMapping("/expenses")
-    public List<ExpenseDTO> getExpenses(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return financeService.listTransactions(resolvedUserId, null, null, null, null);
+    public List<ExpenseDTO> getExpenses(HttpServletRequest httpRequest) {
+        return financeService.listTransactions(requireUserId(httpRequest), null, null, null, null);
     }
 
     public record TransactionRequest(
@@ -164,5 +149,13 @@ public class FinanceController {
     }
 
     public record ExpenseRequest(String userId, Double amount, String currency, String category, String description) {
+    }
+
+    private String requireUserId(HttpServletRequest request) {
+        String userId = UserContext.getUserId(request);
+        if (userId == null || userId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing_user_id");
+        }
+        return userId;
     }
 }

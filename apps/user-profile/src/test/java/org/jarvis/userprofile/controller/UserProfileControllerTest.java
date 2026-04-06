@@ -1,10 +1,7 @@
 package org.jarvis.userprofile.controller;
 
-import org.jarvis.userprofile.domain.UserGoal;
-import org.jarvis.userprofile.repository.UserGoalRepository;
-import org.jarvis.userprofile.repository.UserHabitRepository;
-import org.jarvis.userprofile.repository.UserPriorityRepository;
-import org.jarvis.userprofile.service.UserProfileProvisioningService;
+import org.jarvis.userprofile.dto.UserGoalDto;
+import org.jarvis.userprofile.service.UserProfileService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,16 +20,7 @@ import static org.mockito.Mockito.when;
 class UserProfileControllerTest {
 
     @Mock
-    private UserGoalRepository userGoalRepository;
-
-    @Mock
-    private UserHabitRepository userHabitRepository;
-
-    @Mock
-    private UserPriorityRepository userPriorityRepository;
-
-    @Mock
-    private UserProfileProvisioningService userProfileProvisioningService;
+    private UserProfileService userProfileService;
 
     @AfterEach
     void tearDown() {
@@ -45,21 +33,19 @@ class UserProfileControllerTest {
                 new UsernamePasswordAuthenticationToken("user-7", null, List.of())
         );
 
-        UserGoal goal = new UserGoal();
+        UserGoalDto goal = new UserGoalDto();
         goal.setTitle("Ship local runtime");
-        when(userGoalRepository.save(goal)).thenReturn(goal);
+        goal.setUserId("ignored");
+        UserGoalDto savedGoal = new UserGoalDto();
+        savedGoal.setTitle("Ship local runtime");
+        savedGoal.setUserId("user-7");
+        when(userProfileService.createGoal("user-7", goal)).thenReturn(savedGoal);
 
-        UserProfileController controller = new UserProfileController(
-                userGoalRepository,
-                userHabitRepository,
-                userPriorityRepository,
-                userProfileProvisioningService
-        );
+        UserProfileController controller = new UserProfileController(userProfileService);
 
-        UserGoal created = controller.createUserGoal("ignored-path-user", goal);
+        UserGoalDto created = controller.createUserGoal("ignored-path-user", goal);
 
-        verify(userProfileProvisioningService).ensureProfileExists("user-7");
-        verify(userGoalRepository).save(goal);
+        verify(userProfileService).createGoal("user-7", goal);
         assertEquals("user-7", created.getUserId());
     }
 }

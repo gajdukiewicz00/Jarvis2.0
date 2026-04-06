@@ -159,6 +159,27 @@ class LifeTrackerIntegrationTest {
                 .andExpect(jsonPath("$.currency", is("EUR")));
     }
 
+    @Test
+    @DisplayName("POST /api/v1/life/finance/transaction - ignores forged body userId and uses delegated header")
+    void createTransaction_usesDelegatedHeaderUserId() throws Exception {
+        String requestBody = """
+            {
+                "userId": "forged-user",
+                "amount": 18.75,
+                "currency": "EUR",
+                "category": "FOOD",
+                "description": "Snack"
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/life/finance/transaction")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Id", USER_ID)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId", is(USER_ID)));
+    }
+
     // =========================================================================
     // Time Record Tests
     // =========================================================================
@@ -227,6 +248,28 @@ class LifeTrackerIntegrationTest {
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].title", is("Meeting")))
                 .andExpect(jsonPath("$[0].description", is("Team sync")));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/life/calendar/event - ignores forged body userId and uses delegated header")
+    void createCalendarEvent_usesDelegatedHeaderUserId() throws Exception {
+        String requestBody = """
+            {
+                "userId": "forged-user",
+                "title": "Deep Work",
+                "description": "Protected focus slot",
+                "startTime": "2026-03-27T09:00:00",
+                "endTime": "2026-03-27T10:00:00",
+                "allDay": false
+            }
+            """;
+
+        mockMvc.perform(post("/api/v1/life/calendar/event")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-User-Id", USER_ID)
+                        .content(requestBody))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId", is(USER_ID)));
     }
 
     // =========================================================================

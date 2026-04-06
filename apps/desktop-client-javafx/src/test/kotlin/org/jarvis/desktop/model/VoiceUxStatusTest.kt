@@ -20,7 +20,9 @@ class VoiceUxStatusTest {
         alwaysListening: Boolean = false,
         inputDevice: AudioDeviceInfo? = AudioDeviceInfo("Default Mic", true),
         outputDevice: AudioDeviceInfo? = AudioDeviceInfo("Default Speaker", true),
-        error: String? = null
+        error: String? = null,
+        sttAvailable: Boolean = true,
+        ttsAvailable: Boolean = true
     ) = VoiceRuntimeState(
         sessionState = session,
         connectionPhase = connection,
@@ -30,7 +32,9 @@ class VoiceUxStatusTest {
         inputDevice = inputDevice,
         outputDevice = outputDevice,
         lastError = error,
-        updatedAt = now
+        updatedAt = now,
+        sttAvailable = sttAvailable,
+        ttsAvailable = ttsAvailable
     )
 
     // ── error classification takes priority ─────────────────────────
@@ -167,6 +171,14 @@ class VoiceUxStatusTest {
     @Nested
     @DisplayName("Device problems")
     inner class DeviceProblems {
+
+        @Test
+        fun `tts unavailable produces WARNING when connected`() {
+            val s = state(ttsAvailable = false)
+            val result = VoiceUxStatus.compute(s)
+            assertEquals(Severity.WARNING, result.severity)
+            assertTrue(result.headline.contains("output", ignoreCase = true))
+        }
 
         @Test
         fun `no input device produces WARNING when connected`() {

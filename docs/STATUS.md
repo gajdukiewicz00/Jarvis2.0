@@ -1,5 +1,10 @@
 # Release Status
 
+> **Status note (2026-03-21):** This file is a historical release log for earlier
+> launcher/UI acceptance work. The current backend/runtime/deployment source of
+> truth is [BACKEND_STATUS.md](BACKEND_STATUS.md). The current HTTPS/TLS source
+> of truth is [HTTPS_STANDARD.md](HTTPS_STANDARD.md).
+
 Current status: **ACCEPTED**
 
 > **⚠️ Note (2026-02-28):** This document contains historical git diffs referencing

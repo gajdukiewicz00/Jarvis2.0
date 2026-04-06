@@ -92,12 +92,28 @@ echo "Installing launcher JAR..."
 cp "$LAUNCHER_JAR" "${JARVIS_APP}/launcher.jar"
 echo "  ✅ ${JARVIS_APP}/launcher.jar"
 
-# Optional: Copy desktop client JAR (if built)
+# Optional: Copy desktop UI JARs (unified shell primary, legacy client fallback)
 if [[ "$FROM_RELEASE" == "false" ]]; then
-    DESKTOP_JAR="${REPO_ROOT}/apps/desktop-client-javafx/target/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
-    if [[ -f "$DESKTOP_JAR" ]]; then
-        cp "$DESKTOP_JAR" "${JARVIS_APP}/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
+    DESKTOP_APP_JAR="${REPO_ROOT}/apps/desktop-app-javafx/target/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
+    if [[ -f "$DESKTOP_APP_JAR" ]]; then
+        cp "$DESKTOP_APP_JAR" "${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
+        echo "  ✅ ${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
+    fi
+
+    DESKTOP_LEGACY_JAR="${REPO_ROOT}/apps/desktop-client-javafx/target/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
+    if [[ -f "$DESKTOP_LEGACY_JAR" ]]; then
+        cp "$DESKTOP_LEGACY_JAR" "${JARVIS_APP}/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
         echo "  ✅ ${JARVIS_APP}/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
+    fi
+elif [[ "$FROM_RELEASE" == "true" ]]; then
+    if [[ -f "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" ]]; then
+        cp "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" "${JARVIS_APP}/"
+        echo "  ✅ ${JARVIS_APP}/desktop-app-javafx-${VERSION}.jar"
+    fi
+
+    if [[ -f "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" ]]; then
+        cp "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" "${JARVIS_APP}/"
+        echo "  ✅ ${JARVIS_APP}/desktop-client-javafx-${VERSION}.jar"
     fi
 fi
 
@@ -233,8 +249,11 @@ if [[ "$FROM_RELEASE" == "true" ]]; then
     echo "${RELEASE_DIR}" > "${JARVIS_APP}/RELEASE_SOURCE"
     echo "  ✅ Release source recorded: ${JARVIS_APP}/RELEASE_SOURCE"
 else
-    # For repo-based install, write "REPO" marker
-    echo "REPO" > "${JARVIS_APP}/RELEASE_SOURCE"
+    # For repo-based install, persist the real workspace path so GUI launch can
+    # delegate back to the latest repo sources instead of drifting on a stale
+    # ~/.jarvis/app copy.
+    echo "${REPO_ROOT}" > "${JARVIS_APP}/RELEASE_SOURCE"
+    echo "  ✅ Release source recorded: ${JARVIS_APP}/RELEASE_SOURCE"
 fi
 
 # Log installation/upgrade

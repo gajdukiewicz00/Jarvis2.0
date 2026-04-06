@@ -274,4 +274,43 @@ class VoiceSessionTest {
         assertFalse(VoiceState.LISTENING_WAKE_WORD.isMicMuted())
         assertFalse(VoiceState.PROCESSING.isMicMuted())
     }
+
+    @Test
+    @DisplayName("startSession returns null and reports error when voice transport not ready")
+    fun startSessionReturnsNullWhenTransportNotReady() {
+        val transportReady = AtomicBoolean(false)
+        val sessionWithTransportCheck = VoiceSession(
+            onStateChange = { state, correlationId ->
+                currentState.set(state)
+                lastCorrelationId = correlationId
+            },
+            onStartRecording = { recordingStarted.set(true) },
+            onStopRecording = { recordingStopped.set(true) },
+            onSendEndOfSpeech = { endOfSpeechSent.set(true) },
+            onEnableWakeWord = { wakeWordEnabled.set(true) },
+            onDisableWakeWord = { wakeWordEnabled.set(false) },
+            onPauseMedia = {},
+            onResumeMedia = {},
+            onSpeakTimeout = {},
+            onSessionError = { reason, _ -> lastError.set(reason) },
+            voiceTransportReady = { transportReady.get() }
+        )
+
+        // Transport not ready — should fail
+        val correlationId = sessionWithTransportCheck.startSession()
+        assertNull(correlationId, "Should not start session when transport is not ready")
+        assertEquals(VoiceState.IDLE, sessionWithTransportCheck.state)
+        assertNotNull(lastError.get(), "Should report error when transport not ready")
+        assertTrue(lastError.get()!!.contains("not connected"), "Error should mention connectivity")
+        assertFalse(recordingStarted.get(), "Recording should NOT start")
+
+        // Transport becomes ready — should succeed
+        lastError.set(null)
+        transportReady.set(true)
+        val correlationId2 = sessionWithTransportCheck.startSession()
+        assertNotNull(correlationId2, "Should start session when transport is ready")
+        assertEquals(VoiceState.LISTENING, sessionWithTransportCheck.state)
+
+        sessionWithTransportCheck.shutdown()
+    }
 }

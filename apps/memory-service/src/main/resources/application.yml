@@ -1,5 +1,5 @@
 server:
-  port: 8093
+  port: ${JARVIS_MEMORY_SERVICE_PORT:8093}
   shutdown: graceful
 
 spring:
@@ -13,13 +13,20 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${MEMORY_DATASOURCE_MAX_POOL_SIZE:8}
+      minimum-idle: ${MEMORY_DATASOURCE_MIN_IDLE:1}
+      connection-timeout: ${MEMORY_DATASOURCE_CONNECTION_TIMEOUT_MS:30000}
+      validation-timeout: 5000
+      initialization-fail-timeout: 60000
+      pool-name: memory-service-pool
 
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
     show-sql: false
 
@@ -27,11 +34,17 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+    baseline-version: 0
+    clean-disabled: true
+    table: flyway_schema_history_memory
 
 # Memory service configuration
 memory:
+  startup:
+    fail-fast: ${MEMORY_STARTUP_FAIL_FAST:true}
+
   embedding:
-    service-url: ${EMBEDDING_SERVICE_URL:http://embedding-service:5001}
+    service-url: ${EMBEDDING_SERVICE_URL:http://127.0.0.1:5001}
     dimension: 384  # multilingual-e5-small
     timeout-ms: 30000
   
@@ -54,6 +67,8 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+      probes:
+        enabled: true
 
 # Logging
 logging:
@@ -63,6 +78,5 @@ logging:
     querySnippetMaxLength: ${LOG_PII_QUERY_SNIPPET_MAX_LENGTH:32}
   level:
     org.jarvis.memory: INFO
-    org.hibernate.SQL: TRACE
-    org.hibernate.type.descriptor.sql: TRACE
-    org.springframework.transaction: TRACE
+    org.flywaydb: INFO
+    com.zaxxer.hikari: INFO

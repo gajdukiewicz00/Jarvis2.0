@@ -85,5 +85,26 @@ class LLMBackend(ABC):
         """Unload model from memory"""
         pass
 
+    def supports_chat_messages(self) -> bool:
+        """Whether the backend can consume role-based chat messages directly."""
+        return False
+
+    def chat(
+        self,
+        messages,
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        top_p: float = 0.9
+    ) -> Tuple[str, int, int]:
+        raise NotImplementedError("This backend does not support native chat messages")
+
+    def chat_stream(
+        self,
+        messages,
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        top_p: float = 0.9
+    ) -> Generator[str, None, None]:
+        raise NotImplementedError("This backend does not support native chat streaming")
 
 

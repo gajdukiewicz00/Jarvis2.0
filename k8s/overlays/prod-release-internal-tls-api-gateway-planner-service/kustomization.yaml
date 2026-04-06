@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis
+
+resources:
+  - ../prod-release-internal-tls-planner-service-analytics-service
+
+patches:
+  - path: api-gateway.patch.yaml
+  - path: planner-service.patch.yaml

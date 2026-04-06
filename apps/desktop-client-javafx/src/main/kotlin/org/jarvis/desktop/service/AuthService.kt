@@ -4,6 +4,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jarvis.desktop.auth.AuthResponse
+import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.auth.RefreshRequest
 import org.jarvis.desktop.model.TokenRequest
 import org.jarvis.desktop.model.TokenResponse
@@ -11,7 +13,9 @@ import org.jarvis.desktop.model.TokenResponse
 /**
  * Service for JWT authentication and token management.
  */
-class AuthService(private val baseUrl: String) {
+class AuthService(
+    private val configProvider: () -> ResolvedDesktopConfig = AppConfig::current
+) {
 
     private var currentToken: String? = null
     private val json = Json { ignoreUnknownKeys = true }
@@ -23,7 +27,7 @@ class AuthService(private val baseUrl: String) {
         val request = TokenRequest(username = username)
         val requestBody = json.encodeToString(request)
 
-        val url = java.net.URL("$baseUrl/api/v1/security/auth/generate")
+        val url = java.net.URL("${configProvider().apiGatewayBaseUrl}/api/v1/security/auth/generate")
         val connection = url.openConnection() as java.net.HttpURLConnection
 
         try {
@@ -52,7 +56,7 @@ class AuthService(private val baseUrl: String) {
 
     fun refreshTokens(refreshToken: String): AuthResponse {
         val requestBody = json.encodeToString(RefreshRequest(refreshToken))
-        val url = java.net.URL("$baseUrl/auth/refresh")
+        val url = java.net.URL("${configProvider().apiGatewayBaseUrl}/auth/refresh")
         val connection = url.openConnection() as java.net.HttpURLConnection
 
         try {

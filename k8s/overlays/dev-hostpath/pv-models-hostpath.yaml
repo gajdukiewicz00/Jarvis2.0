@@ -1,5 +1,6 @@
 # =============================================================================
 # Dev-only hostPath PVs for local single-node setups.
+# Replace the placeholder path below with the absolute path to this repo's models/ directory.
 # =============================================================================
 apiVersion: v1
 kind: PersistentVolume
@@ -16,7 +17,7 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   hostPath:
-    path: /tmp/jarvis-models
+    path: /REPLACE_WITH_ABSOLUTE_REPO_MODELS_PATH
     type: DirectoryOrCreate
 ---
 apiVersion: v1
@@ -34,5 +35,5 @@ spec:
     - ReadWriteOnce
   persistentVolumeReclaimPolicy: Retain
   hostPath:
-    path: /tmp/jarvis-models
+    path: /REPLACE_WITH_ABSOLUTE_REPO_MODELS_PATH
     type: DirectoryOrCreate

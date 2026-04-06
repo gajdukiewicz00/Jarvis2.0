@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.apigateway.client.LifeTrackerClient;
 import org.jarvis.apigateway.client.MemoryServiceClient;
 import org.jarvis.apigateway.client.PlannerClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -24,6 +25,12 @@ public class ToolProxyController {
     private final PlannerClient plannerClient;
     private final LifeTrackerClient lifeTrackerClient;
     private final MemoryServiceClient memoryServiceClient;
+
+    @Value("${services.planner.url:http://planner-service:8092}")
+    private String plannerServiceUrl;
+
+    @Value("${services.memory.enabled:false}")
+    private boolean memoryServiceEnabled;
 
     @PostMapping("/todo/create")
     public ResponseEntity<Map<String, Object>> createTodo(
@@ -55,8 +62,8 @@ public class ToolProxyController {
     @PostMapping("/todo/list")
     public ResponseEntity<List<Map<String, Object>>> listTodos(
             @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool list_todos");
         String userId = requireUserId();
+        log.info("Proxying tool list_todos for userId={}, plannerServiceUrl={}", userId, plannerServiceUrl);
         return plannerClient.listTodos(userId, payload);
     }
 
@@ -129,6 +136,11 @@ public class ToolProxyController {
     @PostMapping("/memory/search")
     public ResponseEntity<Map<String, Object>> searchMemory(
             @RequestBody Map<String, Object> payload) {
+        if (!memoryServiceEnabled) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Memory tooling is disabled in the core backend runtime");
+        }
         log.info("Proxying tool search_memory");
         String userId = requireUserId();
         return memoryServiceClient.searchMemory(userId, payload);

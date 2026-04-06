@@ -3,11 +3,10 @@ Model loader with multi-backend support
 Supports: transformers (HuggingFace), llamacpp (GGUF)
 """
 import logging
-from typing import Optional, Generator, Dict, Tuple
+from typing import Dict, Generator, List, Optional, Tuple
 
 from .config import config
 from .backends.base import LLMBackend
-from .backends.transformers_backend import TransformersBackend
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +37,9 @@ class ModelLoader:
     def _load_transformers(self) -> None:
         """Load using Transformers backend"""
         logger.info("Initializing Transformers backend...")
-        
+
+        from .backends.transformers_backend import TransformersBackend
+
         self._backend = TransformersBackend(
             model_path=config.MODEL_PATH,
             device=config.get_effective_device(),
@@ -50,23 +51,24 @@ class ModelLoader:
     def _load_llamacpp(self) -> None:
         """Load using llama.cpp backend"""
         logger.info("Initializing llama.cpp backend...")
-        
+
         try:
             from .backends.llamacpp_backend import LlamaCppBackend
         except ImportError as e:
-            logger.error(f"llama.cpp backend not available: {e}")
-            logger.warning("Falling back to Transformers backend")
-            self._backend_name = "transformers"
-            self._load_transformers()
-            return
-        
+            raise RuntimeError(
+                "llama.cpp backend is not available. "
+                "The local runtime expects llama-cpp-python to be installed."
+            ) from e
+
         self._backend = LlamaCppBackend(
             model_path=config.GGUF_MODEL_PATH,
             n_gpu_layers=config.N_GPU_LAYERS,
             n_ctx=config.N_CTX,
             n_batch=config.N_BATCH,
+            n_threads=config.N_THREADS,
             max_new_tokens=config.MAX_NEW_TOKENS,
-            verbose=config.VERBOSE_LLAMACPP
+            verbose=config.VERBOSE_LLAMACPP,
+            chat_format=config.CHAT_FORMAT,
         )
         self._backend.load()
     
@@ -119,6 +121,45 @@ class ModelLoader:
             temperature=temperature,
             top_p=top_p
         )
+
+    def supports_chat_messages(self) -> bool:
+        return self.is_loaded() and self._backend.supports_chat_messages()
+
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        top_p: float = 0.9
+    ) -> Tuple[str, int, int]:
+        if not self.is_loaded():
+            raise RuntimeError("Model not loaded. Call load() first.")
+        if not self._backend.supports_chat_messages():
+            raise RuntimeError("Configured backend does not support role-based chat messages")
+        return self._backend.chat(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
+
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+        top_p: float = 0.9
+    ) -> Generator[str, None, None]:
+        if not self.is_loaded():
+            raise RuntimeError("Model not loaded. Call load() first.")
+        if not self._backend.supports_chat_messages():
+            raise RuntimeError("Configured backend does not support role-based chat messages")
+        yield from self._backend.chat_stream(
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
     
     def get_diagnostics(self) -> Dict:
         """Get diagnostic information"""
@@ -141,6 +182,12 @@ class ModelLoader:
     def backend_name(self) -> str:
         """Get current backend name"""
         return self._backend_name
+
+    @property
+    def model_name(self) -> str:
+        if self._backend is None:
+            return self._backend_name
+        return getattr(self._backend, "model_name", self._backend_name)
 
 
 # Global model instance

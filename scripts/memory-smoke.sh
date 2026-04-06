@@ -11,9 +11,19 @@
 # =============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+JARVIS_HOME="${JARVIS_HOME:-${HOME}/.jarvis}"
+RUNTIME_ENV_FILE="${JARVIS_HOME}/run/local-runtime/local.env"
+if [[ -f "${RUNTIME_ENV_FILE}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "${RUNTIME_ENV_FILE}"
+    set +a
+fi
+
 # Configuration
-EMBEDDING_URL="${EMBEDDING_URL:-http://localhost:5001}"
-MEMORY_URL="${MEMORY_URL:-http://localhost:8093}"
+EMBEDDING_URL="${EMBEDDING_URL:-${EMBEDDING_SERVICE_URL:-http://localhost:15001}}"
+MEMORY_URL="${MEMORY_URL:-${MEMORY_SERVICE_URL:-http://localhost:8093}}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-30}"
 
 # Colors
@@ -32,6 +42,23 @@ FAILED=0
 TEST_USER="smoke-user-$(date +%s)"
 TEST_SESSION="smoke-session-$(date +%s)"
 
+SERVICE_TOKEN=""
+if [[ -n "${SERVICE_JWT_SECRET:-}" ]] && [[ -f "${SCRIPT_DIR}/runtime/make_service_jwt.py" ]]; then
+    SERVICE_TOKEN="$(python3 "${SCRIPT_DIR}/runtime/make_service_jwt.py" \
+        --secret "${SERVICE_JWT_SECRET}" \
+        --subject "memory-smoke" \
+        --service "memory-smoke" 2>/dev/null || true)"
+fi
+
+MEMORY_AUTH_HEADERS=()
+if [[ -n "${SERVICE_TOKEN}" ]]; then
+    MEMORY_AUTH_HEADERS=(
+        -H "Authorization: Bearer ${SERVICE_TOKEN}"
+        -H "X-User-Id: ${TEST_USER}"
+        -H "X-User-Roles: USER"
+    )
+fi
+
 # Helper function
 api_call() {
     local method="$1"
@@ -43,13 +70,20 @@ api_call() {
     tmp="$(mktemp)"
     local start_ms end_ms status
     start_ms="$(date +%s%3N)"
+
+    extra_headers=()
+    if [[ "$url" == "${MEMORY_URL}"* ]]; then
+        extra_headers=("${MEMORY_AUTH_HEADERS[@]}")
+    fi
     
     if [ -n "$data" ]; then
         status="$(curl -sS --max-time "$timeout" -o "$tmp" -w "%{http_code}" \
             -H "Content-Type: application/json" \
+            "${extra_headers[@]}" \
             -X "$method" -d "$data" "$url" 2>/dev/null)" || status="000"
     else
         status="$(curl -sS --max-time "$timeout" -o "$tmp" -w "%{http_code}" \
+            "${extra_headers[@]}" \
             -X "$method" "$url" 2>/dev/null)" || status="000"
     fi
     
@@ -90,14 +124,14 @@ if api_call POST "$EMBEDDING_URL/embed" "$embed_data"; then
     echo -e "${GREEN}✓${NC} (${LAST_LATENCY}ms)"
     
     # Check dimension
-    if echo "$LAST_BODY" | grep -q '"dimension":\s*384'; then
+    if echo "$LAST_BODY" | grep -Eq '"dimension"[[:space:]]*:[[:space:]]*384'; then
         echo -e "    ${GREEN}✓ Dimension: 384 (correct for multilingual-e5-small)${NC}"
     else
         echo -e "    ${YELLOW}⚠ Unexpected dimension${NC}"
     fi
     
     # Check count
-    if echo "$LAST_BODY" | grep -q '"count":\s*2'; then
+    if echo "$LAST_BODY" | grep -Eq '"count"[[:space:]]*:[[:space:]]*2'; then
         echo -e "    ${GREEN}✓ Count: 2 embeddings generated${NC}"
     fi
 else
@@ -117,10 +151,12 @@ if api_call GET "$MEMORY_URL/memory/health"; then
     echo -e "${GREEN}✓${NC} (${LAST_LATENCY}ms)"
     echo "    Response: ${LAST_BODY:0:150}"
     
-    if echo "$LAST_BODY" | grep -q '"embeddingService":\s*"up"'; then
+    if echo "$LAST_BODY" | grep -Eq '"embeddingService"[[:space:]]*:[[:space:]]*"up"' && \
+       echo "$LAST_BODY" | grep -Eq '"pgvector"[[:space:]]*:[[:space:]]*"available"'; then
         echo -e "    ${GREEN}✓ Embedding service connection OK${NC}"
+        echo -e "    ${GREEN}✓ pgvector extension available${NC}"
     else
-        echo -e "    ${YELLOW}⚠ Embedding service status unknown${NC}"
+        echo -e "    ${YELLOW}⚠ Memory dependencies not fully ready${NC}"
     fi
 else
     echo -e "${RED}✗${NC} (HTTP $LAST_STATUS)"
@@ -195,6 +231,12 @@ if api_call POST "$MEMORY_URL/memory/search" "$search_data"; then
         echo -e "    ${YELLOW}⚠ 'Денис' not found in results${NC}"
         echo "    Response: ${LAST_BODY:0:300}"
     fi
+
+    if echo "$LAST_BODY" | grep -Eq '"retrievalMode"[[:space:]]*:[[:space:]]*"semantic"'; then
+        echo -e "    ${GREEN}✓ Semantic pgvector retrieval used${NC}"
+    else
+        echo -e "    ${YELLOW}⚠ Search did not report semantic retrieval mode${NC}"
+    fi
     
     # Check context text
     if echo "$LAST_BODY" | grep -q '"contextText"'; then
@@ -220,6 +262,7 @@ if [ $FAILED -eq 0 ]; then
     echo ""
     echo "The memory stack is working correctly:"
     echo "  - Embedding service generates 384-dim vectors"
+    echo "  - pgvector is available"
     echo "  - Memory service stores and searches conversations"
     echo "  - RAG pipeline is functional"
     exit 0
@@ -232,4 +275,3 @@ else
     echo "  - Check postgres-pgvector: kubectl logs -n jarvis sts/postgres-pgvector"
     exit 1
 fi
-

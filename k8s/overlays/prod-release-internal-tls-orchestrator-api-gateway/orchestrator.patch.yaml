@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-orchestrator-api-gateway: orchestrator-api-gateway-v1
+    spec:
+      containers:
+        - name: orchestrator
+          env:
+            - name: API_GATEWAY_URL
+              value: https://api-gateway.jarvis.svc.cluster.local:8443
+            - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-orchestrator-api-gateway
+                  key: truststore-password
+            - name: JAVA_TOOL_OPTIONS
+              value: -Djavax.net.ssl.trustStore=/tls-api-gateway/jarvis-internal-truststore.jks -Djavax.net.ssl.trustStorePassword=$(JARVIS_JAVA_TRUSTSTORE_PASSWORD)
+          volumeMounts:
+            - name: internal-tls-orchestrator-api-gateway
+              mountPath: /tls-api-gateway
+              readOnly: true
+      volumes:
+        - name: internal-tls-orchestrator-api-gateway
+          secret:
+            secretName: jarvis-internal-tls-orchestrator-api-gateway
+            items:
+              - key: truststore.jks
+                path: jarvis-internal-truststore.jks
+              - key: ca.crt
+                path: ca.crt

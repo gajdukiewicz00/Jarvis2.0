@@ -1,6 +1,7 @@
 package org.jarvis.voicegateway.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.voicegateway.exception.SttUnavailableException;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
 import org.jarvis.voicegateway.service.SttService;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +14,7 @@ import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,10 +28,10 @@ import java.util.concurrent.ConcurrentHashMap;
 @ConditionalOnProperty(name = "jarvis.stt.provider", havingValue = "vosk", matchIfMissing = true)
 public class VoskSttService implements SttService {
 
-    @Value("${jarvis.vosk.model-path-ru:vosk-model-small-ru-0.22}")
+    @Value("${jarvis.vosk.model-path-ru:${JARVIS_MODELS_DIR:models}/stt/vosk/vosk-model-small-ru-0.22}")
     private String modelPathRu;
 
-    @Value("${jarvis.vosk.model-path-en:vosk-model-small-en-us-0.15}")
+    @Value("${jarvis.vosk.model-path-en:${JARVIS_MODELS_DIR:models}/stt/vosk/vosk-model-small-en-us-0.15}")
     private String modelPathEn;
 
     @Value("${jarvis.vosk.default-language:ru-RU}")
@@ -44,16 +46,19 @@ public class VoskSttService implements SttService {
     public void init() {
         // Load default language model eagerly if exists
         String lang = normalizeLang(defaultLanguage);
-        loadModelIfPresent(lang, pathForLanguage(lang));
+        Path defaultPath = pathForLanguage(lang);
+        log.info("Initializing Vosk STT: defaultLanguage={}, effectiveDefaultLanguage={}, modelPath={}",
+                defaultLanguage, lang, describePath(defaultPath));
+        loadModelIfPresent(lang, defaultPath);
     }
 
     @Override
     public String transcribe(byte[] wav16kMonoPcm, String languageCode) {
-        String lang = normalizeLang(languageCode != null ? languageCode : defaultLanguage);
+        String requestedLanguage = languageCode != null ? languageCode : defaultLanguage;
+        String lang = normalizeLang(requestedLanguage);
         Model model = getModelForLanguage(lang);
         if (model == null) {
-            log.warn("No Vosk model available for lang={}, returning empty transcript", lang);
-            return "";
+            throw unavailableForLanguage(requestedLanguage, lang, pathForLanguage(lang));
         }
 
         try (Recognizer recognizer = new Recognizer(model, sampleRate)) {
@@ -62,28 +67,60 @@ public class VoskSttService implements SttService {
             return extractText(resultJson);
         } catch (IOException e) {
             log.error("Vosk recognition failed for lang {}", lang, e);
-            return "";
+            throw new SttUnavailableException("Vosk recognition failed for language " + requestedLanguage, e);
         }
     }
 
     @Override
     public StreamingRecognitionSession createSession(String languageCode) {
-        String lang = normalizeLang(languageCode != null ? languageCode : defaultLanguage);
+        String requestedLanguage = languageCode != null ? languageCode : defaultLanguage;
+        String lang = normalizeLang(requestedLanguage);
+        Path modelPath = pathForLanguage(lang);
         Model model = getModelForLanguage(lang);
         if (model == null) {
-            log.warn("No Vosk model available for lang={}, falling back to default {}", lang, defaultLanguage);
-            model = getModelForLanguage(normalizeLang(defaultLanguage));
+            throw unavailableForLanguage(requestedLanguage, lang, modelPath);
         }
-        if (model == null) {
-            log.error("No Vosk model loaded. Streaming session unavailable.");
-            throw new IllegalStateException("Vosk STT model not loaded");
-        }
+        log.info("Creating Vosk streaming session: requestedLanguage={}, effectiveLanguage={}, modelPath={}, sampleRate={}",
+                requestedLanguage, lang, describePath(modelPath), sampleRate);
         return new VoskSession(model, sampleRate, lang);
     }
 
     @Override
     public StreamingRecognitionSession createSession() {
         return createSession(defaultLanguage);
+    }
+
+    @Override
+    public String providerId() {
+        return "vosk";
+    }
+
+    @Override
+    public Map<String, Object> describeRuntime() {
+        Map<String, Object> languages = new LinkedHashMap<>();
+        languages.put("ru-RU", describeLanguage("ru-ru"));
+        languages.put("en-US", describeLanguage("en-us"));
+
+        boolean ruAvailable = Boolean.TRUE.equals(((Map<?, ?>) languages.get("ru-RU")).get("available"));
+        boolean enAvailable = Boolean.TRUE.equals(((Map<?, ?>) languages.get("en-US")).get("available"));
+        boolean defaultAvailable = isLanguageAvailable(normalizeLang(defaultLanguage));
+
+        String status;
+        if (!defaultAvailable) {
+            status = "unavailable";
+        } else if (ruAvailable && enAvailable) {
+            status = "available";
+        } else {
+            status = "partial";
+        }
+
+        return Map.of(
+                "configuredProvider", providerId(),
+                "status", status,
+                "available", defaultAvailable,
+                "defaultLanguage", canonicalLanguage(defaultLanguage),
+                "sampleRate", sampleRate,
+                "languages", Map.copyOf(languages));
     }
 
     private Model getModelForLanguage(String lang) {
@@ -121,9 +158,11 @@ public class VoskSttService implements SttService {
     }
 
     private String normalizeLang(String lang) {
-        if (lang == null || lang.isEmpty())
-            return "ru";
-        return lang.toLowerCase(Locale.ROOT);
+        if (lang == null || lang.isBlank()) {
+            return "ru-ru";
+        }
+        String normalized = lang.trim().replace('_', '-').toLowerCase(Locale.ROOT);
+        return normalized.startsWith("en") ? "en-us" : "ru-ru";
     }
 
     private String extractText(String resultJson) {
@@ -140,6 +179,44 @@ public class VoskSttService implements SttService {
             return resultJson.substring(quoteStart + 1, quoteEnd).trim();
         }
         return resultJson.trim();
+    }
+
+    private String describePath(Path path) {
+        return path != null ? path.toAbsolutePath().toString() : "<none>";
+    }
+
+    private boolean isLanguageAvailable(String lang) {
+        return getModelForLanguage(lang) != null;
+    }
+
+    private Map<String, Object> describeLanguage(String lang) {
+        Path path = pathForLanguage(lang);
+        boolean pathExists = path != null && Files.exists(path);
+        boolean modelLoaded = getModelForLanguage(lang) != null;
+
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("available", modelLoaded);
+        details.put("modelPath", describePath(path));
+        details.put("pathExists", pathExists);
+        details.put("loaded", modelLoaded);
+        if (!modelLoaded) {
+            details.put("reason", "Model is missing or failed to load");
+        }
+        return Map.copyOf(details);
+    }
+
+    private SttUnavailableException unavailableForLanguage(String requestedLanguage, String effectiveLanguage, Path modelPath) {
+        String message = String.format(
+                "Vosk STT model for language %s is unavailable (effective=%s, path=%s)",
+                requestedLanguage,
+                canonicalLanguage(effectiveLanguage),
+                describePath(modelPath));
+        log.warn(message);
+        return new SttUnavailableException(message);
+    }
+
+    private String canonicalLanguage(String lang) {
+        return normalizeLang(lang).startsWith("en") ? "en-US" : "ru-RU";
     }
 
     private static class VoskSession implements StreamingRecognitionSession {

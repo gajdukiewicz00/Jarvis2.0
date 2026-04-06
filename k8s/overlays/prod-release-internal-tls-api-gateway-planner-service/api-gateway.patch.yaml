@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-planner-service: api-gateway-planner-service-v1
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: PLANNER_URL
+              value: https://planner-service.jarvis.svc.cluster.local:8092

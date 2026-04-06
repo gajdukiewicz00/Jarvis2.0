@@ -59,12 +59,60 @@ public enum PhraseContext {
     WINDOW_MAXIMIZE,
     LOCK_SCREEN,
 
+    // ==================== System Control (migrated from legacy) ====================
+    CLIPBOARD_COPY,
+    CLIPBOARD_PASTE,
+    UNDO_ACTION,
+    SWITCH_WINDOW,
+    CLOSE_WINDOW,
+    FULLSCREEN,
+    REFRESH_PAGE,
+    NAVIGATE_BACK,
+    NAVIGATE_FORWARD,
+    SHOW_DESKTOP,
+    OPEN_SETTINGS,
+    SYSTEM_SEARCH,
+    SWITCH_LANGUAGE,
+    SCREENSHOT,
+    SLEEP_MODE,
+    MONITOR_OFF,
+
+    // ==================== URL / Website Opening (migrated from legacy) ====================
+    OPEN_URL,
+
     // ==================== Scenarios / Protocols ====================
     WORK_MODE,
     REST_MODE,
     FOCUS_MODE,
     PROTOCOL_HOUSE_PARTY,
     PROTOCOL_CLEAN_SLATE,
+    /** Cozy evening — dim lights, ambient music */
+    PROTOCOL_COZY_EVENING,
+    /** Guests arriving — prepare environment */
+    PROTOCOL_GUESTS,
+    /** Holiday / New Year mood */
+    PROTOCOL_HOLIDAY,
+    /** Game mode — DND, close distractions */
+    GAME_MODE,
+    /** Morning routine */
+    PROTOCOL_MORNING,
+    /** Leaving home — secure and shut down */
+    PROTOCOL_LEAVING,
+    /** Panic / quick hide everything */
+    PROTOCOL_PANIC,
+
+    // ==================== Conversation / Personality (migrated from legacy) ====================
+    HOW_ARE_YOU,
+    WHAT_DOING,
+    BORED,
+    CHEER_UP,
+    LOVE_RESPONSE,
+    RANDOM_FACT,
+    STANDBY_MODE,
+
+    // ==================== Music (migrated from legacy) ====================
+    PLAY_MUSIC,
+    PLAY_RADIO,
 
     // ==================== Timer / Reminders ====================
     TIMER_SET,
@@ -75,29 +123,21 @@ public enum PhraseContext {
     SMART_HOME_SET_VALUE,
 
     // ==================== Sarcasm / Personality ====================
-    /** Sarcasm after repeated failures */
     SARCASTIC_FAILURE,
-    /** Working on something secret */
     SECRET_PROJECT,
-    /** Safety briefing joke */
     SAFETY_BRIEFING,
 
     // ==================== Security ====================
     SECURITY_ALERT,
 
     // ==================== Life Context ====================
-    /** Food tracker related */
     LIFE_FOOD_TRACKER,
-    /** Guest reminder */
     LIFE_GUESTS,
-    /** Stress/health hint (non-medical) */
     HEALTH_STRESS_HINT,
 
     // ==================== Fallback ====================
     UNKNOWN_COMMAND,
-    /** STT timeout - couldn't hear the user */
     STT_TIMEOUT,
-    /** STT noise - heard something but it was background noise */
     STT_NOISE,
     GOODBYE
 }

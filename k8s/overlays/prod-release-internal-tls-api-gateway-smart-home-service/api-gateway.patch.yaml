@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-smart-home-service: api-gateway-smart-home-service-v1
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: SMART_HOME_URL
+              value: https://smart-home-service.jarvis.svc.cluster.local:8086

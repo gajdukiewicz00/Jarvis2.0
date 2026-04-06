@@ -18,4 +18,12 @@ class VoiceWebSocketMessageFactory {
             })
         }.toString()
     }
+
+    fun startMessage(correlationId: String, language: String): String {
+        return buildJsonObject {
+            put("type", "START")
+            put("correlationId", correlationId)
+            put("language", language.trim())
+        }.toString()
+    }
 }

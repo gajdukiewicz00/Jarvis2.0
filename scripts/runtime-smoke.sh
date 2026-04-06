@@ -31,7 +31,21 @@ cleanup() {
 trap cleanup EXIT
 
 ensure_local_env
-export ENABLE_LLM="true"
+SMOKE_INCLUDE_LLM="true"
+if is_truthy "${JARVIS_RUNTIME_SMOKE_SKIP_LLM:-false}"; then
+    SMOKE_INCLUDE_LLM="false"
+fi
+
+PUBLIC_API_BASE_URL="$(runtime_api_base_url)"
+VOICE_WS_URL="$(runtime_voice_ws_url)"
+PC_WS_URL="$(runtime_pc_ws_url)"
+RUNTIME_JAVA_TOOL_OPTIONS="$(runtime_java_tool_options "${JAVA_TOOL_OPTIONS:-}")"
+
+export ENABLE_LLM="${SMOKE_INCLUDE_LLM}"
+export JARVIS_LLM_ENABLED="${SMOKE_INCLUDE_LLM}"
+export ENABLE_MEMORY="false"
+export MEMORY_SERVICE_ENABLED="false"
+export JARVIS_LLM_MANAGED_SERVER="false"
 export JARVIS_SKIP_BUILD="${JARVIS_SKIP_BUILD:-false}"
 
 LLM_CAPTURE_FILE="${RUNTIME_DIR}/llm-capture.jsonl"
@@ -43,33 +57,35 @@ STUB_LOG_FILE="${LOG_DIR}/llm-server-stub.log"
 
 rm -f "${LLM_CAPTURE_FILE}" "${PC_OUTPUT_FILE}" "${PC_READY_FILE}" "${VOICE_OUTPUT_FILE}" "${VOICE_READY_FILE}"
 
-log "Starting local LLM smoke stub..."
-python3 "${ROOT_DIR}/scripts/runtime/llm_server_stub.py" \
-    --port 5000 \
-    --capture "${LLM_CAPTURE_FILE}" >"${STUB_LOG_FILE}" 2>&1 &
-printf '%s\n' "$!" >"${RUNTIME_DIR}/llm-server-stub.pid"
+if [[ "${SMOKE_INCLUDE_LLM}" == "true" ]]; then
+    log "Starting local LLM smoke stub..."
+    python3 "${ROOT_DIR}/scripts/runtime/llm_server_stub.py" \
+        --port 5000 \
+        --capture "${LLM_CAPTURE_FILE}" >"${STUB_LOG_FILE}" 2>&1 &
+    printf '%s\n' "$!" >"${RUNTIME_DIR}/llm-server-stub.pid"
 
-for _ in $(seq 1 20); do
-    if curl -fsS "http://127.0.0.1:5000/health" >/dev/null 2>&1; then
-        break
-    fi
-    sleep 1
-done
-curl -fsS "http://127.0.0.1:5000/health" >/dev/null
+    for _ in $(seq 1 20); do
+        if curl -fsS "http://127.0.0.1:5000/health" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 1
+    done
+    curl -fsS "http://127.0.0.1:5000/health" >/dev/null
+else
+    log "Skipping LLM smoke stub (JARVIS_RUNTIME_SMOKE_SKIP_LLM=true)."
+fi
 
 log "Bringing up local Jarvis runtime..."
 "${ROOT_DIR}/scripts/runtime-up.sh"
 
-register_response="$(curl -fsS \
+register_response="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/auth/register" -fsS \
     -H 'Content-Type: application/json' \
-    -d "{\"username\":\"runtime-smoke\",\"password\":\"RuntimeSmoke!123\",\"role\":\"USER\"}" \
-    "http://127.0.0.1:8080/auth/register" || true)"
+    -d "{\"username\":\"runtime-smoke\",\"password\":\"RuntimeSmoke!123\",\"role\":\"USER\"}" || true)"
 
 if [[ -z "${register_response}" ]]; then
-    register_response="$(curl -fsS \
+    register_response="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/auth/login" -fsS \
         -H 'Content-Type: application/json' \
-        -d "{\"username\":\"runtime-smoke\",\"password\":\"RuntimeSmoke!123\"}" \
-        "http://127.0.0.1:8080/auth/login")"
+        -d "{\"username\":\"runtime-smoke\",\"password\":\"RuntimeSmoke!123\"}")"
 fi
 
 ACCESS_TOKEN="$(python3 - "${register_response}" <<'PY'
@@ -82,9 +98,9 @@ PY
 )"
 
 USERNAME="runtime-smoke"
-USER_ME_RESPONSE="$(curl -fsS \
+USER_ME_RESPONSE="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/security/auth/me" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    "http://127.0.0.1:8080/api/v1/security/auth/me")"
+    )"
 USER_ID="$(python3 - "${USER_ME_RESPONSE}" <<'PY'
 import json
 import sys
@@ -99,9 +115,9 @@ SERVICE_TOKEN="$(python3 "${ROOT_DIR}/scripts/runtime/make_service_jwt.py" \
     --service "runtime-smoke")"
 
 log "Starting desktop and voice websocket probes..."
-java "${ROOT_DIR}/scripts/runtime/WsProbe.java" \
+JAVA_TOOL_OPTIONS="${RUNTIME_JAVA_TOOL_OPTIONS}" java "${ROOT_DIR}/scripts/runtime/WsProbe.java" \
     pc \
-    "ws://127.0.0.1:8080/ws/pc-control" \
+    "${PC_WS_URL}" \
     "${PC_OUTPUT_FILE}" \
     "${PC_READY_FILE}" \
     "${ACCESS_TOKEN}" \
@@ -109,9 +125,9 @@ java "${ROOT_DIR}/scripts/runtime/WsProbe.java" \
     "${USERNAME}" >"${LOG_DIR}/pc-probe.log" 2>&1 &
 printf '%s\n' "$!" >"${RUNTIME_DIR}/pc-probe.pid"
 
-java "${ROOT_DIR}/scripts/runtime/WsProbe.java" \
+JAVA_TOOL_OPTIONS="${RUNTIME_JAVA_TOOL_OPTIONS}" java "${ROOT_DIR}/scripts/runtime/WsProbe.java" \
     voice \
-    "ws://127.0.0.1:8080/ws/voice" \
+    "${VOICE_WS_URL}" \
     "${VOICE_OUTPUT_FILE}" \
     "${VOICE_READY_FILE}" \
     "${ACCESS_TOKEN}" \
@@ -127,11 +143,10 @@ done
 [[ -f "${VOICE_READY_FILE}" ]] || fail "Voice websocket probe did not connect"
 
 log "Checking orchestrator text command -> desktop action..."
-curl -fsS \
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/orchestrator/execute" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
-    -d '{"text":"сделай громче"}' \
-    "http://127.0.0.1:8080/api/v1/orchestrator/execute" >/dev/null
+    -d '{"text":"сделай громче"}' >/dev/null
 
 for _ in $(seq 1 20); do
     if grep -q '"action":"VOLUME_UP"' "${PC_OUTPUT_FILE}" 2>/dev/null; then
@@ -141,12 +156,48 @@ for _ in $(seq 1 20); do
 done
 grep -q '"action":"VOLUME_UP"' "${PC_OUTPUT_FILE}" || fail "Desktop probe did not receive orchestrator action"
 
+log "Checking voice runtime status endpoint..."
+VOICE_RUNTIME_STATUS="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/voice/runtime" -fsS \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}")"
+python3 - "${VOICE_RUNTIME_STATUS}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+assert payload["service"] == "voice-gateway", payload
+assert payload["status"] in {"ready", "partial"}, payload["status"]
+assert payload["localDefaultStack"]["id"] == "vosk+espeak-ng", payload["localDefaultStack"]
+assert payload["localDefaultStack"]["sttProvider"] == "vosk", payload["localDefaultStack"]
+assert payload["localDefaultStack"]["ttsProvider"] == "espeak", payload["localDefaultStack"]
+assert payload["routing"]["publicHttpBasePath"] == "/api/v1/voice"
+assert payload["routing"]["publicWebSocketPath"] == "/ws/voice"
+assert payload["routing"]["notificationPath"] == "/internal/voice/notify"
+assert payload["maturity"]["textCommandPath"] == "verified"
+assert payload["maturity"]["voiceNotifications"] == "verified-text"
+assert payload["tts"]["status"] in {"available", "degraded", "unavailable", "disabled"}
+assert isinstance(payload["tts"]["available"], bool)
+assert payload["stt"]["configuredProvider"] in {"vosk", "whisper", "noop"}
+PY
+
+log "Checking voice command proxy -> real orchestrator reply..."
+VOICE_COMMAND_REPLY="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/voice/command" -fsS \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d '{"text":"сделай громче"}')"
+python3 - "${VOICE_COMMAND_REPLY}" <<'PY'
+import sys
+
+reply = sys.argv[1].strip()
+assert reply, "voice command reply must not be empty"
+assert reply != "Processed: сделай громче", "voice command must return the real orchestrator reply, not a placeholder"
+PY
+
 log "Checking planner focus action -> desktop scenario..."
 curl -fsS \
     -X POST \
     -H "Authorization: Bearer ${SERVICE_TOKEN}" \
     -H "X-User-Id: ${USER_ID}" \
-    "http://127.0.0.1:8092/api/v1/planner/actions/focus-mode?mode=WORK" >/dev/null
+    "${PLANNER_URL}/api/v1/planner/actions/focus-mode?mode=WORK" >/dev/null
 
 for _ in $(seq 1 20); do
     if grep -q '"action":"SCENARIO"' "${PC_OUTPUT_FILE}" 2>/dev/null; then
@@ -164,7 +215,7 @@ curl -fsS \
     -H "X-User-Id: ${USER_ID}" \
     -H 'Content-Type: application/json' \
     -d "{\"message\":\"Runtime smoke reminder\",\"reminderTime\":\"${NOW_TS}\",\"reminderType\":\"ONCE\"}" \
-    "http://127.0.0.1:8092/api/v1/planner/reminders" >/dev/null
+    "${PLANNER_URL}/api/v1/planner/reminders" >/dev/null
 
 for _ in $(seq 1 80); do
     if grep -q 'Runtime smoke reminder' "${PC_OUTPUT_FILE}" 2>/dev/null && \
@@ -177,9 +228,9 @@ grep -q 'Runtime smoke reminder' "${PC_OUTPUT_FILE}" || fail "Desktop notificati
 grep -q 'Runtime smoke reminder' "${VOICE_OUTPUT_FILE}" || fail "Voice notification was not delivered"
 
 log "Checking smart-home registry and action execution..."
-SMART_HOME_DEVICES="$(curl -fsS \
+SMART_HOME_DEVICES="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    "http://127.0.0.1:8080/api/v1/smarthome/devices")"
+    )"
 python3 - "${SMART_HOME_DEVICES}" <<'PY'
 import json
 import sys
@@ -188,16 +239,34 @@ devices = json.loads(sys.argv[1])
 assert any(device["id"] == "kitchen_light" for device in devices), "kitchen_light missing from registry"
 PY
 
-curl -fsS \
+# Normalize the mock device into a known state so the smoke remains deterministic
+# across repeated local runs.
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light/action" -fsS \
     -X POST \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
-    -d '{"action":"TOGGLE"}' \
-    "http://127.0.0.1:8080/api/v1/smarthome/devices/kitchen_light/action" >/dev/null
+    -d '{"action":"TURN_OFF"}' >/dev/null
 
-SMART_HOME_DEVICE="$(curl -fsS \
+SMART_HOME_DEVICE="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    "http://127.0.0.1:8080/api/v1/smarthome/devices/kitchen_light")"
+    )"
+python3 - "${SMART_HOME_DEVICE}" <<'PY'
+import json
+import sys
+
+device = json.loads(sys.argv[1])
+assert device["state"]["power"] is False, "kitchen_light baseline reset should leave the device off"
+PY
+
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light/action" -fsS \
+    -X POST \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -d '{"action":"TOGGLE"}' >/dev/null
+
+SMART_HOME_DEVICE="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light" -fsS \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    )"
 python3 - "${SMART_HOME_DEVICE}" <<'PY'
 import json
 import sys
@@ -207,16 +276,15 @@ assert device["provider"] == "mock", "smart-home provider should default to mock
 assert device["state"]["power"] is True, "kitchen_light should be on after TOGGLE"
 PY
 
-curl -fsS \
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light/action" -fsS \
     -X POST \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
-    -d '{"action":"TURN_OFF"}' \
-    "http://127.0.0.1:8080/api/v1/smarthome/devices/kitchen_light/action" >/dev/null
+    -d '{"action":"TURN_OFF"}' >/dev/null
 
-SMART_HOME_DEVICE="$(curl -fsS \
+SMART_HOME_DEVICE="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    "http://127.0.0.1:8080/api/v1/smarthome/devices/kitchen_light")"
+    )"
 python3 - "${SMART_HOME_DEVICE}" <<'PY'
 import json
 import sys
@@ -226,11 +294,10 @@ assert device["state"]["power"] is False, "kitchen_light should be off after TUR
 PY
 
 log "Checking orchestrator smart-home command -> device state and desktop confirmation..."
-SMART_HOME_REPLY="$(curl -fsS \
+SMART_HOME_REPLY="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/orchestrator/execute" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
-    -d '{"text":"включи кухонный свет"}' \
-    "http://127.0.0.1:8080/api/v1/orchestrator/execute")"
+    -d '{"text":"включи кухонный свет"}')"
 python3 - "${SMART_HOME_REPLY}" <<'PY'
 import sys
 
@@ -246,9 +313,9 @@ for _ in $(seq 1 20); do
 done
 grep -q 'Kitchen Light is now on.' "${PC_OUTPUT_FILE}" || fail "Desktop probe did not receive smart-home confirmation"
 
-SMART_HOME_DEVICE="$(curl -fsS \
+SMART_HOME_DEVICE="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/smarthome/devices/kitchen_light" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    "http://127.0.0.1:8080/api/v1/smarthome/devices/kitchen_light")"
+    )"
 python3 - "${SMART_HOME_DEVICE}" <<'PY'
 import json
 import sys
@@ -257,28 +324,31 @@ device = json.loads(sys.argv[1])
 assert device["state"]["power"] is True, "kitchen_light should be on after orchestrator smart-home command"
 PY
 
-log "Checking orchestrator LLM fallback with personalized goals..."
-curl -fsS \
-    -X POST \
-    -H "Authorization: Bearer ${SERVICE_TOKEN}" \
-    -H "X-User-Id: ${USER_ID}" \
-    -H 'Content-Type: application/json' \
-    -d '{"title":"Runtime smoke goal","description":"LLM should see this goal"}' \
-    "http://127.0.0.1:8089/api/v1/user-profile/${USER_ID}/goals" >/dev/null
+if [[ "${SMOKE_INCLUDE_LLM}" == "true" ]]; then
+    log "Checking orchestrator LLM fallback with personalized goals..."
+    curl -fsS \
+        -X POST \
+        -H "Authorization: Bearer ${SERVICE_TOKEN}" \
+        -H "X-User-Id: ${USER_ID}" \
+        -H 'Content-Type: application/json' \
+        -d '{"title":"Runtime smoke goal","description":"LLM should see this goal"}' \
+        "${USER_PROFILE_URL}/api/v1/user-profile/${USER_ID}/goals" >/dev/null
 
-curl -fsS \
-    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -H 'Content-Type: application/json' \
-    -H 'X-Correlation-ID: runtime-smoke-llm' \
-    -d '{"text":"какие у меня цели"}' \
-    "http://127.0.0.1:8080/api/v1/orchestrator/execute" >/dev/null
+    curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/orchestrator/execute" -fsS \
+        -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+        -H 'Content-Type: application/json' \
+        -H 'X-Correlation-ID: runtime-smoke-llm' \
+        -d '{"text":"какие у меня цели"}' >/dev/null
 
-for _ in $(seq 1 20); do
-    if grep -q 'Runtime smoke goal' "${LLM_CAPTURE_FILE}" 2>/dev/null; then
-        break
-    fi
-    sleep 1
-done
-grep -q 'Runtime smoke goal' "${LLM_CAPTURE_FILE}" || fail "LLM prompt did not include user goals"
+    for _ in $(seq 1 20); do
+        if grep -q 'Runtime smoke goal' "${LLM_CAPTURE_FILE}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+    grep -q 'Runtime smoke goal' "${LLM_CAPTURE_FILE}" || fail "LLM prompt did not include user goals"
+else
+    log "Skipping LLM personalization check (JARVIS_RUNTIME_SMOKE_SKIP_LLM=true)."
+fi
 
 log "Local runtime smoke passed."

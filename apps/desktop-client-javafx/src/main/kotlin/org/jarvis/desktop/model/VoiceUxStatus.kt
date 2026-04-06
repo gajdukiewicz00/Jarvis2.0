@@ -23,6 +23,9 @@ object VoiceUxStatus {
 
         connectionProblem(state.connectionPhase)?.let { return it }
 
+        sttDegradation(state)?.let { return it }
+        ttsDegradation(state)?.let { return it }
+
         deviceProblem(state)?.let { return it }
 
         return sessionStatus(state)
@@ -73,6 +76,13 @@ object VoiceUxStatus {
                     "Check microphone connection and try again"
                 )
 
+            "expired" in lower || "unauthorized" in lower || "401" in lower || "login required" in lower ->
+                StatusLine(
+                    "Voice session expired",
+                    Severity.ERROR,
+                    "Sign in again to restore voice control"
+                )
+
             "not reachable" in lower || "unavailable" in lower ->
                 StatusLine(
                     "Voice backend unavailable",
@@ -104,6 +114,28 @@ object VoiceUxStatus {
         ConnectionPhase.CONNECTING ->
             StatusLine("Connecting to voice gateway...", Severity.INFO)
         ConnectionPhase.CONNECTED -> null
+    }
+
+    // ── STT degradation (connected but STT unavailable) ─────────────
+
+    internal fun sttDegradation(state: VoiceRuntimeState): StatusLine? {
+        if (state.sttAvailable) return null
+        if (!state.connectionPhase.isUsable()) return null
+        return StatusLine(
+            "Speech recognition unavailable",
+            Severity.WARNING,
+            "Install a local STT model or check server configuration"
+        )
+    }
+
+    internal fun ttsDegradation(state: VoiceRuntimeState): StatusLine? {
+        if (state.ttsAvailable) return null
+        if (!state.connectionPhase.isUsable()) return null
+        return StatusLine(
+            "Speech output unavailable",
+            Severity.WARNING,
+            "Voice replies are running in text-only mode until a TTS provider is available"
+        )
     }
 
     // ── device problems ─────────────────────────────────────────────

@@ -27,7 +27,7 @@ class SmartHomeProxyControllerTest {
     void listDevicesDelegatesToSmartHomeClient() {
         when(smartHomeClient.listDevices()).thenReturn(ResponseEntity.ok("[]"));
 
-        ResponseEntity<String> response = controller.listDevices();
+        ResponseEntity<String> response = controller.listDevices(null);
 
         assertEquals(200, response.getStatusCode().value());
         verify(smartHomeClient).listDevices();

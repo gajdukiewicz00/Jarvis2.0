@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-gateway-ingress-from-planner
+spec:
+  podSelector:
+    matchLabels:
+      app: voice-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: planner-service
+      ports:
+        - protocol: TCP
+          port: 8081

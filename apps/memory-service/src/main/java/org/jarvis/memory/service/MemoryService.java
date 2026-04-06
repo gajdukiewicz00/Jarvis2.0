@@ -6,10 +6,12 @@ import org.jarvis.memory.dto.*;
 import org.jarvis.memory.entity.ConversationMessage;
 import org.jarvis.memory.entity.MemoryChunk;
 import org.jarvis.memory.entity.SessionSummary;
+import org.jarvis.memory.exception.MemoryDependencyUnavailableException;
 import org.jarvis.memory.repository.ConversationMessageRepository;
 import org.jarvis.memory.repository.MemoryChunkRepository;
 import org.jarvis.memory.repository.SessionSummaryRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -73,7 +75,6 @@ public class MemoryService {
     /**
      * Search memory for relevant context
      */
-    @Transactional(readOnly = true)
     public SearchResponse search(SearchRequest request, String correlationId) {
         log.info("[{}] Searching memory for user={}, query='{}'",
                 correlationId, request.getUserId(), 
@@ -83,14 +84,24 @@ public class MemoryService {
 
         int topK = request.getTopK() > 0 ? request.getTopK() : defaultTopK;
         double minSimilarity = request.getMinSimilarity() > 0 ? request.getMinSimilarity() : defaultMinSimilarity;
+        minSimilarity = Math.max(0.0d, Math.min(1.0d, minSimilarity));
         int maxTokens = request.getMaxTokens() > 0 ? request.getMaxTokens() : defaultMaxTokens;
 
         try {
-            List<Float> queryEmbedding = embeddingClient.embed(request.getQuery(), correlationId);
-            String queryVector = MemoryChunk.toVectorString(queryEmbedding);
+            List<Float> queryEmbedding;
+            try {
+                queryEmbedding = embeddingClient.embed(request.getQuery(), correlationId);
+            } catch (RuntimeException ex) {
+                throw new MemoryDependencyUnavailableException(
+                        "embedding-service",
+                        "Semantic memory search is unavailable because embedding-service is down",
+                        ex);
+            }
 
-            List<Object[]> rawResults = chunkRepository.findSimilarWithScore(
-                    request.getUserId(), queryVector, topK, minSimilarity);
+            float[] queryVector = MemoryChunk.toPrimitiveArray(queryEmbedding);
+            double maxDistance = 1.0d - minSimilarity;
+            List<Object[]> rawResults = chunkRepository.findSimilarWithDistance(
+                    request.getUserId(), queryVector, maxDistance, PageRequest.of(0, topK));
 
             SearchResponse semanticResponse = buildSemanticResponse(
                     request.getUserId(), rawResults, maxTokens, startTime, correlationId);
@@ -99,11 +110,21 @@ public class MemoryService {
             }
 
             log.info("[{}] Semantic search returned no results, falling back to lexical ranking", correlationId);
+            return buildLexicalFallbackResponse(
+                    request,
+                    topK,
+                    maxTokens,
+                    startTime,
+                    correlationId,
+                    "Semantic search returned no matching chunks");
+        } catch (MemoryDependencyUnavailableException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
-            log.warn("[{}] Semantic search unavailable, using lexical fallback: {}", correlationId, ex.getMessage());
+            throw new MemoryDependencyUnavailableException(
+                    "semantic-search",
+                    "Semantic memory search failed: " + ex.getMessage(),
+                    ex);
         }
-
-        return buildLexicalFallbackResponse(request, topK, maxTokens, startTime, correlationId);
     }
 
     private SearchResponse buildSemanticResponse(
@@ -118,7 +139,8 @@ public class MemoryService {
 
         for (Object[] row : rawResults) {
             MemoryChunk chunk = (MemoryChunk) row[0];
-            double similarity = ((Number) row[1]).doubleValue();
+            double distance = ((Number) row[1]).doubleValue();
+            double similarity = roundSimilarity(Math.max(0.0d, Math.min(1.0d, 1.0d - distance)));
             int chunkTokens = chunkingService.estimateTokens(chunk.getChunkText());
             if (tokenCount + chunkTokens > maxTokens) {
                 break;
@@ -145,6 +167,8 @@ public class MemoryService {
                 .chunks(chunks)
                 .contextText(contextBuilder.toString())
                 .estimatedTokens(tokenCount)
+                .retrievalMode("semantic")
+                .degradedReason("")
                 .totalChunksSearched((int) totalChunks)
                 .processingTimeMs(elapsed)
                 .build();
@@ -155,7 +179,8 @@ public class MemoryService {
             int topK,
             int maxTokens,
             long startTime,
-            String correlationId) {
+            String correlationId,
+            String degradedReason) {
         Set<String> queryTerms = expandQueryTerms(request.getQuery());
         String normalizedQuery = normalizeText(request.getQuery());
 
@@ -215,6 +240,8 @@ public class MemoryService {
                 .chunks(chunks)
                 .contextText(contextBuilder.toString())
                 .estimatedTokens(tokenCount)
+                .retrievalMode("lexical-fallback")
+                .degradedReason(degradedReason)
                 .totalChunksSearched(totalCandidates)
                 .processingTimeMs(elapsed)
                 .build();

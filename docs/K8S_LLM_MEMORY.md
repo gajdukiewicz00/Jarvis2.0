@@ -12,10 +12,10 @@ ENABLE_LLM=true ENABLE_MEMORY=true ./jarvis-launch.sh
 
 ## Models
 
-Place models in `~/.jarvis/models`:
+Place LLM models in the repo-local `models/llm` directory:
 
 ```
-~/.jarvis/models/
+models/llm/
 ├── h2ogpt-7b-chat-q4_k_m.gguf
 └── h2ogpt-4096-llama2-7b-chat/
 ```

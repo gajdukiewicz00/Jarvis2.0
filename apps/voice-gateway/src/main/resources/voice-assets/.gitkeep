@@ -1,0 +1,4 @@
+# Placeholder for pre-recorded voice assets.
+# Structure: {locale}/{category}/{id}.wav
+# Example: ru/system/wake_yes_sir.wav
+# See docs/_archive/legacy-migration/README.md for import from legacy pack.

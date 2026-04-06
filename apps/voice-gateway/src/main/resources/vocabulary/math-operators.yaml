@@ -1,0 +1,23 @@
+# Math operator vocabulary — migrated from legacy VoxCommando math.xml
+# Used for voice calculator, formula dictation, and math-related commands.
+
+operators:
+  - value: "+"
+    phrases_ru: ["плюс", "прибавить"]
+    phrases_en: ["plus", "add"]
+
+  - value: "-"
+    phrases_ru: ["минус", "отнять", "вычесть"]
+    phrases_en: ["minus", "subtract"]
+
+  - value: "*"
+    phrases_ru: ["умножить на", "умножить", "помножить на"]
+    phrases_en: ["times", "multiplied by", "multiply by"]
+
+  - value: "/"
+    phrases_ru: ["разделить на", "делить на", "поделить на"]
+    phrases_en: ["divided by", "divide by"]
+
+  - value: "^"
+    phrases_ru: ["в степени"]
+    phrases_en: ["to the power of", "raised to"]

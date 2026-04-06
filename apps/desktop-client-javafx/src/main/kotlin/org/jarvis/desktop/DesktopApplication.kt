@@ -14,6 +14,7 @@ import org.jarvis.desktop.auth.AuthResponse
 import org.jarvis.desktop.auth.LoginRequest
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.i18n.I18n
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
 import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
@@ -34,14 +35,22 @@ import java.nio.file.Paths
 
 class DesktopApplication : Application() {
     private val logger = LoggerFactory.getLogger(DesktopApplication::class.java)
-    private val apiGatewayBase = AppConfig.apiGatewayBaseUrl
-    private val apiBaseUrl = AppConfig.apiBaseUrl
     private val objectMapper = jacksonObjectMapper()
     private val httpClient = HttpClient.newBuilder().build()
     private val runtimeMonitor = DesktopRuntimeMonitor()
-    private val runtimeHealthProbe = LocalRuntimeHealthProbe(apiGatewayBase)
+    private val runtimeHealthProbe = LocalRuntimeHealthProbe(
+        apiGatewayBaseUrlProvider = { AppConfig.current().apiGatewayBaseUrl }
+    )
     private val runtimeHealthExecutor = Executors.newSingleThreadScheduledExecutor()
     private var runtimeHealthTask: ScheduledFuture<*>? = null
+    private var skipInitialConfigLog = true
+    private val configListener: (ResolvedDesktopConfig) -> Unit = { config ->
+        if (skipInitialConfigLog) {
+            skipInitialConfigLog = false
+        } else {
+            logResolvedEndpoints("updated", config)
+        }
+    }
     
     // PC Control services
     private val systemControlService = SystemControlService()
@@ -50,6 +59,8 @@ class DesktopApplication : Application() {
     override fun start(stage: Stage) {
         I18n.setLocale(AppConfig.locale)
         logger.info("🚀 Starting Jarvis 2.0 Desktop Application...")
+        logResolvedEndpoints("startup", AppConfig.current())
+        AppConfig.addListener(configListener)
         
         // Development mode auto-login
         val devUsername = System.getenv("JARVIS_DEV_USER")
@@ -87,11 +98,11 @@ class DesktopApplication : Application() {
     private fun showMainApplication(stage: Stage) {
         logger.info("📋 Loading application tabs...")
         
-        val authService = AuthService(baseUrl = apiGatewayBase)
-        val apiClient = ApiClient(baseUrl = apiBaseUrl, authService = authService)
+        val authService = AuthService()
+        val apiClient = ApiClient(authService = authService)
         
         val tabPane = TabPane()
-        val settingsTab = SettingsTab(onLogout = { handleLogout(stage) })
+        val settingsTab = SettingsTab(apiClient = apiClient, onLogout = { handleLogout(stage) })
 
         tabPane.tabs.addAll(
             HomeTab(runtimeMonitor, onRefreshRuntime = { refreshRuntimeHealthNow() }).tab,
@@ -133,11 +144,7 @@ class DesktopApplication : Application() {
     }
     
     private fun initPcControlWebSocket() {
-        // Get API Gateway URL for WebSocket
-        val wsUrl = AppConfig.pcControlWebSocketUrl
-
         pcWebSocketClient = PcControlWebSocketClient(
-            url = wsUrl,
             systemControl = systemControlService,
             onStatusChange = { status ->
                 logger.debug("PC WebSocket status: $status")
@@ -182,6 +189,7 @@ class DesktopApplication : Application() {
         Thread {
             try {
                 logger.info("🔐 Development auto-login for: $username")
+                val apiGatewayBase = AppConfig.current().apiGatewayBaseUrl
                 
                 val loginRequest = LoginRequest(username, password)
                 val requestBody = objectMapper.writeValueAsString(loginRequest)
@@ -223,7 +231,7 @@ class DesktopApplication : Application() {
                 logger.info("🔍 Verifying authentication token...")
                 
                 val request = HttpRequest.newBuilder()
-                    .uri(URI.create("$apiGatewayBase/api/v1/security/auth/me"))
+                    .uri(URI.create("${AppConfig.current().apiBaseUrl}/security/auth/me"))
                     .header("Authorization", "Bearer ${TokenManager.getAccessToken()}")
                     .GET()
                     .build()
@@ -276,6 +284,27 @@ class DesktopApplication : Application() {
         pcWebSocketClient?.disconnect()
         TokenManager.clearTokens()
         showLoginScreen(stage)
+    }
+
+    override fun stop() {
+        AppConfig.removeListener(configListener)
+    }
+
+    private fun logResolvedEndpoints(reason: String, config: ResolvedDesktopConfig) {
+        logger.info(
+            "Resolved desktop config [{}]: source={}, manualOverride={}, reason={}, locale={}, voiceLanguage={}, apiClient={}, voiceWs={}, pcControlWs={}, serviceChecker={}, authCheck={}",
+            reason,
+            config.apiGatewaySource.description,
+            config.usesManualEndpointOverride,
+            config.apiGatewayReason,
+            config.locale.toLanguageTag(),
+            config.voiceLanguage,
+            config.apiBaseUrl,
+            config.voiceWebSocketUrl,
+            config.pcControlWebSocketUrl,
+            "${config.apiGatewayBaseUrl}/actuator/health",
+            "${config.apiBaseUrl}/security/auth/me"
+        )
     }
 }
 

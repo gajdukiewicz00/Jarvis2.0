@@ -33,7 +33,7 @@ public class StatefulSmartHomeService implements SmartHomeService {
 
     @Override
     public List<SmartHomeDeviceView> listDevices(String userId) {
-        String scopedUserId = normalizeUserId(userId);
+        String scopedUserId = requireUserId(userId);
         return catalog.all().stream()
                 .map(device -> toView(scopedUserId, device))
                 .toList();
@@ -41,7 +41,7 @@ public class StatefulSmartHomeService implements SmartHomeService {
 
     @Override
     public SmartHomeDeviceView getDevice(String userId, String deviceId) {
-        String scopedUserId = normalizeUserId(userId);
+        String scopedUserId = requireUserId(userId);
         SmartHomeDeviceDefinition device = catalog.findById(deviceId)
                 .orElseThrow(() -> new SmartHomeDeviceNotFoundException(deviceId));
         return toView(scopedUserId, device);
@@ -53,7 +53,7 @@ public class StatefulSmartHomeService implements SmartHomeService {
             throw new SmartHomeValidationException("Action is required");
         }
 
-        String scopedUserId = normalizeUserId(userId);
+        String scopedUserId = requireUserId(userId);
         String normalizedAction = normalizeAction(request.action());
         actionValidator.validateAction(normalizedAction);
 
@@ -199,8 +199,11 @@ public class StatefulSmartHomeService implements SmartHomeService {
         }
     }
 
-    private static String normalizeUserId(String userId) {
-        return userId == null || userId.isBlank() ? "local-user" : userId.trim();
+    private static String requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new SmartHomeValidationException("Delegated user context is required");
+        }
+        return userId.trim();
     }
 
     private static String normalizeAction(String action) {

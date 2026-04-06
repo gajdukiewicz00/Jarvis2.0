@@ -1,0 +1,224 @@
+commands:
+  - id: rule_cozy_evening_protocol
+    matchers:
+      - type: exact
+        values:
+          - "уютный вечер"
+          - "протокол уютный вечер"
+          - "хочу отдохнуть"
+          - "cozy evening"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: cozy_evening
+    response:
+      key: loading_sir
+
+  - id: rule_guests_protocol
+    matchers:
+      - type: exact
+        values:
+          - "у нас гости"
+          - "протокол гости"
+          - "guest protocol"
+          - "guests mode"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: guests
+    response:
+      key: loading_sir
+
+  - id: rule_clean_slate_protocol
+    matchers:
+      - type: exact
+        values:
+          - "протокол чистый лист"
+          - "чистый лист"
+          - "протокол 10"
+          - "убери все с робочего стола"
+          - "убери все с рабочего стола"
+          - "очисти рабочий стол"
+          - "clear the desktop"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: clean_slate
+    response:
+      key: loading_sir
+
+  - id: rule_holiday_protocol
+    matchers:
+      - type: exact
+        values:
+          - "новогоднее настроение"
+          - "протокол новый год"
+          - "holiday mood"
+          - "new year mode"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: holiday
+    response:
+      key: loading_sir
+
+  - id: rule_morning_protocol
+    matchers:
+      - type: exact
+        values:
+          - "утренний протокол"
+          - "начни утро"
+          - "morning routine"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: morning
+    response:
+      key: good_morning
+
+  - id: rule_leaving_protocol
+    matchers:
+      - type: exact
+        values:
+          - "я ухожу"
+          - "я выхожу"
+          - "ухожу из дома"
+          - "leaving home"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: leaving
+    response:
+      key: request_completed_sir
+
+  - id: rule_panic_protocol
+    matchers:
+      - type: exact
+        values:
+          - "джарвис шухер"
+          - "шухер"
+          - "незванные гости"
+          - "panic mode"
+    action:
+      target: pc_control
+      name: SCENARIO
+      params:
+        name: panic
+    response:
+      key: affirmative
+
+  - id: rule_disable_greeting
+    matchers:
+      - type: exact
+        values:
+          - "выключи приветствие"
+          - "disable greeting"
+    action:
+      target: internal
+      name: DISABLE_GREETING
+    response:
+      key: greeting_disabled
+
+  - id: rule_love_response
+    matchers:
+      - type: exact
+        values:
+          - "я тебя люблю"
+          - "люблю тебя"
+          - "ты самый классный"
+          - "i love you"
+      - type: contains
+        values:
+          - "ты умничка"
+          - "you are the best"
+    action:
+      target: internal
+      name: LOVE_RESPONSE
+    response:
+      key: love_response
+
+  - id: rule_random_fact
+    matchers:
+      - type: exact
+        values:
+          - "скажи рандомный факт"
+          - "расскажи факт"
+          - "интересный факт"
+          - "random fact"
+    action:
+      target: internal
+      name: RANDOM_FACT
+    response:
+      key: random_fact_legacy
+
+  - id: rule_coin_flip
+    matchers:
+      - type: exact
+        values:
+          - "орел или решка"
+          - "подбрось монетку"
+          - "подкинь монетку"
+          - "coin flip"
+    action:
+      target: internal
+      name: COIN_FLIP
+    response:
+      key: coin_flip_heads
+
+  - id: rule_fairy_tale
+    matchers:
+      - type: exact
+        values:
+          - "расскажи сказку"
+          - "почитай сказку"
+          - "tell me a story"
+    action:
+      target: internal
+      name: FAIRY_TALE
+    response:
+      key: fairy_tale_short
+
+  - id: rule_cosmos_brief
+    matchers:
+      - type: exact
+        values:
+          - "что ты знаешь о космосе"
+          - "расскажи о космосе"
+          - "tell me about space"
+    action:
+      target: internal
+      name: KNOWLEDGE_SPACE
+    response:
+      key: cosmos_brief
+
+  - id: rule_everest_brief
+    matchers:
+      - type: exact
+        values:
+          - "что ты знаешь о горе эверест"
+          - "расскажи про гору эверест"
+          - "что за гора эверест"
+    action:
+      target: internal
+      name: KNOWLEDGE_EVEREST
+    response:
+      key: everest_brief
+
+  - id: rule_alien_life_brief
+    matchers:
+      - type: exact
+        values:
+          - "есть ли жизнь на других планетах"
+          - "расскажи о жизни на других планетах"
+          - "is there life on other planets"
+    action:
+      target: internal
+      name: KNOWLEDGE_ALIENS
+    response:
+      key: alien_life_brief

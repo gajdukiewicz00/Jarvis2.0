@@ -1,0 +1,165 @@
+commands:
+  - id: rule_wake_response
+    description: "Deterministic wake acknowledgement"
+    priority: 50
+    matchers:
+      - type: exact
+        values:
+          - "джарвис ты тут"
+          - "jarvis are you there"
+      - type: alias
+        values:
+          - "вызов"
+      - type: contains
+        values:
+          - "джарвис слушай"
+          - "ты на месте"
+          - "jarvis listen"
+    action:
+      target: internal
+      name: WAKE_RESPONSE
+    response:
+      key: at_your_service_sir
+
+  - id: rule_greeting
+    description: "Greeting without dispatch"
+    matchers:
+      - type: exact
+        values:
+          - "привет"
+          - "hello"
+      - type: contains
+        values:
+          - "привет джарвис"
+          - "hello jarvis"
+          - "здравствуй джарвис"
+    action:
+      target: internal
+      name: GREETING
+    response:
+      key: hello_i_am_jarvis
+
+  - id: rule_morning_greeting
+    matchers:
+      - type: exact
+        values:
+          - "доброе утро"
+          - "good morning"
+      - type: contains
+        values:
+          - "доброе утро джарвис"
+          - "утро доброе джарвис"
+    action:
+      target: internal
+      name: MORNING_GREETING
+    response:
+      key: good_morning
+
+  - id: rule_thanks
+    matchers:
+      - type: exact
+        values:
+          - "спасибо"
+          - "thanks"
+          - "thank you"
+      - type: contains
+        values:
+          - "большое спасибо"
+          - "спасибо джарвис"
+    action:
+      target: internal
+      name: THANKS
+    response:
+      key: always_at_service_sir
+
+  - id: rule_status_report
+    matchers:
+      - type: exact
+        values:
+          - "что делаешь"
+          - "what are you doing"
+      - type: contains
+        values:
+          - "чем занимаешься"
+          - "докладывай"
+          - "what are you up to"
+    action:
+      target: internal
+      name: WHAT_DOING
+    response:
+      key: running_diagnostics
+
+  - id: rule_how_are_you
+    matchers:
+      - type: exact
+        values:
+          - "как дела"
+          - "how are you"
+      - type: contains
+        values:
+          - "как ты"
+          - "как настроение"
+          - "how is it going"
+    action:
+      target: internal
+      name: HOW_ARE_YOU
+    response:
+      key: at_your_service_sir
+      text:
+        ru: "Функционирую в штатном режиме, сэр."
+        en: "Operating within normal parameters, sir."
+
+  - id: rule_welcome_home
+    matchers:
+      - type: exact
+        values:
+          - "я вернулся"
+          - "i am back"
+      - type: contains
+        values:
+          - "я снова тут"
+          - "я дома"
+          - "i'm home"
+    action:
+      target: internal
+      name: WELCOME_HOME
+    response:
+      key: welcome_back
+
+  - id: rule_open_news
+    matchers:
+      - type: exact
+        values:
+          - "есть новости"
+          - "open the news"
+      - type: contains
+        values:
+          - "что нового"
+          - "включи новости"
+          - "show the news"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx1YlY4U0FtVnVHZ0pCVlNnQVAB?hl=ru&gl=RU&ceid=RU:ru"
+    response:
+      key: news_update
+
+  - id: rule_standby_mode
+    matchers:
+      - type: exact
+        values:
+          - "я отдыхать"
+          - "джарвис не слушай"
+          - "не слушай"
+          - "go to sleep"
+      - type: contains
+        values:
+          - "джарвис не слушай"
+          - "не слушай"
+          - "stop listening"
+    action:
+      target: internal
+      name: STANDBY_MODE
+    response:
+      key: rest_mode

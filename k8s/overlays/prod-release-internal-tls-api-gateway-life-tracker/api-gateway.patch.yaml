@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-api-gateway-life-tracker: api-gateway-life-tracker-v1
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: LIFE_TRACKER_URL
+              value: https://life-tracker.jarvis.svc.cluster.local:8085

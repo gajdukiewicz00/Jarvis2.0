@@ -1,0 +1,10 @@
+- op: add
+  path: /spec/egress/-
+  value:
+    to:
+      - podSelector:
+          matchLabels:
+            app: api-gateway
+    ports:
+      - protocol: TCP
+        port: 8443

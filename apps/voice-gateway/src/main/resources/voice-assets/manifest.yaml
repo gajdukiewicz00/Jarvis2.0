@@ -1,0 +1,1045 @@
+assets:
+  - id: ru/system/always_at_service_sir
+    resource: voice-assets/ru/system/always_at_service_sir.wav
+    locale: ru
+    source: legacy
+    original_filename: "Всегда к вашим услугам сэр.wav"
+    inferred_text: "Всегда к вашим услугам, сэр."
+    category: system
+    tags: [wake, thanks, acknowledgement]
+    quality: good
+    status: active
+
+  - id: ru/system/yes_sir
+    resource: voice-assets/ru/system/yes_sir.wav
+    locale: ru
+    source: legacy
+    original_filename: "Да сэр.wav"
+    inferred_text: "Да, сэр."
+    category: system
+    tags: [confirmation, short]
+    quality: good
+    status: active
+
+  - id: ru/system/yes_sir_alt
+    resource: voice-assets/ru/system/yes_sir_alt.wav
+    locale: ru
+    source: legacy
+    original_filename: "Да сэр(второй).wav"
+    inferred_text: "Да, сэр."
+    category: system
+    tags: [confirmation, short, alternate]
+    quality: good
+    status: active
+
+  - id: ru/system/affirmative
+    resource: voice-assets/ru/system/affirmative.wav
+    locale: ru
+    source: legacy
+    original_filename: "Есть.wav"
+    inferred_text: "Есть."
+    category: system
+    tags: [acknowledgement, short]
+    quality: good
+    status: active
+
+  - id: ru/system/rest_mode
+    resource: voice-assets/ru/system/rest_mode.wav
+    locale: ru
+    source: legacy
+    original_filename: "Я отдыхать.wav"
+    inferred_text: "Я отдыхать."
+    category: system
+    tags: [standby, sleep]
+    quality: good
+    status: active
+
+  - id: ru/assistant/good_morning
+    resource: voice-assets/ru/assistant/good_morning.wav
+    locale: ru
+    source: legacy
+    original_filename: "Доброе утро.wav"
+    inferred_text: "Доброе утро."
+    category: assistant
+    tags: [greeting, morning]
+    quality: good
+    status: active
+
+  - id: ru/assistant/hello_i_am_jarvis
+    resource: voice-assets/ru/assistant/hello_i_am_jarvis.wav
+    locale: ru
+    source: legacy
+    original_filename: "привет я джарвис.wav"
+    inferred_text: "Привет, я Джарвис."
+    category: assistant
+    tags: [greeting, startup]
+    quality: good
+    status: active
+
+  - id: ru/assistant/loading_sir
+    resource: voice-assets/ru/assistant/loading_sir.wav
+    locale: ru
+    source: legacy
+    original_filename: "Загружаю сэр.wav"
+    inferred_text: "Загружаю, сэр."
+    category: assistant
+    tags: [start, loading, opening]
+    quality: good
+    status: active
+
+  - id: ru/assistant/request_completed_sir
+    resource: voice-assets/ru/assistant/request_completed_sir.wav
+    locale: ru
+    source: legacy
+    original_filename: "Запрос выполнен сэр.wav"
+    inferred_text: "Запрос выполнен, сэр."
+    category: assistant
+    tags: [done, success]
+    quality: good
+    status: active
+
+  - id: ru/assistant/at_your_service_sir
+    resource: voice-assets/ru/assistant/at_your_service_sir.wav
+    locale: ru
+    source: legacy
+    original_filename: "К вашим услугам сэр.wav"
+    inferred_text: "К вашим услугам, сэр."
+    category: assistant
+    tags: [wake, readiness]
+    quality: good
+    status: active
+
+  - id: ru/assistant/running_diagnostics
+    resource: voice-assets/ru/assistant/running_diagnostics.wav
+    locale: ru
+    source: legacy
+    original_filename: "Начинаю диагностику системы.wav"
+    inferred_text: "Начинаю диагностику системы."
+    category: assistant
+    tags: [status, diagnostics, working]
+    quality: good
+    status: active
+
+  - id: ru/assistant/welcome_back
+    resource: voice-assets/ru/assistant/welcome_back.wav
+    locale: ru
+    source: legacy
+    original_filename: "Джарвис - приветствие.wav"
+    inferred_text: "Приветствие Джарвиса."
+    category: assistant
+    tags: [welcome, return]
+    quality: good
+    status: active
+
+  - id: ru/assistant/news_update
+    resource: voice-assets/ru/assistant/news_update.wav
+    locale: ru
+    source: legacy
+    original_filename: "что нового.wav"
+    inferred_text: "Что нового."
+    category: assistant
+    tags: [news, update]
+    quality: good
+    status: active
+
+  - id: ru/diagnostics/internet_check
+    resource: voice-assets/ru/diagnostics/internet_check.wav
+    locale: ru
+    source: legacy
+    original_filename: "Новый голос/проверка интернета.wav"
+    inferred_text: "Проверка интернета."
+    category: diagnostics
+    tags: [network, diagnostics]
+    quality: good
+    status: active
+
+  - id: ru/media/pleasant_listening_sir
+    resource: voice-assets/ru/media/pleasant_listening_sir.wav
+    locale: ru
+    source: legacy
+    original_filename: "Новый голос/Приятного прослушивания сэр.wav"
+    inferred_text: "Приятного прослушивания, сэр."
+    category: media
+    tags: [music, radio]
+    quality: good
+    status: active
+
+  - id: ru/scenarios/game_voice_control_activated
+    resource: voice-assets/ru/scenarios/game_voice_control_activated.wav
+    locale: ru
+    source: legacy
+    original_filename: "Новый голос/Активировать голосовое управление в игре_mixdown.wav"
+    inferred_text: "Активировать голосовое управление в игре."
+    category: scenarios
+    tags: [game, scenario]
+    quality: good
+    status: active
+
+  - id: legacy/archive/clip_001
+    resource: voice-assets/legacy/archive/clip_001.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_ ___ _ _____, ______ _ ___ ___ ___________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "86a515622f0ccce46717e7e555ca0a3aacc7a67af8a697e05ac66a40291c6a16"
+    status: active
+
+  - id: legacy/archive/clip_002
+    resource: voice-assets/legacy/archive/clip_002.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_ ___ __ ______ _ _____, _ ________ _______ ________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "7841a436fa02e1a9df66d01a38cc7a01f4706d9d467d7270e45177b089d231b0"
+    status: active
+
+  - id: legacy/archive/clip_003
+    resource: voice-assets/legacy/archive/clip_003.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_ ______ _________ __ _____ __________ __________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "cf4c91c64c49e51a34b21fbe893bbd3995a9cffdac1181b77bcaba507dc770b6"
+    status: active
+
+  - id: legacy/archive/clip_004
+    resource: voice-assets/legacy/archive/clip_004.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_ _________ ___ __________ _____________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "c4e44a2f920d6de2289f9d597a3f63cadcccf2a162cbed7420d68d307f4783af"
+    status: active
+
+  - id: legacy/archive/clip_005
+    resource: voice-assets/legacy/archive/clip_005.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_ _________ __________ _______ _________ ___ _____ _ __ __ _____ _______ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "5ce093bcb8f41944a99b43a7a1dd476449037cf6af494e70374b3dec4e0aaa79"
+    status: active
+
+  - id: legacy/archive/clip_006
+    resource: voice-assets/legacy/archive/clip_006.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_ ______________ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "6355655eb4f2712fb241a6648d1992faa375df1bacd800ac3ee3554c87a90f62"
+    status: active
+
+  - id: legacy/archive/clip_007
+    resource: voice-assets/legacy/archive/clip_007.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__ _______ _____ _______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "58c27ccf5fd6739beadc0c96997052fd135857c7ec3ddab3eceb06bc5fae4dda"
+    status: active
+
+  - id: legacy/archive/clip_008
+    resource: voice-assets/legacy/archive/clip_008.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__ ________ ___ ________ ___ 2.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "a57281432dcafb2207bff3aa994c0bd1192df3d15a79406a31c80c4eea8855cd"
+    status: active
+
+  - id: legacy/archive/clip_009
+    resource: voice-assets/legacy/archive/clip_009.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__ __________ _ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "f278422ece77045f7c50a98da00df8aa8cf728a4cd03e0fdf76630dc30b95d36"
+    status: active
+
+  - id: legacy/archive/clip_010
+    resource: voice-assets/legacy/archive/clip_010.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__, ___ _______ ___ __________ ____________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "7c36593cebf24fc1347c0fb8f8e39915e0b430ef8e1f5bfb962bde356323dce7"
+    status: active
+
+  - id: legacy/archive/clip_011
+    resource: voice-assets/legacy/archive/clip_011.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___ ____ _____ ____________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "a8eacb6c48fe2c827022ab569f7c35dbd2fa0c65b75bb3cb076e6e27232587f6"
+    status: active
+
+  - id: legacy/archive/clip_012
+    resource: voice-assets/legacy/archive/clip_012.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___ ____ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "c3c982b2cd2f0e529d6f93d5873ea027c706c129035fb99d97f6b7e92bda61ec"
+    status: active
+
+  - id: legacy/archive/clip_013
+    resource: voice-assets/legacy/archive/clip_013.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___ _______ __ ______ _______ _______ _________________ ___________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "7388e8b915818c736ad3232f57085b2f5dfd3c5f699c35c47ff2f57a1bd7d40a"
+    status: active
+
+  - id: legacy/archive/clip_014
+    resource: voice-assets/legacy/archive/clip_014.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___ _________ .wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "3589cbb17383ccf34af2b30bb8f5c650b8ac8412464ca6dbb9b89dc4943c06e8"
+    status: active
+
+  - id: legacy/archive/clip_015
+    resource: voice-assets/legacy/archive/clip_015.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___, __ ___ ________, _____ ________ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "8a2718b6bd5923ca8899964fa378b221a7e8944e048484c1aee43435e49ce19a"
+    status: active
+
+  - id: legacy/archive/clip_016
+    resource: voice-assets/legacy/archive/clip_016.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___, __ ______ _________ ______ __ _____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "6163f7851c2bc6c7c4f9ed48cc545fa6a1b40bc79ae9d287ff2253449a17b110"
+    status: active
+
+  - id: legacy/archive/clip_017
+    resource: voice-assets/legacy/archive/clip_017.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___, ___ ________ _______ ______ __ __________ ___ __________ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "0267d7060627b821bec574ca1b88da03ae2605b1cb68bc58be8bea3169eb8c48"
+    status: active
+
+  - id: legacy/archive/clip_018
+    resource: voice-assets/legacy/archive/clip_018.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___, ______ ___ ______ _____ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "d59b6d5ec50436380733b2193342337157cf9f7e5a9556f9628a3c4ea3b6a1ed"
+    status: active
+
+  - id: legacy/archive/clip_019
+    resource: voice-assets/legacy/archive/clip_019.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____ __ _____, _____________ _______ _________ ________ __________ ____ _________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "88228e845eb8364cb4dad2edce00338c0b5123342231e7f532b29bcb770adb4f"
+    status: active
+
+  - id: legacy/archive/clip_020
+    resource: voice-assets/legacy/archive/clip_020.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____ __ _________ ________ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "2bd7943a947cdffecd6259fcbe00932af3acfb06956ee889f7e04e2b933ff241"
+    status: active
+
+  - id: legacy/archive/clip_021
+    resource: voice-assets/legacy/archive/clip_021.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____ __ __________ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "d6d069f8bbefee78c9f7caa573401f10f1d875143bf9035cdadd3d1756060283"
+    status: active
+
+  - id: legacy/archive/clip_022
+    resource: voice-assets/legacy/archive/clip_022.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ ___-_____, _________ _ ___________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "9c53fda3b713ea689223545d42223c275c4bee389c82fcb52369f66c2515c4d2"
+    status: active
+
+  - id: legacy/archive/clip_023
+    resource: voice-assets/legacy/archive/clip_023.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/___ __ ______ _ _______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "2d0f0a1233284d800a4aee3a08fd1ea9de6e23b63b082f5fd11f48f6f7c90ad2"
+    status: active
+
+  - id: legacy/archive/clip_024
+    resource: voice-assets/legacy/archive/clip_024.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 1.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "c5f7664dda5ab47439300d4fb33110555f5685efc03f8fb3d443127cafda8c9c"
+    status: active
+
+  - id: legacy/archive/clip_025
+    resource: voice-assets/legacy/archive/clip_025.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 2.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "e247430f6af6a177756f6106702b547ec1ae69967c9e00f6d04e7a5d8678a72a"
+    status: active
+
+  - id: legacy/archive/clip_026
+    resource: voice-assets/legacy/archive/clip_026.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 3.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "ec2fd0684e8d2eb95066ab59ee78828203e52202372b10469ae37179227ad730"
+    status: active
+
+  - id: legacy/archive/clip_027
+    resource: voice-assets/legacy/archive/clip_027.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 4.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "5819199eeaf061f93ec053a154ad74af750536d58e61542aa492e1148a57629b"
+    status: active
+
+  - id: legacy/archive/clip_028
+    resource: voice-assets/legacy/archive/clip_028.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 5wav.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "842452181527a2f617251971c54f300c5f5e9abb10cd8baecb29c7bf2d4155b6"
+    status: active
+
+  - id: legacy/archive/clip_029
+    resource: voice-assets/legacy/archive/clip_029.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 6.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "e6795f0371b4b2a2e0ce6821a36155f94b8de6198dbdc773ed63ac322bfe6c92"
+    status: active
+
+  - id: legacy/archive/clip_030
+    resource: voice-assets/legacy/archive/clip_030.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 7.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "83d2c67ef4fe62f7393e9f61ba18982162111c426a631be2792a9c4971b8b527"
+    status: active
+
+  - id: legacy/archive/clip_031
+    resource: voice-assets/legacy/archive/clip_031.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ 8.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "29d6758d0117b0ce75d9dfbeec761ae016aaee3c740d06d608847c22e8217e7c"
+    status: active
+
+  - id: legacy/archive/clip_032
+    resource: voice-assets/legacy/archive/clip_032.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ __ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "4b3ccff9cdb0ac3e855c4641bcb935d9b8b720ea3ff59b5f2f56c759db396ce3"
+    status: active
+
+  - id: legacy/archive/clip_033
+    resource: voice-assets/legacy/archive/clip_033.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ __ _____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "826cb5f96ba3f3000f9952d847135daf748071d64a9bfdec172b85e3ee2c3f54"
+    status: active
+
+  - id: legacy/archive/clip_034
+    resource: voice-assets/legacy/archive/clip_034.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____ _______wav.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "70d3963c40952420545b69c21b3e26d3355bcf3dcbb7a2ce513bfc130ad99968"
+    status: active
+
+  - id: legacy/archive/clip_035
+    resource: voice-assets/legacy/archive/clip_035.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "ef70b2441542d6590b5977fddf5c02036545cf082dd788230ff6b3b84c7ecdbd"
+    status: active
+
+  - id: legacy/archive/clip_036
+    resource: voice-assets/legacy/archive/clip_036.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/_____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "7c5092b0640d0afdbeefb47478aa9a2320556c2712bf2598bda43dafdaa3331b"
+    status: active
+
+  - id: legacy/archive/clip_037
+    resource: voice-assets/legacy/archive/clip_037.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _____/______wav.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "216da7431966409da11c2c7141dece6afdc6ad67d55e979f107f6c6fbaa58d4f"
+    status: active
+
+  - id: legacy/archive/clip_038
+    resource: voice-assets/legacy/archive/clip_038.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ ______ (______).wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "d0b0b329dfa9cf2aaed15ea426dba0a13e40c6d47dba877ea46697461e1d46e8"
+    status: active
+
+  - id: legacy/archive/clip_039
+    resource: voice-assets/legacy/archive/clip_039.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ ______ _________ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "dc02140200ed566453602e8edda1d1f4475ecff4965fc8c38f7dbc880c751547"
+    status: active
+
+  - id: legacy/archive/clip_040
+    resource: voice-assets/legacy/archive/clip_040.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "2d87b5311686bf88f8bfdf1a744fb3ba3fbbf587d80421784ab2c41c762d1291"
+    status: active
+
+  - id: legacy/archive/clip_041
+    resource: voice-assets/legacy/archive/clip_041.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/11 %.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "48dc5eb5716a2522907e0821a4b1f9e5103e49ce152b84b11a489ae7b07ec381"
+    status: active
+
+  - id: legacy/archive/clip_042
+    resource: voice-assets/legacy/archive/clip_042.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/2 %.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "563793e61ed3d09729c506c95e9fd50e07eaf1f315fa103d15bf133a38466074"
+    status: active
+
+  - id: legacy/archive/clip_043
+    resource: voice-assets/legacy/archive/clip_043.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/7 %.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "27c29e47737744821f127c5596766b91ec08bea53898e8ba295ce1a3932c42a3"
+    status: active
+
+  - id: legacy/archive/clip_044
+    resource: voice-assets/legacy/archive/clip_044.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/___, _______ 19 %.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "383b763ed446ae121e620df96fdd7f63fe7d61f2c155d823e16f8590dd594e35"
+    status: active
+
+  - id: legacy/archive/clip_045
+    resource: voice-assets/legacy/archive/clip_045.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/_______ 13%.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "923ad7c820379eae37fb60a6918c1a00058368e8a6a8d43b58cbd8746d95a96a"
+    status: active
+
+  - id: legacy/archive/clip_046
+    resource: voice-assets/legacy/archive/clip_046.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/_______ 15 %.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "14854fc409e773ec2cc3d6e4b6f40df2ce86ffae869562d0a68f65a808df7b77"
+    status: active
+
+  - id: legacy/archive/clip_047
+    resource: voice-assets/legacy/archive/clip_047.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/_______ 48% _ ______ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "ca610ca1c7dd1e8f4238b4e7c11aaadf3204fbebff9be1185cd7b69080c7927f"
+    status: active
+
+  - id: legacy/archive/clip_048
+    resource: voice-assets/legacy/archive/clip_048.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/_______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "39bcc5adc159c6e15cdb3a199ff82269cf933794bd6872711b31493d9dfc21f7"
+    status: active
+
+  - id: legacy/archive/clip_049
+    resource: voice-assets/legacy/archive/clip_049.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_____ _______, %/wooow.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "1cf69f114ef2c0113c1f08218b19876e57aff1cdb4a51315f21e1581315211fd"
+    status: active
+
+  - id: legacy/archive/clip_050
+    resource: voice-assets/legacy/archive/clip_050.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "______ __ ____ _____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "5009e3e8784e717b1f476b6e4894073902f55eb67c645b3e0e3a4abc65901411"
+    status: active
+
+  - id: legacy/archive/clip_051
+    resource: voice-assets/legacy/archive/clip_051.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "______ __________ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "8d78261e72ed0ecdff4f656ed70bcb10d32a1cdcec4ac509513f455a260d6b46"
+    status: active
+
+  - id: legacy/archive/clip_052
+    resource: voice-assets/legacy/archive/clip_052.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ - ___________ (_____ _______).wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "0a44fce288784981e38e3af0e23cf6bde9576304aeedb5390270668ff266790e"
+    status: active
+
+  - id: legacy/archive/clip_053
+    resource: voice-assets/legacy/archive/clip_053.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ __ ____________ ___ __________ _______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "56b8f15a3ca7d4ec97db5416ca318359bf0dfba9774c86d623c7cc6dd881d928"
+    status: active
+
+  - id: legacy/archive/clip_054
+    resource: voice-assets/legacy/archive/clip_054.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ ___ _____ _____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "16a66e8819128f760040afa5ed755ad88166827decc9b437e90d6943347c35d5"
+    status: active
+
+  - id: legacy/archive/clip_055
+    resource: voice-assets/legacy/archive/clip_055.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ _____ 1.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "14d7772adc654d717bb09ba98942ca06ae58fd1d2cfcf4d92cdd96dc917a74f3"
+    status: active
+
+  - id: legacy/archive/clip_056
+    resource: voice-assets/legacy/archive/clip_056.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ _____ 2.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "132aa12e35d181c859ce1408bfb3f6f25477810fb61744d9a376d725c23127d5"
+    status: active
+
+  - id: legacy/archive/clip_057
+    resource: voice-assets/legacy/archive/clip_057.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ ______ ________________ ____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "92c1f20e8b509358a1cc1b827b3abacdc6b051eef80e744ddfd28f039d8a3df8"
+    status: active
+
+  - id: legacy/archive/clip_058
+    resource: voice-assets/legacy/archive/clip_058.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ _______ _________/_______ _ ____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "78459652784212f08929c7ab0867e15fdc35f128b8ce4b0f769faea263383260"
+    status: active
+
+  - id: legacy/archive/clip_059
+    resource: voice-assets/legacy/archive/clip_059.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ _______ _________/_______-_______---_____-___-_______-_www.lightaudio.ru_.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "d873416281e2f2ff458a80967238f6b84fc4cafcb2513bfaadcc5f6503487dfd"
+    status: active
+
+  - id: legacy/archive/clip_060
+    resource: voice-assets/legacy/archive/clip_060.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ _______ _________/tts-_2_.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "2e1cf2095b77276288b91440fa273b1d9cb7e10d15f511c114d18f01f1388701"
+    status: active
+
+  - id: legacy/archive/clip_061
+    resource: voice-assets/legacy/archive/clip_061.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ _________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "3bb6a063d79b043f9f8a01bc0bf21c073a2349b52ebb62cb4f89e2987c9b22ee"
+    status: active
+
+  - id: legacy/archive/clip_062
+    resource: voice-assets/legacy/archive/clip_062.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ __________ _____ __ _____ _____________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "39e7db062616e8b93b6bf98992a13f1547ceb8c90f6047ff2a5aa88afd68fa17"
+    status: active
+
+  - id: legacy/archive/clip_063
+    resource: voice-assets/legacy/archive/clip_063.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ ___________ _____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "cbf155df4480815336a4934ce87688a9d44139f918797b106f3e6766971b0eed"
+    status: active
+
+  - id: legacy/archive/clip_064
+    resource: voice-assets/legacy/archive/clip_064.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ ___________ _______ (______).wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "40c58af7d05c79c9aa9d0afb3513d21f667a26206125450860be893474f7155c"
+    status: active
+
+  - id: legacy/archive/clip_065
+    resource: voice-assets/legacy/archive/clip_065.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_______ ______________ ______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "7ac7c1d04fcaff7fc25c3b25c5e9f0b6f055cd49f5684b5cdd7e6ef6e6bb313f"
+    status: active
+
+  - id: legacy/archive/clip_066
+    resource: voice-assets/legacy/archive/clip_066.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "________ _______, _______ ___________ _______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "19c7dc3acbcb33c8452b63039b36ac3ebbcb2fa5ee5258aa5907d44782b05b2e"
+    status: active
+
+  - id: legacy/archive/clip_067
+    resource: voice-assets/legacy/archive/clip_067.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "________ _______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "b2932adad717f7641228fc4c7aeb05b651bfffc3e8c66323a3e90afed27cb01a"
+    status: active
+
+  - id: legacy/archive/clip_068
+    resource: voice-assets/legacy/archive/clip_068.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "________ _________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "5410ab7966f363ab039537f4cc14f3fc8ac97e3453e587c616aa8ecfba8f665b"
+    status: active
+
+  - id: legacy/archive/clip_069
+    resource: voice-assets/legacy/archive/clip_069.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_________ ___ _ ___________ ____ ______ Stark Industries.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "58168900ce73d0439aced69d0fe194155760a3319bce8772af08d533d0d98d95"
+    status: active
+
+  - id: legacy/archive/clip_070
+    resource: voice-assets/legacy/archive/clip_070.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "_________ _________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "9339a1425b13f990a79b54d0fb87e65dc22a5d421e0c21cbeb458862c6ef36f9"
+    status: active
+
+  - id: legacy/archive/clip_071
+    resource: voice-assets/legacy/archive/clip_071.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__________ ___.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "5c64c9327f3e06565a539212313dc978f6495a44ca62f966dce17420470b5699"
+    status: active
+
+  - id: legacy/archive/clip_072
+    resource: voice-assets/legacy/archive/clip_072.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__________ _________ _________ _______.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "0ade75e2b71533d3e97bf6ce03224c1574039b8bde7f0cd692f9e4ec1343d7f5"
+    status: active
+
+  - id: legacy/archive/clip_073
+    resource: voice-assets/legacy/archive/clip_073.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "__________ _________, _______ __________ ___________ _____.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "185b2c449da986825f5a171a3dc1cce6a7225df395faa66f239f731b43f6833e"
+    status: active
+
+  - id: legacy/archive/clip_074
+    resource: voice-assets/legacy/archive/clip_074.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "___________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "f64e9e3a6ac7a0fdc7b47ef17d2a222c6ddffe7d833f71635517080845763c74"
+    status: active
+
+  - id: legacy/archive/clip_075
+    resource: voice-assets/legacy/archive/clip_075.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____________ ____ _____ =).wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "eef6b7f161007f67e6e19bbd81d74a6d5498d1983c51c9cded3adb5604e57951"
+    status: active
+
+  - id: legacy/archive/clip_076
+    resource: voice-assets/legacy/archive/clip_076.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____________ ______ __ _________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "1c7eb82d4895be2100b6a939f0a521ac1cf00500dbaecaf0e52cbf0d81e4a594"
+    status: active
+
+  - id: legacy/archive/clip_077
+    resource: voice-assets/legacy/archive/clip_077.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____________ ______ _________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "a0a81d4638e07a075b5d2c2d9e73076c10a073dd5de11e0b0b9b987f08831f57"
+    status: active
+
+  - id: legacy/archive/clip_078
+    resource: voice-assets/legacy/archive/clip_078.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "____________ _______ _____ _____ __________ _______ ________.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "9a678f4696ebab91c715bd08adc80006362f65e2f51c8a0f7a88e2d7a8fce42e"
+    status: active
+
+  - id: legacy/archive/clip_079
+    resource: voice-assets/legacy/archive/clip_079.wav
+    locale: ru
+    source: legacy_archive
+    original_filename: "koshachiy-dom-zvuk-murlykaniya-koshki-ochen-rasslablyaet.wav"
+    category: archive
+    tags: [legacy, archive, unmapped]
+    quality: unknown
+    sha256: "61b285dae313bf621a6d0f13be43e9fcc06a8e834e3dc5af369f10a78dace6c2"
+    status: active

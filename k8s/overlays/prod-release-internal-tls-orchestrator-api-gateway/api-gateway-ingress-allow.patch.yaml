@@ -1,0 +1,3 @@
+- op: replace
+  path: /spec/ingress/1/ports/0/port
+  value: 8443

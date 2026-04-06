@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        jarvis.io/internal-tls-slice-planner-api-gateway: planner-api-gateway-v1
+    spec:
+      containers:
+        - name: api-gateway
+          ports:
+            - containerPort: 8443
+              name: https-internal
+          env:
+            - name: JARVIS_GATEWAY_INTERNAL_HTTPS_ENABLED
+              value: "true"
+            - name: JARVIS_GATEWAY_INTERNAL_HTTPS_PORT
+              value: "8443"
+            - name: JARVIS_GATEWAY_INTERNAL_HTTPS_KEYSTORE_PATH
+              value: /tls-internal/api-gateway-internal-keystore.p12
+            - name: JARVIS_GATEWAY_INTERNAL_HTTPS_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-internal-tls-planner-api-gateway
+                  key: keystore-password
+            - name: JARVIS_GATEWAY_INTERNAL_HTTPS_KEYSTORE_TYPE
+              value: PKCS12
+            - name: JARVIS_GATEWAY_INTERNAL_HTTPS_KEY_ALIAS
+              value: api-gateway-internal
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8443
+              scheme: HTTPS
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8443
+              scheme: HTTPS
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8443
+              scheme: HTTPS
+          volumeMounts:
+            - name: internal-tls-planner-api-gateway
+              mountPath: /tls-internal
+              readOnly: true
+      volumes:
+        - name: internal-tls-planner-api-gateway
+          secret:
+            secretName: jarvis-internal-tls-planner-api-gateway
+            items:
+              - key: api-gateway-internal-keystore.p12
+                path: api-gateway-internal-keystore.p12
+              - key: ca.crt
+                path: ca.crt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+    - port: 8443
+      targetPort: 8443
+      name: https-internal

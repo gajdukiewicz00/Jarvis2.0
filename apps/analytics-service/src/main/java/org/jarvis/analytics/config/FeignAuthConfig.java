@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestAttributes;
@@ -13,6 +14,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.lang.reflect.Method;
+import java.util.stream.Collectors;
 
 /**
  * Propagates the caller's JWT from the current security context to downstream Feign requests.
@@ -84,23 +86,24 @@ public class FeignAuthConfig {
     }
 
     private String resolveUserRoles() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null) {
-            Object details = authentication.getDetails();
-            if (details instanceof String roles && StringUtils.hasText(roles)) {
-                return roles;
-            }
-            if (details != null) {
-                String detailValue = details.toString();
-                if (StringUtils.hasText(detailValue)) {
-                    return detailValue;
-                }
+        HttpServletRequest request = currentRequest();
+        if (request != null) {
+            String headerRoles = request.getHeader(USER_ROLES_HEADER);
+            if (StringUtils.hasText(headerRoles)) {
+                return headerRoles;
             }
         }
 
-        HttpServletRequest request = currentRequest();
-        if (request != null) {
-            return request.getHeader(USER_ROLES_HEADER);
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            String authorities = authentication.getAuthorities().stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .filter(authority -> authority != null && !authority.isBlank())
+                    .filter(authority -> !"SVC_INTERNAL".equals(authority))
+                    .collect(Collectors.joining(","));
+            if (StringUtils.hasText(authorities)) {
+                return authorities;
+            }
         }
 
         return null;
@@ -167,4 +170,3 @@ public class FeignAuthConfig {
         String getToken();
     }
 }
-

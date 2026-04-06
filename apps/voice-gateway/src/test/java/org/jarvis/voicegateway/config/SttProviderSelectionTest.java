@@ -124,4 +124,32 @@ class SttProviderSelectionTest {
                             .isInstanceOf(SttUnavailableException.class);
                 });
     }
+
+    @Test
+    @DisplayName("vosk: missing models fail honestly instead of returning an empty transcript")
+    void voskMode_missingModelsThrowSttUnavailable() {
+        runner.withPropertyValues("jarvis.stt.provider=vosk")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    SttService stt = context.getBean(SttService.class);
+                    assertThatThrownBy(() -> stt.transcribe(new byte[] {0, 0}, "ru-RU"))
+                            .isInstanceOf(SttUnavailableException.class);
+                    assertThatThrownBy(() -> stt.createSession("en-US"))
+                            .isInstanceOf(SttUnavailableException.class);
+                });
+    }
+
+    @Test
+    @DisplayName("whisper: missing model fails honestly instead of returning an empty transcript")
+    void whisperMode_missingModelThrowsSttUnavailable() {
+        runner.withPropertyValues("jarvis.stt.provider=whisper")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    SttService stt = context.getBean(SttService.class);
+                    assertThatThrownBy(() -> stt.transcribe(new byte[] {0, 0}, "ru-RU"))
+                            .isInstanceOf(SttUnavailableException.class);
+                    assertThatThrownBy(() -> stt.createSession("ru-RU"))
+                            .isInstanceOf(SttUnavailableException.class);
+                });
+    }
 }

@@ -1,0 +1,818 @@
+scenarios:
+  - name: legacy_window_normalize
+    description: "Normalize the active window."
+    steps:
+      - id: normalize-window
+        actionType: WINDOW_NORMALIZE
+        description: "Normalize the active window"
+
+  - name: legacy_window_minimize
+    description: "Minimize the active window."
+    steps:
+      - id: minimize-window
+        actionType: WINDOW_MINIMIZE
+        description: "Minimize the active window"
+
+  - name: legacy_mouse_left_click
+    description: "Click the left mouse button."
+    steps:
+      - id: click-left
+        actionType: MOUSE_LEFT_CLICK
+        description: "Click the left mouse button"
+
+  - name: legacy_empty_trash
+    description: "Empty the desktop trash."
+    steps:
+      - id: empty-trash
+        actionType: EMPTY_TRASH
+        description: "Empty the trash"
+
+  - name: legacy_create_new_folder
+    description: "Create a new folder in the active file manager view."
+    steps:
+      - id: folder-hotkey
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "ctrl+shift+n"
+        description: "Open the new folder shortcut"
+      - id: wait-after-hotkey
+        actionType: WAIT
+        parameters:
+          millis: "300"
+        description: "Wait for the folder input to appear"
+      - id: confirm-folder
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Return"
+        description: "Confirm the new folder"
+
+  - name: legacy_open_optical_drive
+    description: "Open the optical drive tray."
+    steps:
+      - id: open-drive
+        actionType: OPEN_OPTICAL_DRIVE
+        description: "Open the optical drive tray"
+
+  - name: legacy_close_optical_drive
+    description: "Close the optical drive tray."
+    steps:
+      - id: close-drive
+        actionType: CLOSE_OPTICAL_DRIVE
+        description: "Close the optical drive tray"
+
+  - name: legacy_clean_slate_cancel
+    description: "Replay the legacy desktop context-menu clean-slate macro."
+    steps:
+      - id: move-corner
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "1026"
+          y: "25"
+        description: "Move to the top-right desktop area"
+      - id: open-context-menu
+        actionType: MOUSE_RIGHT_CLICK
+        description: "Open the desktop context menu"
+      - id: move-context-item
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "1068"
+          y: "37"
+        description: "Move to the first menu item"
+      - id: click-context-item
+        actionType: MOUSE_LEFT_CLICK
+        description: "Select the first menu item"
+      - id: wait-context-transition
+        actionType: WAIT
+        parameters:
+          millis: "200"
+        description: "Wait for the submenu transition"
+      - id: move-submenu-item
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "769"
+          y: "164"
+        description: "Move to the submenu item"
+      - id: click-submenu-item
+        actionType: MOUSE_LEFT_CLICK
+        description: "Select the submenu item"
+
+  - name: legacy_ppt_delete_slide
+    description: "Open the PowerPoint delete-slide command."
+    steps:
+      - id: open-edit-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+z"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "1000"
+      - id: delete-slide
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Shift+e"
+
+  - name: legacy_ppt_start_slide_show
+    description: "Start the PowerPoint slide show."
+    steps:
+      - id: open-slide-show-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+p"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "1000"
+      - id: start-show
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Shift+x"
+
+  - name: legacy_ppt_configure_slide_show
+    description: "Open the PowerPoint slide-show settings."
+    steps:
+      - id: open-slide-show-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+p"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-slide-show-settings
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "f"
+
+  - name: legacy_ppt_save_presentation_as
+    description: "Open Save As in PowerPoint."
+    steps:
+      - id: open-file-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+a"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "1000"
+      - id: save-as
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Shift+r"
+
+  - name: legacy_ppt_strikethrough
+    description: "Toggle strikethrough in PowerPoint."
+    steps:
+      - id: open-format-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+z"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "1000"
+      - id: apply-strikethrough
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+4"
+
+  - name: legacy_ppt_font_settings
+    description: "Open PowerPoint font settings."
+    steps:
+      - id: open-format-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+z"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "500"
+      - id: choose-font-pane
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "a"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "500"
+      - id: open-font-settings
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "n"
+
+  - name: legacy_ppt_paragraph_settings
+    description: "Open PowerPoint paragraph settings."
+    steps:
+      - id: open-home-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Shift+z"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "500"
+      - id: choose-paragraph-pane
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Shift+p"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "500"
+      - id: open-paragraph-settings
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Shift+g"
+
+  - name: legacy_ppt_add_table
+    description: "Open the PowerPoint table insertion menu."
+    steps:
+      - id: open-insert-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+c"
+      - id: wait-insert-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-table-group
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "w"
+      - id: wait-table-group
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: choose-table
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "m"
+
+  - name: legacy_ppt_add_image
+    description: "Open the PowerPoint picture insertion dialog."
+    steps:
+      - id: open-insert-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+c"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "500"
+      - id: choose-picture
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "e"
+
+  - name: legacy_ppt_photo_album
+    description: "Open the PowerPoint photo album command."
+    steps:
+      - id: open-insert-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+c"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-photo-group
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "f"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-photo-album
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "a"
+
+  - name: legacy_ppt_text_box
+    description: "Open the PowerPoint text box tool."
+    steps:
+      - id: open-insert-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+c"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: choose-text-box
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "b"
+
+  - name: legacy_ppt_word_art
+    description: "Open the PowerPoint WordArt tool."
+    steps:
+      - id: open-insert-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+c"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: choose-word-art
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "j"
+
+  - name: legacy_ppt_date_time
+    description: "Open the PowerPoint date and time dialog."
+    steps:
+      - id: open-insert-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+c"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: choose-date-time
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "d"
+
+  - name: legacy_ppt_page_setup
+    description: "Open PowerPoint page setup."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-page-setup
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "s"
+
+  - name: legacy_ppt_slide_orientation
+    description: "Open PowerPoint slide orientation."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-slide-orientation
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "z"
+
+  - name: legacy_ppt_themes
+    description: "Open the PowerPoint themes gallery."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-themes
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "h"
+
+  - name: legacy_ppt_themes_from_pc
+    description: "Open the PowerPoint theme-from-disk flow."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-themes
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "h"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-theme-from-pc
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "g"
+
+  - name: legacy_ppt_save_current_theme
+    description: "Save the current PowerPoint theme."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-themes
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "h"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: save-current-theme
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "c"
+
+  - name: legacy_ppt_theme_colors
+    description: "Open PowerPoint theme colors."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-theme-variants
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "t"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-theme-colors
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "f"
+
+  - name: legacy_ppt_theme_fonts
+    description: "Open PowerPoint theme fonts."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-first-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-theme-variants
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "t"
+      - id: wait-second-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-theme-fonts
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "a"
+
+  - name: legacy_ppt_background_style
+    description: "Open PowerPoint background styles."
+    steps:
+      - id: open-design-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+q"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-background-style
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "f"
+
+  - name: legacy_ppt_transition_scheme
+    description: "Open PowerPoint slide transitions."
+    steps:
+      - id: open-transitions-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+b"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-transition-scheme
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "t"
+
+  - name: legacy_ppt_transition_sound
+    description: "Open PowerPoint transition sounds."
+    steps:
+      - id: open-transitions-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+b"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-transition-sound
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "d"
+
+  - name: legacy_ppt_transition_speed
+    description: "Open PowerPoint transition speed."
+    steps:
+      - id: open-transitions-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+b"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: open-transition-speed
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "g"
+
+  - name: legacy_ppt_preview_animations
+    description: "Preview PowerPoint slide animations."
+    steps:
+      - id: open-transitions-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+b"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: preview-animations
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "h"
+
+  - name: legacy_ppt_apply_transitions_all
+    description: "Apply PowerPoint transition settings to all slides."
+    steps:
+      - id: open-transitions-tab
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "Alt+b"
+      - id: wait-ribbon
+        actionType: WAIT
+        parameters:
+          millis: "300"
+      - id: apply-transitions-all
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "n"
+
+  - name: legacy_browser_maximize
+    description: "Maximize the browser window and click into it."
+    steps:
+      - id: maximize-browser
+        actionType: WINDOW_MAXIMIZE
+        parameters:
+          title: "Opera"
+      - id: wait-browser
+        actionType: WAIT
+        parameters:
+          millis: "200"
+      - id: focus-browser-content
+        actionType: MOUSE_LEFT_CLICK
+
+  - name: legacy_draw_circle
+    description: "Replay the legacy circle drawing macro."
+    steps:
+      - id: choose-circle-tool
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "531"
+          y: "64"
+      - id: click-circle-tool
+        actionType: MOUSE_LEFT_CLICK
+      - id: wait-tool
+        actionType: WAIT
+        parameters:
+          millis: "100"
+      - id: move-draw-start
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "158"
+          y: "213"
+      - id: drag-start
+        actionType: MOUSE_LEFT_DOWN
+      - id: move-draw-end
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "447"
+          y: "473"
+      - id: drag-end
+        actionType: MOUSE_LEFT_UP
+
+  - name: legacy_draw_square
+    description: "Replay the legacy square drawing macro."
+    steps:
+      - id: choose-square-tool
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "552"
+          y: "62"
+      - id: click-square-tool
+        actionType: MOUSE_LEFT_CLICK
+      - id: move-draw-start
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "653"
+          y: "267"
+      - id: drag-start
+        actionType: MOUSE_LEFT_DOWN
+      - id: wait-tool
+        actionType: WAIT
+        parameters:
+          millis: "100"
+      - id: move-draw-end
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "915"
+          y: "503"
+      - id: drag-end
+        actionType: MOUSE_LEFT_UP
+
+  - name: legacy_draw_red
+    description: "Switch the drawing color to red."
+    steps:
+      - id: move-red
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "953"
+          y: "59"
+      - id: open-red
+        actionType: MOUSE_LEFT_CLICK
+      - id: confirm-red
+        actionType: MOUSE_LEFT_CLICK
+
+  - name: legacy_draw_blue
+    description: "Switch the drawing color to blue."
+    steps:
+      - id: move-blue
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "1062"
+          y: "58"
+      - id: open-blue
+        actionType: MOUSE_LEFT_CLICK
+      - id: confirm-blue
+        actionType: MOUSE_LEFT_CLICK
+
+  - name: legacy_draw_yellow
+    description: "Switch the drawing color to yellow."
+    steps:
+      - id: move-yellow
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "997"
+          y: "60"
+      - id: open-yellow
+        actionType: MOUSE_LEFT_CLICK
+      - id: confirm-yellow
+        actionType: MOUSE_LEFT_CLICK
+
+  - name: legacy_draw_circle_inside_square
+    description: "Replay the legacy circle-inside-square drawing macro."
+    steps:
+      - id: choose-square-tool
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "552"
+          y: "62"
+      - id: click-square-tool
+        actionType: MOUSE_LEFT_CLICK
+      - id: move-square-start
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "313"
+          y: "187"
+      - id: square-down
+        actionType: MOUSE_LEFT_DOWN
+      - id: wait-square
+        actionType: WAIT
+        parameters:
+          millis: "100"
+      - id: move-square-end
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "862"
+          y: "603"
+      - id: square-up
+        actionType: MOUSE_LEFT_UP
+      - id: wait-circle
+        actionType: WAIT
+        parameters:
+          millis: "200"
+      - id: choose-circle-tool
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "530"
+          y: "62"
+      - id: click-circle-tool
+        actionType: MOUSE_LEFT_CLICK
+      - id: move-circle-start
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "443"
+          y: "240"
+      - id: circle-down
+        actionType: MOUSE_LEFT_DOWN
+      - id: wait-circle-drag
+        actionType: WAIT
+        parameters:
+          millis: "100"
+      - id: move-circle-end
+        actionType: MOUSE_MOVE
+        parameters:
+          x: "780"
+          y: "560"
+      - id: circle-up
+        actionType: MOUSE_LEFT_UP
+
+  - name: legacy_yandex_like
+    description: "Toggle the Yandex Music like shortcut."
+    steps:
+      - id: focus-yandex
+        actionType: WINDOW_FOCUS
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"
+      - id: like-track
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "f"
+      - id: minimize-yandex
+        actionType: WINDOW_MINIMIZE
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"
+
+  - name: legacy_yandex_dislike
+    description: "Toggle the Yandex Music dislike shortcut."
+    steps:
+      - id: focus-yandex
+        actionType: WINDOW_FOCUS
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"
+      - id: wait-focus
+        actionType: WAIT
+        parameters:
+          millis: "200"
+      - id: dislike-track
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "d"
+      - id: wait-dislike
+        actionType: WAIT
+        parameters:
+          millis: "200"
+      - id: minimize-yandex
+        actionType: WINDOW_MINIMIZE
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"
+
+  - name: legacy_yandex_minimize
+    description: "Minimize Yandex Music."
+    steps:
+      - id: minimize-yandex
+        actionType: WINDOW_MINIMIZE
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"
+
+  - name: legacy_yandex_pause_play
+    description: "Toggle Yandex Music playback."
+    steps:
+      - id: focus-yandex
+        actionType: WINDOW_FOCUS
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"
+      - id: wait-focus
+        actionType: WAIT
+        parameters:
+          millis: "200"
+      - id: toggle-playback
+        actionType: HOTKEY
+        parameters:
+          keyCombination: "k"
+      - id: wait-toggle
+        actionType: WAIT
+        parameters:
+          millis: "200"
+      - id: minimize-yandex
+        actionType: WINDOW_MINIMIZE
+        parameters:
+          title: "[Яя]ндекс [Мм]узыка"

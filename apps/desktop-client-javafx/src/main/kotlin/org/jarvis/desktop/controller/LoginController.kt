@@ -19,7 +19,6 @@ class LoginController {
     private val logger = LoggerFactory.getLogger(LoginController::class.java)
     private val objectMapper = jacksonObjectMapper()
     private val httpClient = HttpClient.newBuilder().build()
-    private val baseUrl = AppConfig.apiGatewayBaseUrl
     
     // Login tab controls
     @FXML private lateinit var loginUsername: TextField
@@ -62,6 +61,7 @@ class LoginController {
         Thread {
             try {
                 logger.info("Attempting login for user: $username")
+                val baseUrl = AppConfig.current().apiGatewayBaseUrl
                 
                 val loginRequest = LoginRequest(username, password)
                 val requestBody = objectMapper.writeValueAsString(loginRequest)
@@ -143,6 +143,7 @@ class LoginController {
         Thread {
             try {
                 logger.info("Attempting registration for user: $username")
+                val baseUrl = AppConfig.current().apiGatewayBaseUrl
                 
                 val registerRequest = RegisterRequest(username, password, "USER")
                 val requestBody = objectMapper.writeValueAsString(registerRequest)

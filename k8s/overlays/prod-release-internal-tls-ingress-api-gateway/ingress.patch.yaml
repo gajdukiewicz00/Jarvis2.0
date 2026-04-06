@@ -1,0 +1,15 @@
+- op: add
+  path: /metadata/annotations/jarvis.io~1internal-tls-slice-ingress-api-gateway
+  value: ingress-api-gateway-v1
+- op: add
+  path: /metadata/annotations/nginx.ingress.kubernetes.io~1backend-protocol
+  value: HTTPS
+- op: replace
+  path: /spec/rules/0/http/paths/0/backend/service/port/number
+  value: 8443
+- op: replace
+  path: /spec/rules/1/http/paths/0/backend/service/port/number
+  value: 8443
+- op: replace
+  path: /spec/rules/1/http/paths/1/backend/service/port/number
+  value: 8443

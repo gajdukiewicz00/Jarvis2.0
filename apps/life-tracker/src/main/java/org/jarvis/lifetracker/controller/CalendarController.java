@@ -1,12 +1,16 @@
 package org.jarvis.lifetracker.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.lifetracker.domain.CalendarEvent;
 import org.jarvis.lifetracker.domain.EntrySource;
 import org.jarvis.lifetracker.dto.CalendarEventDTO;
 import org.jarvis.lifetracker.service.CalendarService;
+import org.jarvis.lifetracker.util.UserContext;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,12 +25,11 @@ public class CalendarController {
 
     @PostMapping("/event")
     public CalendarEventDTO addEvent(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestBody EventRequest request) {
+            @RequestBody EventRequest request,
+            HttpServletRequest httpRequest) {
         log.info("Adding event: {}", request.title());
         CalendarEvent event = new CalendarEvent();
-        String userId = headerUserId != null ? headerUserId : request.userId();
-        event.setUserId(userId);
+        event.setUserId(requireUserId(httpRequest));
         event.setTitle(request.title());
         event.setDescription(request.description());
         event.setStartTime(request.startTime());
@@ -42,21 +45,19 @@ public class CalendarController {
 
     @PutMapping("/event/{id}")
     public CalendarEventDTO moveEvent(
-            @RequestHeader("X-User-Id") String userId,
             @PathVariable Long id,
-            @RequestBody MoveEventRequest request) {
+            @RequestBody MoveEventRequest request,
+            HttpServletRequest httpRequest) {
         log.info("Moving event {}", id);
-        return calendarService.moveEvent(userId, id, request.newStartTime(), request.newEndTime());
+        return calendarService.moveEvent(requireUserId(httpRequest), id, request.newStartTime(), request.newEndTime());
     }
 
     @GetMapping("/events")
     public List<CalendarEventDTO> getEvents(
-            @RequestHeader(value = "X-User-Id", required = false) String headerUserId,
-            @RequestParam(required = false) String userId,
             @RequestParam(required = false) LocalDateTime from,
-            @RequestParam(required = false) LocalDateTime to) {
-        String resolvedUserId = headerUserId != null ? headerUserId : userId;
-        return calendarService.listEvents(resolvedUserId, from, to);
+            @RequestParam(required = false) LocalDateTime to,
+            HttpServletRequest httpRequest) {
+        return calendarService.listEvents(requireUserId(httpRequest), from, to);
     }
 
     public record EventRequest(
@@ -73,5 +74,13 @@ public class CalendarController {
     }
 
     public record MoveEventRequest(LocalDateTime newStartTime, LocalDateTime newEndTime) {
+    }
+
+    private String requireUserId(HttpServletRequest request) {
+        String userId = UserContext.getUserId(request);
+        if (userId == null || userId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "missing_user_id");
+        }
+        return userId;
     }
 }

@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.logging.LogSanitizer;
 import org.jarvis.memory.dto.*;
-import org.jarvis.memory.service.EmbeddingClient;
+import org.jarvis.memory.service.MemoryDependencyStatusService;
 import org.jarvis.memory.service.MemoryService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -28,7 +28,7 @@ import java.util.UUID;
 public class MemoryController {
 
     private final MemoryService memoryService;
-    private final EmbeddingClient embeddingClient;
+    private final MemoryDependencyStatusService dependencyStatusService;
 
     @Value("${logging.pii.enabled:true}")
     private boolean piiLoggingEnabled = true;
@@ -167,11 +167,16 @@ public class MemoryController {
      */
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
-        boolean embeddingHealthy = embeddingClient.isHealthy();
-        
-        return ResponseEntity.ok(Map.of(
-                "status", embeddingHealthy ? "healthy" : "degraded",
-                "embeddingService", embeddingHealthy ? "up" : "down"
+        MemoryDependencyStatusService.DependencyStatus status = dependencyStatusService.checkDependencies();
+        HttpStatus httpStatus = "healthy".equals(status.status()) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
+        return ResponseEntity.status(httpStatus).body(Map.of(
+                "status", status.status(),
+                "database", status.database(),
+                "pgvector", status.pgvector(),
+                "embeddingService", status.embeddingService(),
+                "embeddingModel", status.embeddingModel() == null ? "unknown" : status.embeddingModel(),
+                "embeddingDimension", status.embeddingDimension() == null ? 0 : status.embeddingDimension(),
+                "embeddingError", status.embeddingError() == null ? "" : status.embeddingError()
         ));
     }
 

@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis
+
+resources:
+  - ../prod-release-internal-tls-orchestrator-nlp-service
+
+patches:
+  - path: planner-service.patch.yaml

@@ -28,9 +28,13 @@ public class SmartHomeController {
     private final SmartHomeService smartHomeService;
 
     @GetMapping("/devices")
-    public ResponseEntity<List<SmartHomeDeviceView>> listDevices(
+    public ResponseEntity<?> listDevices(
             @RequestHeader(value = "X-User-Id", required = false) String userId) {
-        return ResponseEntity.ok(smartHomeService.listDevices(userId));
+        try {
+            return ResponseEntity.ok(smartHomeService.listDevices(requireUserId(userId)));
+        } catch (SmartHomeValidationException e) {
+            return ResponseEntity.badRequest().body(error("MISSING_USER_CONTEXT", e.getMessage()));
+        }
     }
 
     @GetMapping("/devices/{deviceId}")
@@ -38,9 +42,11 @@ public class SmartHomeController {
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @PathVariable String deviceId) {
         try {
-            return ResponseEntity.ok(smartHomeService.getDevice(userId, deviceId));
+            return ResponseEntity.ok(smartHomeService.getDevice(requireUserId(userId), deviceId));
         } catch (SmartHomeDeviceNotFoundException e) {
             return ResponseEntity.status(404).body(error("DEVICE_NOT_FOUND", e.getMessage()));
+        } catch (SmartHomeValidationException e) {
+            return ResponseEntity.badRequest().body(error("MISSING_USER_CONTEXT", e.getMessage()));
         }
     }
 
@@ -54,7 +60,7 @@ public class SmartHomeController {
                 userId, deviceId, request.action(), request.payload());
 
         try {
-            SmartHomeActionResult result = smartHomeService.executeAction(userId, deviceId, request);
+            SmartHomeActionResult result = smartHomeService.executeAction(requireUserId(userId), deviceId, request);
             return ResponseEntity.ok(result);
         } catch (SmartHomeDeviceNotFoundException e) {
             return ResponseEntity.status(404).body(error("DEVICE_NOT_FOUND", e.getMessage()));
@@ -79,5 +85,12 @@ public class SmartHomeController {
                 "success", false,
                 "error", code,
                 "message", message);
+    }
+
+    private String requireUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            throw new SmartHomeValidationException("Delegated user context is required");
+        }
+        return userId.trim();
     }
 }

@@ -2,6 +2,11 @@ openapi: 3.0.0
 info:
   title: Orchestrator Service API
   version: 1.0.0
+  description: |
+    Deprecated as an authoritative voice integration reference.
+    This OpenAPI file is incomplete and intentionally skeletal.
+    For the real voice boundary, use /VOICE_ARCHITECTURE.md and
+    /VOICE_LAYER_REALITY.md instead.
 paths:
   /api/v1/orchestrator/execute:
     post:

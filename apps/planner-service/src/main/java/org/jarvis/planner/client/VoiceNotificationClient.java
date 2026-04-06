@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -37,7 +38,13 @@ public class VoiceNotificationClient {
                     voiceGatewayUrl + "/internal/voice/notify",
                     request,
                     Map.class);
+            log.info("Planner voice notification routed: userId={}, voiceGatewayUrl={}, statusCode={}",
+                    userId, voiceGatewayUrl, response.getStatusCode().value());
             return response.getStatusCode().is2xxSuccessful();
+        } catch (HttpStatusCodeException e) {
+            log.info("Planner voice notification routed: userId={}, voiceGatewayUrl={}, statusCode={}",
+                    userId, voiceGatewayUrl, e.getStatusCode().value());
+            return false;
         } catch (RestClientException e) {
             log.warn("Voice notification delivery failed for user {}: {}", userId, e.getMessage());
             return false;

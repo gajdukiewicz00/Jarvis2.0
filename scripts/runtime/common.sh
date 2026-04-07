@@ -30,6 +30,7 @@ CORE_SERVICES=(
     "orchestrator"
     "voice-gateway"
     "pc-control"
+    "vision-security-service"
     "smart-home-service"
     "life-tracker"
     "analytics-service"
@@ -542,6 +543,7 @@ ensure_local_env() {
     : "${JARVIS_NLP_SERVICE_PORT:=8082}"
     : "${JARVIS_ORCHESTRATOR_PORT:=8083}"
     : "${JARVIS_PC_CONTROL_PORT:=8084}"
+    : "${JARVIS_VISION_SECURITY_PORT:=8094}"
     : "${JARVIS_LIFE_TRACKER_PORT:=8085}"
     : "${JARVIS_SMART_HOME_PORT:=8086}"
     : "${JARVIS_ANALYTICS_PORT:=8087}"
@@ -553,6 +555,8 @@ ensure_local_env() {
     : "${LLM_SERVER_PORT:=15000}"
     : "${EMBEDDING_SERVICE_PORT:=15001}"
     : "${LLM_SERVER_URL:=$(runtime_local_http_url "${LLM_SERVER_PORT}")}"
+    : "${VISION_SECURITY_ENABLED:=true}"
+    : "${VISION_SECURITY_URL:=$(runtime_local_http_url "${JARVIS_VISION_SECURITY_PORT}")}"
     : "${MEMORY_SERVICE_URL:=$(runtime_local_http_url "${JARVIS_MEMORY_SERVICE_PORT}")}"
     : "${EMBEDDING_SERVICE_URL:=$(runtime_local_http_url "${EMBEDDING_SERVICE_PORT}")}"
     : "${JARVIS_LLM_MANAGED_SERVER:=true}"
@@ -652,6 +656,7 @@ ensure_local_env() {
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_NLP_SERVICE_PORT" "${JARVIS_NLP_SERVICE_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_ORCHESTRATOR_PORT" "${JARVIS_ORCHESTRATOR_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_PC_CONTROL_PORT" "${JARVIS_PC_CONTROL_PORT}"
+    write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_VISION_SECURITY_PORT" "${JARVIS_VISION_SECURITY_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_LIFE_TRACKER_PORT" "${JARVIS_LIFE_TRACKER_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_SMART_HOME_PORT" "${JARVIS_SMART_HOME_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_ANALYTICS_PORT" "${JARVIS_ANALYTICS_PORT}"
@@ -661,6 +666,8 @@ ensure_local_env() {
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_PLANNER_PORT" "${JARVIS_PLANNER_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_MEMORY_SERVICE_PORT" "${JARVIS_MEMORY_SERVICE_PORT}"
     write_env_assignment "${LOCAL_ENV_FILE}" "LLM_SERVER_URL" "${LLM_SERVER_URL}"
+    write_env_assignment "${LOCAL_ENV_FILE}" "VISION_SECURITY_ENABLED" "${VISION_SECURITY_ENABLED}"
+    write_env_assignment "${LOCAL_ENV_FILE}" "VISION_SECURITY_URL" "${VISION_SECURITY_URL}"
     write_env_assignment "${LOCAL_ENV_FILE}" "MEMORY_SERVICE_URL" "${MEMORY_SERVICE_URL}"
     write_env_assignment "${LOCAL_ENV_FILE}" "EMBEDDING_SERVICE_URL" "${EMBEDDING_SERVICE_URL}"
     write_env_assignment "${LOCAL_ENV_FILE}" "LLM_SERVER_PORT" "${LLM_SERVER_PORT}"
@@ -735,6 +742,7 @@ ensure_local_env() {
     export JARVIS_NLP_SERVICE_PORT
     export JARVIS_ORCHESTRATOR_PORT
     export JARVIS_PC_CONTROL_PORT
+    export JARVIS_VISION_SECURITY_PORT
     export JARVIS_LIFE_TRACKER_PORT
     export JARVIS_SMART_HOME_PORT
     export JARVIS_ANALYTICS_PORT
@@ -744,6 +752,8 @@ ensure_local_env() {
     export JARVIS_PLANNER_PORT
     export JARVIS_MEMORY_SERVICE_PORT
     export LLM_SERVER_URL
+    export VISION_SECURITY_ENABLED
+    export VISION_SECURITY_URL
     export MEMORY_SERVICE_URL
     export EMBEDDING_SERVICE_URL
     export LLM_SERVER_PORT
@@ -789,6 +799,7 @@ ensure_local_env() {
     export NLP_SERVICE_URL="$(runtime_local_http_url "${JARVIS_NLP_SERVICE_PORT}")"
     export ORCHESTRATOR_URL="$(runtime_local_http_url "${JARVIS_ORCHESTRATOR_PORT}")"
     export PC_CONTROL_URL="$(runtime_local_http_url "${JARVIS_PC_CONTROL_PORT}")"
+    export VISION_SECURITY_URL="$(runtime_local_http_url "${JARVIS_VISION_SECURITY_PORT}")"
     export LIFE_TRACKER_URL="$(runtime_local_http_url "${JARVIS_LIFE_TRACKER_PORT}")"
     export SMART_HOME_URL="$(runtime_local_http_url "${JARVIS_SMART_HOME_PORT}")"
     export ANALYTICS_URL="$(runtime_local_http_url "${JARVIS_ANALYTICS_PORT}")"
@@ -826,6 +837,7 @@ service_health_url() {
         orchestrator) printf '%s/actuator/health/readiness' "$(runtime_local_http_url "${JARVIS_ORCHESTRATOR_PORT}")" ;;
         voice-gateway) printf '%s/actuator/health/readiness' "$(runtime_local_http_url "${JARVIS_VOICE_GATEWAY_PORT}")" ;;
         pc-control) printf '%s/actuator/health/readiness' "$(runtime_local_http_url "${JARVIS_PC_CONTROL_PORT}")" ;;
+        vision-security-service) printf '%s/actuator/health/readiness' "$(runtime_local_http_url "${JARVIS_VISION_SECURITY_PORT}")" ;;
         api-gateway) printf '%s/actuator/health/readiness' "$(runtime_api_base_url)" ;;
         smart-home-service) printf '%s/actuator/health/readiness' "$(runtime_local_http_url "${JARVIS_SMART_HOME_PORT}")" ;;
         life-tracker) printf '%s/actuator/health/readiness' "$(runtime_local_http_url "${JARVIS_LIFE_TRACKER_PORT}")" ;;
@@ -843,7 +855,7 @@ service_health_url() {
 
 service_ready_pattern() {
     case "$1" in
-        api-gateway|security-service|user-profile|nlp-service|orchestrator|voice-gateway|pc-control|smart-home-service|life-tracker|analytics-service|planner-service)
+        api-gateway|security-service|user-profile|nlp-service|orchestrator|voice-gateway|pc-control|vision-security-service|smart-home-service|life-tracker|analytics-service|planner-service)
             printf '"status"[[:space:]]*:[[:space:]]*"UP"'
             ;;
         llm-server) printf '"status"[[:space:]]*:[[:space:]]*"healthy"' ;;
@@ -864,6 +876,7 @@ module_list() {
         "apps/orchestrator"
         "apps/voice-gateway"
         "apps/pc-control"
+        "apps/vision-security-service"
         "apps/smart-home-service"
         "apps/life-tracker"
         "apps/analytics-service"
@@ -1086,6 +1099,7 @@ service_bind_port() {
         nlp-service) printf '%s' "${JARVIS_NLP_SERVICE_PORT}" ;;
         orchestrator) printf '%s' "${JARVIS_ORCHESTRATOR_PORT}" ;;
         pc-control) printf '%s' "${JARVIS_PC_CONTROL_PORT}" ;;
+        vision-security-service) printf '%s' "${JARVIS_VISION_SECURITY_PORT}" ;;
         life-tracker) printf '%s' "${JARVIS_LIFE_TRACKER_PORT}" ;;
         smart-home-service) printf '%s' "${JARVIS_SMART_HOME_PORT}" ;;
         analytics-service) printf '%s' "${JARVIS_ANALYTICS_PORT}" ;;
@@ -1109,6 +1123,7 @@ service_port_override_var() {
         nlp-service) printf 'JARVIS_NLP_SERVICE_PORT' ;;
         orchestrator) printf 'JARVIS_ORCHESTRATOR_PORT' ;;
         pc-control) printf 'JARVIS_PC_CONTROL_PORT' ;;
+        vision-security-service) printf 'JARVIS_VISION_SECURITY_PORT' ;;
         life-tracker) printf 'JARVIS_LIFE_TRACKER_PORT' ;;
         smart-home-service) printf 'JARVIS_SMART_HOME_PORT' ;;
         analytics-service) printf 'JARVIS_ANALYTICS_PORT' ;;
@@ -1229,6 +1244,7 @@ start_service() {
         export JARVIS_NLP_SERVICE_PORT
         export JARVIS_ORCHESTRATOR_PORT
         export JARVIS_PC_CONTROL_PORT
+        export JARVIS_VISION_SECURITY_PORT
         export JARVIS_LIFE_TRACKER_PORT
         export JARVIS_SMART_HOME_PORT
         export JARVIS_ANALYTICS_PORT
@@ -1242,6 +1258,8 @@ start_service() {
         export EMBEDDING_SERVICE_URL
         export MEMORY_SERVICE_ENABLED
         export PC_CONTROL_URL
+        export VISION_SECURITY_ENABLED
+        export VISION_SECURITY_URL
         export PLANNER_URL
         export MANAGEMENT_HEALTH_RABBIT_ENABLED
         export MANAGEMENT_HEALTH_KAFKA_ENABLED

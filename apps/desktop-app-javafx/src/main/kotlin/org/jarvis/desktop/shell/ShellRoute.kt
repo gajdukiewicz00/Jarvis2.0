@@ -5,6 +5,7 @@ enum class ShellRoute(
     val navLabel: String
 ) {
     HOME("Home", "Home"),
+    VISION_SECURITY("Vision Security", "Vision Security"),
     VOICE("Voice", "Voice"),
     DIAGNOSTICS("Diagnostics", "Diagnostics"),
     SETTINGS("Settings", "Settings")

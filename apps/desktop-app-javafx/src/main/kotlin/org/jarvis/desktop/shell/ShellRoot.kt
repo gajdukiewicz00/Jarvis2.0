@@ -11,6 +11,7 @@ import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.features.diagnostics.DiagnosticsView
 import org.jarvis.desktop.features.home.HomeView
 import org.jarvis.desktop.features.settings.SettingsView
+import org.jarvis.desktop.features.vision.VisionSecurityView
 import org.jarvis.desktop.features.voice.VoiceView
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
 import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
@@ -147,10 +148,12 @@ class ShellRoot(
                 ShellRoute.HOME -> HomeView(
                     runtimeMonitor = runtimeMonitor,
                     onRefreshRuntime = ::refreshRuntimeHealthNow,
+                    onOpenVision = { navigator.navigateTo(ShellRoute.VISION_SECURITY) },
                     onOpenVoice = { navigator.navigateTo(ShellRoute.VOICE) },
                     onOpenDiagnostics = { navigator.navigateTo(ShellRoute.DIAGNOSTICS) },
                     onOpenSettings = { navigator.navigateTo(ShellRoute.SETTINGS) }
                 )
+                ShellRoute.VISION_SECURITY -> VisionSecurityView(apiClient)
                 ShellRoute.VOICE -> VoiceView(apiClient, runtimeMonitor)
                 ShellRoute.DIAGNOSTICS -> DiagnosticsView(apiClient)
                 ShellRoute.SETTINGS -> SettingsView(apiClient, ::handleLogout)

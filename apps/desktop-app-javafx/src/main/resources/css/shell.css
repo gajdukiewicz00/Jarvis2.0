@@ -186,6 +186,7 @@
 }
 
 .shell-home-view,
+.shell-vision-view,
 .shell-voice-view,
 .shell-settings-view,
 .shell-diagnostics-view,
@@ -241,6 +242,31 @@
 
 .shell-section-subtitle {
     -fx-text-fill: -jarvis-text-secondary;
+}
+
+.vision-summary-card,
+.vision-capability-card,
+.vision-info-card,
+.vision-incident-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: -jarvis-radius-m;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: -jarvis-radius-m;
+}
+
+.vision-metric-grid,
+.vision-capability-grid {
+    -fx-pref-wrap-length: 1120px;
+}
+
+.vision-incident-list {
+    -fx-spacing: 12px;
+}
+
+.vision-path-label {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    -fx-font-size: 12px;
 }
 
 .diagnostics-scroll {

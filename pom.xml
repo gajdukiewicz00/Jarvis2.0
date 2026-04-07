@@ -40,6 +40,7 @@
         <module>apps/nlp-service</module>
         <module>apps/orchestrator</module>
         <module>apps/pc-control</module>
+        <module>apps/vision-security-service</module>
         <module>apps/life-tracker</module>
         <module>apps/analytics-service</module>
         <module>apps/planner-service</module>

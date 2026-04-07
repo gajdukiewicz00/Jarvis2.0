@@ -25,6 +25,7 @@ flowchart LR
     Gateway --> Analytics[analytics-service]
     Gateway --> Profile[user-profile]
     Gateway --> Pc[pc-control]
+    Gateway --> Vision[vision-security-service]
     Gateway --> Home[smart-home-service]
     Gateway --> Llm[llm-service]
     Gateway --> Memory[memory-service]
@@ -45,11 +46,12 @@ flowchart LR
     Profile --> Pg
     Memory --> Pg
     Home --> Mqtt[(Mosquitto MQTT)]
+    Vision --> DesktopState[(Camera / screen session)]
 ```
 
 ## Core Runtime
 
-The default runtime path starts and deploys this backend set:
+The default local runtime path starts and deploys this backend set:
 
 - `security-service`
 - `user-profile`
@@ -57,13 +59,15 @@ The default runtime path starts and deploys this backend set:
 - `orchestrator`
 - `voice-gateway`
 - `pc-control`
+- `vision-security-service`
 - `smart-home-service`
 - `life-tracker`
 - `analytics-service`
 - `api-gateway`
 - `planner-service`
 
-These services are present in both the local runtime scripts and the Kubernetes manifests.
+Kubernetes still deploys the existing cluster-backed services; `vision-security-service`
+is local-runtime only because it depends on the Ubuntu desktop session, webcam, and local screen state.
 
 ## Optional Runtime
 
@@ -91,7 +95,7 @@ The Maven reactor is the build contract. If a module is not in `pom.xml`, it is 
 Current reactor groups:
 
 - shared: `jarvis-common`
-- core backend: gateway, orchestration, domain, and support services listed above
+- core backend: gateway, orchestration, domain, support services listed above, plus the local-only `vision-security-service`
 - desktop: `desktop-client-javafx`, `desktop-app-javafx`, `launcher-javafx`
 
 ## Operational Rules
@@ -100,4 +104,3 @@ Current reactor groups:
 - Domain services own persistence and validation.
 - `llm-service` can plan and route, but does not replace domain ownership.
 - Local runtime and Kubernetes manifests outrank stale docs.
-

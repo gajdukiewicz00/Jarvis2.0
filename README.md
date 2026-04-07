@@ -22,6 +22,7 @@ Core runtime services:
 - `life-tracker`
 - `analytics-service`
 - `pc-control`
+- `vision-security-service`
 - `smart-home-service`
 
 Optional runtime services:
@@ -30,6 +31,10 @@ Optional runtime services:
 - `llm-server`
 - `memory-service`
 - `embedding-service`
+
+Local-only runtime note:
+
+- `vision-security-service` is currently wired for the Ubuntu local runtime and desktop product path, not Kubernetes
 
 Canonical desktop path:
 
@@ -96,6 +101,7 @@ apps/
   life-tracker/
   analytics-service/
   pc-control/
+  vision-security-service/
   smart-home-service/
   llm-service/
   memory-service/
@@ -116,6 +122,4 @@ k8s/
 ## Non-Goals In This Repo
 
 - no standalone mobile product path
-- no active computer-vision service
 - no archived legacy module tree
-

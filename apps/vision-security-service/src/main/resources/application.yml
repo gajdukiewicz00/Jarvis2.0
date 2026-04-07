@@ -1,0 +1,81 @@
+server:
+  port: ${JARVIS_VISION_SECURITY_PORT:8094}
+  shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_VISION_SECURITY_SSL_ENABLED:false}
+    key-store: ${JARVIS_VISION_SECURITY_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_VISION_SECURITY_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_VISION_SECURITY_KEYSTORE_TYPE:PKCS12}
+
+spring:
+  application:
+    name: vision-security-service
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  mail:
+    host: ${SPRING_MAIL_HOST:}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+
+vision-security:
+  monitoring:
+    auto-start: ${VISION_SECURITY_AUTO_START:false}
+    check-interval-ms: ${VISION_SECURITY_CHECK_INTERVAL_MS:2000}
+    debounce-unknown-frames: ${VISION_SECURITY_DEBOUNCE_UNKNOWN_FRAMES:3}
+    alert-cooldown-seconds: ${VISION_SECURITY_ALERT_COOLDOWN_SECONDS:60}
+  camera:
+    device-index: ${VISION_SECURITY_CAMERA_DEVICE_INDEX:0}
+    width: ${VISION_SECURITY_CAMERA_WIDTH:640}
+    height: ${VISION_SECURITY_CAMERA_HEIGHT:480}
+  enrollment:
+    sample-count: ${VISION_SECURITY_ENROLLMENT_SAMPLE_COUNT:6}
+    sample-spacing-ms: ${VISION_SECURITY_ENROLLMENT_SAMPLE_SPACING_MS:700}
+    capture-timeout-seconds: ${VISION_SECURITY_ENROLLMENT_CAPTURE_TIMEOUT_SECONDS:20}
+  verification:
+    normalized-face-size: ${VISION_SECURITY_FACE_SIZE:160}
+    owner-threshold-margin: ${VISION_SECURITY_OWNER_THRESHOLD_MARGIN:8.0}
+    uncertain-threshold-margin: ${VISION_SECURITY_UNCERTAIN_THRESHOLD_MARGIN:20.0}
+    fallback-owner-threshold: ${VISION_SECURITY_FALLBACK_OWNER_THRESHOLD:55.0}
+    fallback-uncertain-threshold: ${VISION_SECURITY_FALLBACK_UNCERTAIN_THRESHOLD:75.0}
+    min-detection-area-ratio: ${VISION_SECURITY_MIN_DETECTION_AREA_RATIO:0.02}
+  storage:
+    root: ${VISION_SECURITY_STORAGE_ROOT:${user.home}/.jarvis/data/vision-security}
+    max-incidents-per-user: ${VISION_SECURITY_MAX_INCIDENTS_PER_USER:50}
+  screen:
+    ocr-language: ${VISION_SECURITY_OCR_LANGUAGE:eng}
+  email:
+    recipient: ${VISION_SECURITY_EMAIL_RECIPIENT:}
+    from: ${VISION_SECURITY_EMAIL_FROM:${SPRING_MAIL_USERNAME:}}
+    subject-prefix: ${VISION_SECURITY_EMAIL_SUBJECT_PREFIX:[Jarvis Vision Security]}
+  gpu:
+    prefer-if-available: ${VISION_SECURITY_PREFER_GPU:false}
+
+management:
+  health:
+    mail:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+
+logging:
+  level:
+    org.jarvis.visionsecurity: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [traceId=%X{traceId:-}] [requestId=%X{requestId:-}] [correlationId=%X{correlationId:-}] %logger{36} - %msg%n"

@@ -59,6 +59,9 @@ services:
     url: ${ORCHESTRATOR_URL:http://orchestrator:8083}
   pc-control:
     url: ${PC_CONTROL_URL:http://pc-control:8084}
+  vision-security:
+    enabled: ${VISION_SECURITY_ENABLED:false}
+    url: ${VISION_SECURITY_URL:http://vision-security-service:8094}
   life-tracker:
     url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
   smart-home:

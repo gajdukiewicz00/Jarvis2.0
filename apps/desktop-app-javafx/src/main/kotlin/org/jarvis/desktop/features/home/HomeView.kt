@@ -24,6 +24,7 @@ import java.time.format.DateTimeFormatter
 class HomeView(
     private val runtimeMonitor: DesktopRuntimeMonitor,
     private val onRefreshRuntime: () -> Unit,
+    private val onOpenVision: () -> Unit,
     private val onOpenVoice: () -> Unit,
     private val onOpenDiagnostics: () -> Unit,
     private val onOpenSettings: () -> Unit
@@ -136,6 +137,7 @@ class HomeView(
                 styleClass += "home-action-grid"
                 children.addAll(
                     actionButton("Refresh runtime", onRefreshRuntime),
+                    actionButton("Open Vision Security", onOpenVision),
                     actionButton("Open Voice", onOpenVoice),
                     actionButton("Open Diagnostics", onOpenDiagnostics),
                     actionButton("Open Settings", onOpenSettings)

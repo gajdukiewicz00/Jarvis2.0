@@ -33,6 +33,9 @@ wait_for_service "voice-gateway"
 start_service "pc-control"
 wait_for_service "pc-control"
 
+start_service "vision-security-service"
+wait_for_service "vision-security-service"
+
 start_service "smart-home-service"
 wait_for_service "smart-home-service"
 

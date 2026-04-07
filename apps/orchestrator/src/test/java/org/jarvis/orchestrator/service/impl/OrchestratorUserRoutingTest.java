@@ -6,6 +6,7 @@ import org.jarvis.orchestrator.client.NlpClient;
 import org.jarvis.orchestrator.client.PcControlClient;
 import org.jarvis.orchestrator.client.SmartHomeClient;
 import org.jarvis.orchestrator.config.OrchestratorExecutorProperties;
+import org.jarvis.orchestrator.dto.IntentExecutionResult;
 import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
 import org.jarvis.orchestrator.phrases.Language;
 import org.jarvis.orchestrator.phrases.PhraseContext;
@@ -18,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -59,6 +62,17 @@ class OrchestratorUserRoutingTest {
                 new OrchestratorExecutorProperties());
 
         when(phraseProvider.getPhrase(eq(PhraseContext.VOLUME_UP), eq(Language.RU))).thenReturn("ok");
+        when(apiGatewayPcClient.sendPcAction(new ApiGatewayPcClient.PcActionRequest(
+                "VOLUME_UP",
+                Map.of("delta", 15),
+                "user-42",
+                "corr-1")))
+                .thenReturn(Map.of(
+                        "status", "executed",
+                        "executorFound", true,
+                        "executionAttempted", true,
+                        "executionSucceeded", true,
+                        "executionFailed", false));
 
         String response = service.executeIntent(
                 "volume_up",
@@ -70,7 +84,7 @@ class OrchestratorUserRoutingTest {
 
         assertEquals("ok", response);
         verify(apiGatewayPcClient).sendPcAction(
-                new ApiGatewayPcClient.PcActionRequest("VOLUME_UP", Map.of("delta", 15), "user-42"));
+                new ApiGatewayPcClient.PcActionRequest("VOLUME_UP", Map.of("delta", 15), "user-42", "corr-1"));
     }
 
     @Test
@@ -103,6 +117,19 @@ class OrchestratorUserRoutingTest {
                                 "mock",
                                 "2026-03-14T10:45:00Z"),
                         "2026-03-14T10:45:00Z"));
+        when(apiGatewayPcClient.sendPcAction(new ApiGatewayPcClient.PcActionRequest(
+                "NOTIFY",
+                Map.of(
+                        "title", "Умный дом",
+                        "message", "Kitchen Light is now on."),
+                "user-42",
+                "corr-2")))
+                .thenReturn(Map.of(
+                        "status", "executed",
+                        "executorFound", true,
+                        "executionAttempted", true,
+                        "executionSucceeded", true,
+                        "executionFailed", false));
         when(phraseProvider.getPhrase(
                 eq(PhraseContext.SMART_HOME_TURN_ON),
                 eq(Language.RU),
@@ -128,7 +155,8 @@ class OrchestratorUserRoutingTest {
                         Map.of(
                                 "title", "Умный дом",
                                 "message", "Kitchen Light is now on."),
-                        "user-42"));
+                        "user-42",
+                        "corr-2"));
     }
 
     @Test
@@ -143,6 +171,17 @@ class OrchestratorUserRoutingTest {
                 new OrchestratorExecutorProperties());
 
         when(phraseProvider.getPhrase(eq(PhraseContext.OPEN_URL), eq(Language.RU))).thenReturn("Загружаю, сэр.");
+        when(apiGatewayPcClient.sendPcAction(new ApiGatewayPcClient.PcActionRequest(
+                "OPEN_URL",
+                Map.of("url", "https://www.youtube.com/"),
+                "user-42",
+                "corr-3")))
+                .thenReturn(Map.of(
+                        "status", "executed",
+                        "executorFound", true,
+                        "executionAttempted", true,
+                        "executionSucceeded", true,
+                        "executionFailed", false));
 
         String response = service.executeIntent(
                 "open_url",
@@ -157,7 +196,8 @@ class OrchestratorUserRoutingTest {
                 new ApiGatewayPcClient.PcActionRequest(
                         "OPEN_URL",
                         Map.of("url", "https://www.youtube.com/"),
-                        "user-42"));
+                        "user-42",
+                        "corr-3"));
     }
 
     @Test
@@ -172,6 +212,17 @@ class OrchestratorUserRoutingTest {
                 new OrchestratorExecutorProperties());
 
         when(phraseProvider.getPhrase(eq(PhraseContext.MONITOR_OFF), eq(Language.RU))).thenReturn("Экран погашен.");
+        when(apiGatewayPcClient.sendPcAction(new ApiGatewayPcClient.PcActionRequest(
+                "SYSTEM_COMMAND",
+                Map.of("command", "monitor_off"),
+                "user-42",
+                "corr-4")))
+                .thenReturn(Map.of(
+                        "status", "executed",
+                        "executorFound", true,
+                        "executionAttempted", true,
+                        "executionSucceeded", true,
+                        "executionFailed", false));
 
         String response = service.executeIntent(
                 "monitor_off",
@@ -186,6 +237,49 @@ class OrchestratorUserRoutingTest {
                 new ApiGatewayPcClient.PcActionRequest(
                         "SYSTEM_COMMAND",
                         Map.of("command", "monitor_off"),
-                        "user-42"));
+                        "user-42",
+                        "corr-4"));
+    }
+
+    @Test
+    void executeIntentDetailedMarksMissingDesktopExecutorAsFailure() {
+        service = new OrchestratorServiceImpl(
+                nlpClient,
+                pcControlClient,
+                apiGatewayPcClient,
+                phraseProvider,
+                llmClient,
+                smartHomeClient,
+                new OrchestratorExecutorProperties());
+
+        when(apiGatewayPcClient.sendPcAction(new ApiGatewayPcClient.PcActionRequest(
+                "VOLUME_UP",
+                Map.of("delta", 10),
+                "user-42",
+                "corr-5")))
+                .thenReturn(Map.of(
+                        "status", "no_clients",
+                        "executorFound", false,
+                        "executionAttempted", false,
+                        "executionSucceeded", false,
+                        "executionFailed", true,
+                        "failureReason", "No desktop executor is connected"));
+        when(phraseProvider.getPhrase(eq(PhraseContext.ACK_ERROR), eq(Language.RU)))
+                .thenReturn("Не удалось выполнить команду.");
+
+        IntentExecutionResult result = service.executeIntentDetailed(
+                "volume_up",
+                Map.of("delta", "10"),
+                "ru",
+                "corr-5",
+                "сделай громче",
+                "user-42");
+
+        assertEquals("Не удалось выполнить команду.", result.responseText());
+        assertFalse(result.executorFound());
+        assertFalse(result.executionAttempted());
+        assertFalse(result.executionSucceeded());
+        assertTrue(result.executionFailed());
+        assertEquals("No desktop executor is connected", result.failureReason());
     }
 }

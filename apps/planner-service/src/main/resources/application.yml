@@ -1,19 +1,27 @@
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
-  config:
-    import: optional:file:../shared-config/application-hikari.yml
-  
   application:
     name: planner-service
-  
   datasource:
     url: ${SPRING_DATASOURCE_URL}
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver
-    # HikariCP configuration imported from application-hikari.yml
-  
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1200000
+      keepalive-time: 300000
+      validation-timeout: 5000
+      connection-test-query: SELECT 1
+      leak-detection-threshold: 60000
+      initialization-fail-timeout: -1
+      auto-commit: true
+      register-mbeans: true
+
   jpa:
     hibernate:
       ddl-auto: validate

@@ -42,7 +42,7 @@ class DesktopServiceHealthCheckerTest {
 
             val results = checker.checkAll()
 
-            assertEquals(listOf(URI.create("https://api.jarvis.local/actuator/health")), gatewayUris)
+            assertEquals(listOf(URI.create("https://api.jarvis.local/actuator/health/readiness")), gatewayUris)
             assertEquals(
                 listOf(
                     "Auth Context" to "/security/auth/me",

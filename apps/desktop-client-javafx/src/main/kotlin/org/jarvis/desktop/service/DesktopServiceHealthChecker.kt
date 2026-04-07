@@ -70,7 +70,7 @@ class DesktopServiceHealthChecker(
     }
 
     private fun checkGateway(config: ResolvedDesktopConfig): ServiceCheck {
-        val target = "${config.apiGatewayBaseUrl}/actuator/health"
+        val target = "${config.apiGatewayBaseUrl}/actuator/health/readiness"
         val outcome = gatewayProbe(URI.create(target))
         return ServiceCheck("API Gateway", outcome.status, target, outcome.detail)
     }

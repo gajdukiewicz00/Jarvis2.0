@@ -22,6 +22,16 @@ internal class LocalRuntimeEndpointDetector(
     private val clock: Clock = Clock.systemUTC()
 ) {
 
+    fun summaryFingerprint(): String? {
+        if (!Files.isRegularFile(summaryPath)) {
+            return null
+        }
+
+        val lastModifiedMillis = runCatching { Files.getLastModifiedTime(summaryPath).toMillis() }.getOrNull()
+            ?: return summaryPath.toAbsolutePath().toString()
+        return "${summaryPath.toAbsolutePath()}:$lastModifiedMillis"
+    }
+
     fun detectActive(): LocalRuntimeEndpointSnapshot? {
         if (!Files.isRegularFile(summaryPath)) {
             return null
@@ -40,7 +50,7 @@ internal class LocalRuntimeEndpointDetector(
 
         val apiGatewayBaseUrl = DesktopConfigResolver.normalizeBaseUrl(extractJsonString(summary, "apiUrl"))
             ?: return null
-        val healthUri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health")
+        val healthUri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health/readiness")
         val reachable = runCatching { healthProbe(healthUri) }.getOrDefault(false)
         if (!reachable) {
             return null
@@ -54,7 +64,7 @@ internal class LocalRuntimeEndpointDetector(
 
         return LocalRuntimeEndpointSnapshot(
             apiGatewayBaseUrl = apiGatewayBaseUrl,
-            reason = "Active local runtime detected from ${summaryPath.toAbsolutePath()} (status=$status$ageSuffix, actuator health probe OK)"
+            reason = "Active local runtime detected from ${summaryPath.toAbsolutePath()} (status=$status$ageSuffix, actuator readiness probe OK)"
         )
     }
 

@@ -44,6 +44,24 @@ class RuleBasedNlpServiceTest {
     }
 
     @Test
+    void inferMatchesLiteralEnglishVolumeDownPhrase() {
+        NlpResult result = service.infer("volume down", "en");
+
+        assertEquals("volume_down", result.intent());
+        assertEquals("10", result.slots().get("amount"));
+        assertEquals("-", result.slots().get("direction"));
+    }
+
+    @Test
+    void inferMatchesMakeItQuieterPhrase() {
+        NlpResult result = service.infer("make it quieter", "en");
+
+        assertEquals("volume_down", result.intent());
+        assertEquals("10", result.slots().get("amount"));
+        assertEquals("-", result.slots().get("direction"));
+    }
+
+    @Test
     void inferParsesKitchenLightTurnOnCommand() {
         NlpResult result = service.infer("включи кухонный свет", "ru");
 

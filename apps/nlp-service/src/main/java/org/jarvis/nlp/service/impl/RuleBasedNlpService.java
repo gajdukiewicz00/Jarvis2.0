@@ -39,11 +39,11 @@ public class RuleBasedNlpService implements NlpService {
 
     // ============ VOLUME ============
     private static final Pattern VOL_UP = Pattern.compile(
-            "(?:сделай(?:-ка)?|прибавь|увеличь|подними|громче)(?:\\s+(?:громкость|звук))?(?:\\s+на\\s+([\\p{L}\\d]+))?",
+            "(?:^|\\b)(?:(?:сделай(?:-ка)?|прибавь|увеличь|подними|громче)(?:\\s+(?:громкость|звук))?|(?:volume\\s+up)|(?:turn\\s+(?:the\\s+)?(?:volume|sound)\\s+up)|(?:(?:increase|raise|boost)\\s+(?:the\\s+)?(?:volume|sound))|(?:make(?:\\s+it)?\\s+louder))(?:\\s+(?:на|by)\\s+([\\p{L}\\d]+))?(?:\\s*%)?(?:\\b|$)",
             RXF);
 
     private static final Pattern VOL_DOWN = Pattern.compile(
-            "(?:сделай(?:-ка)?|уменьши|убавь|снизь|понизь|тише)(?:\\s+(?:громкость|звук))?(?:\\s+на\\s+([\\p{L}\\d]+))?",
+            "(?:^|\\b)(?:(?:сделай(?:-ка)?|уменьши|убавь|снизь|понизь|тише)(?:\\s+(?:громкость|звук))?|(?:volume\\s+down)|(?:turn\\s+(?:the\\s+)?(?:volume|sound)\\s+down)|(?:(?:decrease|lower|reduce)\\s+(?:the\\s+)?(?:volume|sound))|(?:make(?:\\s+it)?\\s+quieter)|quieter)(?:\\s+(?:на|by)\\s+([\\p{L}\\d]+))?(?:\\s*%)?(?:\\b|$)",
             RXF);
 
     private static final Pattern VOL_SET = Pattern.compile(

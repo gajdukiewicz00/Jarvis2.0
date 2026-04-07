@@ -214,7 +214,6 @@ ensure_repo_gui_artifacts() {
 
     local launcher_target="${repo_root}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
     local desktop_shell_target="${repo_root}/apps/desktop-app-javafx/target/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-    local desktop_legacy_target="${repo_root}/apps/desktop-client-javafx/target/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
     local launcher_stale="false"
     local desktop_shell_stale="false"
 
@@ -267,9 +266,7 @@ ensure_repo_gui_artifacts() {
 
     sync_file_if_needed "${launcher_target}" "${JARVIS_APP}/launcher.jar"
     sync_file_if_needed "${desktop_shell_target}" "${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-    if [[ -f "${desktop_legacy_target}" ]]; then
-        sync_file_if_needed "${desktop_legacy_target}" "${JARVIS_APP}/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
-    fi
+    rm -f "${JARVIS_APP}"/desktop-client-javafx-*.jar 2>/dev/null || true
     sync_executable_if_needed "${repo_root}/scripts/product/jarvis-launcher.sh" "${JARVIS_APP}/bin/jarvis-launcher.sh"
     if [[ -f "${repo_root}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
         sync_file_if_needed \

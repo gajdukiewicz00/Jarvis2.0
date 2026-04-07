@@ -17,16 +17,24 @@ class LocalRuntimeHealthProbe(
 
     fun probe(): DesktopRuntimeMonitor.ConnectionStatus {
         val apiGatewayBaseUrl = apiGatewayBaseUrlProvider()
-        val uri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health")
         return try {
-            val response = fetcher(uri)
+            val readinessUri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health/readiness")
+            val readinessResponse = fetcher(readinessUri)
             when {
-                response.statusCode in 200..299 && response.body.contains("\"UP\"", ignoreCase = true) ->
-                    status(DesktopRuntimeMonitor.ConnectionState.CONNECTED, "Local runtime healthy at $uri")
-                response.statusCode in 200..299 ->
-                    status(DesktopRuntimeMonitor.ConnectionState.DEGRADED, "Runtime reachable but not healthy: ${response.body.take(120)}")
+                readinessResponse.statusCode in 200..299 && readinessResponse.body.contains("\"UP\"", ignoreCase = true) ->
+                    status(DesktopRuntimeMonitor.ConnectionState.CONNECTED, "Local runtime healthy at $readinessUri")
+                readinessResponse.statusCode == 404 || readinessResponse.statusCode == 405 ->
+                    probeLegacyHealth(apiGatewayBaseUrl)
+                readinessResponse.statusCode in 200..299 ->
+                    status(
+                        DesktopRuntimeMonitor.ConnectionState.DEGRADED,
+                        "Runtime reachable but not healthy: ${readinessResponse.body.take(120)}"
+                    )
                 else ->
-                    status(DesktopRuntimeMonitor.ConnectionState.ERROR, "Runtime health check failed with HTTP ${response.statusCode}")
+                    status(
+                        DesktopRuntimeMonitor.ConnectionState.ERROR,
+                        "Runtime health check failed with HTTP ${readinessResponse.statusCode}"
+                    )
             }
         } catch (e: Exception) {
             status(DesktopRuntimeMonitor.ConnectionState.ERROR, "Runtime unreachable: ${e.message}")
@@ -38,6 +46,19 @@ class LocalRuntimeHealthProbe(
         detail: String
     ): DesktopRuntimeMonitor.ConnectionStatus {
         return DesktopRuntimeMonitor.ConnectionStatus(state, detail, clock.instant())
+    }
+
+    private fun probeLegacyHealth(apiGatewayBaseUrl: String): DesktopRuntimeMonitor.ConnectionStatus {
+        val legacyUri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health")
+        val response = fetcher(legacyUri)
+        return when {
+            response.statusCode in 200..299 && response.body.contains("\"UP\"", ignoreCase = true) ->
+                status(DesktopRuntimeMonitor.ConnectionState.CONNECTED, "Local runtime healthy at $legacyUri")
+            response.statusCode in 200..299 ->
+                status(DesktopRuntimeMonitor.ConnectionState.DEGRADED, "Runtime reachable but not healthy: ${response.body.take(120)}")
+            else ->
+                status(DesktopRuntimeMonitor.ConnectionState.ERROR, "Runtime health check failed with HTTP ${response.statusCode}")
+        }
     }
 
     companion object {

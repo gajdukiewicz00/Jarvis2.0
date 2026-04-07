@@ -88,19 +88,19 @@ public class RestOrchestratorClient implements OrchestratorClient {
 
     @Override
     public String sendIntent(String action, Map<String, Object> parameters, String language, String correlationId) {
-        return sendIntent(action, parameters, language, correlationId, null, null);
+        return sendIntentDetailed(action, parameters, language, correlationId, null, null).responseText();
     }
 
     @Override
     public String sendIntent(String action, Map<String, Object> parameters, String language,
             String correlationId, String originalText) {
-        return sendIntent(action, parameters, language, correlationId, originalText, null);
+        return sendIntentDetailed(action, parameters, language, correlationId, originalText, null).responseText();
     }
 
     @Override
-    public String sendIntent(String action, Map<String, Object> parameters, String language,
+    public IntentExecutionResult sendIntentDetailed(String action, Map<String, Object> parameters, String language,
             String correlationId, String originalText, String userId) {
-        String targetUrl = orchestratorUrl + "/api/v1/orchestrator/execute";
+        String targetUrl = orchestratorUrl + "/api/v1/orchestrator/execute-detailed";
         log.info("📤 Sending intent to Orchestrator: action={}, params={}, lang={}, correlationId={}, hasText={}",
                 action, parameters, language, correlationId, originalText != null);
 
@@ -136,15 +136,30 @@ public class RestOrchestratorClient implements OrchestratorClient {
                 request.header("X-User-Id", userId);
             }
 
-            String response = request
+            IntentExecutionResult response = request
                     .body(requestBody)
                     .retrieve()
-                    .body(String.class);
+                    .body(IntentExecutionResult.class);
 
-            log.info("📥 Orchestrator response: '{}', correlationId={}", response, correlationId);
+            log.info(
+                    "📥 Orchestrator response: response='{}', executorFound={}, executionAttempted={}, executionSucceeded={}, failureReason={}, correlationId={}",
+                    response != null ? response.responseText() : null,
+                    response != null && response.executorFound(),
+                    response != null && response.executionAttempted(),
+                    response != null && response.executionSucceeded(),
+                    response != null ? response.failureReason() : null,
+                    correlationId);
             log.info("Voice gateway orchestrator routed: targetUrl={}, correlationId={}, mode=intent",
                     targetUrl, correlationId);
-            return response;
+            return response != null
+                    ? response
+                    : new IntentExecutionResult(
+                            "",
+                            false,
+                            false,
+                            false,
+                            true,
+                            "Orchestrator returned an empty response");
 
         } catch (HttpStatusCodeException e) {
             log.warn("❌ Orchestrator returned error status={} body={}", e.getStatusCode(), e.getResponseBodyAsString(),

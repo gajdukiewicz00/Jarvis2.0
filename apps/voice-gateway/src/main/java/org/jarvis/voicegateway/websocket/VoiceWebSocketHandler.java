@@ -57,6 +57,19 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     // Counter for audio chunk logging (to avoid spam)
     private final AtomicInteger chunkCounter = new AtomicInteger(0);
 
+    private record CommandResponseOutcome(
+            String action,
+            String responseText,
+            boolean handled,
+            boolean recognized,
+            boolean actionResolved,
+            boolean executorFound,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            boolean executionFailed,
+            String failureReason) {
+    }
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String userId = resolveUserId(session);
@@ -258,7 +271,13 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
         String responseText = null;
         String action = "UNKNOWN";
-        boolean handled = false;
+        boolean recognized = text != null && !text.isBlank();
+        boolean actionResolved = false;
+        boolean executorFound = false;
+        boolean executionAttempted = false;
+        boolean executionSucceeded = false;
+        boolean executionFailed = false;
+        String failureReason = null;
 
         try {
             log.info("🎯 Processing command: '{}', correlationId={}, detectedLang={}", text, correlationId, lang);
@@ -271,61 +290,89 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     .build());
 
             action = intent.getAction() != null ? intent.getAction() : "UNKNOWN";
-            handled = intent.isHandled();
             responseText = intent.getResponse();
+            actionResolved = intent.isHandled() && !"UNKNOWN".equalsIgnoreCase(action);
 
-            log.info("🔍 Intent detected: action={}, handled={}, params={}, correlationId={}",
-                    action, handled, intent.getParameters(), correlationId);
+            log.info("🔍 Intent detected: action={}, actionResolved={}, params={}, correlationId={}",
+                    action, actionResolved, intent.getParameters(), correlationId);
 
-            // Always call orchestrator to get proper response (including for
-            // UNKNOWN/fallback)
-            // Orchestrator will handle: recognized intents → action + phrase, unknown →
-            // fallback phrase
-            String orchestratorAction = (handled && !"UNKNOWN".equals(action)) ? action : "fallback";
+            String orchestratorAction = actionResolved ? action : "fallback";
             log.info("📤 Sending intent to orchestrator: action={}, params={}, correlationId={}",
                     orchestratorAction, intent.getParameters(), correlationId);
             try {
-                String orchestratorResponse = orchestratorClient.sendIntent(
+                OrchestratorClient.IntentExecutionResult orchestratorResult = orchestratorClient.sendIntentDetailed(
                         orchestratorAction,
                         intent.getParameters(),
                         lang,
                         correlationId,
                         text,
                         ctx.userId); // Pass original text and user context for downstream routing
-                log.info("📥 Orchestrator response: '{}', correlationId={}", orchestratorResponse, correlationId);
+                log.info(
+                        "📥 Orchestrator response: response='{}', executorFound={}, executionAttempted={}, executionSucceeded={}, executionFailed={}, failureReason={}, correlationId={}",
+                        orchestratorResult != null ? orchestratorResult.responseText() : null,
+                        orchestratorResult != null && orchestratorResult.executorFound(),
+                        orchestratorResult != null && orchestratorResult.executionAttempted(),
+                        orchestratorResult != null && orchestratorResult.executionSucceeded(),
+                        orchestratorResult != null && orchestratorResult.executionFailed(),
+                        orchestratorResult != null ? orchestratorResult.failureReason() : null,
+                        correlationId);
 
-                // Use orchestrator response if available
-                if (orchestratorResponse != null && !orchestratorResponse.isBlank()) {
-                    responseText = orchestratorResponse;
+                if (orchestratorResult != null) {
+                    if (orchestratorResult.responseText() != null && !orchestratorResult.responseText().isBlank()) {
+                        responseText = orchestratorResult.responseText();
+                    }
+                    executorFound = orchestratorResult.executorFound();
+                    executionAttempted = orchestratorResult.executionAttempted();
+                    executionSucceeded = orchestratorResult.executionSucceeded();
+                    executionFailed = orchestratorResult.executionFailed();
+                    failureReason = orchestratorResult.failureReason();
+                } else if (actionResolved) {
+                    executionFailed = true;
+                    failureReason = "Orchestrator returned an empty response";
                 }
             } catch (RuntimeException e) {
+                failureReason = e.getMessage();
+                if (actionResolved) {
+                    executionFailed = true;
+                }
                 log.error("❌ Failed to call orchestrator, correlationId={}, error={}", correlationId, e.getMessage());
-                // Don't override responseText - use intent's response as fallback
             }
         } catch (RuntimeException e) {
+            failureReason = e.getMessage();
+            if (actionResolved) {
+                executionFailed = true;
+            }
             log.error("❌ Error in handleCommand, correlationId={}", correlationId, e);
             responseText = lang.startsWith("ru")
                     ? "Произошла ошибка при обработке команды."
                     : "An error occurred while processing the command.";
         }
 
+        boolean handled = isHandled(actionResolved, executionAttempted, executionSucceeded, executionFailed, failureReason);
+        if (shouldUseFailureResponse(actionResolved, executionSucceeded, executionFailed, failureReason)) {
+            responseText = commandFailureMessage(lang);
+        }
         if (responseText == null || responseText.isBlank()) {
-            responseText = lang.startsWith("ru")
-                    ? "Команда обработана."
-                    : "Command processed.";
+            responseText = handled
+                    ? (lang.startsWith("ru") ? "Команда обработана." : "Command processed.")
+                    : commandFailureMessage(lang);
         }
 
+        CommandResponseOutcome outcome = new CommandResponseOutcome(
+                action,
+                responseText,
+                handled,
+                recognized,
+                actionResolved,
+                executorFound,
+                executionAttempted,
+                executionSucceeded,
+                executionFailed,
+                failureReason);
+        logCommandOutcome("intent", action, outcome, correlationId);
+
         // Send response to client - wrapped in try-catch to prevent WS close
-        try {
-            sendJsonMessage(ctx.session, Map.of(
-                    "type", "RESPONSE",
-                    "action", action,
-                    "handled", handled,
-                    "text", responseText,
-                    "correlationId", correlationId));
-        } catch (RuntimeException e) {
-            log.error("Failed to send RESPONSE message, correlationId={}", correlationId, e);
-        }
+        sendCommandResponse(ctx.session, outcome, correlationId);
 
         // Hybrid voice: pre-recorded .wav when available, TTS fallback
         try {
@@ -364,7 +411,32 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 action = dispatchResult.routedAction();
             }
 
-            sendCommandResponse(ctx.session, action, true, responseText, correlationId);
+            if (shouldUseFailureResponse(
+                    dispatchResult.actionResolved(),
+                    dispatchResult.executionSucceeded(),
+                    dispatchResult.executionFailed(),
+                    dispatchResult.failureReason())) {
+                responseText = commandFailureMessage(lang);
+            }
+
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    action,
+                    responseText,
+                    isHandled(
+                            dispatchResult.actionResolved(),
+                            dispatchResult.executionAttempted(),
+                            dispatchResult.executionSucceeded(),
+                            dispatchResult.executionFailed(),
+                            dispatchResult.failureReason()),
+                    true,
+                    dispatchResult.actionResolved(),
+                    dispatchResult.executorFound(),
+                    dispatchResult.executionAttempted(),
+                    dispatchResult.executionSucceeded(),
+                    dispatchResult.executionFailed(),
+                    dispatchResult.failureReason());
+            logCommandOutcome("rule", action, outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
 
             byte[] audio = voiceOutputService.resolveRuleResponseAudio(
                     match.responseKey(),
@@ -376,10 +448,20 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         } catch (RuntimeException e) {
             log.error("❌ Error executing rule-based command: id={}, action={}, correlationId={}",
                     match.command().id(), action, correlationId, e);
-            String errorText = lang.startsWith("ru")
-                    ? "Произошла ошибка при выполнении команды."
-                    : "An error occurred while executing the command.";
-            sendCommandResponse(ctx.session, action, false, errorText, correlationId);
+            String errorText = commandFailureMessage(lang);
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    action,
+                    errorText,
+                    false,
+                    true,
+                    true,
+                    false,
+                    false,
+                    false,
+                    true,
+                    e.getMessage());
+            logCommandOutcome("rule", action, outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
             byte[] audio = voiceOutputService.resolveRuleResponseAudio(
                     null,
                     errorText,
@@ -402,15 +484,77 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         return lang.startsWith("ru") ? "Выполняю." : "Executing.";
     }
 
-    private void sendCommandResponse(WebSocketSession session, String action, boolean handled,
-                                     String responseText, String correlationId) {
+    private boolean isHandled(
+            boolean actionResolved,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            boolean executionFailed,
+            String failureReason) {
+        if (!actionResolved) {
+            return false;
+        }
+        if (executionFailed) {
+            return false;
+        }
+        if (failureReason != null && !failureReason.isBlank() && !executionSucceeded) {
+            return false;
+        }
+        if (executionAttempted) {
+            return executionSucceeded;
+        }
+        return true;
+    }
+
+    private boolean shouldUseFailureResponse(
+            boolean actionResolved,
+            boolean executionSucceeded,
+            boolean executionFailed,
+            String failureReason) {
+        return actionResolved
+                && !executionSucceeded
+                && (executionFailed || (failureReason != null && !failureReason.isBlank()));
+    }
+
+    private String commandFailureMessage(String lang) {
+        return lang.startsWith("ru")
+                ? "Не удалось выполнить команду."
+                : "I couldn't execute that command.";
+    }
+
+    private void logCommandOutcome(String source, String action, CommandResponseOutcome outcome, String correlationId) {
+        log.info(
+                "📣 Voice command outcome: source={}, action={}, handled={}, recognized={}, actionResolved={}, executorFound={}, executionAttempted={}, executionSucceeded={}, executionFailed={}, failureReason={}, correlationId={}",
+                source,
+                action,
+                outcome.handled(),
+                outcome.recognized(),
+                outcome.actionResolved(),
+                outcome.executorFound(),
+                outcome.executionAttempted(),
+                outcome.executionSucceeded(),
+                outcome.executionFailed(),
+                outcome.failureReason(),
+                correlationId);
+    }
+
+    private void sendCommandResponse(WebSocketSession session, CommandResponseOutcome outcome, String correlationId) {
         try {
-            sendJsonMessage(session, Map.of(
-                    "type", "RESPONSE",
-                    "action", action,
-                    "handled", handled,
-                    "text", responseText,
-                    "correlationId", correlationId));
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("type", "RESPONSE");
+            payload.put("action", outcome.action());
+            payload.put("handled", outcome.handled());
+            payload.put("recognized", outcome.recognized());
+            payload.put("actionResolved", outcome.actionResolved());
+            payload.put("executorFound", outcome.executorFound());
+            payload.put("executionAttempted", outcome.executionAttempted());
+            payload.put("executionSucceeded", outcome.executionSucceeded());
+            payload.put("executionFailed", outcome.executionFailed());
+            payload.put("text", outcome.responseText());
+            payload.put("correlationId", correlationId);
+            if (outcome.failureReason() != null && !outcome.failureReason().isBlank()) {
+                payload.put("failureReason", outcome.failureReason());
+            }
+            sendJsonMessage(session, payload);
         } catch (RuntimeException e) {
             log.error("Failed to send RESPONSE message, correlationId={}", correlationId, e);
         }

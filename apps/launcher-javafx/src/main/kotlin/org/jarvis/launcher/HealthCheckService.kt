@@ -29,6 +29,7 @@ import javax.net.ssl.TrustManagerFactory
 class HealthCheckService(
     private val apiBaseUrl: String,
     private val kubeconfigProvider: () -> String?,
+    private val serviceCheckOverride: ((String, Boolean) -> ServiceHealthStatus.ServiceCheck?)? = null,
     private val onStatusChange: (ServiceHealthStatus) -> Unit
 ) {
     private val logger = LoggerFactory.getLogger(HealthCheckService::class.java)
@@ -147,7 +148,7 @@ class HealthCheckService(
         }
 
         val coreChecks = linkedMapOf<String, ServiceHealthStatus.ServiceCheck>()
-        val apiCheck = checkApiGateway()
+        val apiCheck = checkServiceHealth("api-gateway")
         val externallyObservable = apiCheck.status != ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN
 
         // IDLE: no bootstrap process and nothing externally reachable.
@@ -279,6 +280,7 @@ class HealthCheckService(
     }
     
     private fun checkServiceHealth(serviceName: String, optional: Boolean = false): ServiceHealthStatus.ServiceCheck {
+        serviceCheckOverride?.invoke(serviceName, optional)?.let { return it }
         return try {
             when (serviceName) {
                 "api-gateway" -> checkApiGateway()
@@ -306,60 +308,36 @@ class HealthCheckService(
     }
     
     private fun checkApiGateway(): ServiceHealthStatus.ServiceCheck {
+        return checkActuatorHealth("api-gateway", actuatorUrls(apiBaseUrl))
+    }
+
+    private fun checkActuatorHealth(
+        name: String,
+        urls: List<String>,
+        successMessage: String = "UP"
+    ): ServiceHealthStatus.ServiceCheck {
         return try {
-            // Iteration 1.5 (Stage 7): Support HTTPS for api.jarvis.local
-            val healthUrl = "$apiBaseUrl/actuator/health"
-            val connection = openConnection(URL(healthUrl))
-            connection.connectTimeout = 3000
-            connection.readTimeout = 3000
-            connection.requestMethod = "GET"
-            
-            // For HTTPS, Java uses system trust store by default (includes our CA after installation)
-            connection.connect()
-            
-            val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                val response = connection.inputStream.bufferedReader().use { it.readText() }
-                if (response.contains("\"status\":\"UP\"") || response.contains("UP")) {
-                    ServiceHealthStatus.ServiceCheck(
-                        name = "api-gateway",
-                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
-                        message = "UP"
-                    )
-                } else {
-                    ServiceHealthStatus.ServiceCheck(
-                        name = "api-gateway",
-                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                        message = "Status not UP: $response"
-                    )
-                }
-            } else {
-                ServiceHealthStatus.ServiceCheck(
-                    name = "api-gateway",
-                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                    message = "HTTP $responseCode"
-                )
-            }
+            performActuatorHealthCheck(name, urls, successMessage)
         } catch (e: javax.net.ssl.SSLException) {
             val msg = e.message?.take(120) ?: "SSL error"
             val isTrust = msg.contains("PKIX", ignoreCase = true) ||
                 msg.contains("certificate_unknown", ignoreCase = true) ||
                 msg.contains("unable to find valid certification path", ignoreCase = true)
             ServiceHealthStatus.ServiceCheck(
-                name = "api-gateway",
+                name = name,
                 status = if (isTrust) ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN
                 else ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
                 message = if (isTrust) "TLS trust missing - click Fix TLS" else "SSL error: ${msg.take(50)}"
             )
         } catch (e: java.net.ConnectException) {
             ServiceHealthStatus.ServiceCheck(
-                name = "api-gateway",
+                name = name,
                 status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
                 message = "Connection refused: ${e.message}"
             )
         } catch (e: Exception) {
             ServiceHealthStatus.ServiceCheck(
-                name = "api-gateway",
+                name = name,
                 status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
                 message = "Error: ${e.message?.take(50) ?: "Unknown"}"
             )
@@ -425,65 +403,16 @@ class HealthCheckService(
     
     private fun checkSecurityService(): ServiceHealthStatus.ServiceCheck {
         if (localRuntime) {
-            return checkHttpService("security-service", "http://127.0.0.1:8088/actuator/health")
-        }
-        // Check security-service through api-gateway or directly
-        return try {
-            // Try through gateway first
-            val healthUrl = "$apiBaseUrl/actuator/health"
-            val connection = openConnection(URL(healthUrl))
-            connection.connectTimeout = 3000
-            connection.readTimeout = 3000
-            connection.requestMethod = "GET"
-            
-            // Iteration 1.5 (Stage 7): Support HTTPS
-            connection.connect()
-            
-            val responseCode = connection.responseCode
-            if (responseCode == 200) {
-                val response = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
-                // Check if security-service components are UP
-                // Gateway health should include downstream services
-                if (response.contains("\"status\":\"UP\"") || response.contains("UP")) {
-                    // If gateway is UP, assume security-service is accessible through it
-                    // (Gateway won't be UP if security-service is down)
-                    ServiceHealthStatus.ServiceCheck(
-                        name = "security-service",
-                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
-                        message = "UP (via gateway)"
-                    )
-                } else {
-                    ServiceHealthStatus.ServiceCheck(
-                        name = "security-service",
-                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                        message = "Status not UP"
-                    )
-                }
-            } else {
-                ServiceHealthStatus.ServiceCheck(
-                    name = "security-service",
-                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                    message = "Gateway returned $responseCode"
-                )
-            }
-        } catch (e: javax.net.ssl.SSLException) {
-            val msg = e.message?.take(120) ?: "SSL error"
-            val isTrust = msg.contains("PKIX", ignoreCase = true) ||
-                msg.contains("certificate_unknown", ignoreCase = true) ||
-                msg.contains("unable to find valid certification path", ignoreCase = true)
-            ServiceHealthStatus.ServiceCheck(
-                name = "security-service",
-                status = if (isTrust) ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN
-                else ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                message = if (isTrust) "TLS trust missing - click Fix TLS" else "SSL error: ${msg.take(50)}"
-            )
-        } catch (e: Exception) {
-            ServiceHealthStatus.ServiceCheck(
-                name = "security-service",
-                status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                message = "Connection error: ${e.message?.take(50) ?: "Unknown"}"
+            return checkActuatorHealth(
+                "security-service",
+                actuatorUrls("http://127.0.0.1:8088")
             )
         }
+        return checkActuatorHealth(
+            "security-service",
+            actuatorUrls(apiBaseUrl),
+            successMessage = "UP (via gateway)"
+        )
     }
     
     private fun checkVoiceGateway(optional: Boolean): ServiceHealthStatus.ServiceCheck {
@@ -498,7 +427,10 @@ class HealthCheckService(
         }
 
         if (localRuntime) {
-            return checkHttpService("voice-gateway", "http://127.0.0.1:8081/actuator/health")
+            return checkActuatorHealth(
+                "voice-gateway",
+                actuatorUrls("http://127.0.0.1:8081")
+            )
         }
 
         // voice.jarvis.local is routed through api-gateway ingress, so HTTP /actuator checks
@@ -782,26 +714,16 @@ class HealthCheckService(
     }
 
     private fun checkHttpService(name: String, url: String): ServiceHealthStatus.ServiceCheck {
-        return try {
-            val connection = openConnection(URL(url))
-            connection.requestMethod = "GET"
-            connection.connectTimeout = 3000
-            connection.readTimeout = 3000
-            connection.connect()
+        return checkHttpService(name, listOf(url))
+    }
 
-            if (connection.responseCode == 200) {
-                ServiceHealthStatus.ServiceCheck(
-                    name = name,
-                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
-                    message = "UP"
-                )
-            } else {
-                ServiceHealthStatus.ServiceCheck(
-                    name = name,
-                    status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
-                    message = "HTTP ${connection.responseCode}"
-                )
-            }
+    private fun checkHttpService(
+        name: String,
+        urls: List<String>,
+        successMessage: String = "UP"
+    ): ServiceHealthStatus.ServiceCheck {
+        return try {
+            performSimpleHttpCheck(name, urls, successMessage)
         } catch (e: Exception) {
             ServiceHealthStatus.ServiceCheck(
                 name = name,
@@ -856,5 +778,118 @@ class HealthCheckService(
             return userPath.toString()
         }
         return null
+    }
+
+    private fun actuatorUrls(baseUrl: String): List<String> {
+        val normalized = baseUrl.trimEnd('/')
+        return listOf(
+            "$normalized/actuator/health/readiness",
+            "$normalized/actuator/health"
+        )
+    }
+
+    private fun performActuatorHealthCheck(
+        name: String,
+        urls: List<String>,
+        successMessage: String
+    ): ServiceHealthStatus.ServiceCheck {
+        var lastStatus = "No health endpoint configured"
+
+        urls.forEachIndexed { index, url ->
+            val connection = openConnection(URL(url))
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.connect()
+
+            when (val responseCode = connection.responseCode) {
+                in 200..299 -> {
+                    val response = BufferedReader(InputStreamReader(connection.inputStream)).use { it.readText() }
+                    if (actuatorResponseShowsUp(response)) {
+                        return ServiceHealthStatus.ServiceCheck(
+                            name = name,
+                            status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+                            message = successMessage
+                        )
+                    }
+                    return ServiceHealthStatus.ServiceCheck(
+                        name = name,
+                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                        message = "Status not UP: ${response.take(120)}"
+                    )
+                }
+                404, 405 -> {
+                    lastStatus = "HTTP $responseCode"
+                    if (index != urls.lastIndex) {
+                        return@forEachIndexed
+                    }
+                }
+                else -> {
+                    return ServiceHealthStatus.ServiceCheck(
+                        name = name,
+                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                        message = "HTTP $responseCode"
+                    )
+                }
+            }
+        }
+
+        return ServiceHealthStatus.ServiceCheck(
+            name = name,
+            status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+            message = lastStatus
+        )
+    }
+
+    private fun performSimpleHttpCheck(
+        name: String,
+        urls: List<String>,
+        successMessage: String
+    ): ServiceHealthStatus.ServiceCheck {
+        var lastStatus = "No endpoint configured"
+
+        urls.forEachIndexed { index, url ->
+            val connection = openConnection(URL(url))
+            connection.requestMethod = "GET"
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
+            connection.connect()
+
+            when (val responseCode = connection.responseCode) {
+                in 200..299 -> {
+                    return ServiceHealthStatus.ServiceCheck(
+                        name = name,
+                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+                        message = successMessage
+                    )
+                }
+                404, 405 -> {
+                    lastStatus = "HTTP $responseCode"
+                    if (index != urls.lastIndex) {
+                        return@forEachIndexed
+                    }
+                }
+                else -> {
+                    return ServiceHealthStatus.ServiceCheck(
+                        name = name,
+                        status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+                        message = "HTTP $responseCode"
+                    )
+                }
+            }
+        }
+
+        return ServiceHealthStatus.ServiceCheck(
+            name = name,
+            status = ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+            message = lastStatus
+        )
+    }
+
+    private fun actuatorResponseShowsUp(response: String): Boolean {
+        return response.contains("\"status\":\"UP\"") ||
+            response.contains("\"status\": \"UP\"") ||
+            response.contains("\"status\":\"up\"") ||
+            response.contains("\"status\": \"up\"")
     }
 }

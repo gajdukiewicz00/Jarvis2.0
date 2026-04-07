@@ -514,6 +514,7 @@ ensure_local_env() {
     : "${POSTGRES_PASSWORD:=${SPRING_DATASOURCE_PASSWORD}}"
     : "${JWT_SECRET:=$(random_secret)}"
     : "${SERVICE_JWT_SECRET:=${JWT_SECRET}}"
+    : "${JARVIS_KEEP_LOCAL_POSTGRES_DATA:=true}"
     : "${ENABLE_LLM:=false}"
     : "${JARVIS_LLM_ENABLED:=${ENABLE_LLM}}"
     : "${ENABLE_MEMORY:=false}"

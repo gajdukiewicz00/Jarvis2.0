@@ -10,7 +10,12 @@ import java.util.Locale
  */
 object AppConfig {
     private val settingsStore: DesktopSettingsStore = PreferencesDesktopSettingsStore()
-    private val configService = DesktopConfigService(settingsStore)
+    private val localRuntimeDetector = LocalRuntimeEndpointDetector()
+    private val configService = DesktopConfigService(
+        settingsStore = settingsStore,
+        localRuntimeEndpointProvider = localRuntimeDetector::detectActive,
+        runtimeSummaryFingerprintProvider = localRuntimeDetector::summaryFingerprint
+    )
 
     fun current(): ResolvedDesktopConfig = configService.current()
 

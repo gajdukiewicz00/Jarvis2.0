@@ -435,13 +435,13 @@ class SettingsView(
     }
 
     private fun logout() {
-        onLogout()
-        renderSessionDetails()
+        logoutButton.isDisable = true
         showFeedback(
-            headline = "Session cleared",
-            message = "Desktop tokens were removed from the unified shell session.",
+            headline = "Signing out",
+            message = "Returning to the desktop login screen.",
             toneClass = "shell-status-tone-warning"
         )
+        onLogout()
     }
 
     private fun syncCurrentConfig() {

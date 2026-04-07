@@ -174,8 +174,15 @@ class AppConfigTest {
         )
 
         assertEquals("https://127.0.0.1:18080", resolved.apiGatewayBaseUrl)
+        assertEquals("https://127.0.0.1:18080/api/v1", resolved.apiBaseUrl)
+        assertEquals("wss://127.0.0.1:18080/ws/voice", resolved.voiceWebSocketUrl)
+        assertEquals("wss://127.0.0.1:18080/ws/pc-control", resolved.pcControlWebSocketUrl)
         assertEquals(ConfigSource.ACTIVE_LOCAL_RUNTIME, resolved.apiGatewaySource)
         assertEquals(false, resolved.usesManualEndpointOverride)
+        assertEquals(
+            "runtime summary says local runtime is healthy; no manual endpoint override is active",
+            resolved.apiGatewayReason
+        )
     }
 
     @Test

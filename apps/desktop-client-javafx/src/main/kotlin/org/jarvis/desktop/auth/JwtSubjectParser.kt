@@ -1,6 +1,7 @@
 package org.jarvis.desktop.auth
 
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.databind.JsonNode
 import java.util.Base64
 
 /**
@@ -11,6 +12,25 @@ object JwtSubjectParser {
     private val objectMapper = jacksonObjectMapper()
 
     fun extractSubject(token: String?): String? {
+        val payload = parsePayload(token) ?: return null
+        return payload.path("sub").asText(null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun extractExpirationEpochSeconds(token: String?): Long? {
+        val payload = parsePayload(token) ?: return null
+        val expirationNode = payload.path("exp")
+        if (expirationNode.isMissingNode || expirationNode.isNull) {
+            return null
+        }
+
+        return when {
+            expirationNode.canConvertToLong() -> expirationNode.longValue()
+            expirationNode.isTextual -> expirationNode.asText().toLongOrNull()
+            else -> null
+        }
+    }
+
+    private fun parsePayload(token: String?): JsonNode? {
         if (token.isNullOrBlank()) {
             return null
         }
@@ -22,8 +42,7 @@ object JwtSubjectParser {
 
         return try {
             val payloadBytes = decodeBase64Url(parts[1])
-            val payload = objectMapper.readTree(payloadBytes)
-            payload.path("sub").asText(null)?.takeIf { it.isNotBlank() }
+            objectMapper.readTree(payloadBytes)
         } catch (_: Exception) {
             null
         }

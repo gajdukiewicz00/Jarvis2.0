@@ -7,6 +7,7 @@ import org.jarvis.orchestrator.client.NlpClient;
 import org.jarvis.orchestrator.client.PcControlClient;
 import org.jarvis.orchestrator.client.SmartHomeClient;
 import org.jarvis.orchestrator.config.OrchestratorExecutorProperties;
+import org.jarvis.orchestrator.dto.IntentExecutionResult;
 import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
 import org.jarvis.orchestrator.phrases.Language;
 import org.jarvis.orchestrator.phrases.LanguageDetector;
@@ -73,6 +74,46 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     private final ThreadPoolExecutor llmExecutor;
     private final OrchestratorExecutorProperties executorProperties;
     private final AtomicLong rejectedLlmTasks = new AtomicLong(0);
+    private final ThreadLocal<ExecutionMetadata> executionMetadata = ThreadLocal.withInitial(ExecutionMetadata::none);
+
+    private record ExecutionMetadata(
+            boolean executorFound,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            String failureReason) {
+        private static ExecutionMetadata none() {
+            return new ExecutionMetadata(false, false, false, null);
+        }
+
+        private static ExecutionMetadata success() {
+            return new ExecutionMetadata(true, true, true, null);
+        }
+
+        private static ExecutionMetadata failure(boolean executorFound, boolean executionAttempted, String failureReason) {
+            return new ExecutionMetadata(executorFound, executionAttempted, false, failureReason);
+        }
+    }
+
+    private record PcDispatchResult(
+            boolean executorFound,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            String failureReason,
+            Map<String, Object> rawResponse) {
+    }
+
+    private static final class PcActionDispatchException extends RuntimeException {
+        private final PcDispatchResult dispatchResult;
+
+        private PcActionDispatchException(String message, PcDispatchResult dispatchResult) {
+            super(message);
+            this.dispatchResult = dispatchResult;
+        }
+
+        private PcDispatchResult dispatchResult() {
+            return dispatchResult;
+        }
+    }
 
     public OrchestratorServiceImpl(
             NlpClient nlpClient,
@@ -97,6 +138,24 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     }
 
     @Override
+    public IntentExecutionResult processTextDetailed(String text, String language, String correlationId, String userId) {
+        executionMetadata.set(ExecutionMetadata.none());
+        try {
+            String responseText = processText(text, language, correlationId, userId);
+            ExecutionMetadata metadata = executionMetadata.get();
+            return new IntentExecutionResult(
+                    responseText,
+                    metadata.executorFound(),
+                    metadata.executionAttempted(),
+                    metadata.executionSucceeded(),
+                    isExecutionFailure(metadata),
+                    metadata.failureReason());
+        } finally {
+            executionMetadata.remove();
+        }
+    }
+
+    @Override
     public String processText(String text, String language, String correlationId, String userId) {
         log.info("📝 Processing text: '{}', lang={}, correlationId={}", text, language, correlationId);
         log.info("🧠 Orchestrator NLP route: nlpUrl={}, correlationId={}", nlpUrl, correlationId);
@@ -118,8 +177,33 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     }
 
     @Override
+    public IntentExecutionResult executeIntentDetailed(
+            String intent,
+            Map<String, String> slots,
+            String language,
+            String correlationId,
+            String originalText,
+            String userId) {
+        executionMetadata.set(ExecutionMetadata.none());
+        try {
+            String responseText = executeIntent(intent, slots, language, correlationId, originalText, userId);
+            ExecutionMetadata metadata = executionMetadata.get();
+            return new IntentExecutionResult(
+                    responseText,
+                    metadata.executorFound(),
+                    metadata.executionAttempted(),
+                    metadata.executionSucceeded(),
+                    isExecutionFailure(metadata),
+                    metadata.failureReason());
+        } finally {
+            executionMetadata.remove();
+        }
+    }
+
+    @Override
     public String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,
             String originalText, String userId) {
+        executionMetadata.set(ExecutionMetadata.none());
         // Normalize intent to lowercase snake_case for consistent matching
         String normalizedIntent = normalizeIntent(intent);
 
@@ -500,6 +584,9 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 }
             };
         } catch (RuntimeException e) {
+            if (!executionMetadata.get().executionAttempted()) {
+                rememberExecutionMetadata(ExecutionMetadata.failure(false, false, e.getMessage()));
+            }
             log.error("❌ Error executing intent: {}, correlationId={}", intent, correlationId, e);
             return phraseProvider.getPhrase(PhraseContext.ACK_ERROR, lang);
         }
@@ -522,6 +609,7 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 scopedUserId,
                 deviceId,
                 new SmartHomeClient.ActionRequest(action, payload));
+        rememberExecutionMetadata(ExecutionMetadata.success());
 
         sendPcAction("NOTIFY", Map.of(
                 "title", lang == Language.RU ? "Умный дом" : "Smart Home",
@@ -554,27 +642,134 @@ public class OrchestratorServiceImpl implements OrchestratorService {
      * Send PC action to Desktop via API Gateway WebSocket.
      */
     private void sendPcAction(String action, Map<String, Object> params, String correlationId, String userId) {
+        PcDispatchResult dispatchResult = dispatchPcAction(action, params, correlationId, userId);
+        if (!dispatchResult.executionSucceeded()) {
+            throw new PcActionDispatchException(
+                    dispatchResult.failureReason() != null
+                            ? dispatchResult.failureReason()
+                            : "PC action execution failed",
+                    dispatchResult);
+        }
+    }
+
+    private PcDispatchResult dispatchPcAction(String action, Map<String, Object> params, String correlationId, String userId) {
         try {
             log.info("📤 Sending PC action via API Gateway: action={}, params={}, apiGatewayUrl={}, correlationId={}, userId={}",
                     action, params, apiGatewayUrl, correlationId, userId);
             var result = apiGatewayPcClient.sendPcAction(
-                    new ApiGatewayPcClient.PcActionRequest(action, params, userId));
-            log.info("✅ API Gateway PC action routed: action={}, apiGatewayUrl={}, result={}, correlationId={}",
-                    action, apiGatewayUrl, result, correlationId);
+                    new ApiGatewayPcClient.PcActionRequest(action, params, userId, correlationId));
+            PcDispatchResult dispatchResult = parseApiGatewayDispatchResult(result);
+            rememberPcActionMetadata(action, dispatchResult);
+            log.info(
+                    "📥 API Gateway PC action result: action={}, executionAttempted={}, executionSucceeded={}, failureReason={}, correlationId={}, rawResult={}",
+                    action,
+                    dispatchResult.executionAttempted(),
+                    dispatchResult.executionSucceeded(),
+                    dispatchResult.failureReason(),
+                    correlationId,
+                    result);
+            if (!dispatchResult.executionSucceeded()) {
+                log.warn(
+                        "⚠️ API Gateway PC action was not executed: action={}, correlationId={}, failureReason={}",
+                        action,
+                        correlationId,
+                        dispatchResult.failureReason());
+            }
+            return dispatchResult;
         } catch (RuntimeException e) {
             log.warn("⚠️ Failed to send PC action via API Gateway ({}), apiGatewayUrl={}, falling back to direct call, correlationId={}",
                     e.getMessage(), apiGatewayUrl, correlationId);
-            // Fallback to direct K8S pc-control (stub)
             try {
                 Map<String, String> stringParams = new HashMap<>();
                 params.forEach((k, v) -> stringParams.put(k, String.valueOf(v)));
                 pcControlClient.executeAction(userId != null && !userId.isBlank() ? userId : "local-user",
                         new PcControlClient.ActionRequest(action, stringParams));
-                log.info("✅ PC action sent via direct client, correlationId={}", correlationId);
+                PcDispatchResult dispatchResult = new PcDispatchResult(
+                        true,
+                        true,
+                        true,
+                        null,
+                        Map.of("backend", "direct-pc-control"));
+                rememberPcActionMetadata(action, dispatchResult);
+                log.info(
+                        "✅ Direct pc-control fallback result: action={}, executionSucceeded={}, failureReason={}, correlationId={}",
+                        action,
+                        dispatchResult.executionSucceeded(),
+                        dispatchResult.failureReason(),
+                        correlationId);
+                return dispatchResult;
             } catch (RuntimeException ex) {
                 log.error("❌ Failed to execute PC action: {}, correlationId={}", ex.getMessage(), correlationId);
+                PcDispatchResult dispatchResult = new PcDispatchResult(
+                        false,
+                        true,
+                        false,
+                        ex.getMessage(),
+                        Map.of());
+                rememberPcActionMetadata(action, dispatchResult);
+                return dispatchResult;
             }
         }
+    }
+
+    private PcDispatchResult parseApiGatewayDispatchResult(Map<String, Object> result) {
+        boolean executorFound = readBoolean(result, "executorFound");
+        boolean executionAttempted = readBoolean(result, "executionAttempted");
+        boolean executionSucceeded = readBoolean(result, "executionSucceeded");
+        String failureReason = readString(result, "failureReason");
+        if ((failureReason == null || failureReason.isBlank()) && !executionSucceeded) {
+            failureReason = readString(result, "message");
+        }
+        return new PcDispatchResult(
+                executorFound,
+                executionAttempted,
+                executionSucceeded,
+                failureReason,
+                result != null ? Map.copyOf(result) : Map.of());
+    }
+
+    private void rememberPcActionMetadata(String action, PcDispatchResult dispatchResult) {
+        if ("NOTIFY".equalsIgnoreCase(action) && executionMetadata.get().executionAttempted()) {
+            return;
+        }
+        if (dispatchResult.executionSucceeded()) {
+            rememberExecutionMetadata(ExecutionMetadata.success());
+        } else {
+                rememberExecutionMetadata(ExecutionMetadata.failure(
+                        dispatchResult.executorFound(),
+                        dispatchResult.executionAttempted(),
+                        dispatchResult.failureReason()));
+        }
+    }
+
+    private void rememberExecutionMetadata(ExecutionMetadata metadata) {
+        executionMetadata.set(metadata);
+    }
+
+    private boolean isExecutionFailure(ExecutionMetadata metadata) {
+        return metadata != null
+                && !metadata.executionSucceeded()
+                && (metadata.executionAttempted()
+                        || (metadata.failureReason() != null && !metadata.failureReason().isBlank()));
+    }
+
+    private boolean readBoolean(Map<String, Object> result, String key) {
+        if (result == null) {
+            return false;
+        }
+        Object value = result.get(key);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private String readString(Map<String, Object> result, String key) {
+        if (result == null) {
+            return null;
+        }
+        Object value = result.get(key);
+        return value != null ? String.valueOf(value) : null;
     }
 
     private int parseIntOrDefault(String value, int defaultValue) {

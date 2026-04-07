@@ -186,9 +186,7 @@ object JarvisPaths {
     }
     
     /**
-     * Get path to the preferred desktop UI JAR.
-     * Primary target is the unified shell (`desktop-app-javafx`),
-     * with legacy `desktop-client-javafx` kept as a fallback.
+     * Get path to the canonical desktop UI JAR.
      */
     fun getDesktopJar(): Path {
         val projectRoot = getProjectRoot()
@@ -198,13 +196,7 @@ object JarvisPaths {
         }
 
         newestMatchingJar(jarvisRoot.resolve("app"), "desktop-app-javafx-*.jar")?.let { return it }
-
-        val repoLegacyJar = projectRoot.resolve("apps/desktop-client-javafx/target/desktop-client-javafx-0.1.0-SNAPSHOT.jar")
-        if (Files.exists(repoLegacyJar)) {
-            return repoLegacyJar
-        }
-
-        return newestMatchingJar(jarvisRoot.resolve("app"), "desktop-client-javafx-*.jar") ?: repoShellJar
+        return repoShellJar
     }
     
     /**

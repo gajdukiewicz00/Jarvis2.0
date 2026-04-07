@@ -22,7 +22,7 @@ class LocalRuntimeHealthProbeTest {
         val status = probe.probe()
 
         assertEquals(DesktopRuntimeMonitor.ConnectionState.CONNECTED, status.state)
-        assertEquals("Local runtime healthy at http://127.0.0.1:8080/actuator/health", status.detail)
+        assertEquals("Local runtime healthy at http://127.0.0.1:8080/actuator/health/readiness", status.detail)
     }
 
     @Test
@@ -71,8 +71,36 @@ class LocalRuntimeHealthProbeTest {
 
         assertEquals(
             listOf(
-                URI.create("http://127.0.0.1:8080/actuator/health"),
-                URI.create("https://api.jarvis.local/actuator/health")
+                URI.create("http://127.0.0.1:8080/actuator/health/readiness"),
+                URI.create("https://api.jarvis.local/actuator/health/readiness")
+            ),
+            seenUris
+        )
+    }
+
+    @Test
+    fun `readiness probe falls back to legacy actuator health on 404`() {
+        val seenUris = mutableListOf<URI>()
+        val probe = LocalRuntimeHealthProbe(
+            apiGatewayBaseUrlProvider = { "http://127.0.0.1:8080" },
+            fetcher = { uri ->
+                seenUris += uri
+                when (uri.path) {
+                    "/actuator/health/readiness" -> LocalRuntimeHealthProbe.HttpResult(404, "")
+                    "/actuator/health" -> LocalRuntimeHealthProbe.HttpResult(200, """{"status":"UP"}""")
+                    else -> error("Unexpected URI $uri")
+                }
+            },
+            clock = clock
+        )
+
+        val status = probe.probe()
+
+        assertEquals(DesktopRuntimeMonitor.ConnectionState.CONNECTED, status.state)
+        assertEquals(
+            listOf(
+                URI.create("http://127.0.0.1:8080/actuator/health/readiness"),
+                URI.create("http://127.0.0.1:8080/actuator/health")
             ),
             seenUris
         )

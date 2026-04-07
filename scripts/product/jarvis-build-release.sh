@@ -6,7 +6,6 @@
 # Builds a release artifact (tar.gz) containing:
 # - launcher.jar
 # - unified desktop shell JAR
-# - optional legacy desktop client JAR (fallback)
 # - install scripts
 # - desktop file template
 # - documentation
@@ -64,21 +63,10 @@ if [[ ! -f "$DESKTOP_APP_JAR" ]]; then
 fi
 echo "  ✅ Desktop shell JAR found: $DESKTOP_APP_JAR"
 
-# Locate optional legacy desktop client JAR (fallback path only)
-DESKTOP_LEGACY_JAR="${REPO_ROOT}/apps/desktop-client-javafx/target/desktop-client-javafx-${VERSION}.jar"
-if [[ -f "$DESKTOP_LEGACY_JAR" ]]; then
-    echo "  ✅ Legacy desktop client JAR found: $DESKTOP_LEGACY_JAR"
-else
-    echo "  ℹ️  Legacy desktop client JAR not found; release will rely on unified shell only"
-fi
-
 # Copy JARs
 echo "Copying JARs..."
 cp "$LAUNCHER_JAR" "${RELEASE_DIR}/launcher.jar"
 cp "$DESKTOP_APP_JAR" "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar"
-if [[ -f "$DESKTOP_LEGACY_JAR" ]]; then
-    cp "$DESKTOP_LEGACY_JAR" "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar"
-fi
 echo "  ✅ JARs copied"
 
 # Copy core launch scripts
@@ -208,25 +196,6 @@ if [[ -f "${JARVIS_APP}/VERSION" ]]; then
     if [[ -n "$OLD_VERSION" ]] && [[ "$OLD_VERSION" != "$VERSION" ]]; then
         INSTALL_TYPE="upgrade"
         echo "Upgrading from $OLD_VERSION to $VERSION..."
-        
-        # Create backup
-        BACKUP_DIR="${JARVIS_APP}/backup/${OLD_VERSION}"
-        mkdir -p "${BACKUP_DIR}"
-        echo "  Creating backup in ${BACKUP_DIR}..."
-        
-        if [[ -f "${JARVIS_APP}/launcher.jar" ]]; then
-            cp "${JARVIS_APP}/launcher.jar" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        if [[ -d "${JARVIS_APP}/bin" ]]; then
-            cp -r "${JARVIS_APP}/bin" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        if [[ -d "${JARVIS_APP}/config" ]]; then
-            cp -r "${JARVIS_APP}/config" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        if [[ -f "${JARVIS_APP}/VERSION" ]]; then
-            cp "${JARVIS_APP}/VERSION" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        echo "  ✅ Backup created"
     fi
 fi
 
@@ -238,9 +207,6 @@ echo "  Install path: ${JARVIS_APP}"
 echo "  Install type: ${INSTALL_TYPE}"
 if [[ "$INSTALL_TYPE" == "upgrade" ]]; then
     echo "  Previous version: $OLD_VERSION"
-    echo "  Backup path: ${JARVIS_APP}/backup/${OLD_VERSION}"
-else
-    echo "  Backup path: none (fresh install)"
 fi
 echo "  Desktop entry: ${JARVIS_DESKTOP}/jarvis.desktop"
 echo "  Install log: ${INSTALL_LOG}"
@@ -252,9 +218,7 @@ cp "${RELEASE_DIR}/launcher.jar" "${JARVIS_APP}/"
 if [[ -f "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" ]]; then
     cp "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" "${JARVIS_APP}/"
 fi
-if [[ -f "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" ]]; then
-    cp "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" "${JARVIS_APP}/"
-fi
+rm -f "${JARVIS_APP}"/desktop-client-javafx-*.jar 2>/dev/null || true
 cp "${RELEASE_DIR}/jarvis-launch.sh" "${JARVIS_APP}/"
 cp "${RELEASE_DIR}/jarvis-stop.sh" "${JARVIS_APP}/"
 cp "${RELEASE_DIR}/jarvis-logs.sh" "${JARVIS_APP}/"
@@ -487,7 +451,6 @@ install_desktop_entry
     echo "Version: $VERSION"
     if [[ "$INSTALL_TYPE" == "upgrade" ]]; then
         echo "Previous version: $OLD_VERSION"
-        echo "Backup location: ${JARVIS_APP}/backup/${OLD_VERSION}"
     fi
     echo "Install location: ${JARVIS_APP}"
     echo "Release directory: ${RELEASE_DIR}"
@@ -513,7 +476,6 @@ echo "  Install path: ${JARVIS_APP}"
 echo "  Install type: ${INSTALL_TYPE}"
 if [[ "$INSTALL_TYPE" == "upgrade" ]]; then
     echo "  Previous version: $OLD_VERSION"
-    echo "  Backup location: ${JARVIS_APP}/backup/${OLD_VERSION}"
 fi
 echo "  Desktop entry: ${JARVIS_DESKTOP}/jarvis.desktop"
 echo "  Install log: ${INSTALL_LOG}"
@@ -565,7 +527,6 @@ Or use the install script from the repository:
 
 - \`launcher.jar\` - Launcher application
 - \`desktop-app-javafx-${VERSION}.jar\` - Unified desktop shell
-- \`desktop-client-javafx-${VERSION}.jar\` - Legacy desktop client fallback (optional)
 - \`bin/\` - Scripts (jarvis-launcher.sh, jarvis-stop.sh, jarvis-diagnostics.sh)
 - \`config/\` - Configuration files
 - \`docs/\` - Documentation
@@ -574,7 +535,6 @@ Or use the install script from the repository:
 
 The install script automatically:
 - Detects existing installation
-- Creates backup in \`~/.jarvis/app/backup/<old-version>/\`
 - Installs new version
 - Creates \`~/.local/share/applications/jarvis.desktop\` once (idempotent)
 

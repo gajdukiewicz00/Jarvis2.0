@@ -1,8 +1,7 @@
 package org.jarvis.desktop.service
 
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.databind.DeserializationFeature
 import org.jarvis.desktop.auth.AuthResponse
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.config.ResolvedDesktopConfig
@@ -18,14 +17,15 @@ class AuthService(
 ) {
 
     private var currentToken: String? = null
-    private val json = Json { ignoreUnknownKeys = true }
+    private val objectMapper = jacksonObjectMapper()
+        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 
     /**
      * Login and get JWT token.
      */
     fun login(username: String): String {
         val request = TokenRequest(username = username)
-        val requestBody = json.encodeToString(request)
+        val requestBody = objectMapper.writeValueAsString(request)
 
         val url = java.net.URL("${configProvider().apiGatewayBaseUrl}/api/v1/security/auth/generate")
         val connection = url.openConnection() as java.net.HttpURLConnection
@@ -42,7 +42,7 @@ class AuthService(
             val responseCode = connection.responseCode
             if (responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
-                val tokenResponse = json.decodeFromString<TokenResponse>(response)
+                val tokenResponse = objectMapper.readValue(response, TokenResponse::class.java)
                 currentToken = tokenResponse.token
                 return tokenResponse.token
             } else {
@@ -55,7 +55,7 @@ class AuthService(
     }
 
     fun refreshTokens(refreshToken: String): AuthResponse {
-        val requestBody = json.encodeToString(RefreshRequest(refreshToken))
+        val requestBody = objectMapper.writeValueAsString(RefreshRequest(refreshToken))
         val url = java.net.URL("${configProvider().apiGatewayBaseUrl}/auth/refresh")
         val connection = url.openConnection() as java.net.HttpURLConnection
 
@@ -68,7 +68,7 @@ class AuthService(
             val responseCode = connection.responseCode
             if (responseCode == 200) {
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
-                val authResponse = json.decodeFromString<AuthResponse>(response)
+                val authResponse = objectMapper.readValue(response, AuthResponse::class.java)
                 currentToken = authResponse.accessToken
                 return authResponse
             } else {

@@ -13,6 +13,11 @@ import java.net.URI
  */
 class SystemControlService {
     private val logger = LoggerFactory.getLogger(SystemControlService::class.java)
+    private data class CommandResult(
+        val command: List<String>,
+        val exitCode: Int,
+        val output: String
+    )
 
     // ==================== Volume Control ====================
 
@@ -24,8 +29,14 @@ class SystemControlService {
     fun changeVolume(delta: Int, sign: String): Result<Unit> {
         return try {
             val actualSign = if (sign == "+") "+" else "-"
-            executeCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$actualSign$delta%")
-            logger.info("🔊 Volume changed by $actualSign$delta% via pactl")
+            val backend = selectAudioBackend()
+            when (backend) {
+                "wpctl" -> executeCheckedCommand("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$delta%$actualSign")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$actualSign$delta%")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "$delta%$actualSign")
+                else -> error("Unsupported audio backend: $backend")
+            }
+            logger.info("🔊 Volume changed by {}{} via {}", actualSign, "$delta%", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not change volume: ${e.message}")
@@ -38,8 +49,14 @@ class SystemControlService {
      */
     fun setVolume(percent: Int): Result<Unit> {
         return try {
-            executeCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$percent%")
-            logger.info("🔊 Volume set to $percent% via pactl")
+            val backend = selectAudioBackend()
+            when (backend) {
+                "wpctl" -> executeCheckedCommand("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$percent%")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$percent%")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "$percent%")
+                else -> error("Unsupported audio backend: $backend")
+            }
+            logger.info("🔊 Volume set to {} via {}", "$percent%", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not set volume: ${e.message}")
@@ -52,8 +69,14 @@ class SystemControlService {
      */
     fun mute(): Result<Unit> {
         return try {
-            executeCommand("pactl", "set-sink-mute", "@DEFAULT_SINK@", "1")
-            logger.info("🔇 System muted via pactl")
+            val backend = selectAudioBackend()
+            when (backend) {
+                "wpctl" -> executeCheckedCommand("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-mute", "@DEFAULT_SINK@", "1")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "mute")
+                else -> error("Unsupported audio backend: $backend")
+            }
+            logger.info("🔇 System muted via {}", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not mute: ${e.message}")
@@ -66,8 +89,14 @@ class SystemControlService {
      */
     fun unmute(): Result<Unit> {
         return try {
-            executeCommand("pactl", "set-sink-mute", "@DEFAULT_SINK@", "0")
-            logger.info("🔊 System unmuted via pactl")
+            val backend = selectAudioBackend()
+            when (backend) {
+                "wpctl" -> executeCheckedCommand("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-mute", "@DEFAULT_SINK@", "0")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "unmute")
+                else -> error("Unsupported audio backend: $backend")
+            }
+            logger.info("🔊 System unmuted via {}", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not unmute: ${e.message}")
@@ -80,8 +109,14 @@ class SystemControlService {
      */
     fun toggleMute(): Result<Unit> {
         return try {
-            executeCommand("pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle")
-            logger.info("🔊 Mute toggled via pactl")
+            val backend = selectAudioBackend()
+            when (backend) {
+                "wpctl" -> executeCheckedCommand("wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "toggle")
+                else -> error("Unsupported audio backend: $backend")
+            }
+            logger.info("🔊 Mute toggled via {}", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not toggle mute: ${e.message}")
@@ -107,7 +142,7 @@ class SystemControlService {
         }
         
         return try {
-            executeCommand("playerctl", playerctlAction)
+            executeCheckedCommand("playerctl", playerctlAction)
             logger.info("🎵 Media $playerctlAction via playerctl")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -183,7 +218,7 @@ class SystemControlService {
     fun executeHotkey(keys: String): Result<Unit> {
         return try {
             // Use xdotool to simulate key presses
-            executeCommand("xdotool", "key", keys)
+            executeCheckedCommand("xdotool", "key", keys)
             logger.info("⌨️ Executed hotkey: $keys")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -212,10 +247,10 @@ class SystemControlService {
         return try {
             if (target != null) {
                 // Find window by name and perform action
-                executeCommand("xdotool", "search", "--name", target, xdotoolAction)
+                executeCheckedCommand("xdotool", "search", "--name", target, xdotoolAction)
             } else {
                 // Perform on active window
-                executeCommand("xdotool", "getactivewindow", xdotoolAction)
+                executeCheckedCommand("xdotool", "getactivewindow", xdotoolAction)
             }
             logger.info("🪟 Window action: $action ${target ?: "(active)"}")
             Result.success(Unit)
@@ -271,7 +306,7 @@ class SystemControlService {
      */
     fun showNotification(title: String, message: String): Result<Unit> {
         return try {
-            executeCommand("notify-send", title, message)
+            executeCheckedCommand("notify-send", title, message)
             logger.info("📢 Notification: $title - $message")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -289,81 +324,81 @@ class SystemControlService {
         return when (scenario.lowercase()) {
             "work", "work_mode" -> {
                 // Open work apps, disable notifications
-                openApp("vscode")
-                openApp("firefox")
+                ensureSuccess(openApp("vscode"))
+                ensureSuccess(openApp("firefox"))
                 logger.info("📋 Scenario: Work mode activated")
                 Result.success(Unit)
             }
             "rest", "rest_mode" -> {
                 // Close work apps, play music
-                mediaControl("PLAY")
+                ensureSuccess(mediaControl("PLAY"))
                 logger.info("📋 Scenario: Rest mode activated")
                 Result.success(Unit)
             }
             "focus", "focus_mode" -> {
                 // Enable DND, minimize all
-                executeCommand("xdotool", "key", "Super+d")
+                executeCheckedCommand("xdotool", "key", "Super+d")
                 logger.info("📋 Scenario: Focus mode activated")
                 Result.success(Unit)
             }
             "house_party" -> {
                 // Party mode
-                mediaControl("PLAY")
-                setVolume(70)
+                ensureSuccess(mediaControl("PLAY"))
+                ensureSuccess(setVolume(70))
                 logger.info("📋 Scenario: House party mode activated")
                 Result.success(Unit)
             }
             "clean_slate" -> {
                 // Close all windows
-                executeCommand("xdotool", "key", "Super+d")
+                executeCheckedCommand("xdotool", "key", "Super+d")
                 logger.info("📋 Scenario: Clean slate activated")
                 Result.success(Unit)
             }
             "cozy_evening" -> {
-                mediaControl("PLAY")
-                setVolume(25)
-                showNotification("Jarvis", "Cozy evening protocol activated")
+                ensureSuccess(mediaControl("PLAY"))
+                ensureSuccess(setVolume(25))
+                ensureSuccess(showNotification("Jarvis", "Cozy evening protocol activated"))
                 logger.info("📋 Scenario: Cozy evening activated")
                 Result.success(Unit)
             }
             "guests" -> {
-                mediaControl("PLAY")
-                setVolume(45)
-                showNotification("Jarvis", "Guest protocol activated")
+                ensureSuccess(mediaControl("PLAY"))
+                ensureSuccess(setVolume(45))
+                ensureSuccess(showNotification("Jarvis", "Guest protocol activated"))
                 logger.info("📋 Scenario: Guests activated")
                 Result.success(Unit)
             }
             "holiday" -> {
-                mediaControl("PLAY")
-                setVolume(55)
-                showNotification("Jarvis", "Holiday protocol activated")
+                ensureSuccess(mediaControl("PLAY"))
+                ensureSuccess(setVolume(55))
+                ensureSuccess(showNotification("Jarvis", "Holiday protocol activated"))
                 logger.info("📋 Scenario: Holiday activated")
                 Result.success(Unit)
             }
             "game" -> {
-                setVolume(60)
-                showNotification("Jarvis", "Game mode activated")
+                ensureSuccess(setVolume(60))
+                ensureSuccess(showNotification("Jarvis", "Game mode activated"))
                 logger.info("📋 Scenario: Game mode activated")
                 Result.success(Unit)
             }
             "morning" -> {
-                openApp("browser")
-                setVolume(35)
-                showNotification("Jarvis", "Morning protocol activated")
+                ensureSuccess(openApp("browser"))
+                ensureSuccess(setVolume(35))
+                ensureSuccess(showNotification("Jarvis", "Morning protocol activated"))
                 logger.info("📋 Scenario: Morning protocol activated")
                 Result.success(Unit)
             }
             "leaving" -> {
-                mediaControl("PAUSE")
-                executeCommand("xdotool", "key", "Super+d")
-                showNotification("Jarvis", "Leaving protocol activated")
+                ensureSuccess(mediaControl("PAUSE"))
+                executeCheckedCommand("xdotool", "key", "Super+d")
+                ensureSuccess(showNotification("Jarvis", "Leaving protocol activated"))
                 logger.info("📋 Scenario: Leaving protocol activated")
                 Result.success(Unit)
             }
             "panic" -> {
-                mute()
-                executeCommand("xdotool", "key", "Super+d")
-                showNotification("Jarvis", "Panic protocol activated")
+                ensureSuccess(mute())
+                executeCheckedCommand("xdotool", "key", "Super+d")
+                ensureSuccess(showNotification("Jarvis", "Panic protocol activated"))
                 logger.info("📋 Scenario: Panic protocol activated")
                 Result.success(Unit)
             }
@@ -425,24 +460,21 @@ class SystemControlService {
      * @return command output
      */
     private fun executeCommand(vararg command: String): String {
-        val process = ProcessBuilder(*command)
-            .redirectErrorStream(true)
-            .start()
-        
-        val output = StringBuilder()
-        BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
-            reader.forEachLine { output.appendLine(it) }
-        }
-        
-        val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            logger.debug("Command '${command.joinToString(" ")}' exited with code $exitCode: $output")
-        }
-
-        return output.toString().trim()
+        return executeProcess(*command).output
     }
 
     private fun executeCheckedCommand(vararg command: String): String {
+        val result = executeProcess(*command)
+        if (result.exitCode != 0) {
+            throw IllegalStateException(
+                "Command '${result.command.joinToString(" ")}' failed with code ${result.exitCode}: ${result.output}"
+            )
+        }
+        return result.output
+    }
+
+    private fun executeProcess(vararg command: String): CommandResult {
+        logger.info("▶️ Running system command: {}", command.joinToString(" "))
         val process = ProcessBuilder(*command)
             .redirectErrorStream(true)
             .start()
@@ -453,10 +485,13 @@ class SystemControlService {
         }
 
         val exitCode = process.waitFor()
-        if (exitCode != 0) {
-            throw IllegalStateException("Command '${command.joinToString(" ")}' failed with code $exitCode: ${output.toString().trim()}")
+        val trimmed = output.toString().trim()
+        if (exitCode == 0) {
+            logger.info("✅ Command succeeded: command='{}', output='{}'", command.joinToString(" "), trimmed)
+        } else {
+            logger.warn("❌ Command failed: command='{}', exitCode={}, output='{}'", command.joinToString(" "), exitCode, trimmed)
         }
-        return output.toString().trim()
+        return CommandResult(command.toList(), exitCode, trimmed)
     }
 
     private fun runFirstChecked(vararg commands: List<String>) {
@@ -492,11 +527,26 @@ class SystemControlService {
      */
     fun checkDependencies(): Map<String, Boolean> {
         return mapOf(
+            "wpctl" to isCommandAvailable("wpctl"),
             "pactl" to isCommandAvailable("pactl"),
+            "amixer" to isCommandAvailable("amixer"),
             "playerctl" to isCommandAvailable("playerctl"),
             "xdotool" to isCommandAvailable("xdotool"),
             "notify-send" to isCommandAvailable("notify-send")
         )
+    }
+
+    private fun selectAudioBackend(): String {
+        return when {
+            isCommandAvailable("wpctl") -> "wpctl"
+            isCommandAvailable("pactl") -> "pactl"
+            isCommandAvailable("amixer") -> "amixer"
+            else -> throw IllegalStateException("No audio backend available (expected one of: wpctl, pactl, amixer)")
+        }
+    }
+
+    private fun ensureSuccess(result: Result<Unit>) {
+        result.getOrThrow()
     }
 
     private fun isCommandAvailable(command: String): Boolean {

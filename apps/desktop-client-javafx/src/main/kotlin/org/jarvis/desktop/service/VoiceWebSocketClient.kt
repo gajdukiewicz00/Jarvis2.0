@@ -4,11 +4,14 @@ import javafx.application.Platform
 import kotlinx.serialization.json.*
 import okhttp3.*
 import okio.ByteString.Companion.toByteString
+import org.jarvis.desktop.auth.JwtSubjectParser
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.config.VoiceRecognitionLanguage
 import org.slf4j.LoggerFactory
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 /**
@@ -31,18 +34,26 @@ class VoiceWebSocketClient(
     private val onAudioReceived: (ByteArray) -> Unit,
     private val onSttStatusChanged: (available: Boolean, reason: String?) -> Unit = { _, _ -> },
     private val onTtsStatusChanged: (available: Boolean, reason: String?) -> Unit = { _, _ -> },
-    private val authServiceFactory: () -> AuthService = { AuthService() }
+    private val authServiceFactory: () -> AuthService = { AuthService() },
+    private val uiDispatcher: ((() -> Unit) -> Unit) = { action -> Platform.runLater(action) }
 ) : WebSocketListener() {
+    companion object {
+        private const val PRECONNECT_REFRESH_WINDOW_SECONDS = 30L
+    }
 
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS) // Disable timeout for long-lived connection
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
+    private val reconnectExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "voice-ws-reconnect").apply { isDaemon = true }
+    }
     private val logger = LoggerFactory.getLogger(VoiceWebSocketClient::class.java)
     private val messageFactory = VoiceWebSocketMessageFactory()
     private val configListener: (ResolvedDesktopConfig) -> Unit = { config ->
         handleResolvedConfigChange(config)
     }
+    private val stateLock = Any()
     
     private var webSocket: WebSocket? = null
     var isConnected = false
@@ -63,21 +74,49 @@ class VoiceWebSocketClient(
     private var shouldReconnect = true
     private var authRefreshAttempts = 0
     private val maxAuthRefreshAttempts = 1
+    private var connectInProgress = false
+    private var authRecoveryInProgress = false
+    private var pendingReconnectTicket = 0L
+    private var pendingReconnectFuture: ScheduledFuture<*>? = null
+
+    private enum class ConnectDecision {
+        START,
+        SKIP,
+        DEFER
+    }
+
+    private fun dispatchToUi(action: () -> Unit) {
+        uiDispatcher(action)
+    }
 
     fun connect() {
-        if (isConnected) return
+        connectInternal("manual connect")
+    }
 
-        shouldReconnect = true
+    private fun connectInternal(trigger: String, reservationHeld: Boolean = false) {
+        if (!reservationHeld) {
+            when (prepareConnect(trigger)) {
+                ConnectDecision.SKIP -> return
+                ConnectDecision.DEFER -> {
+                    requestReconnect(100L, "$trigger waiting for auth recovery")
+                    return
+                }
+                ConnectDecision.START -> Unit
+            }
+        }
+
         ensureConfigListener()
         val config = AppConfig.current()
-        resolvedUrl = config.voiceWebSocketUrl
+        resolvedUrl = urlProvider()
         currentVoiceLanguage = config.voiceLanguage
-        Platform.runLater { onStateChange("CONNECTING") }
+        dispatchToUi { onStateChange("CONNECTING") }
 
         val requestBuilder = Request.Builder()
             .url(resolvedUrl)
 
         var token = TokenManager.getAccessToken()
+        maybeRefreshExpiringAccessToken(token)
+        token = TokenManager.getAccessToken()
         if (token.isNullOrBlank() && !TokenManager.getRefreshToken().isNullOrBlank()) {
             attemptTokenRefresh("missing access token before voice websocket connect")
             token = TokenManager.getAccessToken()
@@ -113,14 +152,60 @@ class VoiceWebSocketClient(
             username ?: "",
             role ?: ""
         )
-        webSocket = client.newWebSocket(request, this)
+        try {
+            webSocket = client.newWebSocket(request, this)
+        } catch (e: Exception) {
+            synchronized(stateLock) {
+                connectInProgress = false
+            }
+            logger.error("❌ Voice WS connect bootstrap failed: {}", e.message, e)
+            dispatchToUi { onStateChange("ERROR: ${e.message}") }
+            if (shouldReconnect) {
+                scheduleReconnect()
+            }
+        }
+    }
+
+    private fun maybeRefreshExpiringAccessToken(currentToken: String?) {
+        if (currentToken.isNullOrBlank()) {
+            return
+        }
+
+        val refreshToken = TokenManager.getRefreshToken()
+        if (refreshToken.isNullOrBlank()) {
+            return
+        }
+
+        val expirationEpochSeconds = JwtSubjectParser.extractExpirationEpochSeconds(currentToken) ?: return
+        val secondsUntilExpiry = expirationEpochSeconds - (System.currentTimeMillis() / 1000L)
+        if (secondsUntilExpiry > PRECONNECT_REFRESH_WINDOW_SECONDS) {
+            return
+        }
+
+        val refreshReason = if (secondsUntilExpiry <= 0) {
+            "cached access token expired before voice websocket connect"
+        } else {
+            "cached access token expires in ${secondsUntilExpiry}s before voice websocket connect"
+        }
+
+        if (!attemptTokenRefresh(refreshReason, clearTokensOnFailure = false)) {
+            logger.warn(
+                "Voice WS pre-connect token refresh failed; proceeding with cached access token and keeping 401 recovery enabled ({})",
+                refreshReason
+            )
+        }
     }
     
     fun disconnect() {
         shouldReconnect = false
+        cancelPendingReconnect()
         webSocket?.close(1000, "Client disconnecting")
         webSocket = null
         isConnected = false
+        synchronized(stateLock) {
+            connectInProgress = false
+            authRecoveryInProgress = false
+        }
         onStateChange("DISCONNECTED")
         removeConfigListener()
     }
@@ -139,16 +224,13 @@ class VoiceWebSocketClient(
         }
 
         val existingSocket = webSocket
-        isConnected = false
-        webSocket = null
+        synchronized(stateLock) {
+            isConnected = false
+            connectInProgress = false
+            webSocket = null
+        }
         existingSocket?.close(1000, "Endpoint updated")
-
-        Thread {
-            Thread.sleep(200L)
-            if (shouldReconnect) {
-                connect()
-            }
-        }.start()
+        requestReconnect(200L, "endpoint updated")
     }
 
     private fun ensureConfigListener() {
@@ -164,13 +246,100 @@ class VoiceWebSocketClient(
             configListenerRegistered = false
         }
     }
+
+    private fun prepareConnect(trigger: String): ConnectDecision {
+        synchronized(stateLock) {
+            if (isConnected) {
+                logger.debug("Skipping Voice WS connect ({}): socket is already connected", trigger)
+                return ConnectDecision.SKIP
+            }
+            if (connectInProgress) {
+                logger.debug("Skipping Voice WS connect ({}): another connect is already in progress", trigger)
+                return ConnectDecision.SKIP
+            }
+            if (authRecoveryInProgress) {
+                logger.info("Deferring Voice WS connect ({}): auth recovery still running", trigger)
+                return ConnectDecision.DEFER
+            }
+
+            shouldReconnect = true
+            cancelPendingReconnectLocked()
+            connectInProgress = true
+            return ConnectDecision.START
+        }
+    }
+
+    private fun requestReconnect(delayMs: Long, reason: String) {
+        val ticket = synchronized(stateLock) {
+            if (!shouldReconnect) {
+                return
+            }
+            cancelPendingReconnectLocked()
+            pendingReconnectTicket += 1
+            pendingReconnectTicket.also { scheduledTicket ->
+                pendingReconnectFuture = reconnectExecutor.schedule(
+                    { executeReconnectRequest(scheduledTicket, reason) },
+                    delayMs,
+                    TimeUnit.MILLISECONDS
+                )
+            }
+        }
+        logger.debug("Queued Voice WS reconnect ticket={} in {}ms ({})", ticket, delayMs, reason)
+    }
+
+    private fun executeReconnectRequest(ticket: Long, reason: String) {
+        synchronized(stateLock) {
+            if (ticket != pendingReconnectTicket) {
+                return
+            }
+            pendingReconnectFuture = null
+            if (!shouldReconnect || isConnected) {
+                return
+            }
+            if (connectInProgress) {
+                logger.debug("Skipping Voice WS reconnect ticket={} ({}): connect already in progress", ticket, reason)
+                return
+            }
+            if (authRecoveryInProgress) {
+                pendingReconnectFuture = reconnectExecutor.schedule(
+                    { executeReconnectRequest(ticket, reason) },
+                    100L,
+                    TimeUnit.MILLISECONDS
+                )
+                logger.debug("Deferring Voice WS reconnect ticket={} ({}): waiting for auth recovery", ticket, reason)
+                return
+            }
+            connectInProgress = true
+        }
+
+        logger.info("🔌 Attempting Voice WS reconnect ({})...", reason)
+        connectInternal(reason, reservationHeld = true)
+    }
+
+    private fun cancelPendingReconnect() {
+        synchronized(stateLock) {
+            cancelPendingReconnectLocked()
+        }
+    }
+
+    private fun cancelPendingReconnectLocked() {
+        pendingReconnectFuture?.cancel(false)
+        pendingReconnectFuture = null
+        pendingReconnectTicket += 1
+    }
+
+    private fun isCurrentSocket(candidate: WebSocket): Boolean {
+        synchronized(stateLock) {
+            return webSocket === candidate
+        }
+    }
     
     private fun scheduleReconnect() {
         if (!shouldReconnect || reconnectAttempts >= maxReconnectAttempts) {
             logger.warn("🔌 Not reconnecting: shouldReconnect={}, attempts={}/{}", 
                 shouldReconnect, reconnectAttempts, maxReconnectAttempts)
             if (reconnectAttempts >= maxReconnectAttempts) {
-                Platform.runLater {
+                dispatchToUi {
                     onStateChange("UNAVAILABLE: voice backend not reachable after $maxReconnectAttempts attempts")
                 }
             }
@@ -182,15 +351,8 @@ class VoiceWebSocketClient(
         logger.info("🔌 Scheduling Voice WS reconnect attempt {}/{} in {}s", 
             reconnectAttempts, maxReconnectAttempts, delay)
         
-        Platform.runLater { onStateChange("Reconnecting in ${delay}s (attempt $reconnectAttempts/$maxReconnectAttempts)...") }
-        
-        Thread {
-            Thread.sleep(delay * 1000L)
-            if (!isConnected && shouldReconnect) {
-                logger.info("🔌 Attempting Voice WS reconnect...")
-                connect()
-            }
-        }.start()
+        dispatchToUi { onStateChange("Reconnecting in ${delay}s (attempt $reconnectAttempts/$maxReconnectAttempts)...") }
+        requestReconnect(delay * 1000L, "backoff attempt $reconnectAttempts/$maxReconnectAttempts")
     }
     
     /**
@@ -271,11 +433,19 @@ class VoiceWebSocketClient(
     }
 
     override fun onOpen(webSocket: WebSocket, response: Response) {
-        isConnected = true
-        reconnectAttempts = 0 // Reset on successful connection
-        authRefreshAttempts = 0
+        synchronized(stateLock) {
+            if (this.webSocket !== webSocket) {
+                logger.debug("Ignoring stale Voice WS open callback for {}", response.request.url)
+                webSocket.close(1000, "Superseded by newer connection")
+                return
+            }
+            connectInProgress = false
+            isConnected = true
+            reconnectAttempts = 0 // Reset on successful connection
+            authRefreshAttempts = 0
+        }
         logger.info("🔌 Voice WS connected: ${response.request.url}")
-        Platform.runLater { onStateChange("CONNECTED") }
+        dispatchToUi { onStateChange("CONNECTED") }
         val config = AppConfig.current()
         currentVoiceLanguage = VoiceRecognitionLanguage.normalize(config.voiceLanguage)
         logger.info(
@@ -287,12 +457,16 @@ class VoiceWebSocketClient(
     }
 
     override fun onMessage(webSocket: WebSocket, text: String) {
+        if (!isCurrentSocket(webSocket)) {
+            logger.debug("Ignoring stale Voice WS text message")
+            return
+        }
         try {
             val json = Json.parseToJsonElement(text).jsonObject
             val type = json["type"]?.jsonPrimitive?.content
             val msgCorrelationId = json["correlationId"]?.jsonPrimitive?.contentOrNull
             
-            Platform.runLater {
+            dispatchToUi {
                 when (type) {
                     "STATE" -> {
                         val state = json["state"]?.jsonPrimitive?.content ?: "UNKNOWN"
@@ -323,8 +497,27 @@ class VoiceWebSocketClient(
                         val responseText = json["text"]?.jsonPrimitive?.content ?: ""
                         val action = json["action"]?.jsonPrimitive?.contentOrNull
                         val handled = json["handled"]?.jsonPrimitive?.booleanOrNull ?: false
-                        logger.info("📢 Response: '{}', action={}, handled={}, correlationId={}", 
-                            responseText, action, handled, msgCorrelationId)
+                        val recognized = json["recognized"]?.jsonPrimitive?.booleanOrNull
+                        val actionResolved = json["actionResolved"]?.jsonPrimitive?.booleanOrNull
+                        val executorFound = json["executorFound"]?.jsonPrimitive?.booleanOrNull
+                        val executionAttempted = json["executionAttempted"]?.jsonPrimitive?.booleanOrNull
+                        val executionSucceeded = json["executionSucceeded"]?.jsonPrimitive?.booleanOrNull
+                        val executionFailed = json["executionFailed"]?.jsonPrimitive?.booleanOrNull
+                        val failureReason = json["failureReason"]?.jsonPrimitive?.contentOrNull
+                        logger.info(
+                            "📢 Response: '{}', action={}, handled={}, recognized={}, actionResolved={}, executorFound={}, executionAttempted={}, executionSucceeded={}, executionFailed={}, failureReason={}, correlationId={}",
+                            responseText,
+                            action,
+                            handled,
+                            recognized,
+                            actionResolved,
+                            executorFound,
+                            executionAttempted,
+                            executionSucceeded,
+                            executionFailed,
+                            failureReason,
+                            msgCorrelationId
+                        )
                         if (action == "STT_UNAVAILABLE") {
                             onSttStatusChanged(false, responseText)
                         }
@@ -347,20 +540,36 @@ class VoiceWebSocketClient(
     }
 
     override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+        if (!isCurrentSocket(webSocket)) {
+            logger.debug("Ignoring stale Voice WS audio frame")
+            return
+        }
         // Received TTS audio
         val audioData = bytes.toByteArray()
-        Platform.runLater { onAudioReceived(audioData) }
+        dispatchToUi { onAudioReceived(audioData) }
     }
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+        if (!isCurrentSocket(webSocket)) {
+            logger.debug("Ignoring stale Voice WS closing callback: code={}, reason={}", code, reason)
+            return
+        }
         logger.warn("⚠️ Voice WS closing: code={}, reason={}", code, reason)
         // Don't set isConnected=false here, wait for onClosed
     }
     
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-        isConnected = false
+        synchronized(stateLock) {
+            if (this.webSocket !== webSocket) {
+                logger.debug("Ignoring stale Voice WS closed callback: code={}, reason={}", code, reason)
+                return
+            }
+            connectInProgress = false
+            this.webSocket = null
+            isConnected = false
+        }
         logger.warn("🔌 Voice WS closed: code={}, reason={}", code, reason)
-        Platform.runLater { onStateChange("DISCONNECTED") }
+        dispatchToUi { onStateChange("DISCONNECTED") }
         
         // Auto-reconnect if not intentional close (1000 = normal close)
         if (code != 1000 && shouldReconnect) {
@@ -369,7 +578,15 @@ class VoiceWebSocketClient(
     }
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-        isConnected = false
+        synchronized(stateLock) {
+            if (this.webSocket !== webSocket) {
+                logger.debug("Ignoring stale Voice WS failure callback: {}", t.message)
+                return
+            }
+            connectInProgress = false
+            this.webSocket = null
+            isConnected = false
+        }
         if (response?.code == 401 || response?.code == 403) {
             val authMessage = "Voice WebSocket upgrade rejected with HTTP ${response.code}"
             logger.warn("❌ {}. Attempting auth recovery.", authMessage)
@@ -379,7 +596,7 @@ class VoiceWebSocketClient(
         }
 
         logger.error("❌ Voice WS failure: {}, code={}", t.message, response?.code)
-        Platform.runLater { onStateChange("ERROR: ${t.message}") }
+        dispatchToUi { onStateChange("ERROR: ${t.message}") }
 
         // Auto-reconnect on failure
         if (shouldReconnect) {
@@ -388,29 +605,40 @@ class VoiceWebSocketClient(
     }
 
     private fun handleUnauthorizedFailure(message: String): Boolean {
-        if (authRefreshAttempts < maxAuthRefreshAttempts && attemptTokenRefresh(message)) {
-            authRefreshAttempts++
-            logger.info("🔐 Voice WS token refresh succeeded, reconnecting immediately")
-            Platform.runLater { onStateChange("Re-authenticating voice session...") }
-            Thread {
-                Thread.sleep(300L)
-                if (shouldReconnect && !isConnected) {
-                    connect()
-                }
-            }.start()
-            return true
+        synchronized(stateLock) {
+            if (authRecoveryInProgress) {
+                logger.info("Voice WS auth recovery already in progress; skipping duplicate recovery trigger")
+                return true
+            }
+            authRecoveryInProgress = true
         }
 
-        logger.warn("🔐 Voice WS auth recovery failed; moving voice channel to AUTH_REQUIRED")
-        Platform.runLater { onStateChange("AUTH_REQUIRED: voice session expired, login required") }
-        return true
+        try {
+            if (authRefreshAttempts < maxAuthRefreshAttempts && attemptTokenRefresh(message)) {
+                authRefreshAttempts++
+                logger.info("🔐 Voice WS token refresh succeeded, reconnecting immediately")
+                dispatchToUi { onStateChange("Re-authenticating voice session...") }
+                requestReconnect(300L, "auth recovery")
+                return true
+            }
+
+            logger.warn("🔐 Voice WS auth recovery failed; moving voice channel to AUTH_REQUIRED")
+            dispatchToUi { onStateChange("AUTH_REQUIRED: voice session expired, login required") }
+            return true
+        } finally {
+            synchronized(stateLock) {
+                authRecoveryInProgress = false
+            }
+        }
     }
 
-    private fun attemptTokenRefresh(reason: String): Boolean {
+    private fun attemptTokenRefresh(reason: String, clearTokensOnFailure: Boolean = true): Boolean {
         val refreshToken = TokenManager.getRefreshToken()
         if (refreshToken.isNullOrBlank()) {
             logger.warn("Cannot refresh Voice WS auth: refresh token missing ({})", reason)
-            TokenManager.clearTokens()
+            if (clearTokensOnFailure) {
+                TokenManager.clearTokens()
+            }
             return false
         }
 
@@ -426,7 +654,9 @@ class VoiceWebSocketClient(
             true
         } catch (e: Exception) {
             logger.error("Voice WS token refresh failed: {}", e.message, e)
-            TokenManager.clearTokens()
+            if (clearTokensOnFailure) {
+                TokenManager.clearTokens()
+            }
             false
         }
     }

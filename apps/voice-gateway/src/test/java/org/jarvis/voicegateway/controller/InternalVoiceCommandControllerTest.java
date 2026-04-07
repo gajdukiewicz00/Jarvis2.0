@@ -33,13 +33,23 @@ class InternalVoiceCommandControllerTest {
 
     @Test
     void dispatchPcActionRoutesToGateway() {
+        when(pcControlActionGateway.dispatch("VOLUME_UP", Map.of("delta", 10), "user-42", null))
+                .thenReturn(new PcControlActionGateway.DispatchResult(
+                        "executed",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        Map.of("status", "executed")));
+
         ResponseEntity<?> response = controller.dispatchPcAction(Map.of(
                 "action", "VOLUME_UP",
                 "params", Map.of("delta", 10),
                 "userId", "user-42"));
 
         assertEquals(200, response.getStatusCode().value());
-        verify(pcControlActionGateway).dispatch("VOLUME_UP", Map.of("delta", 10), "user-42");
+        verify(pcControlActionGateway).dispatch("VOLUME_UP", Map.of("delta", 10), "user-42", null);
     }
 
     @Test

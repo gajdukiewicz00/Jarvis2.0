@@ -92,30 +92,20 @@ echo "Installing launcher JAR..."
 cp "$LAUNCHER_JAR" "${JARVIS_APP}/launcher.jar"
 echo "  ✅ ${JARVIS_APP}/launcher.jar"
 
-# Optional: Copy desktop UI JARs (unified shell primary, legacy client fallback)
+# Optional: Copy desktop UI JAR
 if [[ "$FROM_RELEASE" == "false" ]]; then
     DESKTOP_APP_JAR="${REPO_ROOT}/apps/desktop-app-javafx/target/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
     if [[ -f "$DESKTOP_APP_JAR" ]]; then
         cp "$DESKTOP_APP_JAR" "${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
         echo "  ✅ ${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
     fi
-
-    DESKTOP_LEGACY_JAR="${REPO_ROOT}/apps/desktop-client-javafx/target/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
-    if [[ -f "$DESKTOP_LEGACY_JAR" ]]; then
-        cp "$DESKTOP_LEGACY_JAR" "${JARVIS_APP}/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
-        echo "  ✅ ${JARVIS_APP}/desktop-client-javafx-0.1.0-SNAPSHOT.jar"
-    fi
 elif [[ "$FROM_RELEASE" == "true" ]]; then
     if [[ -f "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" ]]; then
         cp "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" "${JARVIS_APP}/"
         echo "  ✅ ${JARVIS_APP}/desktop-app-javafx-${VERSION}.jar"
     fi
-
-    if [[ -f "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" ]]; then
-        cp "${RELEASE_DIR}/desktop-client-javafx-${VERSION}.jar" "${JARVIS_APP}/"
-        echo "  ✅ ${JARVIS_APP}/desktop-client-javafx-${VERSION}.jar"
-    fi
 fi
+rm -f "${JARVIS_APP}"/desktop-client-javafx-*.jar 2>/dev/null || true
 
 # Stage 11: Copy scripts from release or repo
 if [[ "$FROM_RELEASE" == "true" ]]; then
@@ -214,26 +204,6 @@ if [[ -f "${JARVIS_APP}/VERSION" ]]; then
     if [[ -n "$OLD_VERSION" ]] && [[ "$OLD_VERSION" != "$VERSION" ]]; then
         INSTALL_TYPE="upgrade"
         echo "Upgrading from $OLD_VERSION to $VERSION..."
-        
-        # Create backup
-        BACKUP_DIR="${JARVIS_APP}/backup/${OLD_VERSION}"
-        mkdir -p "${BACKUP_DIR}"
-        echo "  Creating backup in ${BACKUP_DIR}..."
-        
-        # Backup existing files
-        if [[ -f "${JARVIS_APP}/launcher.jar" ]]; then
-            cp "${JARVIS_APP}/launcher.jar" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        if [[ -d "${JARVIS_APP}/bin" ]]; then
-            cp -r "${JARVIS_APP}/bin" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        if [[ -d "${JARVIS_APP}/config" ]]; then
-            cp -r "${JARVIS_APP}/config" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        if [[ -f "${JARVIS_APP}/VERSION" ]]; then
-            cp "${JARVIS_APP}/VERSION" "${BACKUP_DIR}/" 2>/dev/null || true
-        fi
-        echo "  ✅ Backup created: ${BACKUP_DIR}"
     elif [[ "$OLD_VERSION" == "$VERSION" ]]; then
         INSTALL_TYPE="reinstall"
         echo "Reinstalling version $VERSION..."
@@ -267,7 +237,6 @@ mkdir -p "${JARVIS_HOME}/logs"
     echo "Version: $VERSION"
     if [[ "$INSTALL_TYPE" == "upgrade" ]]; then
         echo "Previous version: $OLD_VERSION"
-        echo "Backup location: ${JARVIS_APP}/backup/${OLD_VERSION}"
     fi
     echo "Install location: ${JARVIS_APP}"
     echo "User: $(whoami)"

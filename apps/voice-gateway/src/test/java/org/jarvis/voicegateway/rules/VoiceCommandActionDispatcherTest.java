@@ -10,8 +10,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class VoiceCommandActionDispatcherTest {
@@ -24,6 +27,15 @@ class VoiceCommandActionDispatcherTest {
     @Test
     void dispatchesPcControlActionsWithStaticParams() {
         VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        when(pcControlActionGateway.dispatch("OPEN_APP", Map.of("app", "browser"), "user-1", "corr-1"))
+                .thenReturn(new PcControlActionGateway.DispatchResult(
+                        "executed",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        Map.of("status", "executed")));
 
         VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
@@ -36,12 +48,22 @@ class VoiceCommandActionDispatcherTest {
                 "corr-1");
 
         assertEquals("OPEN_APP", result.routedAction());
-        verify(pcControlActionGateway).dispatch("OPEN_APP", Map.of("app", "browser"), "user-1");
+        assertTrue(result.executionSucceeded());
+        verify(pcControlActionGateway).dispatch("OPEN_APP", Map.of("app", "browser"), "user-1", "corr-1");
     }
 
     @Test
     void dispatchesSystemActionsAsSystemCommand() {
         VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        when(pcControlActionGateway.dispatch("SYSTEM_COMMAND", Map.of("command", "sleep"), "user-1", "corr-2"))
+                .thenReturn(new PcControlActionGateway.DispatchResult(
+                        "executed",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        Map.of("status", "executed")));
 
         VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
@@ -54,7 +76,8 @@ class VoiceCommandActionDispatcherTest {
                 "corr-2");
 
         assertEquals("SYSTEM_COMMAND", result.routedAction());
-        verify(pcControlActionGateway).dispatch("SYSTEM_COMMAND", Map.of("command", "sleep"), "user-1");
+        assertTrue(result.executionSucceeded());
+        verify(pcControlActionGateway).dispatch("SYSTEM_COMMAND", Map.of("command", "sleep"), "user-1", "corr-2");
     }
 
     @Test
@@ -78,7 +101,7 @@ class VoiceCommandActionDispatcherTest {
     void internalActionsDoNotCallExternalGateways() {
         VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
 
-        dispatcher.dispatch(
+        VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
                         VoiceCommandCatalog.ActionTarget.INTERNAL,
                         "WAKE_RESPONSE",
@@ -88,8 +111,44 @@ class VoiceCommandActionDispatcherTest {
                 "user-1",
                 "corr-4");
 
-        verify(pcControlActionGateway, never()).dispatch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyMap(), org.mockito.ArgumentMatchers.any());
+        assertTrue(result.actionResolved());
+        assertFalse(result.executionAttempted());
+        verify(pcControlActionGateway, never()).dispatch(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyMap(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
         verify(smartHomeActionGateway, never()).execute(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void dispatchMarksRuleAsFailedWhenDesktopExecutionFailsBeforeAttempt() {
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        when(pcControlActionGateway.dispatch("OPEN_APP", Map.of("app", "browser"), "user-1", "corr-5"))
+                .thenReturn(new PcControlActionGateway.DispatchResult(
+                        "no_clients",
+                        false,
+                        false,
+                        false,
+                        true,
+                        "No desktop executor is connected",
+                        Map.of("status", "no_clients")));
+
+        VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
+                matchFor(new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PC_CONTROL,
+                        "OPEN_APP",
+                        null,
+                        null,
+                        Map.of("app", "browser"))),
+                "user-1",
+                "corr-5");
+
+        assertTrue(result.actionResolved());
+        assertFalse(result.executorFound());
+        assertFalse(result.executionAttempted());
+        assertTrue(result.executionFailed());
+        assertEquals("No desktop executor is connected", result.failureReason());
     }
 
     private VoiceCommandCatalog.Match matchFor(VoiceCommandCatalog.Action action) {

@@ -302,7 +302,7 @@ class DesktopApplication : Application() {
             config.apiBaseUrl,
             config.voiceWebSocketUrl,
             config.pcControlWebSocketUrl,
-            "${config.apiGatewayBaseUrl}/actuator/health",
+            "${config.apiGatewayBaseUrl}/actuator/health/readiness",
             "${config.apiBaseUrl}/security/auth/me"
         )
     }

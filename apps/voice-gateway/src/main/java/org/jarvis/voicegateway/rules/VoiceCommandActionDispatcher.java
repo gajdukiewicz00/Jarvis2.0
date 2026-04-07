@@ -27,18 +27,62 @@ public class VoiceCommandActionDispatcher {
             case INTERNAL -> {
                 log.info("🧠 Executing internal rule command: id={}, action={}, correlationId={}",
                         match.command().id(), action.name(), correlationId);
-                yield new DispatchResult(true, action.name(), Map.of());
+                yield new DispatchResult(
+                        true,
+                        false,
+                        false,
+                        false,
+                        false,
+                        null,
+                        action.name(),
+                        Map.of());
             }
             case PC_CONTROL -> {
                 Map<String, Object> params = new LinkedHashMap<>(match.parameters());
-                pcControlActionGateway.dispatch(action.name(), params, userId);
-                yield new DispatchResult(true, action.name(), Map.copyOf(params));
+                PcControlActionGateway.DispatchResult gatewayResult =
+                        pcControlActionGateway.dispatch(action.name(), params, userId, correlationId);
+                log.info(
+                        "🎛️ Rule command routed to desktop executor: id={}, action={}, correlationId={}, executorFound={}, executionAttempted={}, executionSucceeded={}, failureReason={}",
+                        match.command().id(),
+                        action.name(),
+                        correlationId,
+                        gatewayResult.executorFound(),
+                        gatewayResult.executionAttempted(),
+                        gatewayResult.executionSucceeded(),
+                        gatewayResult.failureReason());
+                yield new DispatchResult(
+                        true,
+                        gatewayResult.executorFound(),
+                        gatewayResult.executionAttempted(),
+                        gatewayResult.executionSucceeded(),
+                        gatewayResult.executionFailed(),
+                        gatewayResult.failureReason(),
+                        action.name(),
+                        Map.copyOf(params));
             }
             case SYSTEM -> {
                 Map<String, Object> params = new LinkedHashMap<>(match.parameters());
                 params.put("command", action.name());
-                pcControlActionGateway.dispatch("SYSTEM_COMMAND", params, userId);
-                yield new DispatchResult(true, "SYSTEM_COMMAND", Map.copyOf(params));
+                PcControlActionGateway.DispatchResult gatewayResult =
+                        pcControlActionGateway.dispatch("SYSTEM_COMMAND", params, userId, correlationId);
+                log.info(
+                        "🖥️ Rule command routed as system command: id={}, command={}, correlationId={}, executorFound={}, executionAttempted={}, executionSucceeded={}, failureReason={}",
+                        match.command().id(),
+                        action.name(),
+                        correlationId,
+                        gatewayResult.executorFound(),
+                        gatewayResult.executionAttempted(),
+                        gatewayResult.executionSucceeded(),
+                        gatewayResult.failureReason());
+                yield new DispatchResult(
+                        true,
+                        gatewayResult.executorFound(),
+                        gatewayResult.executionAttempted(),
+                        gatewayResult.executionSucceeded(),
+                        gatewayResult.executionFailed(),
+                        gatewayResult.failureReason(),
+                        "SYSTEM_COMMAND",
+                        Map.copyOf(params));
             }
             case SMART_HOME -> {
                 String scopedUserId = userId != null && !userId.isBlank() ? userId : "local-user";
@@ -46,13 +90,36 @@ public class VoiceCommandActionDispatcher {
                     throw new IllegalArgumentException("SMART_HOME rule command requires deviceId");
                 }
                 smartHomeActionGateway.execute(scopedUserId, action.deviceId(), action.name(), action.payload());
-                yield new DispatchResult(true, action.name(), Map.of(
+                log.info(
+                        "🏠 Rule command routed to smart-home executor: id={}, deviceId={}, action={}, correlationId={}, userId={}",
+                        match.command().id(),
+                        action.deviceId(),
+                        action.name(),
+                        correlationId,
+                        scopedUserId);
+                yield new DispatchResult(
+                        true,
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        action.name(),
+                        Map.of(
                         "deviceId", action.deviceId(),
                         "action", action.name()));
             }
         };
     }
 
-    public record DispatchResult(boolean executed, String routedAction, Map<String, Object> routedParams) {
+    public record DispatchResult(
+            boolean actionResolved,
+            boolean executorFound,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            boolean executionFailed,
+            String failureReason,
+            String routedAction,
+            Map<String, Object> routedParams) {
     }
 }

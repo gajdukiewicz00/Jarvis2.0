@@ -15,6 +15,11 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
 class LoginController {
+    companion object {
+        @Volatile
+        var loginSuccessHandler: ((Stage) -> Unit)? = null
+    }
+
     
     private val logger = LoggerFactory.getLogger(LoginController::class.java)
     private val objectMapper = jacksonObjectMapper()
@@ -209,10 +214,15 @@ class LoginController {
     
     private fun navigateToMainApp() {
         val stage = loginButton.scene.window as Stage
-        
+
+        loginSuccessHandler?.let { handler ->
+            handler(stage)
+            return
+        }
+
         // Close login window and start main app
         stage.close()
-        
+
         // Start main application
         val mainApp = org.jarvis.desktop.DesktopApplication()
         val mainStage = Stage()

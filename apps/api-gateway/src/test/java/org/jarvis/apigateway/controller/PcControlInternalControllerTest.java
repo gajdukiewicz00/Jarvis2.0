@@ -11,8 +11,6 @@ import org.springframework.http.ResponseEntity;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,8 +25,27 @@ class PcControlInternalControllerTest {
 
     @Test
     void sendActionRoutesToSpecificUserWhenUserIdIsProvided() {
-        when(webSocketHandler.hasConnectedClients()).thenReturn(true);
-        when(webSocketHandler.sendPcActionToUser(eq("user-42"), eq("NOTIFY"), any())).thenReturn(1);
+        when(webSocketHandler.dispatchPcAction(
+                "NOTIFY",
+                new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(Map.of("message", "Planner reminder")),
+                null,
+                "user-42",
+                null))
+                .thenReturn(new PcControlWebSocketHandler.DispatchResult(
+                        "req-1",
+                        "NOTIFY",
+                        "executed",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        1,
+                        1,
+                        1,
+                        0,
+                        null,
+                        "user-42"));
 
         ResponseEntity<?> response = controller.sendAction(Map.of(
                 "action", "NOTIFY",
@@ -36,6 +53,11 @@ class PcControlInternalControllerTest {
                 "params", Map.of("message", "Planner reminder")));
 
         assertEquals(200, response.getStatusCode().value());
-        verify(webSocketHandler).sendPcActionToUser(eq("user-42"), eq("NOTIFY"), any());
+        verify(webSocketHandler).dispatchPcAction(
+                "NOTIFY",
+                new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(Map.of("message", "Planner reminder")),
+                null,
+                "user-42",
+                null);
     }
 }

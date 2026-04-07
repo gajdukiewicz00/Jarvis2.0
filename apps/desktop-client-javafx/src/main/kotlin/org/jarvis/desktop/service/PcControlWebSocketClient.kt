@@ -3,6 +3,7 @@ package org.jarvis.desktop.service
 import javafx.application.Platform
 import kotlinx.serialization.json.*
 import okhttp3.*
+import org.jarvis.desktop.auth.JwtSubjectParser
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.config.ResolvedDesktopConfig
@@ -20,10 +21,14 @@ import java.util.concurrent.TimeUnit
 class PcControlWebSocketClient(
     private val urlProvider: () -> String = { AppConfig.current().pcControlWebSocketUrl },
     private val systemControl: SystemControlService,
-    private val onStatusChange: (String) -> Unit = {}
+    private val onStatusChange: (String) -> Unit = {},
+    private val authServiceFactory: () -> AuthService = { AuthService() },
+    private val uiDispatcher: ((() -> Unit) -> Unit) = { action -> Platform.runLater(action) }
 ) : WebSocketListener() {
 
     internal companion object {
+        private const val PRECONNECT_REFRESH_WINDOW_SECONDS = 30L
+
         fun buildIdentifyMessage(userId: String?, username: String?): String {
             val resolvedClientId = when {
                 !userId.isNullOrBlank() -> "desktop-$userId"
@@ -95,6 +100,7 @@ class PcControlWebSocketClient(
 
     private val logger = LoggerFactory.getLogger(PcControlWebSocketClient::class.java)
     private val json = Json { ignoreUnknownKeys = true }
+    private val stateLock = Any()
     private val configListener: (ResolvedDesktopConfig) -> Unit = { config ->
         handleEndpointChange(config.pcControlWebSocketUrl)
     }
@@ -107,7 +113,10 @@ class PcControlWebSocketClient(
     private var webSocket: WebSocket? = null
     private var isConnected = false
     private var reconnectAttempts = 0
-    private val maxReconnectAttempts = 5
+    private val maxReconnectAttempts = 10
+    private var authRefreshAttempts = 0
+    private val maxAuthRefreshAttempts = 1
+    private var authRecoveryInProgress = false
     @Volatile private var resolvedUrl: String = urlProvider()
     private var configListenerRegistered = false
     
@@ -126,7 +135,13 @@ class PcControlWebSocketClient(
         val requestBuilder = Request.Builder()
             .url(resolvedUrl)
 
-        val token = TokenManager.getAccessToken()
+        var token = TokenManager.getAccessToken()
+        maybeRefreshExpiringAccessToken(token)
+        token = TokenManager.getAccessToken()
+        if (token.isNullOrBlank() && !TokenManager.getRefreshToken().isNullOrBlank()) {
+            attemptTokenRefresh("missing access token before PC control websocket connect", clearTokensOnFailure = false)
+            token = TokenManager.getAccessToken()
+        }
         if (!token.isNullOrBlank()) {
             requestBuilder.addHeader("Authorization", "Bearer $token")
         } else {
@@ -151,6 +166,7 @@ class PcControlWebSocketClient(
     override fun onOpen(webSocket: WebSocket, response: Response) {
         isConnected = true
         reconnectAttempts = 0
+        authRefreshAttempts = 0
         logger.info("✅ Connected to PC Control WebSocket")
         updateStatus("Connected")
 
@@ -177,14 +193,26 @@ class PcControlWebSocketClient(
 
     private fun handlePcAction(jsonObj: JsonObject) {
         val action = jsonObj["action"]?.jsonPrimitive?.content ?: return
+        val requestId = jsonObj["requestId"]?.jsonPrimitive?.contentOrNull
         val params = jsonObj["params"]?.jsonObject ?: buildJsonObject { }
         val actionSummary = describeAction(action, params)
         
-        logger.info("🎯 Executing PC action: $action with params: $params")
+        logger.info("🎯 Executing PC action: action={}, requestId={}, params={}", action, requestId, params)
         updateStatus("Executing $actionSummary")
         
-        Platform.runLater {
+        uiDispatcher {
             try {
+                fun missingParameterResult(vararg names: String): Result<Unit> {
+                    val joined = names.joinToString(" or ")
+                    return Result.failure(IllegalArgumentException("Missing required parameter: $joined"))
+                }
+
+                fun firstText(vararg names: String): String? {
+                    return names.asSequence()
+                        .mapNotNull { params[it]?.jsonPrimitive?.contentOrNull }
+                        .firstOrNull()
+                }
+
                 val result = when (action.uppercase()) {
                     // Volume
                     "VOLUME_UP" -> {
@@ -214,30 +242,29 @@ class PcControlWebSocketClient(
                     
                     // Apps
                     "OPEN_APP" -> {
-                        val app = params["app"]?.jsonPrimitive?.content 
-                            ?: params["appName"]?.jsonPrimitive?.content 
-                            ?: return@runLater
-                        systemControl.openApp(app)
+                        val app = firstText("app", "appName")
+                        if (app == null) missingParameterResult("app", "appName")
+                        else systemControl.openApp(app)
                     }
                     "OPEN_URL" -> {
-                        val url = params["url"]?.jsonPrimitive?.content ?: return@runLater
-                        systemControl.openUrl(url)
+                        val url = firstText("url")
+                        if (url == null) missingParameterResult("url")
+                        else systemControl.openUrl(url)
                     }
                     
                     // Hotkeys
                     "HOTKEY", "KEY" -> {
-                        val keys = params["keys"]?.jsonPrimitive?.content 
-                            ?: params["combination"]?.jsonPrimitive?.content
-                            ?: params["keyCombination"]?.jsonPrimitive?.content
-                            ?: return@runLater
-                        systemControl.executeHotkey(keys)
+                        val keys = firstText("keys", "combination", "keyCombination")
+                        if (keys == null) missingParameterResult("keys", "combination", "keyCombination")
+                        else systemControl.executeHotkey(keys)
                     }
                     
                     // Windows
                     "WINDOW" -> {
-                        val windowAction = params["action"]?.jsonPrimitive?.content ?: return@runLater
+                        val windowAction = firstText("action")
                         val target = params["target"]?.jsonPrimitive?.content
-                        systemControl.windowAction(windowAction, target)
+                        if (windowAction == null) missingParameterResult("action")
+                        else systemControl.windowAction(windowAction, target)
                     }
                     "MINIMIZE" -> systemControl.windowAction("MINIMIZE")
                     "MAXIMIZE" -> systemControl.windowAction("MAXIMIZE")
@@ -253,15 +280,15 @@ class PcControlWebSocketClient(
                     
                     // Scenarios
                     "SCENARIO" -> {
-                        val scenario = params["name"]?.jsonPrimitive?.content 
-                            ?: params["scenario"]?.jsonPrimitive?.content 
-                            ?: return@runLater
-                        systemControl.executeScenario(scenario)
+                        val scenario = firstText("name", "scenario")
+                        if (scenario == null) missingParameterResult("name", "scenario")
+                        else systemControl.executeScenario(scenario)
                     }
                     "SYSTEM_COMMAND" -> {
-                        when (params["command"]?.jsonPrimitive?.content?.lowercase()) {
+                        when (firstText("command")?.lowercase()) {
                             "sleep" -> systemControl.sleepMode()
                             "monitor_off" -> systemControl.turnMonitorOff()
+                            null -> missingParameterResult("command")
                             else -> Result.failure(IllegalArgumentException("Unknown system command"))
                         }
                     }
@@ -279,29 +306,44 @@ class PcControlWebSocketClient(
                 }
                 
                 if (result.isSuccess) {
-                    logger.info("✓ Action completed: $action")
+                    logger.info("✓ Action completed: action={}, requestId={}", action, requestId)
                     updateStatus(formatStatusMessage("✓", action, params))
-                    sendAck(action, true)
+                    sendAck(requestId, action, true)
                 } else {
-                    logger.error("✗ Action failed: $action - ${result.exceptionOrNull()?.message}")
+                    logger.error(
+                        "✗ Action failed: action={}, requestId={}, error={}",
+                        action,
+                        requestId,
+                        result.exceptionOrNull()?.message
+                    )
                     updateStatus(formatStatusMessage("✗", action, params, result.exceptionOrNull()?.message ?: "failed"))
-                    sendAck(action, false, result.exceptionOrNull()?.message)
+                    sendAck(requestId, action, false, result.exceptionOrNull()?.message)
                 }
             } catch (e: Exception) {
-                logger.error("Error executing action: $action", e)
+                logger.error("Error executing action: action={}, requestId={}", action, requestId, e)
                 updateStatus(formatStatusMessage("✗", action, params, e.message ?: "unexpected error"))
-                sendAck(action, false, e.message)
+                sendAck(requestId, action, false, e.message)
             }
         }
     }
     
-    private fun sendAck(action: String, success: Boolean, error: String? = null) {
+    private fun sendAck(requestId: String?, action: String, success: Boolean, error: String? = null) {
         val ack = buildJsonObject {
             put("type", "ACK")
             put("action", action)
+            if (!requestId.isNullOrBlank()) {
+                put("requestId", requestId)
+            }
             put("success", success)
             if (error != null) put("error", error)
         }
+        logger.info(
+            "📤 Sending PC action ACK: requestId={}, action={}, success={}, error={}",
+            requestId,
+            action,
+            success,
+            error
+        )
         webSocket?.send(ack.toString())
     }
 
@@ -331,9 +373,104 @@ class PcControlWebSocketClient(
         isConnected = false
         logger.warn("WebSocket failure: ${t.message}")
         updateStatus("Connection failed")
-        
+
+        if (response?.code == 401 && handleUnauthorizedFailure("PC Control WebSocket upgrade rejected with HTTP 401")) {
+            return
+        }
+
         if (reconnectAttempts < maxReconnectAttempts) {
             scheduleReconnect()
+        }
+    }
+
+    private fun maybeRefreshExpiringAccessToken(currentToken: String?) {
+        if (currentToken.isNullOrBlank()) {
+            return
+        }
+
+        val refreshToken = TokenManager.getRefreshToken()
+        if (refreshToken.isNullOrBlank()) {
+            return
+        }
+
+        val expirationEpochSeconds = JwtSubjectParser.extractExpirationEpochSeconds(currentToken) ?: return
+        val secondsUntilExpiry = expirationEpochSeconds - (System.currentTimeMillis() / 1000L)
+        if (secondsUntilExpiry > PRECONNECT_REFRESH_WINDOW_SECONDS) {
+            return
+        }
+
+        val refreshReason = if (secondsUntilExpiry <= 0) {
+            "cached access token expired before PC control websocket connect"
+        } else {
+            "cached access token expires in ${secondsUntilExpiry}s before PC control websocket connect"
+        }
+
+        if (!attemptTokenRefresh(refreshReason, clearTokensOnFailure = false)) {
+            logger.warn(
+                "PC Control pre-connect token refresh failed; proceeding with cached access token ({})",
+                refreshReason
+            )
+        }
+    }
+
+    private fun handleUnauthorizedFailure(reason: String): Boolean {
+        synchronized(stateLock) {
+            if (authRecoveryInProgress) {
+                logger.info("PC Control auth recovery already in progress; skipping duplicate recovery trigger")
+                return true
+            }
+            authRecoveryInProgress = true
+        }
+
+        try {
+            if (authRefreshAttempts < maxAuthRefreshAttempts && attemptTokenRefresh(reason)) {
+                authRefreshAttempts++
+                logger.info("🔐 PC Control token refresh succeeded, reconnecting immediately")
+                reconnectAttempts = 0
+                Thread {
+                    Thread.sleep(300L)
+                    if (!isConnected) {
+                        connect()
+                    }
+                }.start()
+                return true
+            }
+
+            logger.warn("🔐 PC Control auth recovery failed; desktop executor login is required")
+            return true
+        } finally {
+            synchronized(stateLock) {
+                authRecoveryInProgress = false
+            }
+        }
+    }
+
+    private fun attemptTokenRefresh(reason: String, clearTokensOnFailure: Boolean = true): Boolean {
+        val refreshToken = TokenManager.getRefreshToken()
+        if (refreshToken.isNullOrBlank()) {
+            logger.warn("Cannot refresh PC Control auth: refresh token missing ({})", reason)
+            if (clearTokensOnFailure) {
+                TokenManager.clearTokens()
+            }
+            return false
+        }
+
+        return try {
+            logger.info("Refreshing PC Control auth token ({})", reason)
+            val authResponse = authServiceFactory().refreshTokens(refreshToken)
+            TokenManager.saveTokens(
+                authResponse.accessToken,
+                authResponse.refreshToken,
+                authResponse.username,
+                authResponse.role
+            )
+            true
+        } catch (e: Exception) {
+            logger.error("PC Control token refresh failed: {}", e.message, e)
+            if (clearTokensOnFailure) {
+                TokenManager.clearTokens()
+            }
+            false
         }
     }
     
@@ -352,7 +489,7 @@ class PcControlWebSocketClient(
     }
     
     private fun updateStatus(status: String) {
-        Platform.runLater { onStatusChange(status) }
+        uiDispatcher { onStatusChange(status) }
     }
 
     private fun handleEndpointChange(newUrl: String) {

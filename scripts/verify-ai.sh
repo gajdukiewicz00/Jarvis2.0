@@ -220,12 +220,8 @@ run_optional_smokes() {
 check_required_paths() {
     check_file "${PROJECT_ROOT}/README.md"
     check_file "${PROJECT_ROOT}/ARCHITECTURE.md"
+    check_file "${PROJECT_ROOT}/docs/architecture.md"
     check_file "${PROJECT_ROOT}/RUNBOOK_LLM.md"
-    check_file "${PROJECT_ROOT}/AI_LAYER_REALITY.md"
-    check_file "${PROJECT_ROOT}/AI_ARCHITECTURE.md"
-    check_file "${PROJECT_ROOT}/AI_OPERATIONS.md"
-    check_file "${PROJECT_ROOT}/AI_GAPS.md"
-    check_file "${PROJECT_ROOT}/docs/STATUS.md"
     check_file "${PROJECT_ROOT}/scripts/acceptance-ai.sh"
     check_file "${PROJECT_ROOT}/scripts/product/jarvis-run-acceptance.sh"
     check_file "${PROJECT_ROOT}/scripts/setup-ai-local.sh"
@@ -323,11 +319,7 @@ check_repo_hygiene() {
     local tracked_files=()
     while IFS= read -r -d '' path; do
         [[ "${path}" == docs/* ]] && continue
-        [[ "${path}" == docs/_archive/* ]] && continue
-        [[ "${path}" == docs/legacy/* ]] && continue
-        [[ "${path}" == scripts/legacy/* ]] && continue
         [[ "${path}" == scripts/verify-ai.sh ]] && continue
-        [[ "${path}" == apps/mobile-client/.gradle/* ]] && continue
         [[ "${path}" == *application-dev.yaml ]] && continue
         [[ "${path}" == *application-dev.yml ]] && continue
         [[ "${path}" == *application-docker.yml ]] && continue

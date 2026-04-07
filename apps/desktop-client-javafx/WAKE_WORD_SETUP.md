@@ -1,5 +1,7 @@
 # Porcupine Wake Word Setup
 
+`desktop-client-javafx` is an internal build module. The supported desktop runtime path is `launcher-javafx` / `desktop-app-javafx`.
+
 ## 1. Create Wake Word Model "Джарвис"
 
 ### Steps:
@@ -27,7 +29,7 @@
    - Download the `.ppn` file
    - Rename to: `jarvis_ru.ppn`
    - Save to: `apps/desktop-client-javafx/src/main/resources/models/`
-   - This repo-local classpath location is the canonical wake-word model path used by the desktop client
+   - This repo-local classpath location is consumed by `desktop-app-javafx` through the internal `desktop-client-javafx` dependency
    - Keep the `.ppn` major version aligned with `ai.picovoice:porcupine-java`
 
 ---
@@ -58,7 +60,7 @@ $env:PORCUPINE_ACCESS_KEY = "your-picovoice-access-key"
 ### IntelliJ IDEA Run Configuration:
 
 1. Run → Edit Configurations
-2. Select your app configuration
+2. Select your `desktop-app-javafx` or `launcher-javafx` configuration
 3. Environment variables: `PORCUPINE_ACCESS_KEY=your-picovoice-access-key`
 
 ---
@@ -79,8 +81,8 @@ mkdir -p apps/desktop-client-javafx/src/main/resources/models
 # Set env var
 export PORCUPINE_ACCESS_KEY="your-picovoice-access-key"
 
-# Run
-mvn clean compile javafx:run -pl apps/desktop-client-javafx
+# Supported desktop path
+mvn clean compile -pl apps/desktop-app-javafx -am javafx:run
 ```
 
 ---

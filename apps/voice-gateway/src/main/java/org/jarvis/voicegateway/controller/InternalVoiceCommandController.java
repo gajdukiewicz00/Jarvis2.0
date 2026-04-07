@@ -34,6 +34,7 @@ public class InternalVoiceCommandController {
         String action = body.get("action") != null ? String.valueOf(body.get("action")) : null;
         Object paramsValue = body.get("params");
         String userId = body.get("userId") != null ? String.valueOf(body.get("userId")) : null;
+        String correlationId = body.get("correlationId") != null ? String.valueOf(body.get("correlationId")) : null;
 
         if (action == null || action.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "action is required"));
@@ -47,13 +48,21 @@ public class InternalVoiceCommandController {
                         java.util.LinkedHashMap::new))
                 : Map.of();
 
-        log.info("Routing internal voice PC action: action={}, userId={}, params={}", action, userId, params);
-        pcControlActionGateway.dispatch(action, params, userId);
+        log.info("Routing internal voice PC action: action={}, userId={}, correlationId={}, params={}",
+                action, userId, correlationId, params);
+        PcControlActionGateway.DispatchResult dispatchResult =
+                pcControlActionGateway.dispatch(action, params, userId, correlationId);
 
         return ResponseEntity.ok(Map.of(
-                "status", "dispatched",
+                "status", dispatchResult.status(),
                 "action", action,
-                "userId", userId != null ? userId : ""));
+                "userId", userId != null ? userId : "",
+                "correlationId", correlationId != null ? correlationId : "",
+                "executorFound", dispatchResult.executorFound(),
+                "executionAttempted", dispatchResult.executionAttempted(),
+                "executionSucceeded", dispatchResult.executionSucceeded(),
+                "executionFailed", dispatchResult.executionFailed(),
+                "failureReason", dispatchResult.failureReason() != null ? dispatchResult.failureReason() : ""));
     }
 
     @PostMapping("/orchestrator-intent")

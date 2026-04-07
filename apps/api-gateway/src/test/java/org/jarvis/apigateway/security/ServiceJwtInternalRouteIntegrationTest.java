@@ -24,8 +24,7 @@ import org.springframework.web.context.WebApplicationContext;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -73,8 +72,27 @@ class ServiceJwtInternalRouteIntegrationTest {
 
     @Test
     void internalPcControlRouteAcceptsServiceJwt() throws Exception {
-        when(webSocketHandler.hasConnectedClients()).thenReturn(true);
-        when(webSocketHandler.sendPcActionToUser(eq("user-123"), eq("NOTIFY"), any())).thenReturn(1);
+        when(webSocketHandler.dispatchPcAction(
+                org.mockito.ArgumentMatchers.eq("NOTIFY"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(null),
+                org.mockito.ArgumentMatchers.eq("user-123"),
+                org.mockito.ArgumentMatchers.eq(null)))
+                .thenReturn(new PcControlWebSocketHandler.DispatchResult(
+                        "req-1",
+                        "NOTIFY",
+                        "executed",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        1,
+                        1,
+                        1,
+                        0,
+                        null,
+                        "user-123"));
 
         String serviceToken = serviceJwtProvider.createToken("planner-service", List.of("SVC_INTERNAL"));
 
@@ -94,6 +112,13 @@ class ServiceJwtInternalRouteIntegrationTest {
                                 """))
                 .andExpect(status().isOk());
 
-        verify(webSocketHandler).sendPcActionToUser(eq("user-123"), eq("NOTIFY"), any());
+        verify(webSocketHandler).dispatchPcAction(
+                org.mockito.ArgumentMatchers.eq("NOTIFY"),
+                argThat(jsonNode -> jsonNode != null
+                        && "Smoke".equals(jsonNode.path("title").asText())
+                        && "Reminder".equals(jsonNode.path("message").asText())),
+                org.mockito.ArgumentMatchers.eq(null),
+                org.mockito.ArgumentMatchers.eq("user-123"),
+                org.mockito.ArgumentMatchers.eq(null));
     }
 }

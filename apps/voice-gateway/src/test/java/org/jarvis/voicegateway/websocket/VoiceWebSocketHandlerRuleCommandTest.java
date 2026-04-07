@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -103,7 +104,15 @@ class VoiceWebSocketHandlerRuleCommandTest {
 
         when(ruleBasedVoiceCommandService.match("открой браузер", "ru")).thenReturn(Optional.of(match));
         when(voiceCommandActionDispatcher.dispatch(match, "user-1", "corr-1"))
-                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(true, "OPEN_APP", Map.of("app", "browser")));
+                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(
+                        true,
+                        true,
+                        true,
+                        true,
+                        false,
+                        null,
+                        "OPEN_APP",
+                        Map.of("app", "browser")));
         when(wavResponseRegistry.lookupText("loading_sir", "ru")).thenReturn("Загружаю, сэр.");
         when(voiceOutputService.resolveRuleResponseAudio("loading_sir", "Загружаю, сэр.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
                 .thenReturn(new byte[]{1, 2, 3});
@@ -111,7 +120,7 @@ class VoiceWebSocketHandlerRuleCommandTest {
         invokeHandleCommand("corr-1", "открой браузер");
 
         verify(voiceCommandActionDispatcher).dispatch(match, "user-1", "corr-1");
-        verify(orchestratorClient, never()).sendIntent(any(), any(), any(), any(), any(), any());
+        verify(orchestratorClient, never()).sendIntentDetailed(any(), any(), any(), any(), any(), any());
 
         ArgumentCaptor<WebSocketMessage<?>> messages = ArgumentCaptor.forClass(WebSocketMessage.class);
         verify(session, org.mockito.Mockito.atLeastOnce()).sendMessage(messages.capture());
@@ -139,15 +148,21 @@ class VoiceWebSocketHandlerRuleCommandTest {
                 .action("OPEN_URL")
                 .parameters(Map.of("url", "https://news.google.com"))
                 .build());
-        when(orchestratorClient.sendIntent("OPEN_URL", Map.of("url", "https://news.google.com"),
+        when(orchestratorClient.sendIntentDetailed("OPEN_URL", Map.of("url", "https://news.google.com"),
                 "ru", "corr-2", "что нового", "user-1"))
-                .thenReturn("Открываю новости.");
+                .thenReturn(new OrchestratorClient.IntentExecutionResult(
+                        "Открываю новости.",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null));
         when(voiceOutputService.resolveAndGetAudio("open_url", "Открываю новости.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
                 .thenReturn(new byte[]{4, 5, 6});
 
         invokeHandleCommand("corr-2", "что нового");
 
-        verify(orchestratorClient).sendIntent(
+        verify(orchestratorClient).sendIntentDetailed(
                 eq("OPEN_URL"),
                 eq(Map.of("url", "https://news.google.com")),
                 eq("ru"),
@@ -155,6 +170,54 @@ class VoiceWebSocketHandlerRuleCommandTest {
                 eq("что нового"),
                 eq("user-1"));
         verify(voiceCommandActionDispatcher, never()).dispatch(any(), any(), any());
+    }
+
+    @Test
+    void ruleCommandReturnsFailureResponseWhenDesktopExecutionFails() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-User-Id", "user-1");
+        when(session.getHandshakeHeaders()).thenReturn(headers);
+
+        VoiceCommandCatalog.Match match = buildMatch(
+                new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PC_CONTROL,
+                        "OPEN_APP",
+                        null,
+                        null,
+                        Map.of("app", "browser")),
+                new VoiceCommandCatalog.Response("loading_sir", Map.of()));
+
+        when(ruleBasedVoiceCommandService.match("открой браузер", "ru")).thenReturn(Optional.of(match));
+        when(voiceCommandActionDispatcher.dispatch(match, "user-1", "corr-fail"))
+                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(
+                        true,
+                        false,
+                        false,
+                        false,
+                        true,
+                        "No desktop executor is connected",
+                        "OPEN_APP",
+                        Map.of("app", "browser")));
+        when(voiceOutputService.resolveRuleResponseAudio("loading_sir", "Не удалось выполнить команду.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
+                .thenReturn(new byte[]{7, 8, 9});
+
+        invokeHandleCommand("corr-fail", "открой браузер");
+
+        ArgumentCaptor<WebSocketMessage<?>> messages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(session, org.mockito.Mockito.atLeastOnce()).sendMessage(messages.capture());
+        List<String> payloads = messages.getAllValues().stream()
+                .filter(TextMessage.class::isInstance)
+                .map(TextMessage.class::cast)
+                .map(TextMessage::getPayload)
+                .toList();
+
+        assertTrue(payloads.stream().anyMatch(payload ->
+                payload.contains("\"action\":\"OPEN_APP\"")
+                        && payload.contains("\"handled\":false")
+                        && payload.contains("\"executionFailed\":true")
+                        && payload.contains("\"failureReason\":\"No desktop executor is connected\"")
+                        && payload.contains("Не удалось выполнить команду.")));
+        assertFalse(payloads.stream().anyMatch(payload -> payload.contains("Загружаю, сэр.")));
     }
 
     private void invokeHandleCommand(String correlationId, String text) throws Exception {

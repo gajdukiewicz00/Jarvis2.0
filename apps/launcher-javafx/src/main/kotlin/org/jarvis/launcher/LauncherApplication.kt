@@ -811,9 +811,7 @@ class LauncherApplication : Application() {
             showError(
                 "Desktop JAR not found",
                 "Cannot find desktop launch artifact: $desktopJar\n\n" +
-                    "Primary target: apps/desktop-app-javafx\n" +
-                    "Fallback target: apps/desktop-client-javafx\n\n" +
-                    "Build unified desktop shell first:\n" +
+                    "Build desktop-app-javafx first:\n" +
                     "mvn -pl apps/desktop-app-javafx -am -DskipTests clean package"
             )
             return

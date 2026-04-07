@@ -6,7 +6,7 @@ Prod-grade one-click запуск Jarvis через иконку. Никаких
 
 1. Открой меню приложений и запусти **Jarvis**.
 2. Desktop entry поднимет canonical wrapper `~/.jarvis/app/bin/jarvis-launcher.sh`.
-3. Wrapper делегирует в актуальный repo launcher, если workspace доступен, и при необходимости сам пересоберёт `launcher-javafx` и `desktop-client-javafx`.
+3. Wrapper делегирует в актуальный repo launcher, если workspace доступен, и при необходимости сам пересоберёт `launcher-javafx` и `desktop-app-javafx`.
 4. Launcher auto-start'ит полный локальный стек; кнопки **Start All** и **Start Desktop** остаются как ручной fallback/diagnostics surface.
 
 ## Desktop integration (launcher icon)

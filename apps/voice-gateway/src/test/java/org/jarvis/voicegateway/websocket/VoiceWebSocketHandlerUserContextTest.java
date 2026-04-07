@@ -29,7 +29,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -126,7 +128,14 @@ class VoiceWebSocketHandlerUserContextTest {
                 .response("ok")
                 .parameters(Map.of("delta", 10))
                 .build());
-        when(orchestratorClient.sendIntent(any(), any(), any(), any(), any(), any())).thenReturn("done");
+        when(orchestratorClient.sendIntentDetailed(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new OrchestratorClient.IntentExecutionResult(
+                        "done",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null));
 
         handler.afterConnectionEstablished(session);
         Map<?, ?> sessions = (Map<?, ?>) ReflectionTestUtils.getField(handler, "sessions");
@@ -137,7 +146,7 @@ class VoiceWebSocketHandlerUserContextTest {
         handleCommand.setAccessible(true);
         handleCommand.invoke(handler, context, "сделай громче");
 
-        verify(orchestratorClient).sendIntent(
+        verify(orchestratorClient).sendIntentDetailed(
                 eq("VOLUME_UP"),
                 eq(Map.of("delta", 10)),
                 eq("ru"),
@@ -218,7 +227,14 @@ class VoiceWebSocketHandlerUserContextTest {
                 .response("ok")
                 .parameters(Map.of("url", "https://youtube.com"))
                 .build());
-        when(orchestratorClient.sendIntent(any(), any(), any(), any(), any(), any())).thenReturn("done");
+        when(orchestratorClient.sendIntentDetailed(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new OrchestratorClient.IntentExecutionResult(
+                        "done",
+                        true,
+                        true,
+                        true,
+                        false,
+                        null));
 
         handler.afterConnectionEstablished(session);
         Map<?, ?> sessions = (Map<?, ?>) ReflectionTestUtils.getField(handler, "sessions");
@@ -233,5 +249,48 @@ class VoiceWebSocketHandlerUserContextTest {
         ArgumentCaptor<IntentRequest> requestCaptor = ArgumentCaptor.forClass(IntentRequest.class);
         verify(intentService).handle(requestCaptor.capture());
         assertEquals("ru", requestCaptor.getValue().getLanguage());
+    }
+
+    @Test
+    void handleCommandReportsHandledFalseWhenExecutorIsMissing() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-User-Id", "user-7");
+        when(session.getHandshakeHeaders()).thenReturn(headers);
+        when(intentService.handle(any())).thenReturn(IntentResult.builder()
+                .handled(true)
+                .action("VOLUME_UP")
+                .response("ok")
+                .parameters(Map.of("delta", 10))
+                .build());
+        when(orchestratorClient.sendIntentDetailed(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new OrchestratorClient.IntentExecutionResult(
+                        "Не удалось выполнить команду.",
+                        false,
+                        false,
+                        false,
+                        true,
+                        "No desktop executor is connected"));
+
+        handler.afterConnectionEstablished(session);
+        Map<?, ?> sessions = (Map<?, ?>) ReflectionTestUtils.getField(handler, "sessions");
+        Object context = sessions.get("voice-session");
+        ReflectionTestUtils.setField(context, "correlationId", "corr-failed");
+
+        Method handleCommand = VoiceWebSocketHandler.class.getDeclaredMethod("handleCommand", context.getClass(), String.class);
+        handleCommand.setAccessible(true);
+        handleCommand.invoke(handler, context, "сделай громче");
+
+        ArgumentCaptor<TextMessage> messageCaptor = ArgumentCaptor.forClass(TextMessage.class);
+        verify(session, atLeastOnce()).sendMessage(messageCaptor.capture());
+        String responsePayload = messageCaptor.getAllValues().stream()
+                .map(TextMessage::getPayload)
+                .filter(payload -> payload.contains("\"type\":\"RESPONSE\""))
+                .reduce((first, second) -> second)
+                .orElseThrow();
+
+        assertTrue(responsePayload.contains("\"handled\":false"));
+        assertTrue(responsePayload.contains("\"executionFailed\":true"));
+        assertTrue(responsePayload.contains("\"failureReason\":\"No desktop executor is connected\""));
+        assertFalse(responsePayload.contains("\"handled\":true"));
     }
 }

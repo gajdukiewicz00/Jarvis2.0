@@ -30,6 +30,6 @@ public interface ApiGatewayPcClient {
     @GetMapping("/internal/pc-control/status")
     Map<String, Object> getStatus();
 
-    record PcActionRequest(String action, Map<String, Object> params, String userId) {
+    record PcActionRequest(String action, Map<String, Object> params, String userId, String correlationId) {
     }
 }

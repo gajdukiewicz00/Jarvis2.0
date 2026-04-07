@@ -3,6 +3,15 @@ package org.jarvis.voicegateway.client;
 import java.util.Map;
 
 public interface OrchestratorClient {
+
+    record IntentExecutionResult(
+            String responseText,
+            boolean executorFound,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            boolean executionFailed,
+            String failureReason) {
+    }
     
     /**
      * Send raw text command to orchestrator (legacy method).
@@ -25,6 +34,14 @@ public interface OrchestratorClient {
      * @return Response text from orchestrator (for TTS)
      */
     String sendIntent(String action, Map<String, Object> parameters, String language, String correlationId);
+
+    IntentExecutionResult sendIntentDetailed(
+            String action,
+            Map<String, Object> parameters,
+            String language,
+            String correlationId,
+            String originalText,
+            String userId);
     
     /**
      * Send structured intent to orchestrator for execution with original text.
@@ -43,6 +60,6 @@ public interface OrchestratorClient {
 
     default String sendIntent(String action, Map<String, Object> parameters, String language,
                               String correlationId, String originalText, String userId) {
-        return sendIntent(action, parameters, language, correlationId, originalText);
+        return sendIntentDetailed(action, parameters, language, correlationId, originalText, userId).responseText();
     }
 }

@@ -28,11 +28,9 @@ on:
       - "README.md"
       - "DEPLOYMENT_INSTRUCTIONS.md"
       - "k8s/README.md"
-      - "docs/BACKEND_STATUS.md"
-      - "CORE_BACKEND_REALITY.md"
-      - "CORE_BACKEND_ARCHITECTURE.md"
-      - "CORE_BACKEND_OPERATIONS.md"
-      - "CORE_BACKEND_GAPS.md"
+      - "ARCHITECTURE.md"
+      - "docs/architecture.md"
+      - "RUNBOOK_LLM.md"
   push:
     branches:
       - master
@@ -62,11 +60,9 @@ on:
       - "README.md"
       - "DEPLOYMENT_INSTRUCTIONS.md"
       - "k8s/README.md"
-      - "docs/BACKEND_STATUS.md"
-      - "CORE_BACKEND_REALITY.md"
-      - "CORE_BACKEND_ARCHITECTURE.md"
-      - "CORE_BACKEND_OPERATIONS.md"
-      - "CORE_BACKEND_GAPS.md"
+      - "ARCHITECTURE.md"
+      - "docs/architecture.md"
+      - "RUNBOOK_LLM.md"
 
 permissions:
   contents: read

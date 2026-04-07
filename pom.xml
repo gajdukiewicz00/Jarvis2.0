@@ -34,39 +34,23 @@
     </properties>
 
     <modules>
-        <!-- Shared library (must be first) -->
         <module>apps/jarvis-common</module>
-        
-        <!-- Core services -->
         <module>apps/api-gateway</module>
         <module>apps/voice-gateway</module>
         <module>apps/nlp-service</module>
         <module>apps/orchestrator</module>
         <module>apps/pc-control</module>
-        
-        <!-- Data services -->
         <module>apps/life-tracker</module>
         <module>apps/analytics-service</module>
         <module>apps/planner-service</module>
         <module>apps/user-profile</module>
-        
-        <!-- Security -->
         <module>apps/security-service</module>
-        <module>apps/vision-service</module>
-
-        <!-- LLM services -->
         <module>apps/llm-service</module>
         <module>apps/memory-service</module>
-        
-        <!-- IoT -->
         <module>apps/smart-home-service</module>
-        
-        <!-- Clients -->
         <module>apps/desktop-client-javafx</module>
         <module>apps/desktop-app-javafx</module>
         <module>apps/launcher-javafx</module>
-        
-        <!-- REMOVED: apps/assistant-core (legacy, functionality moved to llm-service + orchestrator) -->
     </modules>
 
     <dependencyManagement>

@@ -15,18 +15,24 @@ import org.jarvis.desktop.features.voice.VoiceView
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
 import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
 import org.jarvis.desktop.service.AuthService
+import org.jarvis.desktop.service.PcControlWebSocketClient
+import org.jarvis.desktop.service.SystemControlService
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
-class ShellRoot : BorderPane() {
+class ShellRoot(
+    private val onLogoutRequested: () -> Unit
+) : BorderPane() {
     private val navigator = ShellNavigator()
     private val topBar = ShellTopBar(navigator)
     private val navPane = ShellNavPane(navigator)
     private val authService = AuthService()
     private val apiClient = ApiClient(authService = authService)
     private val runtimeMonitor = DesktopRuntimeMonitor()
+    private val systemControlService = SystemControlService()
+    private var pcWebSocketClient: PcControlWebSocketClient? = null
     private val runtimeHealthProbe = LocalRuntimeHealthProbe(
         apiGatewayBaseUrlProvider = { AppConfig.current().apiGatewayBaseUrl }
     )
@@ -72,7 +78,7 @@ class ShellRoot : BorderPane() {
         runtimeMonitor.updatePcControl(
             DesktopRuntimeMonitor.ConnectionStatus(
                 DesktopRuntimeMonitor.ConnectionState.UNKNOWN,
-                "Diagnostics and desktop actions stay in existing clients for now",
+                "Desktop action channel is initializing",
                 java.time.Instant.now()
             )
         )
@@ -84,6 +90,7 @@ class ShellRoot : BorderPane() {
         )
 
         startRuntimeHealthPolling()
+        initPcControlWebSocket()
     }
 
     fun shutdown() {
@@ -93,6 +100,8 @@ class ShellRoot : BorderPane() {
 
         stopRuntimeHealthPolling()
         runtimeExecutor.shutdownNow()
+        pcWebSocketClient?.disconnect()
+        pcWebSocketClient = null
         activeRouteContent()?.onRouteDeactivated()
         routeViews.values.forEach { routeNode ->
             routeNode.routeContent()?.onShellShutdown()
@@ -102,6 +111,34 @@ class ShellRoot : BorderPane() {
         navPane.dispose()
         runtimeMonitor.removeListener(runtimeListener)
         AppConfig.removeListener(configListener)
+    }
+
+    private fun initPcControlWebSocket() {
+        pcWebSocketClient?.disconnect()
+        pcWebSocketClient = PcControlWebSocketClient(
+            systemControl = systemControlService,
+            onStatusChange = { status ->
+                runtimeMonitor.consumePcStatus(status)
+            }
+        )
+
+        Thread {
+            try {
+                Thread.sleep(2_000)
+                pcWebSocketClient?.connect()
+            } catch (e: Exception) {
+                runtimeMonitor.consumePcStatus("Connection failed")
+                runtimeMonitor.recordEvent(
+                    DesktopRuntimeMonitor.EventSource.PC_CONTROL,
+                    DesktopRuntimeMonitor.EventSeverity.ERROR,
+                    "Desktop actions failed",
+                    e.message ?: "Failed to initialize desktop action channel"
+                )
+            }
+        }.apply {
+            isDaemon = true
+            name = "jarvis-desktop-shell-pc-control"
+        }.start()
     }
 
     private fun routeView(route: ShellRoute): Node {
@@ -160,6 +197,7 @@ class ShellRoot : BorderPane() {
     }
 
     private fun handleLogout() {
+        authService.logout()
         TokenManager.clearTokens()
         runtimeMonitor.recordEvent(
             DesktopRuntimeMonitor.EventSource.SYSTEM,
@@ -167,6 +205,6 @@ class ShellRoot : BorderPane() {
             "Desktop session cleared",
             "Tokens were removed from the unified shell session."
         )
-        topBar.renderConfig(AppConfig.current())
+        onLogoutRequested()
     }
 }

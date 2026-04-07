@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -26,70 +27,37 @@ public class PcControlInternalController {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Send a PC action command to connected desktop clients.
-     * 
-     * Example body:
-     * {
-     * "action": "VOLUME_UP",
-     * "params": {"delta": 10}
-     * }
+     * Send a PC action command to connected desktop clients and wait for the
+     * desktop ACK so callers can distinguish delivery from actual execution.
      */
     @PostMapping("/action")
     public ResponseEntity<?> sendAction(@RequestBody Map<String, Object> body) {
-        String action = (String) body.get("action");
+        String action = body.get("action") != null ? String.valueOf(body.get("action")) : null;
         JsonNode params = objectMapper.valueToTree(body.get("params"));
         String sessionId = body.get("sessionId") != null ? String.valueOf(body.get("sessionId")) : null;
         String userId = body.get("userId") != null ? String.valueOf(body.get("userId")) : null;
+        String correlationId = body.get("correlationId") != null ? String.valueOf(body.get("correlationId")) : null;
 
         if (action == null || action.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "action is required"));
         }
 
-        if (!webSocketHandler.hasConnectedClients()) {
-            log.warn("No desktop clients connected for PC action: {}", action);
-            return ResponseEntity.ok(Map.of(
-                    "status", "no_clients",
-                    "message", "No desktop clients connected"));
-        }
+        log.info(
+                "🎯 Triggering PC action: action={}, sessionId={}, userId={}, correlationId={}, params={}",
+                action,
+                sessionId,
+                userId,
+                correlationId,
+                params);
 
-        if (sessionId != null && !sessionId.isBlank()) {
-            log.info("🎯 Triggering PC action for session {}: {} with params: {}", sessionId, action, params);
-            boolean sent = webSocketHandler.sendPcActionToSession(sessionId, action, params);
-            if (!sent) {
-                return ResponseEntity.status(404).body(Map.of(
-                        "status", "session_not_found",
-                        "sessionId", sessionId,
-                        "action", action));
-            }
-            return ResponseEntity.ok(Map.of(
-                    "status", "sent",
-                    "action", action,
-                    "sessionId", sessionId));
-        }
+        PcControlWebSocketHandler.DispatchResult result = webSocketHandler.dispatchPcAction(
+                action,
+                params,
+                sessionId,
+                userId,
+                correlationId);
 
-        if (userId != null && !userId.isBlank()) {
-            log.info("🎯 Triggering PC action for user {}: {} with params: {}", userId, action, params);
-            int sentCount = webSocketHandler.sendPcActionToUser(userId, action, params);
-            if (sentCount == 0) {
-                return ResponseEntity.status(404).body(Map.of(
-                        "status", "user_not_connected",
-                        "userId", userId,
-                        "action", action));
-            }
-            return ResponseEntity.ok(Map.of(
-                    "status", "sent",
-                    "action", action,
-                    "userId", userId,
-                    "clients", sentCount));
-        }
-
-        log.info("🎯 Triggering PC action (broadcast): {} with params: {}", action, params);
-        webSocketHandler.sendPcAction(action, params);
-
-        return ResponseEntity.ok(Map.of(
-                "status", "sent",
-                "action", action,
-                "clients", webSocketHandler.getConnectedClientsCount()));
+        return ResponseEntity.ok(toResponseBody(result));
     }
 
     /**
@@ -100,5 +68,33 @@ public class PcControlInternalController {
         return ResponseEntity.ok(Map.of(
                 "connectedClients", webSocketHandler.getConnectedClientsCount(),
                 "hasClients", webSocketHandler.hasConnectedClients()));
+    }
+
+    private Map<String, Object> toResponseBody(PcControlWebSocketHandler.DispatchResult result) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("status", result.status());
+        payload.put("action", result.action());
+        payload.put("executorFound", result.executorFound());
+        payload.put("executionAttempted", result.executionAttempted());
+        payload.put("executionSucceeded", result.executionSucceeded());
+        payload.put("executionFailed", result.executionFailed());
+        payload.put("deliveredClients", result.deliveredClients());
+        payload.put("acknowledgedClients", result.acknowledgedClients());
+        payload.put("successfulClients", result.successfulClients());
+        payload.put("failedClients", result.failedClients());
+        if (result.requestId() != null) {
+            payload.put("requestId", result.requestId());
+        }
+        if (result.sessionId() != null && !result.sessionId().isBlank()) {
+            payload.put("sessionId", result.sessionId());
+        }
+        if (result.userId() != null && !result.userId().isBlank()) {
+            payload.put("userId", result.userId());
+        }
+        if (result.failureReason() != null && !result.failureReason().isBlank()) {
+            payload.put("failureReason", result.failureReason());
+            payload.put("message", result.failureReason());
+        }
+        return payload;
     }
 }

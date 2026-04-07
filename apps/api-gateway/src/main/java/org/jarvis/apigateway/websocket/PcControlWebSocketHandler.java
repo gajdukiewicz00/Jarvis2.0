@@ -12,20 +12,33 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * WebSocket handler for desktop-side PC control sessions.
  *
  * Sessions are tracked by authenticated user ID so internal services can route
  * actions to the correct desktop instead of broadcasting blindly.
+ *
+ * The handler now waits for desktop ACKs so callers can distinguish
+ * "message delivered" from "desktop action really executed".
  */
 @Slf4j
 @Component
 public class PcControlWebSocketHandler extends TextWebSocketHandler {
+    private static final long DEFAULT_ACK_TIMEOUT_MS = 4_000L;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ConcurrentHashMap<String, ClientSession> clientSessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, PendingAction> pendingActions = new ConcurrentHashMap<>();
 
     private record ClientSession(
             WebSocketSession session,
@@ -33,6 +46,86 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
             String clientId,
             String userId,
             String username) {
+    }
+
+    public record DispatchResult(
+            String requestId,
+            String action,
+            String status,
+            boolean executorFound,
+            boolean executionAttempted,
+            boolean executionSucceeded,
+            boolean executionFailed,
+            String failureReason,
+            int deliveredClients,
+            int acknowledgedClients,
+            int successfulClients,
+            int failedClients,
+            String sessionId,
+            String userId) {
+    }
+
+    private record ActionAck(
+            String requestId,
+            String action,
+            boolean success,
+            String error,
+            String sessionId,
+            String userId) {
+    }
+
+    private record DispatchAcknowledgements(
+            int expectedTargets,
+            Map<String, ActionAck> acknowledgements) {
+    }
+
+    private static final class PendingAction {
+        private final String requestId;
+        private final String action;
+        private final AtomicInteger expectedTargets = new AtomicInteger(-1);
+        private final ConcurrentHashMap<String, ActionAck> acknowledgements = new ConcurrentHashMap<>();
+        private final CompletableFuture<DispatchAcknowledgements> completion = new CompletableFuture<>();
+
+        private PendingAction(String requestId, String action) {
+            this.requestId = requestId;
+            this.action = action;
+        }
+
+        private void setExpectedTargets(int expected) {
+            expectedTargets.set(Math.max(expected, 0));
+            completeIfSatisfied();
+        }
+
+        private void acknowledge(ActionAck ack) {
+            String key = ack.sessionId() != null && !ack.sessionId().isBlank()
+                    ? ack.sessionId()
+                    : UUID.randomUUID().toString();
+            acknowledgements.put(key, ack);
+            completeIfSatisfied();
+        }
+
+        private DispatchAcknowledgements await(long timeoutMs) throws InterruptedException, TimeoutException {
+            try {
+                return completion.get(timeoutMs, TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new IllegalStateException(
+                        "ACK wait failed for requestId=" + requestId + ", action=" + action,
+                        e);
+            }
+        }
+
+        private DispatchAcknowledgements snapshot() {
+            return new DispatchAcknowledgements(
+                    Math.max(expectedTargets.get(), 0),
+                    Map.copyOf(acknowledgements));
+        }
+
+        private void completeIfSatisfied() {
+            int expected = expectedTargets.get();
+            if (expected >= 0 && acknowledgements.size() >= expected && !completion.isDone()) {
+                completion.complete(snapshot());
+            }
+        }
     }
 
     @Override
@@ -89,9 +182,35 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleAck(WebSocketSession session, JsonNode json) {
+        String requestId = readText(json, "requestId", null);
         String action = readText(json, "action", "");
         boolean success = json.has("success") && json.get("success").asBoolean();
-        log.info("Action {} completed: {}", action, success ? "✓" : "✗");
+        String error = readText(json, "error", null);
+        ClientSession clientSession = clientSessions.get(session.getId());
+        String userId = clientSession != null ? clientSession.userId() : principalName(session.getPrincipal());
+
+        log.info(
+                "Action ACK received: requestId={}, action={}, success={}, sessionId={}, userId={}, error={}",
+                requestId,
+                action,
+                success,
+                session.getId(),
+                userId,
+                error);
+
+        if (requestId == null || requestId.isBlank()) {
+            log.warn("Received ACK without requestId: sessionId={}, action={}", session.getId(), action);
+            return;
+        }
+
+        PendingAction pendingAction = pendingActions.get(requestId);
+        if (pendingAction == null) {
+            log.warn("Received ACK for unknown or expired requestId={}, action={}, sessionId={}",
+                    requestId, action, session.getId());
+            return;
+        }
+
+        pendingAction.acknowledge(new ActionAck(requestId, action, success, error, session.getId(), userId));
     }
 
     @Override
@@ -106,44 +225,113 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         clientSessions.remove(session.getId());
     }
 
-    public void sendPcAction(String action, JsonNode params) {
-        String messageStr = pcActionMessage(action, params);
-        long targetCount = clientSessions.values().stream()
-                .filter(this::isPcControlClient)
-                .filter(cs -> cs.session().isOpen())
-                .peek(cs -> sendMessage(cs.session(), messageStr))
-                .count();
-
-        log.info("📤 Sending PC action '{}' to {} PC_CONTROL clients (connected: {})",
-                action, targetCount, clientSessions.size());
+    public DispatchResult dispatchPcAction(
+            String action,
+            JsonNode params,
+            String sessionId,
+            String userId,
+            String correlationId) {
+        return dispatchPcAction(action, params, sessionId, userId, correlationId, DEFAULT_ACK_TIMEOUT_MS);
     }
 
-    public boolean sendPcActionToSession(String sessionId, String action, JsonNode params) {
-        ClientSession clientSession = clientSessions.get(sessionId);
-        if (clientSession != null && clientSession.session().isOpen()) {
-            sendMessage(clientSession.session(), pcActionMessage(action, params));
-            return true;
+    public DispatchResult dispatchPcAction(
+            String action,
+            JsonNode params,
+            String sessionId,
+            String userId,
+            String correlationId,
+            long ackTimeoutMs) {
+        List<ClientSession> targets = resolveTargets(sessionId, userId);
+        if (targets.isEmpty()) {
+            String status = sessionId != null && !sessionId.isBlank()
+                    ? "session_not_found"
+                    : (userId != null && !userId.isBlank() ? "user_not_connected" : "no_clients");
+            String failureReason = switch (status) {
+                case "session_not_found" -> "Requested desktop session is not connected";
+                case "user_not_connected" -> "No identified desktop executor is connected for this user";
+                default -> "No identified desktop executors are connected";
+            };
+            log.warn(
+                    "No desktop executors available for action {}: status={}, sessionId={}, userId={}, rawConnections={}, eligibleExecutors={}",
+                    action,
+                    status,
+                    sessionId,
+                    userId,
+                    clientSessions.size(),
+                    getConnectedClientsCount());
+            return new DispatchResult(
+                    null,
+                    action,
+                    status,
+                    false,
+                    false,
+                    false,
+                    true,
+                    failureReason,
+                    0,
+                    0,
+                    0,
+                    0,
+                    sessionId,
+                    userId);
         }
-        log.warn("Session {} not found or closed for action {}", sessionId, action);
-        return false;
-    }
 
-    public int sendPcActionToUser(String userId, String action, JsonNode params) {
-        if (userId == null || userId.isBlank()) {
-            return 0;
+        String requestId = buildRequestId(correlationId);
+        PendingAction pendingAction = new PendingAction(requestId, action);
+        pendingActions.put(requestId, pendingAction);
+
+        int deliveredClients = 0;
+        try {
+            String message = pcActionMessage(action, params, requestId, correlationId);
+            for (ClientSession clientSession : targets) {
+                if (sendMessage(clientSession.session(), message)) {
+                    deliveredClients++;
+                }
+            }
+
+            pendingAction.setExpectedTargets(deliveredClients);
+            if (deliveredClients == 0) {
+                log.warn("Eligible desktop executors found but message delivery failed: action={}, requestId={}",
+                        action, requestId);
+                return new DispatchResult(
+                        requestId,
+                        action,
+                        "delivery_failed",
+                        true,
+                        true,
+                        false,
+                        true,
+                        "Eligible desktop executors were found but message delivery failed",
+                        0,
+                        0,
+                        0,
+                        0,
+                        sessionId,
+                        userId);
+            }
+
+            DispatchAcknowledgements acknowledgements;
+            try {
+                acknowledgements = pendingAction.await(ackTimeoutMs);
+            } catch (TimeoutException e) {
+                acknowledgements = pendingAction.snapshot();
+                log.warn(
+                        "PC action ACK timeout: requestId={}, action={}, deliveredClients={}, acknowledgedClients={}, timeoutMs={}",
+                        requestId,
+                        action,
+                        deliveredClients,
+                        acknowledgements.acknowledgements().size(),
+                        ackTimeoutMs);
+            }
+
+            return buildDispatchResult(requestId, action, sessionId, userId, deliveredClients, acknowledgements);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Interrupted while waiting for PC action ACK: requestId={}, action={}", requestId, action);
+            return buildDispatchResult(requestId, action, sessionId, userId, deliveredClients, pendingAction.snapshot());
+        } finally {
+            pendingActions.remove(requestId);
         }
-
-        String messageStr = pcActionMessage(action, params);
-        int targetCount = (int) clientSessions.values().stream()
-                .filter(this::isPcControlClient)
-                .filter(cs -> userId.equals(cs.userId()))
-                .filter(cs -> cs.session().isOpen())
-                .peek(cs -> sendMessage(cs.session(), messageStr))
-                .count();
-
-        log.info("📤 Sending PC action '{}' to {} PC_CONTROL clients for user {}",
-                action, targetCount, userId);
-        return targetCount;
     }
 
     public int getConnectedClientsCount() {
@@ -157,10 +345,119 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         return getConnectedClientsCount() > 0;
     }
 
-    private String pcActionMessage(String action, JsonNode params) {
+    private List<ClientSession> resolveTargets(String sessionId, String userId) {
+        List<ClientSession> targets = new ArrayList<>();
+        if (sessionId != null && !sessionId.isBlank()) {
+            ClientSession clientSession = clientSessions.get(sessionId);
+            if (clientSession != null && isPcControlClient(clientSession) && clientSession.session().isOpen()) {
+                targets.add(clientSession);
+            }
+            return targets;
+        }
+
+        if (userId != null && !userId.isBlank()) {
+            clientSessions.values().stream()
+                    .filter(this::isPcControlClient)
+                    .filter(cs -> userId.equals(cs.userId()))
+                    .filter(cs -> cs.session().isOpen())
+                    .forEach(targets::add);
+            return targets;
+        }
+
+        clientSessions.values().stream()
+                .filter(this::isPcControlClient)
+                .filter(cs -> cs.session().isOpen())
+                .forEach(targets::add);
+        return targets;
+    }
+
+    private DispatchResult buildDispatchResult(
+            String requestId,
+            String action,
+            String sessionId,
+            String userId,
+            int deliveredClients,
+            DispatchAcknowledgements acknowledgements) {
+        int acknowledgedClients = acknowledgements.acknowledgements().size();
+        int successfulClients = (int) acknowledgements.acknowledgements().values().stream()
+                .filter(ActionAck::success)
+                .count();
+        int failedClients = acknowledgedClients - successfulClients;
+        boolean executionSucceeded = successfulClients > 0;
+        boolean allDeliveredAcknowledged = acknowledgedClients >= deliveredClients;
+
+        String failureReason = null;
+        if (!executionSucceeded) {
+            failureReason = acknowledgements.acknowledgements().values().stream()
+                    .map(ActionAck::error)
+                    .filter(error -> error != null && !error.isBlank())
+                    .findFirst()
+                    .orElse(allDeliveredAcknowledged
+                            ? "Desktop executor reported failure"
+                            : "Desktop executor did not acknowledge the command in time");
+        } else if (!allDeliveredAcknowledged) {
+            failureReason = "At least one desktop executor did not acknowledge the command in time";
+        }
+
+        String status;
+        if (!executionSucceeded && !allDeliveredAcknowledged) {
+            status = "ack_timeout";
+        } else if (!executionSucceeded) {
+            status = "execution_failed";
+        } else if (failedClients > 0 || acknowledgedClients < deliveredClients) {
+            status = "partial_success";
+        } else {
+            status = "executed";
+        }
+        boolean executionFailed = switch (status) {
+            case "executed", "partial_success" -> false;
+            default -> true;
+        };
+
+        log.info(
+                "PC action dispatch completed: requestId={}, action={}, status={}, deliveredClients={}, acknowledgedClients={}, successfulClients={}, failedClients={}, failureReason={}",
+                requestId,
+                action,
+                status,
+                deliveredClients,
+                acknowledgedClients,
+                successfulClients,
+                failedClients,
+                failureReason);
+
+        return new DispatchResult(
+                requestId,
+                action,
+                status,
+                deliveredClients > 0,
+                deliveredClients > 0,
+                executionSucceeded,
+                executionFailed,
+                failureReason,
+                deliveredClients,
+                acknowledgedClients,
+                successfulClients,
+                failedClients,
+                sessionId,
+                userId);
+    }
+
+    private String buildRequestId(String correlationId) {
+        String token = UUID.randomUUID().toString();
+        if (correlationId == null || correlationId.isBlank()) {
+            return token;
+        }
+        return correlationId + ":" + token;
+    }
+
+    private String pcActionMessage(String action, JsonNode params, String requestId, String correlationId) {
         ObjectNode message = objectMapper.createObjectNode();
         message.put("type", "PC_ACTION");
         message.put("action", action);
+        message.put("requestId", requestId);
+        if (correlationId != null && !correlationId.isBlank()) {
+            message.put("correlationId", correlationId);
+        }
         message.set("params", params != null ? params : objectMapper.createObjectNode());
         return message.toString();
     }
@@ -172,14 +469,16 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         return node.toString();
     }
 
-    private void sendMessage(WebSocketSession session, String message) {
+    private boolean sendMessage(WebSocketSession session, String message) {
         try {
             if (session.isOpen()) {
                 session.sendMessage(new TextMessage(message));
+                return true;
             }
         } catch (IOException e) {
             log.error("Failed to send message to {}: {}", session.getId(), e.getMessage());
         }
+        return false;
     }
 
     private boolean isPcControlClient(ClientSession clientSession) {
@@ -203,6 +502,6 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String readText(JsonNode json, String field, String defaultValue) {
-        return json.has(field) ? json.get(field).asText() : defaultValue;
+        return json.has(field) && !json.get(field).isNull() ? json.get(field).asText() : defaultValue;
     }
 }

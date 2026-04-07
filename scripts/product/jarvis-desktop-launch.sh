@@ -101,11 +101,7 @@ fi
 
 (
   cd "$JARVIS_HOME"
-  if [[ -f "apps/desktop-app-javafx/pom.xml" ]]; then
-    mvn -q -pl apps/desktop-app-javafx -am -DskipTests javafx:run
-  else
-    mvn -q -pl apps/desktop-client-javafx -DskipTests javafx:run
-  fi
+  mvn -q -pl apps/desktop-app-javafx -am -DskipTests javafx:run
 ) >"$CLIENT_LOG" 2>&1 &
 echo "Started desktop UI. Log: $CLIENT_LOG"
 if [[ -n "$TRUSTSTORE_PATH" ]]; then

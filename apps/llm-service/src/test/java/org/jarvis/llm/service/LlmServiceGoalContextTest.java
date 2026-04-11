@@ -4,6 +4,7 @@ import org.jarvis.llm.client.LlmClient;
 import org.jarvis.llm.client.MemoryClient;
 import org.jarvis.llm.client.UserProfileClient;
 import org.jarvis.llm.config.LlmBackgroundExecutor;
+import org.jarvis.llm.config.ModelProfileProperties;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.UserPreferencesDto;
@@ -44,11 +45,18 @@ class LlmServiceGoalContextTest {
     private MemoryClient memoryClient;
     @Mock
     private TokenBudgetManager tokenBudgetManager;
+    @Mock
+    private LlmMetrics llmMetrics;
+
+    private LlmAdmissionController admissionController;
+    private ModelProfileProperties profileProperties;
 
     private LlmService llmService;
 
     @BeforeEach
     void setUp() {
+        admissionController = new LlmAdmissionController(1, 4);
+        profileProperties = new ModelProfileProperties();
         llmService = new LlmService(
                 llmClient,
                 conversationMemory,
@@ -57,6 +65,9 @@ class LlmServiceGoalContextTest {
                 emotionSelector,
                 languageEnforcer,
                 backgroundExecutor,
+                admissionController,
+                profileProperties,
+                llmMetrics,
                 memoryClient,
                 tokenBudgetManager);
         ReflectionTestUtils.setField(llmService, "memoryEnabled", false);

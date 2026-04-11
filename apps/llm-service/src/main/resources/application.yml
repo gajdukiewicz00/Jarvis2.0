@@ -55,6 +55,28 @@ llm:
     queue-capacity: ${LLM_EXECUTOR_QUEUE_CAPACITY:200}
     keepalive-seconds: ${LLM_EXECUTOR_KEEPALIVE_SECONDS:60}
     shutdown-timeout-seconds: ${LLM_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS:20}
+  # Admission control: prevents VRAM thrash and inference storms
+  admission:
+    max-concurrent: ${LLM_ADMISSION_MAX_CONCURRENT:1}
+    max-queue-depth: ${LLM_ADMISSION_MAX_QUEUE_DEPTH:8}
+  # Model profiles: per-channel inference parameters
+  profiles:
+    voice-fast:
+      max-tokens: ${LLM_PROFILE_VOICE_MAX_TOKENS:256}
+      temperature: ${LLM_PROFILE_VOICE_TEMPERATURE:0.3}
+      timeout-seconds: ${LLM_PROFILE_VOICE_TIMEOUT:15}
+    desktop-general:
+      max-tokens: ${LLM_PROFILE_DESKTOP_MAX_TOKENS:512}
+      temperature: ${LLM_PROFILE_DESKTOP_TEMPERATURE:0.7}
+      timeout-seconds: ${LLM_PROFILE_DESKTOP_TIMEOUT:120}
+    background-summary:
+      max-tokens: ${LLM_PROFILE_BACKGROUND_MAX_TOKENS:1024}
+      temperature: ${LLM_PROFILE_BACKGROUND_TEMPERATURE:0.5}
+      timeout-seconds: ${LLM_PROFILE_BACKGROUND_TIMEOUT:300}
+    orchestration:
+      max-tokens: ${LLM_PROFILE_ORCHESTRATION_MAX_TOKENS:700}
+      temperature: ${LLM_PROFILE_ORCHESTRATION_TEMPERATURE:0.2}
+      timeout-seconds: ${LLM_PROFILE_ORCHESTRATION_TIMEOUT:60}
 
 # Long-term memory integration
 memory:
@@ -74,6 +96,27 @@ services:
     timeouts:
       connect-ms: ${USER_PROFILE_CONNECT_TIMEOUT_MS:3000}
       read-ms: ${USER_PROFILE_READ_TIMEOUT_MS:5000}
+
+# Actuator / Metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 # Logging
 logging:

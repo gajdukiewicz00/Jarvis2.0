@@ -1,0 +1,12 @@
+# Shared observability environment for Jarvis Spring Boot services.
+# Injected into deployments via the observability-env.patch.yaml kustomize patch.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: observability-env
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+data:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo:4318"
+  SPRING_PROFILES_INCLUDE: "observability"

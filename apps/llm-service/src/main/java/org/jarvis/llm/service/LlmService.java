@@ -8,6 +8,7 @@ import org.jarvis.llm.client.LlmClient;
 import org.jarvis.llm.client.MemoryClient;
 import org.jarvis.llm.client.UserProfileClient;
 import org.jarvis.llm.config.LlmBackgroundExecutor;
+import org.jarvis.llm.config.ModelProfileProperties;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.DialogRequest;
@@ -42,8 +43,10 @@ public class LlmService {
     private final EmotionSelector emotionSelector;
     private final RussianLanguageEnforcer languageEnforcer;
     private final LlmBackgroundExecutor backgroundExecutor;
-    
-    // Long-term memory integration
+    private final LlmAdmissionController admissionController;
+    private final ModelProfileProperties profileProperties;
+    private final LlmMetrics llmMetrics;
+
     private final MemoryClient memoryClient;
     private final TokenBudgetManager tokenBudgetManager;
 
@@ -85,7 +88,7 @@ public class LlmService {
     }
 
     /**
-     * Process user message with optional rate-limit bypass for trusted internal callers.
+     * Process user message with profile and optional rate-limit bypass.
      */
     public ChatResponseDto processMessage(
             String sessionId,
@@ -93,6 +96,21 @@ public class LlmService {
             String userMessage,
             String correlationId,
             boolean enforceRateLimit) {
+        return processMessage(sessionId, userId, userMessage, correlationId, enforceRateLimit, null);
+    }
+
+    /**
+     * Process user message with explicit profile selection and admission control.
+     *
+     * @param profileName one of: voice-fast, desktop-general, background-summary, or null for default
+     */
+    public ChatResponseDto processMessage(
+            String sessionId,
+            String userId,
+            String userMessage,
+            String correlationId,
+            boolean enforceRateLimit,
+            String profileName) {
         long startTime = System.currentTimeMillis();
         log.info("[{}] Processing message for session: {}", correlationId, sessionId);
 
@@ -169,53 +187,59 @@ public class LlmService {
         // Enforce Russian language
         languageEnforcer.enforceRussianInMessages(messages);
 
-        // Call LLM
-        ChatResponseDto response = llmClient.chat(messages, 512, 0.7, correlationId);
+        // Resolve model profile for this request
+        ModelProfileProperties.Profile profile = profileProperties.resolve(profileName);
+        LlmAdmissionController.Priority priority = resolvePriority(profileName);
 
-        // Validate response is in Russian
-        languageEnforcer.validateResponse(response.getReply());
-
-        // Select appropriate emotion for TTS
-        LocalTime localTime = LocalTime.now(ZoneId.of(prefs.getTimezone()));
-        Emotion emotion = emotionSelector.selectEmotion(
-                userMessage,
-                localTime,
-                prefs.getCommunicationStyle());
-        response.setEmotion(emotion);
-        log.debug("Selected emotion: {}", emotion);
-
-        // Save to short-term conversation memory
-        ChatMessageDto userMsg = new ChatMessageDto(ChatMessageDto.Role.USER, userMessage);
-        ChatMessageDto assistantMsg = new ChatMessageDto(ChatMessageDto.Role.ASSISTANT, response.getReply());
-        conversationMemory.addMessage(sessionId, userMsg);
-        conversationMemory.addMessage(sessionId, assistantMsg);
-
-        // === Save to long-term memory (async, fire-and-forget) ===
-        if (memoryEnabled) {
-            final String finalUserMessage = userMessage;
-            try {
-                backgroundExecutor.execute(() -> {
-                    try {
-                        memoryClient.ingestAsync(
-                                effectiveUserId,
-                                sessionId,
-                                finalUserMessage,
-                                response.getReply(),
-                                correlationId);
-                    } catch (RuntimeException e) {
-                        log.warn("[{}] Memory ingest task failed (non-fatal): {}", correlationId, e.getMessage());
-                    }
-                });
-            } catch (RuntimeException e) {
-                log.warn("[{}] Memory ingest failed (non-fatal): {}", correlationId, e.getMessage());
+        // Admission control: acquire inference slot
+        llmMetrics.recordChatRequest();
+        try (LlmAdmissionController.AdmissionTicket ticket =
+                     admissionController.tryAcquire(priority, profile.getTimeoutSeconds())) {
+            if (ticket == null) {
+                llmMetrics.recordAdmissionRejected();
+                throw new RuntimeException("LLM inference unavailable: admission control rejected or timed out");
             }
-        }
 
-        long elapsed = System.currentTimeMillis() - startTime;
-        log.info("[{}] ✓ Message processed in {}ms (memory: {})", 
-                correlationId, elapsed, memoryContext.isBlank() ? "none" : "used");
-        
-        return response;
+            // Call LLM with profile parameters
+            ChatResponseDto response = llmClient.chat(
+                    messages, profile.getMaxTokens(), profile.getTemperature(), correlationId);
+            llmMetrics.recordChatLatency(System.currentTimeMillis() - startTime);
+
+            languageEnforcer.validateResponse(response.getReply());
+
+            LocalTime localTime = LocalTime.now(ZoneId.of(prefs.getTimezone()));
+            Emotion emotion = emotionSelector.selectEmotion(
+                    userMessage, localTime, prefs.getCommunicationStyle());
+            response.setEmotion(emotion);
+
+            ChatMessageDto userMsg = new ChatMessageDto(ChatMessageDto.Role.USER, userMessage);
+            ChatMessageDto assistantMsg = new ChatMessageDto(ChatMessageDto.Role.ASSISTANT, response.getReply());
+            conversationMemory.addMessage(sessionId, userMsg);
+            conversationMemory.addMessage(sessionId, assistantMsg);
+
+            if (memoryEnabled) {
+                final String finalUserMessage = userMessage;
+                try {
+                    backgroundExecutor.execute(() -> {
+                        try {
+                            memoryClient.ingestAsync(
+                                    effectiveUserId, sessionId, finalUserMessage,
+                                    response.getReply(), correlationId);
+                        } catch (RuntimeException e) {
+                            log.warn("[{}] Memory ingest task failed (non-fatal): {}", correlationId, e.getMessage());
+                        }
+                    });
+                } catch (RuntimeException e) {
+                    log.warn("[{}] Memory ingest failed (non-fatal): {}", correlationId, e.getMessage());
+                }
+            }
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            log.info("[{}] Message processed in {}ms (profile={}, memory={})",
+                    correlationId, elapsed, profileName != null ? profileName : "default",
+                    memoryContext.isBlank() ? "none" : "used");
+            return response;
+        }
     }
 
     // ============== DIALOG MODE ==============
@@ -425,6 +449,15 @@ public class LlmService {
             return sessionId.substring(0, dashIndex);
         }
         return sessionId;
+    }
+
+    private LlmAdmissionController.Priority resolvePriority(String profileName) {
+        if (profileName == null) return LlmAdmissionController.Priority.INTERACTIVE;
+        return switch (profileName.toLowerCase()) {
+            case "voice-fast", "voice" -> LlmAdmissionController.Priority.VOICE;
+            case "background-summary", "background" -> LlmAdmissionController.Priority.BACKGROUND;
+            default -> LlmAdmissionController.Priority.INTERACTIVE;
+        };
     }
 
     private long getLastRequestTime(String userId) {

@@ -8,6 +8,10 @@ spec:
     metadata:
       annotations:
         jarvis.io/internal-tls-slice-api-gateway-orchestrator: api-gateway-orchestrator-v1
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8083"
+        prometheus.io/scheme: https
     spec:
       containers:
         - name: orchestrator

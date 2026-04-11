@@ -186,6 +186,12 @@
 }
 
 .shell-home-view,
+.shell-planner-view,
+.shell-life-view,
+.shell-analytics-view,
+.shell-pc-control-view,
+.shell-smart-home-view,
+.shell-ai-view,
 .shell-vision-view,
 .shell-voice-view,
 .shell-settings-view,
@@ -563,4 +569,71 @@
 
 .diagnostics-readonly-area .content {
     -fx-background-color: -jarvis-surface-elevated;
+}
+
+/* ── AI Runtime tab ── */
+
+.ai-overall-card {
+    -fx-background-color: linear-gradient(to bottom right, rgba(167, 139, 250, 0.08), -jarvis-surface);
+}
+
+.ai-overall-headline {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.ai-overall-detail {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.ai-feedback-row {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: -jarvis-radius-m;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: -jarvis-radius-m;
+    -fx-padding: 12px 14px;
+}
+
+.ai-feedback-text {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.ai-status-grid {
+    -fx-pref-wrap-length: 1120px;
+}
+
+.ai-status-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.ai-info-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.ai-detail-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.ai-code-label {
+    -fx-font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: normal;
+}
+
+.ai-meta-label {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.ai-field-label {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 13px;
+}
+
+.ai-form-grid {
+    -fx-padding: 2px 0 0 0;
+}
+
+.ai-action-grid {
+    -fx-pref-wrap-length: 900px;
 }

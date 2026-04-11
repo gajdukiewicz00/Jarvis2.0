@@ -81,6 +81,10 @@ class AnalyticsTab(private val apiClient: ApiClient) {
         loadAllAnalytics()
     }
 
+    fun refresh() {
+        loadAllAnalytics()
+    }
+
     private fun createSection(title: String, textArea: TextArea, description: String): VBox {
         val section = VBox(5.0)
         section.style = "-fx-border-color: lightgray; -fx-border-width: 1; -fx-padding: 10;"
@@ -106,14 +110,21 @@ class AnalyticsTab(private val apiClient: ApiClient) {
 
         Thread {
             try {
-                loadExpensesByMonth()
-                loadExpensesByCategory()
-                loadTimeStatistics()
-                loadCalendarStatistics()
+                val failures = listOfNotNull(
+                    loadExpensesByMonth(),
+                    loadExpensesByCategory(),
+                    loadTimeStatistics(),
+                    loadCalendarStatistics()
+                )
 
                 Platform.runLater {
-                    statusLabel.text = "✓ Analytics loaded successfully"
-                    statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+                    if (failures.isEmpty()) {
+                        statusLabel.text = "✓ Analytics loaded successfully"
+                        statusLabel.style = "-fx-text-fill: green; -fx-font-weight: bold;"
+                    } else {
+                        statusLabel.text = "✗ Analytics failed in ${failures.size} pane(s): ${failures.joinToString(", ")}"
+                        statusLabel.style = "-fx-text-fill: red; -fx-font-weight: bold;"
+                    }
                 }
             } catch (e: Exception) {
                 val errorMessage = e.message ?: "Unknown error"
@@ -134,13 +145,14 @@ class AnalyticsTab(private val apiClient: ApiClient) {
         }.start()
     }
 
-    private fun loadExpensesByMonth() {
+    private fun loadExpensesByMonth(): String? {
         try {
             val response = apiClient.get("/analytics/expenses/by-month")
             val formatted = formatExpenseData(response, "Month")
             Platform.runLater {
                 expensesByMonthArea.text = formatted
             }
+            return null
         } catch (e: Exception) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
@@ -150,16 +162,18 @@ class AnalyticsTab(private val apiClient: ApiClient) {
                     "Error: $errorMessage"
                 }
             }
+            return "monthly expenses"
         }
     }
 
-    private fun loadExpensesByCategory() {
+    private fun loadExpensesByCategory(): String? {
         try {
             val response = apiClient.get("/analytics/expenses/by-category")
             val formatted = formatExpenseData(response, "Category")
             Platform.runLater {
                 expensesByCategoryArea.text = formatted
             }
+            return null
         } catch (e: Exception) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
@@ -169,16 +183,18 @@ class AnalyticsTab(private val apiClient: ApiClient) {
                     "Error: $errorMessage"
                 }
             }
+            return "category expenses"
         }
     }
 
-    private fun loadTimeStatistics() {
+    private fun loadTimeStatistics(): String? {
         try {
             val response = apiClient.get("/analytics/time/summary")
             val formatted = formatTimeData(response)
             Platform.runLater {
                 timeStatsArea.text = formatted
             }
+            return null
         } catch (e: Exception) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
@@ -188,16 +204,18 @@ class AnalyticsTab(private val apiClient: ApiClient) {
                     "Error: $errorMessage"
                 }
             }
+            return "time statistics"
         }
     }
 
-    private fun loadCalendarStatistics() {
+    private fun loadCalendarStatistics(): String? {
         try {
             val response = apiClient.get("/analytics/calendar/summary")
             val formatted = formatCalendarData(response)
             Platform.runLater {
                 calendarStatsArea.text = formatted
             }
+            return null
         } catch (e: Exception) {
             val errorMessage = e.message ?: "Unknown error"
             Platform.runLater {
@@ -207,6 +225,7 @@ class AnalyticsTab(private val apiClient: ApiClient) {
                     "Error: $errorMessage"
                 }
             }
+            return "calendar overview"
         }
     }
 

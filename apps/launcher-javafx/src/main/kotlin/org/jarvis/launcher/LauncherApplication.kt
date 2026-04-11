@@ -150,6 +150,12 @@ class LauncherApplication : Application() {
             }
         }
         appendLog("Launcher runtime target: ${JarvisPaths.describeRuntimeTarget()}")
+
+        if (autoStart && !JarvisPaths.isLocalRuntime()) {
+            appendLog("K8s auto-start: preparing Kubernetes runtime...")
+            updateStatus(LauncherStatus.STARTING)
+        }
+
         // Stage 5: Cleanup stale PIDs on startup
         cleanupStalePids()
 
@@ -258,12 +264,35 @@ class LauncherApplication : Application() {
     }
 
     private fun persistSettings() {
+        val existing = try { configManager.load() } catch (_: Exception) { LauncherSettings() }
         configManager.save(
-            LauncherSettings(
+            existing.copy(
                 enableLlm = enableLlm,
                 enableMemory = enableMemory,
                 enableGpu = enableGpuSetting
             )
+        )
+    }
+
+    private fun syncK8sRunSummary(status: LauncherStatus) {
+        if (JarvisPaths.isLocalRuntime()) {
+            return
+        }
+
+        val summaryStatus = when (status) {
+            LauncherStatus.IDLE -> "stopped"
+            LauncherStatus.STARTING -> "starting"
+            LauncherStatus.READY -> "ready"
+            LauncherStatus.DEGRADED -> "degraded"
+            LauncherStatus.ERROR -> "error"
+        }
+
+        JarvisPaths.writeRuntimeRunSummary(
+            status = summaryStatus,
+            apiUrl = JarvisPaths.getApiGatewayUrl(),
+            voiceUrl = "wss://voice.jarvis.local",
+            runtimeMode = "k8s",
+            grafanaUrl = JarvisPaths.getGrafanaUrl()
         )
     }
     
@@ -311,6 +340,12 @@ class LauncherApplication : Application() {
         }
         
         Platform.runLater {
+            if (newLauncherStatus == LauncherStatus.STARTING ||
+                newLauncherStatus == LauncherStatus.READY ||
+                newLauncherStatus == LauncherStatus.DEGRADED
+            ) {
+                syncK8sRunSummary(newLauncherStatus)
+            }
             updateStatus(newLauncherStatus)
             updateStatusBadge(newLauncherStatus)  // Stage 15: Update badge color
             statusLabel.text = statusText
@@ -618,7 +653,44 @@ class LauncherApplication : Application() {
         }
     }
     
+    private fun validateK8sPreconditions(): Boolean {
+        if (JarvisPaths.isLocalRuntime()) {
+            return true
+        }
+        val kubeconfig = bootstrapKubeconfig
+            ?: System.getenv("KUBECONFIG")?.takeIf { Files.exists(Paths.get(it)) }?.toString()
+            ?: Paths.get(System.getProperty("user.home"), ".jarvis", "kubeconfig")
+                .takeIf { Files.exists(it) }?.toString()
+        if (kubeconfig == null) {
+            showError(
+                "Kubernetes not ready",
+                "No kubeconfig found. Bootstrap should have set one up.\n\n" +
+                    "This likely means k3s is not installed or the bootstrap was skipped.\n\n" +
+                    "Action: Check the Control tab log for bootstrap errors.\n" +
+                    "Manual fix: sudo cp /etc/rancher/k3s/k3s.yaml ~/.jarvis/kubeconfig && sudo chown \$(whoami) ~/.jarvis/kubeconfig"
+            )
+            return false
+        }
+
+        val hostsOk = try {
+            val hostsContent = Files.readAllLines(Paths.get("/etc/hosts"))
+            hostsContent.any { it.contains("api.jarvis.local") } &&
+                hostsContent.any { it.contains("voice.jarvis.local") } &&
+                hostsContent.any { it.contains("grafana.jarvis.local") }
+        } catch (_: Exception) { false }
+        if (!hostsOk) {
+            appendLog("WARNING: /etc/hosts missing api.jarvis.local / voice.jarvis.local / grafana.jarvis.local — TLS/ingress may fail")
+        }
+        return true
+    }
+
     private fun startBackend() {
+        if (!validateK8sPreconditions()) {
+            updateStatus(LauncherStatus.ERROR)
+            appendLog("K8s precondition check failed — see error dialog")
+            return
+        }
+
         // Check if already running
         val existingRunner = processRunner.get()
         if (existingRunner != null && existingRunner.isRunning()) {
@@ -982,34 +1054,48 @@ class LauncherApplication : Application() {
             appendLog("Start All already in progress")
             return
         }
+
+        var k8sRevalidationStarted = false
+
         // Idempotency: check if already running
         val currentStatus = status.get()
         if (currentStatus == LauncherStatus.READY || currentStatus == LauncherStatus.DEGRADED) {
-            // Backend already ready, just start desktop
-            if (!isDesktopRunning()) {
-                appendLog("Backend already READY, starting desktop...")
-                startDesktop()
+            if (!JarvisPaths.isLocalRuntime()) {
+                appendLog("Backend already UP, revalidating Kubernetes runtime + observability...")
+                startBackend()
+                k8sRevalidationStarted = true
             } else {
-                appendLog("Desktop already running")
+                if (!isDesktopRunning()) {
+                    appendLog("Backend already READY, starting desktop...")
+                    startDesktop()
+                } else {
+                    appendLog("Desktop already running")
+                }
+                startAllInProgress.set(false)
+                return
             }
-            startAllInProgress.set(false)
-            return
         }
 
         val currentHealth = healthCheckService?.getCurrentStatus()
-        if (healthIndicatesBackendUsable(currentHealth)) {
+        if (!k8sRevalidationStarted && healthIndicatesBackendUsable(currentHealth)) {
             backendExpectedRunning.set(true)
-            if (!isDesktopRunning()) {
-                appendLog("Backend core services already UP, starting desktop...")
-                startDesktop()
+            if (!JarvisPaths.isLocalRuntime()) {
+                appendLog("Backend core services already UP, revalidating Kubernetes runtime + observability...")
+                startBackend()
+                k8sRevalidationStarted = true
             } else {
-                appendLog("Desktop already running")
+                if (!isDesktopRunning()) {
+                    appendLog("Backend core services already UP, starting desktop...")
+                    startDesktop()
+                } else {
+                    appendLog("Desktop already running")
+                }
+                startAllInProgress.set(false)
+                return
             }
-            startAllInProgress.set(false)
-            return
         }
         
-        if (currentStatus == LauncherStatus.STARTING) {
+        if (!k8sRevalidationStarted && currentStatus == LauncherStatus.STARTING) {
             val runnerActive = processRunner.get()?.isRunning() == true
             val backendPid = getBackendPidFromFile()
             val backendProcessAlive = backendPid != null && isProcessAlive(backendPid)
@@ -1021,10 +1107,10 @@ class LauncherApplication : Application() {
             appendLog("Status is STARTING, but no backend bootstrap process is running. Retrying startup...")
         }
         
-        if (!autoBootstrap || bootstrapCompleted.get()) {
+        if (!k8sRevalidationStarted && (!autoBootstrap || bootstrapCompleted.get())) {
             appendLog("Start All: Starting backend...")
             startBackend()
-        } else {
+        } else if (!k8sRevalidationStarted) {
             if (!bootstrapInProgress.compareAndSet(false, true)) {
                 appendLog("Bootstrap already running, please wait...")
                 return
@@ -1039,6 +1125,10 @@ class LauncherApplication : Application() {
                         startBackend()
                     }
                 } else {
+                    Platform.runLater {
+                        appendLog("ERROR: Bootstrap failed — cannot start Kubernetes runtime")
+                        updateStatus(LauncherStatus.ERROR)
+                    }
                     startAllInProgress.set(false)
                 }
             }
@@ -1255,6 +1345,7 @@ class LauncherApplication : Application() {
     }
 
     private fun ensureDependencies(): Boolean {
+        val requiresDocker = JarvisPaths.isLocalRuntime()
         if (enableLlm && enableGpuSetting && !gpuAvailable) {
             appendLog("GPU not detected on host; disabling LLM for this run.")
             enableLlm = false
@@ -1267,7 +1358,7 @@ class LauncherApplication : Application() {
         if (!commandExists("java")) missingPackages.add("openjdk-21-jre")
         if (!commandExists("mvn")) missingPackages.add("maven")
         if (!commandExists("kubectl")) missingPackages.add("kubernetes-cli")
-        if (!commandExists("docker")) missingPackages.add("docker.io")
+        if (requiresDocker && !commandExists("docker")) missingPackages.add("docker.io")
         if (!commandExists("curl")) missingPackages.add("curl")
         if (!commandExists("openssl")) missingPackages.add("openssl")
 
@@ -1293,8 +1384,12 @@ class LauncherApplication : Application() {
             }
         }
 
-        if (!ensureDockerAccess()) {
+        if (requiresDocker && !ensureDockerAccess()) {
             return false
+        }
+
+        if (!requiresDocker) {
+            appendLog("K8s runtime detected; skipping Docker dependency check.")
         }
 
         if (!commandExists("k3s")) {
@@ -1416,7 +1511,18 @@ class LauncherApplication : Application() {
         }
         val systemConfig = Paths.get("/etc/rancher/k3s/k3s.yaml")
         if (!Files.exists(systemConfig)) {
-            return true
+            showError(
+                "Kubeconfig not found",
+                "No kubeconfig found at:\n" +
+                    "  - ${jarvisConfig}\n" +
+                    "  - ${systemConfig}\n\n" +
+                    "Kubernetes mode requires a valid kubeconfig.\n\n" +
+                    "To fix:\n" +
+                    "  1. Install k3s: curl -sfL https://get.k3s.io | sh -\n" +
+                    "  2. Copy config: sudo cp /etc/rancher/k3s/k3s.yaml ~/.jarvis/kubeconfig && sudo chown \$(whoami) ~/.jarvis/kubeconfig\n\n" +
+                    "Or set JARVIS_RUNTIME_MODE=local for local development mode."
+            )
+            return false
         }
         if (!commandExists("pkexec")) {
             showError("Kubeconfig missing", "pkexec not found; cannot copy k3s kubeconfig.")
@@ -1509,7 +1615,8 @@ class LauncherApplication : Application() {
         val hostsFile = Paths.get("/etc/hosts")
         val hostsOk = try {
             Files.readAllLines(hostsFile).any { it.contains("api.jarvis.local") } &&
-                Files.readAllLines(hostsFile).any { it.contains("voice.jarvis.local") }
+                Files.readAllLines(hostsFile).any { it.contains("voice.jarvis.local") } &&
+                Files.readAllLines(hostsFile).any { it.contains("grafana.jarvis.local") }
         } catch (e: Exception) {
             false
         }
@@ -1707,11 +1814,16 @@ class LauncherApplication : Application() {
                     appendLog("Auto-start enabled: starting full stack...")
                     if (healthIndicatesBackendUsable(healthStatus)) {
                         backendExpectedRunning.set(true)
-                        if (!isDesktopRunning()) {
-                            appendLog("Backend core services already UP, starting desktop...")
-                            startDesktop()
+                        if (!JarvisPaths.isLocalRuntime()) {
+                            appendLog("Backend core services already UP, revalidating Kubernetes runtime + observability...")
+                            startAll()
                         } else {
-                            appendLog("Desktop already running")
+                            if (!isDesktopRunning()) {
+                                appendLog("Backend core services already UP, starting desktop...")
+                                startDesktop()
+                            } else {
+                                appendLog("Desktop already running")
+                            }
                         }
                     } else {
                         startAll()
@@ -1886,9 +1998,23 @@ class LauncherApplication : Application() {
                     diagnostics.appendLine("runtimeMode: ${lastRunSummary.runtimeMode ?: "unknown"}")
                     diagnostics.appendLine("apiUrl: ${lastRunSummary.apiUrl ?: "n/a"}")
                     diagnostics.appendLine("voiceUrl: ${lastRunSummary.voiceUrl ?: "n/a"}")
+                    diagnostics.appendLine("grafanaUrl: ${lastRunSummary.grafanaUrl ?: "n/a"}")
                     diagnostics.appendLine("timestamp: ${lastRunSummary.timestamp ?: "n/a"}")
                 } else {
                     diagnostics.appendLine("missing")
+                }
+                diagnostics.appendLine("")
+
+                diagnostics.appendLine("--- Observability Verification ---")
+                try {
+                    val observabilitySummary = JarvisPaths.observabilityStatus
+                    if (Files.exists(observabilitySummary)) {
+                        diagnostics.appendLine(Files.readString(observabilitySummary).trim())
+                    } else {
+                        diagnostics.appendLine("missing")
+                    }
+                } catch (e: Exception) {
+                    diagnostics.appendLine("Error reading observability summary: ${e.message}")
                 }
                 diagnostics.appendLine("")
                 

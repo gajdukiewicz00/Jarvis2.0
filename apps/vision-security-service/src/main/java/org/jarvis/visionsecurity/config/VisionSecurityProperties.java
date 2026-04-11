@@ -25,6 +25,7 @@ public class VisionSecurityProperties {
         private long checkIntervalMs = 2_000L;
         private int debounceUnknownFrames = 3;
         private long alertCooldownSeconds = 60L;
+        private int ownerGraceFrames = 2;
     }
 
     @Getter
@@ -38,20 +39,29 @@ public class VisionSecurityProperties {
     @Getter
     @Setter
     public static class Enrollment {
-        private int sampleCount = 6;
+        private int sampleCount = 8;
         private long sampleSpacingMs = 700L;
-        private long captureTimeoutSeconds = 20L;
+        private long captureTimeoutSeconds = 30L;
+        private double minFaceSharpness = 30.0;
+        private double minFaceContrast = 25.0;
+        private int maxDuplicateHashDistance = 4;
     }
 
     @Getter
     @Setter
     public static class Verification {
         private int normalizedFaceSize = 160;
-        private double ownerThresholdMargin = 8.0;
-        private double uncertainThresholdMargin = 20.0;
-        private double fallbackOwnerThreshold = 55.0;
-        private double fallbackUncertainThreshold = 75.0;
-        private double minDetectionAreaRatio = 0.02;
+        private double ownerThresholdMargin = 15.0;
+        private double uncertainThresholdMargin = 30.0;
+        private double fallbackOwnerThreshold = 70.0;
+        private double fallbackUncertainThreshold = 100.0;
+        private double minDetectionAreaRatio = 0.004;
+        private double facePaddingRatio = 0.12;
+        private double claheClipLimit = 2.5;
+        private int claheGridSize = 8;
+        private boolean enableEyeAlignment = true;
+        private double detectionScaleFactor = 1.08;
+        private int detectionMinNeighbors = 2;
     }
 
     @Getter

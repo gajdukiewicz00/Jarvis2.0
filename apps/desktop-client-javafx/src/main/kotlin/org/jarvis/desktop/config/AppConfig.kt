@@ -5,7 +5,7 @@ import java.util.Locale
 /**
  * Centralized application configuration for the desktop client.
  *
- * Active local runtime endpoints win by default unless the user explicitly
+ * Active runtime summary endpoints win by default unless the user explicitly
  * pins a manual endpoint override in desktop settings.
  */
 object AppConfig {
@@ -14,7 +14,8 @@ object AppConfig {
     private val configService = DesktopConfigService(
         settingsStore = settingsStore,
         localRuntimeEndpointProvider = localRuntimeDetector::detectActive,
-        runtimeSummaryFingerprintProvider = localRuntimeDetector::summaryFingerprint
+        runtimeSummaryFingerprintProvider = localRuntimeDetector::summaryFingerprint,
+        endpointHealthProbe = localRuntimeDetector::isReachable
     )
 
     fun current(): ResolvedDesktopConfig = configService.current()
@@ -71,9 +72,10 @@ object AppConfig {
     internal fun resolve(
         environment: Map<String, String>,
         settings: DesktopSettings,
-        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot?
+        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot?,
+        manualEndpointReachable: Boolean? = null
     ): ResolvedDesktopConfig {
-        return DesktopConfigResolver.resolve(environment, settings, localRuntimeEndpoint)
+        return DesktopConfigResolver.resolve(environment, settings, localRuntimeEndpoint, manualEndpointReachable)
     }
 
     internal fun resolveApiGatewayBaseUrl(environment: Map<String, String>, settings: DesktopSettings): String {

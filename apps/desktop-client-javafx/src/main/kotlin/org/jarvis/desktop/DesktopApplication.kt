@@ -21,6 +21,7 @@ import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
 import org.jarvis.desktop.service.AuthService
 import org.jarvis.desktop.service.PcControlWebSocketClient
 import org.jarvis.desktop.service.SystemControlService
+import org.jarvis.desktop.service.TransportErrorFormatter
 import org.jarvis.desktop.ui.tabs.*
 import org.slf4j.LoggerFactory
 import java.net.URI
@@ -158,7 +159,12 @@ class DesktopApplication : Application() {
                 Thread.sleep(2000) // Wait for app to fully initialize
                 pcWebSocketClient?.connect()
             } catch (e: Exception) {
-                logger.warn("Failed to connect PC Control WebSocket: ${e.message}")
+                val formatted = TransportErrorFormatter.describeFailure(
+                    channel = "PC Control WebSocket",
+                    endpoint = AppConfig.current().pcControlWebSocketUrl,
+                    throwable = e
+                )
+                logger.warn("{}", formatted.diagnosticMessage, e)
             }
         }.start()
         

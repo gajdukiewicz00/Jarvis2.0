@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.logging.LogSanitizer;
 import org.jarvis.llm.client.LlmClient;
+import org.jarvis.llm.config.ModelProfileProperties;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.orchestrator.dto.ModelToolCall;
@@ -31,14 +32,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LlmOrchestratorService {
 
-    private static final double DEFAULT_TEMPERATURE = 0.2;
-    private static final int DEFAULT_MAX_TOKENS = 700;
-
     private final LlmClient llmClient;
     private final TokenBudgetManager tokenBudgetManager;
     private final SystemPromptProvider systemPromptProvider;
     private final ToolSchemaRegistry toolSchemaRegistry;
+    private final ToolCallValidator toolCallValidator;
     private final ObjectMapper objectMapper;
+    private final ModelProfileProperties profileProperties;
 
     @Value("${logging.pii.enabled:true}")
     private boolean piiLoggingEnabled = true;
@@ -63,7 +63,8 @@ public class LlmOrchestratorService {
                 userMessage
         );
 
-        ChatResponseDto response = llmClient.chat(messages, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, correlationId);
+        ModelProfileProperties.Profile profile = profileProperties.resolve("orchestration");
+        ChatResponseDto response = llmClient.chat(messages, profile.getMaxTokens(), profile.getTemperature(), correlationId);
         String raw = response.getReply();
 
         ModelToolPlan plan = parsePlan(raw);
@@ -73,11 +74,25 @@ public class LlmOrchestratorService {
         if (plan.getToolCalls() == null || plan.getToolCalls().isEmpty()) {
             warnings.add("LLM returned no tool_calls");
         } else {
+            int maxCalls = request.getMaxToolCalls() != null ? request.getMaxToolCalls() : 4;
+            int accepted = 0;
             for (ModelToolCall call : plan.getToolCalls()) {
-                if (call.getName() == null || call.getName().isBlank()) {
-                    warnings.add("Tool call missing name");
+                if (accepted >= maxCalls) {
+                    warnings.add("Truncated tool calls at max=" + maxCalls);
+                    break;
+                }
+
+                ToolCallValidator.ValidationResult vr = toolCallValidator.validate(call);
+                if (!vr.valid()) {
+                    warnings.addAll(vr.errors());
+                    log.warn("[{}] AI_TOOL_REJECTED userId={} tool={} errors={}",
+                            correlationId,
+                            sanitizer.sanitizeId(request.getUserId()),
+                            call.getName(),
+                            vr.errors());
                     continue;
                 }
+
                 ToolCallDto toolCall = new ToolCallDto();
                 toolCall.setName(call.getName());
                 toolCall.setArguments(call.getArguments());
@@ -86,6 +101,7 @@ public class LlmOrchestratorService {
                         : Boolean.FALSE);
                 toolCall.setIdempotencyKey(buildIdempotencyKey(request.getUserId(), call.getName(), call.getArguments()));
                 toolCalls.add(toolCall);
+                accepted++;
                 log.info("[{}] AI_TOOL_PLANNED userId={} tool={} idempotencyKey={} outcome=planned",
                         correlationId,
                         sanitizer.sanitizeId(request.getUserId()),

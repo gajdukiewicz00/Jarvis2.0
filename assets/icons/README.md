@@ -1,23 +1,8 @@
 # Jarvis Icons
 
-This directory contains product icons for Jarvis 2.0.
+This file stays here because it describes the contents of this directory.
 
-## Files
+- `jarvis.png` is the desktop-entry/product icon used by install scripts
+- `jarvis.svg` is the scalable source asset
 
-- `jarvis.png` - 256x256 PNG icon for desktop entries
-- `jarvis.svg` - Scalable vector icon (optional, for future use)
-
-## Usage
-
-Icons are installed to `~/.jarvis/app/assets/icons/` during product installation.
-
-Desktop entry references: `Icon=$HOME/.jarvis/app/assets/icons/jarvis.png`
-
-## Note
-
-If `jarvis.png` is missing, copy from `icons/jarvis-icon.png` in the repository root.
-
-
-
-
-
+Install/runtime scripts expect the icon to be copied into the local app asset path during product installation.

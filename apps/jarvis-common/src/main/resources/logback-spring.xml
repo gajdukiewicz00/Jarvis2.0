@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Default Logback configuration for Jarvis microservices.
+    Picked up automatically by any Spring Boot service that depends on jarvis-common
+    and does NOT have its own logback-spring.xml / logback.xml.
+
+    Profile "observability" → JSON structured output (for Loki ingestion).
+    All other profiles      → human-readable plain text.
+-->
+<configuration>
+    <include resource="jarvis-logback-base.xml"/>
+
+    <springProfile name="observability">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!observability">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_PLAIN"/>
+        </root>
+    </springProfile>
+</configuration>

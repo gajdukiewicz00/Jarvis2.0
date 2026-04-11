@@ -13,6 +13,10 @@ import org.slf4j.LoggerFactory
 class PcControlTab(private val apiClient: ApiClient) {
     val tab = Tab("PC Control")
     private val statusLabel = Label("")
+    private val dependencySummaryLabel = Label("").apply {
+        isWrapText = true
+        style = "-fx-text-fill: #455a64;"
+    }
     private val systemControl = SystemControlService()
     private val logger = LoggerFactory.getLogger(PcControlTab::class.java)
     private var missingDeps: Set<String> = emptySet()
@@ -30,9 +34,13 @@ class PcControlTab(private val apiClient: ApiClient) {
         // Status label
         statusLabel.style = "-fx-font-weight: bold;"
         content.children.add(statusLabel)
+        content.children.add(dependencySummaryLabel)
         
         // Check dependencies on init
         checkDependencies()
+        content.children.add(Button("Refresh capabilities").apply {
+            setOnAction { refresh() }
+        })
         
         // === Volume Control ===
         val volumeSection = createSection("🔊 Volume", createVolumeControls())
@@ -67,6 +75,10 @@ class PcControlTab(private val apiClient: ApiClient) {
             isFitToWidth = true
         }
         tab.isClosable = false
+    }
+
+    fun refresh() {
+        checkDependencies()
     }
     
     private fun createSection(title: String, controls: FlowPane): VBox {
@@ -275,11 +287,26 @@ class PcControlTab(private val apiClient: ApiClient) {
     }
 
     private fun checkDependencies() {
+        statusLabel.text = "Checking desktop control capabilities..."
+        statusLabel.style = "-fx-text-fill: #1565c0; -fx-font-weight: bold;"
         val deps = systemControl.checkDependencies()
         missingDeps = deps.filter { !it.value }.keys
-        if (missingDeps.isNotEmpty()) {
+
+        val availableDeps = deps.filterValues { it }.keys
+        dependencySummaryLabel.text = when {
+            deps.isEmpty() -> "No capability probes are registered for this desktop control helper."
+            availableDeps.isEmpty() -> "No supported desktop automation utilities were detected on this machine."
+            missingDeps.isEmpty() -> "Utilities ready: ${availableDeps.sorted().joinToString()}"
+            else -> "Utilities ready: ${availableDeps.sorted().joinToString()} | Missing: ${missingDeps.sorted().joinToString()}"
+        }
+
+        if (availableDeps.isEmpty()) {
+            showStatus("⚠️ No supported desktop automation utilities detected", false)
+        } else if (missingDeps.isNotEmpty()) {
             showStatus("⚠️ Missing: ${missingDeps.joinToString()}. Install: sudo apt install ${missingDeps.joinToString(" ")}", false)
             logger.warn("Missing utilities: $missingDeps. Install with: sudo apt install ${missingDeps.joinToString(" ")}")
+        } else {
+            showStatus("✓ Desktop control helper is ready", true)
         }
     }
 }

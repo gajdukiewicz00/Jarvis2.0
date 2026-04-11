@@ -1,8 +1,8 @@
 """
 Configuration for the local Jarvis LLM server.
 
-The local runtime prefers llama.cpp with a single GGUF model file.
-Transformers remains available for non-local experimentation.
+The canonical repo default is llama.cpp with the canonical Qwen GGUF file.
+Transformers remains available as an explicit opt-in mode.
 """
 import logging
 import os
@@ -18,10 +18,10 @@ class Config:
     LLM_BACKEND: str = os.getenv("LLM_BACKEND", "llamacpp")
     
     # Model paths
-    # For transformers: path to HuggingFace model directory
-    MODEL_PATH: str = os.getenv("MODEL_PATH", "/models/h2ogpt-4096-llama2-7b-chat")
+    # For transformers: path to a mounted HuggingFace model directory
+    MODEL_PATH: str = os.getenv("MODEL_PATH", "/models")
     # For llama.cpp: path to GGUF file
-    GGUF_MODEL_PATH: str = os.getenv("GGUF_MODEL_PATH", "/models/llm/model.gguf")
+    GGUF_MODEL_PATH: str = os.getenv("GGUF_MODEL_PATH", "/models/qwen2.5-3b-instruct-q4_k_m.gguf")
     
     # Device: 'cuda', 'cpu', or 'auto' (auto-detect)
     DEVICE: str = os.getenv("DEVICE", "auto")
@@ -30,7 +30,7 @@ class Config:
     LLM_QUANT: str = os.getenv("LLM_QUANT", "none")
     
     # llama.cpp specific
-    N_GPU_LAYERS: int = int(os.getenv("N_GPU_LAYERS", "-1"))  # -1 = all on GPU
+    N_GPU_LAYERS: int = int(os.getenv("N_GPU_LAYERS", "0"))  # 0 = CPU-safe default
     N_CTX: int = int(os.getenv("N_CTX", "4096"))  # Context window
     N_BATCH: int = int(os.getenv("N_BATCH", "512"))  # Batch size
     N_THREADS: int = int(os.getenv("N_THREADS", "6"))
@@ -114,14 +114,18 @@ class Config:
         
         # Validate model paths based on backend
         if cls.LLM_BACKEND == "transformers":
-            if not os.path.exists(cls.MODEL_PATH):
-                raise ValueError(f"Transformers model path does not exist: {cls.MODEL_PATH}")
+            if not os.path.isdir(cls.MODEL_PATH):
+                raise ValueError(
+                    f"Transformers model path must be a directory: {cls.MODEL_PATH}. "
+                    "For the canonical local/runtime path use LLM_BACKEND=llamacpp "
+                    "with a GGUF file mounted at GGUF_MODEL_PATH."
+                )
         elif cls.LLM_BACKEND == "llamacpp":
             if not os.path.exists(cls.GGUF_MODEL_PATH):
                 raise ValueError(
                     "GGUF model path does not exist: "
-                    f"{cls.GGUF_MODEL_PATH}. Download a 7B/8B instruct GGUF model "
-                    "into models/llm or set JARVIS_LLM_MODEL_PATH / GGUF_MODEL_PATH."
+                    f"{cls.GGUF_MODEL_PATH}. Download the canonical local GGUF model "
+                    "or set JARVIS_LLM_MODEL_PATH / GGUF_MODEL_PATH explicitly."
                 )
         
         # Validate quantization

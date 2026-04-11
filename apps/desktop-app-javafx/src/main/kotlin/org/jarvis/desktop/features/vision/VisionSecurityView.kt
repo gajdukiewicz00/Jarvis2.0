@@ -30,6 +30,7 @@ class VisionSecurityView(
         Thread(runnable, "jarvis-desktop-app-vision-security").apply { isDaemon = true }
     }
     private val refreshInFlight = AtomicBoolean(false)
+    private val actionInFlight = AtomicBoolean(false)
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
 
     private val updatedLabel = Label("Waiting for vision security snapshot")
@@ -74,7 +75,27 @@ class VisionSecurityView(
         styleClass += "vision-incident-list"
     }
 
+    private val startMonitoringButton = actionButton("Start Monitoring") {
+        executeAction { readModel.startMonitoring() }
+    }
+    private val stopMonitoringButton = actionButton("Stop Monitoring") {
+        executeAction { readModel.stopMonitoring() }
+    }
+    private val captureEnrollmentButton = actionButton("Capture Owner Enrollment") {
+        executeAction { readModel.captureEnrollment() }
+    }
+    private val resetEnrollmentButton = actionButton("Reset Enrollment") {
+        executeAction { readModel.resetEnrollment() }
+    }
+    private val exportPipelineButton = actionButton("Export Pipeline Snapshot") {
+        executeAction { readModel.capturePipelineSnapshot() }
+    }
+    private val sendTestAlertButton = actionButton("Send Test Alert") {
+        executeAction { readModel.sendTestAlert() }
+    }
+
     private var refreshTask: ScheduledFuture<*>? = null
+    private var latestStatus: VisionSecurityReadModel.StatusSnapshot? = null
 
     init {
         styleClass += "shell-route-scroll"
@@ -83,6 +104,7 @@ class VisionSecurityView(
         vbarPolicy = ScrollPane.ScrollBarPolicy.AS_NEEDED
         content = buildContent()
         refreshButton.setOnAction { refreshNow() }
+        updateActionButtons()
     }
 
     override fun onRouteActivated() {
@@ -175,24 +197,12 @@ class VisionSecurityView(
             subtitle = "Start or pause monitoring, refresh owner enrollment, export the classical CV stages, and verify alert delivery.",
             body = FlowPane(12.0, 12.0).apply {
                 children.addAll(
-                    actionButton("Start Monitoring") {
-                        executeAction { readModel.startMonitoring() }
-                    },
-                    actionButton("Stop Monitoring") {
-                        executeAction { readModel.stopMonitoring() }
-                    },
-                    actionButton("Capture Owner Enrollment") {
-                        executeAction { readModel.captureEnrollment() }
-                    },
-                    actionButton("Reset Enrollment") {
-                        executeAction { readModel.resetEnrollment() }
-                    },
-                    actionButton("Export Pipeline Snapshot") {
-                        executeAction { readModel.capturePipelineSnapshot() }
-                    },
-                    actionButton("Send Test Alert") {
-                        executeAction { readModel.sendTestAlert() }
-                    }
+                    startMonitoringButton,
+                    stopMonitoringButton,
+                    captureEnrollmentButton,
+                    resetEnrollmentButton,
+                    exportPipelineButton,
+                    sendTestAlertButton
                 )
             }
         )
@@ -244,12 +254,15 @@ class VisionSecurityView(
     }
 
     private fun refreshNow() {
+        if (actionInFlight.get()) {
+            return
+        }
         if (!refreshInFlight.compareAndSet(false, true)) {
             return
         }
 
         Platform.runLater {
-            refreshButton.isDisable = true
+            updateActionButtons()
             updatedLabel.text = "Refreshing vision security..."
         }
 
@@ -261,7 +274,7 @@ class VisionSecurityView(
                 Platform.runLater { renderFailure(e) }
             } finally {
                 refreshInFlight.set(false)
-                Platform.runLater { refreshButton.isDisable = false }
+                Platform.runLater { updateActionButtons() }
             }
         }
     }
@@ -282,9 +295,11 @@ class VisionSecurityView(
     }
 
     private fun render(snapshot: VisionSecurityReadModel.Snapshot) {
+        latestStatus = snapshot.status
         updatedLabel.text = "Updated ${timeFormatter.format(snapshot.refreshedAt)}"
         renderStatus(snapshot.status)
         renderIncidents(snapshot.incidents)
+        updateActionButtons()
     }
 
     private fun renderStatus(status: VisionSecurityReadModel.StatusSnapshot) {
@@ -379,6 +394,11 @@ class VisionSecurityView(
     }
 
     private fun executeAction(action: () -> VisionSecurityReadModel.ActionResult) {
+        if (!actionInFlight.compareAndSet(false, true)) {
+            return
+        }
+
+        Platform.runLater { updateActionButtons() }
         refreshExecutor.execute {
             try {
                 val result = action()
@@ -387,22 +407,48 @@ class VisionSecurityView(
                     applyTone(feedbackPill, "shell-status-tone-info")
                     feedbackLabel.text = result.detail
                 }
-                refreshNow()
             } catch (e: Exception) {
                 Platform.runLater {
                     feedbackPill.text = "Action failed"
                     applyTone(feedbackPill, "shell-status-tone-error")
-                    feedbackLabel.text = e.message ?: "Vision security action failed"
+                    feedbackLabel.text = describeError(e)
                 }
+            } finally {
+                actionInFlight.set(false)
+                Platform.runLater { updateActionButtons() }
             }
+            refreshNow()
         }
     }
 
     private fun renderFailure(error: Exception) {
+        latestStatus = null
         updatedLabel.text = "Vision security refresh failed"
         feedbackPill.text = "Unavailable"
         applyTone(feedbackPill, "shell-status-tone-error")
         feedbackLabel.text = error.message ?: "Vision security API is unavailable"
+        updateActionButtons()
+    }
+
+    private fun updateActionButtons() {
+        val status = latestStatus
+        val busy = actionInFlight.get()
+        val canAct = status != null
+        val monitoringEnabled = status?.monitoringEnabled == true
+
+        refreshButton.isDisable = busy || refreshInFlight.get()
+        startMonitoringButton.isDisable = busy || !canAct || monitoringEnabled
+        stopMonitoringButton.isDisable = busy || !canAct || !monitoringEnabled
+        captureEnrollmentButton.isDisable = busy || !canAct || monitoringEnabled
+        resetEnrollmentButton.isDisable = busy || !canAct
+        exportPipelineButton.isDisable = busy || !canAct || monitoringEnabled
+        sendTestAlertButton.isDisable = busy || !canAct
+    }
+
+    private fun describeError(error: Exception): String {
+        val message = error.message ?: return "Vision security action failed"
+        val match = "\"message\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(message)
+        return match?.groupValues?.getOrNull(1) ?: message
     }
 
     private fun renderCapability(pill: Label, detail: Label, snapshot: VisionSecurityReadModel.CapabilitySnapshot) {

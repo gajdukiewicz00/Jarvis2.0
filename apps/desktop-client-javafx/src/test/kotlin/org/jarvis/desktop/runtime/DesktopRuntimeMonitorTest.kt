@@ -53,6 +53,18 @@ class DesktopRuntimeMonitorTest {
     }
 
     @Test
+    fun `pc connection failure with detail remains an error state`() {
+        val monitor = DesktopRuntimeMonitor(clock = clock, maxEvents = 3)
+
+        monitor.consumePcStatus("Connection failed: Host not found for PC Control WebSocket at ws://desktop.invalid/ws/pc-control.")
+
+        val snapshot = monitor.currentSnapshot()
+        assertEquals(DesktopRuntimeMonitor.ConnectionState.ERROR, snapshot.pcControl.state)
+        assertEquals(DesktopRuntimeMonitor.EventSeverity.ERROR, snapshot.events.first().severity)
+        assertTrue(snapshot.events.first().details!!.contains("Host not found"))
+    }
+
+    @Test
     fun `voiceRuntime starts null and is populated via updateVoiceRuntime`() {
         val monitor = DesktopRuntimeMonitor(clock = clock)
         assertNull(monitor.currentSnapshot().voiceRuntime)

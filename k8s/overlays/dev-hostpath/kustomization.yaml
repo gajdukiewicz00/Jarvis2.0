@@ -1,8 +1,14 @@
 # =============================================================================
 # Jarvis 2.0 - Dev HostPath Overlay
 # =============================================================================
-# Dev-only overlay that reintroduces hostPath-backed model storage.
-# Production overlay intentionally avoids hostPath and uses PVCs only.
+# Dev-only overlay that layers hostPath-backed model storage on top of the
+# full prod overlay.  This gives you the entire prod manifest set (including
+# the optional LLM/Memory stack at replicas: 0) plus local PVs.
+#
+# Before use:
+#   1. Replace /REPLACE_WITH_ABSOLUTE_REPO_MODELS_PATH in pv-models-hostpath.yaml
+#   2. Apply secrets: scripts/product/jarvis-secrets-apply.sh
+#   3. Scale optional workloads: kubectl -n jarvis scale deploy/llm-server --replicas=1
 # =============================================================================
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -10,5 +16,12 @@ kind: Kustomization
 namespace: jarvis
 
 resources:
-  - ../../base
+  # Inherit all prod resources (core + AI stack + network policies)
+  - ../prod
+
+  # HostPath PVs for local model storage (llm-models-pv, vosk-models-pv)
   - pv-models-hostpath.yaml
+
+patches:
+  # Bind PVCs to local hostPath PVs via storageClassName: manual + label selector
+  - path: pvc-manual-binding.patch.yaml

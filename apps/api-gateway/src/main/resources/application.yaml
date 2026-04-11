@@ -45,6 +45,9 @@ spring:
           analytics-service:
             connectTimeout: 5000
             readTimeout: 30000
+          vision-security:
+            connectTimeout: 5000
+            readTimeout: 30000
 
   lifecycle:
     timeout-per-shutdown-phase: 30s
@@ -105,11 +108,14 @@ management:
     circuitbreakers:
       enabled: true
   metrics:
-    export:
-      prometheus:
-        enabled: false  # Enable in production with monitoring setup
     tags:
       application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 # Rate Limiting (requests per minute)
 rate-limit:

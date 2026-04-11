@@ -33,21 +33,31 @@ vision-security:
     check-interval-ms: ${VISION_SECURITY_CHECK_INTERVAL_MS:2000}
     debounce-unknown-frames: ${VISION_SECURITY_DEBOUNCE_UNKNOWN_FRAMES:3}
     alert-cooldown-seconds: ${VISION_SECURITY_ALERT_COOLDOWN_SECONDS:60}
+    owner-grace-frames: ${VISION_SECURITY_OWNER_GRACE_FRAMES:2}
   camera:
     device-index: ${VISION_SECURITY_CAMERA_DEVICE_INDEX:0}
     width: ${VISION_SECURITY_CAMERA_WIDTH:640}
     height: ${VISION_SECURITY_CAMERA_HEIGHT:480}
   enrollment:
-    sample-count: ${VISION_SECURITY_ENROLLMENT_SAMPLE_COUNT:6}
+    sample-count: ${VISION_SECURITY_ENROLLMENT_SAMPLE_COUNT:8}
     sample-spacing-ms: ${VISION_SECURITY_ENROLLMENT_SAMPLE_SPACING_MS:700}
-    capture-timeout-seconds: ${VISION_SECURITY_ENROLLMENT_CAPTURE_TIMEOUT_SECONDS:20}
+    capture-timeout-seconds: ${VISION_SECURITY_ENROLLMENT_CAPTURE_TIMEOUT_SECONDS:30}
+    min-face-sharpness: ${VISION_SECURITY_MIN_FACE_SHARPNESS:30.0}
+    min-face-contrast: ${VISION_SECURITY_MIN_FACE_CONTRAST:25.0}
+    max-duplicate-hash-distance: ${VISION_SECURITY_MAX_DUPLICATE_HASH_DISTANCE:4}
   verification:
     normalized-face-size: ${VISION_SECURITY_FACE_SIZE:160}
-    owner-threshold-margin: ${VISION_SECURITY_OWNER_THRESHOLD_MARGIN:8.0}
-    uncertain-threshold-margin: ${VISION_SECURITY_UNCERTAIN_THRESHOLD_MARGIN:20.0}
-    fallback-owner-threshold: ${VISION_SECURITY_FALLBACK_OWNER_THRESHOLD:55.0}
-    fallback-uncertain-threshold: ${VISION_SECURITY_FALLBACK_UNCERTAIN_THRESHOLD:75.0}
-    min-detection-area-ratio: ${VISION_SECURITY_MIN_DETECTION_AREA_RATIO:0.02}
+    owner-threshold-margin: ${VISION_SECURITY_OWNER_THRESHOLD_MARGIN:15.0}
+    uncertain-threshold-margin: ${VISION_SECURITY_UNCERTAIN_THRESHOLD_MARGIN:30.0}
+    fallback-owner-threshold: ${VISION_SECURITY_FALLBACK_OWNER_THRESHOLD:70.0}
+    fallback-uncertain-threshold: ${VISION_SECURITY_FALLBACK_UNCERTAIN_THRESHOLD:100.0}
+    min-detection-area-ratio: ${VISION_SECURITY_MIN_DETECTION_AREA_RATIO:0.004}
+    face-padding-ratio: ${VISION_SECURITY_FACE_PADDING_RATIO:0.12}
+    clahe-clip-limit: ${VISION_SECURITY_CLAHE_CLIP_LIMIT:2.5}
+    clahe-grid-size: ${VISION_SECURITY_CLAHE_GRID_SIZE:8}
+    enable-eye-alignment: ${VISION_SECURITY_ENABLE_EYE_ALIGNMENT:true}
+    detection-scale-factor: ${VISION_SECURITY_DETECTION_SCALE_FACTOR:1.08}
+    detection-min-neighbors: ${VISION_SECURITY_DETECTION_MIN_NEIGHBORS:2}
   storage:
     root: ${VISION_SECURITY_STORAGE_ROOT:${user.home}/.jarvis/data/vision-security}
     max-incidents-per-user: ${VISION_SECURITY_MAX_INCIDENTS_PER_USER:50}
@@ -67,12 +77,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: always
       probes:
         enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
 
 logging:
   level:

@@ -36,11 +36,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgres
-          image: ankane/pgvector:v0.7.4-pg16
+          image: pgvector/pgvector:pg16
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -81,6 +81,10 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
+            - name: postgres-run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             exec:
               command:
@@ -109,6 +113,10 @@ spec:
           configMap:
             name: postgres-init-scripts
             defaultMode: 0755
+        - name: postgres-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

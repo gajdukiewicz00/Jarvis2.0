@@ -1,0 +1,295 @@
+# NetworkPolicies for the Jarvis observability stack.
+# These policies extend the namespace-wide default-deny posture from the prod
+# overlay with the minimum routes needed for metrics, logs, traces, and Grafana.
+
+---
+# Prometheus needs:
+# 1. Kubernetes API access for pod discovery. In k3s this can be enforced
+#    after service translation on the control-plane listener at 6443.
+# 2. access to Spring Actuator ports inside the jarvis namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-egress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: jarvis
+      ports:
+        - port: 8080
+          protocol: TCP
+        - port: 8081
+          protocol: TCP
+        - port: 8082
+          protocol: TCP
+        - port: 8083
+          protocol: TCP
+        - port: 8084
+          protocol: TCP
+        - port: 8085
+          protocol: TCP
+        - port: 8086
+          protocol: TCP
+        - port: 8087
+          protocol: TCP
+        - port: 8088
+          protocol: TCP
+        - port: 8089
+          protocol: TCP
+        - port: 8091
+          protocol: TCP
+        - port: 8092
+          protocol: TCP
+        - port: 8093
+          protocol: TCP
+        - port: 8443
+          protocol: TCP
+---
+# Prometheus scrapes only the Jarvis Spring workloads that expose Actuator.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jarvis-services-ingress-from-prometheus
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - api-gateway
+          - voice-gateway
+          - nlp-service
+          - orchestrator
+          - pc-control
+          - life-tracker
+          - smart-home-service
+          - analytics-service
+          - security-service
+          - user-profile
+          - llm-service
+          - planner-service
+          - memory-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+---
+# Tempo accepts OTLP traces from Jarvis services and query traffic from Grafana.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tempo-ingress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: tempo
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: jarvis
+      ports:
+        - port: 4317
+          protocol: TCP
+        - port: 4318
+          protocol: TCP
+        - port: 3200
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jarvis-services-egress-tempo
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - api-gateway
+          - voice-gateway
+          - nlp-service
+          - orchestrator
+          - pc-control
+          - life-tracker
+          - smart-home-service
+          - analytics-service
+          - security-service
+          - user-profile
+          - llm-service
+          - planner-service
+          - memory-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: tempo
+      ports:
+        - port: 4318
+          protocol: TCP
+---
+# Loki receives logs from Alloy and read queries from Grafana.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: loki-ingress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: loki
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: alloy
+        - podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - port: 3100
+          protocol: TCP
+---
+# Alloy uses the Kubernetes API for pod logs/events and writes to Loki.
+# k3s can enforce the translated control-plane listener port (6443) instead of
+# the ClusterIP service port (443), so allow both.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alloy-egress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: alloy
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+        - port: 6443
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: loki
+      ports:
+        - port: 3100
+          protocol: TCP
+---
+# Grafana needs query access to Prometheus, Loki, and Tempo.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-egress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 9090
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: loki
+      ports:
+        - port: 3100
+          protocol: TCP
+    - to:
+        - podSelector:
+            matchLabels:
+              app: tempo
+      ports:
+        - port: 3200
+          protocol: TCP
+---
+# Grafana is exposed via ingress and/or port-forward.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: grafana-ingress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: grafana
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 3000
+          protocol: TCP
+---
+# Prometheus itself stays private to Grafana and port-forward.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prometheus-ingress
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+spec:
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grafana
+      ports:
+        - port: 9090
+          protocol: TCP

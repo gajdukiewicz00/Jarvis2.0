@@ -31,6 +31,13 @@ public interface VisionSecurityClient {
     )
     ResponseEntity<String> captureEnrollment(@RequestBody String body);
 
+    @PostMapping(
+            value = "/api/v1/vision-security/enrollment/import",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    ResponseEntity<String> importEnrollment(@RequestBody String body);
+
     @PostMapping("/api/v1/vision-security/enrollment/reset")
     ResponseEntity<String> resetEnrollment();
 

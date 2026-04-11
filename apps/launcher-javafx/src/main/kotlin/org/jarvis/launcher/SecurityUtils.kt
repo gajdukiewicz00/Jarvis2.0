@@ -94,12 +94,13 @@ object SecurityUtils {
             "RABBITMQ_USERNAME",
             "POSTGRES_PASSWORD",
             "POSTGRES_USER",
+            "GRAFANA_ADMIN_USER",
+            "GRAFANA_ADMIN_PASSWORD",
             "API_KEY",
             "SECRET_KEY"
         )
     }
 }
-
 
 
 

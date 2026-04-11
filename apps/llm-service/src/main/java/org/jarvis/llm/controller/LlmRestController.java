@@ -43,6 +43,8 @@ public class LlmRestController {
 
     private final LlmService llmService;
     private final AiRuntimeStatusService aiRuntimeStatusService;
+    private final org.jarvis.llm.service.LlmLifecycleManager lifecycleManager;
+    private final org.jarvis.llm.service.LlmAdmissionController admissionController;
 
     @Value("${logging.pii.enabled:true}")
     private boolean piiLoggingEnabled = true;
@@ -60,7 +62,8 @@ public class LlmRestController {
     public ResponseEntity<ChatResponseDto> chat(
             @Valid @RequestBody ChatRequestDto request,
             Authentication authentication,
-            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
+            @RequestHeader(value = "X-Model-Profile", required = false) String modelProfile) {
 
         if (correlationId == null) {
             correlationId = java.util.UUID.randomUUID().toString();
@@ -71,12 +74,12 @@ public class LlmRestController {
             return ResponseEntity.badRequest().build();
         }
 
-        log.info("Received REST chat request for session={}, correlationId={}",
+        log.info("Received REST chat request for session={}, profile={}, correlationId={}",
                 logSanitizer().sanitizeId(request.getSessionId()),
+                modelProfile != null ? modelProfile : "default",
                 correlationId);
 
         try {
-            // Get last user message from request
             String userMessage = request.getMessages().get(request.getMessages().size() - 1).getContent();
             if (userMessage == null || userMessage.isBlank()) {
                 log.warn("Invalid chat request: last user message is empty, correlationId={}", correlationId);
@@ -88,7 +91,8 @@ public class LlmRestController {
                     resolveEffectiveUserId(authentication),
                     userMessage,
                     correlationId,
-                    !isInternalRequest(authentication));
+                    !isInternalRequest(authentication),
+                    modelProfile);
 
             return ResponseEntity.ok(response);
 
@@ -177,6 +181,8 @@ public class LlmRestController {
      */
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
+        lifecycleManager.refreshState();
+
         Map<String, Object> runtime = aiRuntimeStatusService.describe();
         @SuppressWarnings("unchecked")
         Map<String, Object> llm = (Map<String, Object>) runtime.get("llm");
@@ -186,19 +192,31 @@ public class LlmRestController {
         boolean llmAvailable = Boolean.TRUE.equals(llm.get("available"));
         boolean memoryEnabled = Boolean.TRUE.equals(memory.get("enabled")) && Boolean.TRUE.equals(memory.get("serviceEnabled"));
         boolean memoryAvailable = Boolean.TRUE.equals(memory.get("available"));
-        boolean healthy = llmAvailable && (!memoryEnabled || memoryAvailable);
+
+        org.jarvis.llm.service.LlmLifecycleManager.State state = lifecycleManager.getState();
+        boolean healthy = state == org.jarvis.llm.service.LlmLifecycleManager.State.READY;
+        boolean usable = lifecycleManager.isUsable();
 
         Map<String, Object> response = new LinkedHashMap<>();
-        response.put("status", healthy ? "healthy" : "degraded");
+        response.put("status", healthy ? "healthy" : (usable ? "degraded" : state.name().toLowerCase()));
+        response.put("lifecycle_state", state.name());
+        response.put("lifecycle_reason", lifecycleManager.getStateReason());
+        response.put("warmup_complete", lifecycleManager.isWarmupComplete());
         response.put("llm_server_available", llmAvailable);
         response.put("memory_available", memoryAvailable);
         response.put("memory_enabled", memoryEnabled);
+        response.put("active_inferences", admissionController.getActiveInferences());
+        response.put("queue_depth", admissionController.getQueueDepth());
         response.put("full_local_ai_readiness", runtime.get("fullLocalAiReadiness"));
         response.put("configured_provider", llm.get("configuredProvider"));
         response.put("effective_provider", llm.get("effectiveProvider"));
         response.put("configured_model", llm.get("configuredModel"));
         response.put("effective_model", llm.get("effectiveModel"));
-        return ResponseEntity.status(healthy ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE).body(response);
+
+        HttpStatus httpStatus = healthy ? HttpStatus.OK
+                : usable ? HttpStatus.OK
+                : HttpStatus.SERVICE_UNAVAILABLE;
+        return ResponseEntity.status(httpStatus).body(response);
     }
 
     private LogSanitizer logSanitizer() {

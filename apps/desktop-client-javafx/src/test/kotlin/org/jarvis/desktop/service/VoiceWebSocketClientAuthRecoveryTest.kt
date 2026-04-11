@@ -10,6 +10,8 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.ConfigSource
+import org.jarvis.desktop.config.DesktopSettings
+import org.jarvis.desktop.config.PreferencesDesktopSettingsStore
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.AfterEach
@@ -31,12 +33,13 @@ import java.util.concurrent.atomic.AtomicReference
 class VoiceWebSocketClientAuthRecoveryTest {
 
     private val server = MockWebServer()
+    private val settingsStore = PreferencesDesktopSettingsStore()
     private var client: VoiceWebSocketClient? = null
-    private lateinit var originalConfig: ResolvedDesktopConfig
+    private lateinit var originalSettings: DesktopSettings
 
     @BeforeEach
     fun setUp() {
-        originalConfig = AppConfig.current()
+        originalSettings = settingsStore.load()
     }
 
     @AfterEach
@@ -44,11 +47,8 @@ class VoiceWebSocketClientAuthRecoveryTest {
         client?.disconnect()
         client = null
         TokenManager.clearTokens()
-        AppConfig.saveSettings(
-            apiGatewayBaseUrl = originalConfig.apiGatewayBaseUrl,
-            locale = originalConfig.locale,
-            manualEndpointOverride = originalConfig.usesManualEndpointOverride
-        )
+        settingsStore.save(originalSettings)
+        AppConfig.reload()
         runCatching { server.shutdown() }
     }
 

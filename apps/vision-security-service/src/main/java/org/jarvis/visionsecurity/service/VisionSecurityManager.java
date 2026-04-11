@@ -16,23 +16,33 @@ import org.jarvis.visionsecurity.model.StagePaths;
 import org.jarvis.visionsecurity.model.VisionSecurityConfigView;
 import org.jarvis.visionsecurity.model.VisionSecurityStatus;
 import org.opencv.core.Mat;
+import org.opencv.imgcodecs.Imgcodecs;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class VisionSecurityManager {
+
+    private static final int MIN_ENROLLMENT_SAMPLES = 5;
 
     private final VisionSecurityProperties properties;
     private final CameraCaptureService cameraCaptureService;
@@ -49,6 +59,7 @@ public class VisionSecurityManager {
             Thread.ofVirtual().name("jarvis-vision-security-monitor").unstarted(runnable));
 
     private final AtomicBoolean monitoringEnabled = new AtomicBoolean(false);
+    private final AtomicReference<String> activeExclusiveOperation = new AtomicReference<>();
     private volatile ScheduledFuture<?> monitoringTask;
     private volatile String activeUserId;
     private volatile DecisionType lastDecision;
@@ -58,7 +69,7 @@ public class VisionSecurityManager {
     private volatile int lastUnknownStreak;
     private volatile String lastIncidentId;
     private volatile CapabilityStatus lastCameraStatus = new CapabilityStatus("UNKNOWN", "Camera not checked yet");
-    private volatile MonitoringDecisionEngine decisionEngine = new MonitoringDecisionEngine(3, Duration.ofSeconds(60));
+    private volatile MonitoringDecisionEngine decisionEngine;
 
     @PreDestroy
     public void shutdown() {
@@ -67,13 +78,24 @@ public class VisionSecurityManager {
     }
 
     public synchronized VisionSecurityStatus startMonitoring(String userId) {
-        stopMonitoring(userId);
+        if (monitoringEnabled.get()) {
+            lastReason = "Monitoring already active";
+            return statusFor(userId);
+        }
+
+        String exclusiveOperation = activeExclusiveOperation.get();
+        if (exclusiveOperation != null) {
+            throw new IllegalStateException("Cannot start monitoring while " + exclusiveOperation + " is using the camera");
+        }
+
         monitoringEnabled.set(true);
         activeUserId = userId;
         decisionEngine = new MonitoringDecisionEngine(
                 properties.getMonitoring().getDebounceUnknownFrames(),
-                Duration.ofSeconds(properties.getMonitoring().getAlertCooldownSeconds())
+                Duration.ofSeconds(properties.getMonitoring().getAlertCooldownSeconds()),
+                properties.getMonitoring().getOwnerGraceFrames()
         );
+        lastCameraStatus = new CapabilityStatus("AVAILABLE", "Camera reserved for monitoring");
         monitoringTask = monitoringExecutor.scheduleWithFixedDelay(
                 () -> monitorOnce(userId),
                 0,
@@ -86,6 +108,11 @@ public class VisionSecurityManager {
 
     public synchronized VisionSecurityStatus stopMonitoring(String userId) {
         String statusUser = userId == null || userId.isBlank() ? activeUserId : userId;
+        if (!monitoringEnabled.get() && monitoringTask == null) {
+            lastReason = "Monitoring already stopped";
+            return statusFor(statusUser);
+        }
+
         monitoringEnabled.set(false);
         activeUserId = null;
         ScheduledFuture<?> current = monitoringTask;
@@ -93,7 +120,9 @@ public class VisionSecurityManager {
         if (current != null) {
             current.cancel(true);
         }
-        decisionEngine.reset();
+        if (decisionEngine != null) {
+            decisionEngine.reset();
+        }
         lastUnknownStreak = 0;
         lastReason = "Monitoring stopped";
         return statusFor(statusUser);
@@ -101,33 +130,141 @@ public class VisionSecurityManager {
 
     public EnrollmentResult captureEnrollment(String userId, Integer sampleCount) throws Exception {
         int requestedSamples = sampleCount == null ? properties.getEnrollment().getSampleCount() : sampleCount;
-        if (requestedSamples < 3) {
-            throw new IllegalArgumentException("Enrollment needs at least 3 samples");
+        if (requestedSamples < MIN_ENROLLMENT_SAMPLES) {
+            throw new IllegalArgumentException("Enrollment needs at least " + MIN_ENROLLMENT_SAMPLES + " samples");
         }
 
-        Instant deadline = Instant.now().plusSeconds(properties.getEnrollment().getCaptureTimeoutSeconds());
-        List<Mat> samples = new java.util.ArrayList<>();
+        return runExclusiveCameraOperation("owner enrollment", () -> {
+            Instant deadline = Instant.now().plusSeconds(properties.getEnrollment().getCaptureTimeoutSeconds());
+            List<Mat> samples = new java.util.ArrayList<>();
+            List<String> sampleHashes = new java.util.ArrayList<>();
+            try {
+                return cameraCaptureService.withCameraSession("owner enrollment", session -> {
+                    int frameCount = 0;
+                    java.util.Map<String, Integer> rejections = new java.util.LinkedHashMap<>();
+                    while (samples.size() < requestedSamples && Instant.now().isBefore(deadline)) {
+                        Mat frame = session.captureFrame();
+                        frameCount++;
+                        try {
+                            Mat sample = visionPipelineService.extractEnrollmentFace(frame);
+                            EnrollmentSampleAssessment assessment = assessEnrollmentSample(sample, sampleHashes);
+
+                            if (assessment.rejectionReason() != null) {
+                                sample.release();
+                                rejections.merge(assessment.rejectionReason(), 1, Integer::sum);
+                                continue;
+                            }
+
+                            sampleHashes.add(assessment.sampleHash());
+                            log.info("Enrollment sample {}/{} accepted: sharpness={}, contrast={}, nearestHashDistance={}",
+                                    samples.size() + 1, requestedSamples,
+                                    String.format("%.1f", assessment.sharpness()),
+                                    String.format("%.1f", assessment.contrast()),
+                                    assessment.nearestHashDistance() == Integer.MAX_VALUE ? "n/a" : assessment.nearestHashDistance());
+                            samples.add(sample);
+                            sleepBetweenEnrollmentSamples();
+                        } catch (IllegalStateException ex) {
+                            String reason = ex.getMessage() == null ? "unknown" : ex.getMessage();
+                            rejections.merge(reason, 1, Integer::sum);
+                        } finally {
+                            frame.release();
+                        }
+                    }
+
+                    if (samples.size() < requestedSamples) {
+                        StringBuilder sb = new StringBuilder("Enrollment failed: ")
+                                .append(samples.size()).append("/").append(requestedSamples)
+                                .append(" samples from ").append(frameCount).append(" frames.");
+                        if (!rejections.isEmpty()) {
+                            sb.append(" Rejections:");
+                            rejections.forEach((reason, count) -> sb.append(" [").append(reason).append("]=").append(count));
+                        }
+                        throw new IllegalStateException(sb.toString());
+                    }
+
+                    return faceVerificationService.storeEnrollment(userId, samples);
+                });
+            } finally {
+                samples.forEach(Mat::release);
+            }
+        });
+    }
+
+    public EnrollmentResult importEnrollmentFromDataset(String userId, Path datasetDirectory) throws IOException {
+        if (!Files.isDirectory(datasetDirectory)) {
+            throw new IllegalArgumentException("Dataset directory does not exist: " + datasetDirectory);
+        }
+
+        List<Path> imagePaths;
+        try (Stream<Path> stream = Files.list(datasetDirectory)) {
+            imagePaths = stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> {
+                        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+                        return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg");
+                    })
+                    .sorted()
+                    .toList();
+        }
+
+        if (imagePaths.isEmpty()) {
+            throw new IllegalArgumentException("No image files found in " + datasetDirectory);
+        }
+
+        List<Mat> acceptedSamples = new java.util.ArrayList<>();
+        List<String> acceptedHashes = new java.util.ArrayList<>();
+        Map<String, Integer> rejections = new LinkedHashMap<>();
+        int processed = 0;
+
         try {
-            while (samples.size() < requestedSamples && Instant.now().isBefore(deadline)) {
-                Mat frame = cameraCaptureService.captureFrame();
+            for (Path imagePath : imagePaths) {
+                processed++;
+                Mat frame = Imgcodecs.imread(imagePath.toString());
+                if (frame.empty()) {
+                    rejections.merge("unreadable image", 1, Integer::sum);
+                    frame.release();
+                    continue;
+                }
+
                 try {
                     Mat sample = visionPipelineService.extractEnrollmentFace(frame);
-                    samples.add(sample);
-                    Thread.sleep(properties.getEnrollment().getSampleSpacingMs());
-                } catch (IllegalStateException ignored) {
-                    // Skip frames until a single clean face is present.
+                    EnrollmentSampleAssessment assessment = assessEnrollmentSample(sample, acceptedHashes);
+                    if (assessment.rejectionReason() != null) {
+                        sample.release();
+                        rejections.merge(assessment.rejectionReason(), 1, Integer::sum);
+                        continue;
+                    }
+
+                    acceptedHashes.add(assessment.sampleHash());
+                    log.info("Dataset import: accepted {} (sharpness={}, contrast={}, nearestHashDistance={})",
+                            imagePath.getFileName(),
+                            String.format("%.1f", assessment.sharpness()),
+                            String.format("%.1f", assessment.contrast()),
+                            assessment.nearestHashDistance() == Integer.MAX_VALUE ? "n/a" : assessment.nearestHashDistance());
+                    acceptedSamples.add(sample);
+                } catch (IllegalStateException ex) {
+                    rejections.merge(ex.getMessage() != null ? ex.getMessage() : "unknown", 1, Integer::sum);
                 } finally {
                     frame.release();
                 }
             }
 
-            if (samples.size() < requestedSamples) {
-                throw new IllegalStateException("Only captured " + samples.size() + " enrollment samples before timeout");
+            if (acceptedSamples.size() < MIN_ENROLLMENT_SAMPLES) {
+                StringBuilder sb = new StringBuilder("Dataset import failed: only ")
+                        .append(acceptedSamples.size()).append(" quality samples from ")
+                        .append(processed).append(" images.");
+                if (!rejections.isEmpty()) {
+                    sb.append(" Rejections:");
+                    rejections.forEach((reason, count) -> sb.append(" [").append(reason).append("]=").append(count));
+                }
+                throw new IllegalStateException(sb.toString());
             }
 
-            return faceVerificationService.storeEnrollment(userId, samples);
+            log.info("Dataset import for {}: {} accepted from {} images. Rejections: {}",
+                    userId, acceptedSamples.size(), processed, rejections);
+            return faceVerificationService.storeEnrollment(userId, acceptedSamples);
         } finally {
-            samples.forEach(Mat::release);
+            acceptedSamples.forEach(Mat::release);
         }
     }
 
@@ -137,15 +274,19 @@ public class VisionSecurityManager {
     }
 
     public PipelineSnapshotResult capturePipelineSnapshot(String userId) throws Exception {
-        Instant createdAt = Instant.now();
-        Path directory = incidentStore.createSnapshotDirectory(userId, createdAt);
-        Mat frame = cameraCaptureService.captureFrame();
-        try {
-            PipelineResult result = visionPipelineService.analyze(userId, frame, directory);
-            return new PipelineSnapshotResult(userId, createdAt, directory.toString(), result);
-        } finally {
-            frame.release();
-        }
+        return runExclusiveCameraOperation("pipeline snapshot", () -> {
+            Instant createdAt = Instant.now();
+            Path directory = incidentStore.createSnapshotDirectory(userId, createdAt);
+            return cameraCaptureService.withCameraSession("pipeline snapshot", session -> {
+                Mat frame = session.captureFrame();
+                try {
+                    PipelineResult result = visionPipelineService.analyze(userId, frame, directory);
+                    return new PipelineSnapshotResult(userId, createdAt, directory.toString(), result);
+                } finally {
+                    frame.release();
+                }
+            });
+        });
     }
 
     public EmailDelivery sendTestAlert(String userId) {
@@ -177,6 +318,23 @@ public class VisionSecurityManager {
         );
     }
 
+    public boolean isMonitoringEnabled() {
+        return monitoringEnabled.get();
+    }
+
+    public CapabilityStatus cameraCapabilityStatus() {
+        if (monitoringEnabled.get()) {
+            return lastCameraStatus;
+        }
+
+        String exclusiveOperation = activeExclusiveOperation.get();
+        if (exclusiveOperation != null) {
+            return new CapabilityStatus("AVAILABLE", "Camera reserved by " + exclusiveOperation);
+        }
+
+        return cameraCaptureService.capabilityStatus();
+    }
+
     public VisionSecurityStatus statusFor(String userId) {
         String scopedUser = userId == null || userId.isBlank() ? activeUserId : userId;
         boolean ownerEnrolled = false;
@@ -190,7 +348,7 @@ public class VisionSecurityManager {
             }
         }
 
-        CapabilityStatus cameraStatus = monitoringEnabled.get() ? lastCameraStatus : cameraCaptureService.capabilityStatus();
+        CapabilityStatus cameraStatus = cameraCapabilityStatus();
         CapabilityStatus screenshotStatus = screenshotService.capabilityStatus();
         CapabilityStatus ocrStatus = ocrService.capabilityStatus();
         CapabilityStatus emailStatus = emailAlertService.capabilityStatus();
@@ -219,12 +377,12 @@ public class VisionSecurityManager {
 
     private void monitorOnce(String userId) {
         try {
-            Mat frame = cameraCaptureService.captureFrame();
+            Mat frame = cameraCaptureService.captureFrame("monitoring");
             try {
                 lastCameraStatus = new CapabilityStatus("AVAILABLE", "Camera capture succeeded");
                 PipelineResult quickResult = visionPipelineService.analyze(userId, frame, null);
-                updateDecision(quickResult);
                 MonitoringDecisionEngine.Observation observation = decisionEngine.observe(quickResult.decision(), Instant.now());
+                updateDecision(quickResult, observation.effectiveDecision());
                 lastUnknownStreak = observation.unknownStreak();
                 if (observation.alertTriggered()) {
                     recordIncident(userId, frame);
@@ -237,6 +395,78 @@ public class VisionSecurityManager {
             lastReason = "Monitoring error: " + ex.getMessage();
             log.warn("Vision security monitoring tick failed", ex);
         }
+    }
+
+    private void sleepBetweenEnrollmentSamples() {
+        try {
+            Thread.sleep(properties.getEnrollment().getSampleSpacingMs());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Owner enrollment was interrupted", ex);
+        }
+    }
+
+    private EnrollmentSampleAssessment assessEnrollmentSample(Mat sample, List<String> acceptedHashes) {
+        double sharpness = visionPipelineService.measureFaceSharpness(sample);
+        if (sharpness < properties.getEnrollment().getMinFaceSharpness()) {
+            return new EnrollmentSampleAssessment(
+                    sharpness,
+                    0.0,
+                    Integer.MAX_VALUE,
+                    null,
+                    "blurry face (sharpness=" + String.format("%.1f", sharpness) + ")"
+            );
+        }
+
+        double contrast = visionPipelineService.measureFaceContrast(sample);
+        if (contrast < properties.getEnrollment().getMinFaceContrast()) {
+            return new EnrollmentSampleAssessment(
+                    sharpness,
+                    contrast,
+                    Integer.MAX_VALUE,
+                    null,
+                    "low contrast (contrast=" + String.format("%.1f", contrast) + ")"
+            );
+        }
+
+        String sampleHash = visionPipelineService.computeDifferenceHash(sample);
+        int nearestHashDistance = acceptedHashes.stream()
+                .mapToInt(existingHash -> visionPipelineService.hammingDistance(sampleHash, existingHash))
+                .min()
+                .orElse(Integer.MAX_VALUE);
+        if (nearestHashDistance <= properties.getEnrollment().getMaxDuplicateHashDistance()) {
+            return new EnrollmentSampleAssessment(
+                    sharpness,
+                    contrast,
+                    nearestHashDistance,
+                    sampleHash,
+                    "too similar to an accepted sample (hashDistance=" + nearestHashDistance + ")"
+            );
+        }
+
+        return new EnrollmentSampleAssessment(sharpness, contrast, nearestHashDistance, sampleHash, null);
+    }
+
+    private <T> T runExclusiveCameraOperation(String operation, ExclusiveCameraOperation<T> operationCallback) throws Exception {
+        beginExclusiveCameraOperation(operation);
+        try {
+            return operationCallback.execute();
+        } finally {
+            activeExclusiveOperation.compareAndSet(operation, null);
+        }
+    }
+
+    private synchronized void beginExclusiveCameraOperation(String operation) {
+        if (monitoringEnabled.get()) {
+            throw new IllegalStateException("Stop monitoring before starting " + operation);
+        }
+
+        String currentOperation = activeExclusiveOperation.get();
+        if (currentOperation != null) {
+            throw new IllegalStateException("Vision security is already using the camera for " + currentOperation);
+        }
+
+        activeExclusiveOperation.set(operation);
     }
 
     private void recordIncident(String userId, Mat frame) throws Exception {
@@ -307,10 +537,13 @@ public class VisionSecurityManager {
         lastReason = "Unknown person confirmed and incident stored";
     }
 
-    private void updateDecision(PipelineResult result) {
-        lastDecision = result.decision();
+    private void updateDecision(PipelineResult result, DecisionType effectiveDecision) {
+        lastDecision = effectiveDecision;
         lastDecisionAt = Instant.now();
-        lastReason = result.reason();
+        lastReason = effectiveDecision == result.decision()
+                ? result.reason()
+                : "Temporal consensus kept " + effectiveDecision + " while frame-level result was " + result.decision()
+                + " (" + result.reason() + ")";
         lastFaceCount = result.faceCount();
     }
 
@@ -327,5 +560,19 @@ public class VisionSecurityManager {
             return "DEGRADED";
         }
         return "READY";
+    }
+
+    @FunctionalInterface
+    private interface ExclusiveCameraOperation<T> {
+        T execute() throws Exception;
+    }
+
+    private record EnrollmentSampleAssessment(
+            double sharpness,
+            double contrast,
+            int nearestHashDistance,
+            String sampleHash,
+            String rejectionReason
+    ) {
     }
 }

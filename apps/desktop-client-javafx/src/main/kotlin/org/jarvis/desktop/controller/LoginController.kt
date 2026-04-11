@@ -8,6 +8,7 @@ import javafx.scene.control.*
 import javafx.stage.Stage
 import org.jarvis.desktop.auth.*
 import org.jarvis.desktop.config.AppConfig
+import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
@@ -64,9 +65,11 @@ class LoginController {
         loginError.isVisible = false
         
         Thread {
+            var resolvedConfig: ResolvedDesktopConfig? = null
             try {
                 logger.info("Attempting login for user: $username")
-                val baseUrl = AppConfig.current().apiGatewayBaseUrl
+                resolvedConfig = AppConfig.current()
+                val baseUrl = resolvedConfig.apiGatewayBaseUrl
                 
                 val loginRequest = LoginRequest(username, password)
                 val requestBody = objectMapper.writeValueAsString(loginRequest)
@@ -113,7 +116,8 @@ class LoginController {
             } catch (e: Exception) {
                 logger.error("Login error: ${e.message}", e)
                 Platform.runLater {
-                    showLoginError("Ошибка подключения к серверу: ${e.message}")
+                    val config = resolvedConfig ?: AppConfig.current()
+                    showLoginError(ServerConnectionErrorFormatter.format(config, e))
                     loginButton.isDisable = false
                 }
             }
@@ -146,9 +150,11 @@ class LoginController {
         registerError.isVisible = false
         
         Thread {
+            var resolvedConfig: ResolvedDesktopConfig? = null
             try {
                 logger.info("Attempting registration for user: $username")
-                val baseUrl = AppConfig.current().apiGatewayBaseUrl
+                resolvedConfig = AppConfig.current()
+                val baseUrl = resolvedConfig.apiGatewayBaseUrl
                 
                 val registerRequest = RegisterRequest(username, password, "USER")
                 val requestBody = objectMapper.writeValueAsString(registerRequest)
@@ -195,7 +201,8 @@ class LoginController {
             } catch (e: Exception) {
                 logger.error("Registration error: ${e.message}", e)
                 Platform.runLater {
-                    showRegisterError("Ошибка подключения к серверу: ${e.message}")
+                    val config = resolvedConfig ?: AppConfig.current()
+                    showRegisterError(ServerConnectionErrorFormatter.format(config, e))
                     registerButton.isDisable = false
                 }
             }

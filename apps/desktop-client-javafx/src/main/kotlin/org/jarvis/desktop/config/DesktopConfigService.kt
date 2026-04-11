@@ -9,7 +9,8 @@ internal class DesktopConfigService(
     private val settingsStore: DesktopSettingsStore,
     private val environmentProvider: () -> Map<String, String> = System::getenv,
     private val localRuntimeEndpointProvider: () -> LocalRuntimeEndpointSnapshot? = LocalRuntimeEndpointDetector()::detectActive,
-    private val runtimeSummaryFingerprintProvider: () -> String? = { null }
+    private val runtimeSummaryFingerprintProvider: () -> String? = { null },
+    private val endpointHealthProbe: (String) -> Boolean = { false }
 ) {
     private val logger = LoggerFactory.getLogger(DesktopConfigService::class.java)
 
@@ -20,6 +21,7 @@ internal class DesktopConfigService(
 
     private val listeners = CopyOnWriteArrayList<(ResolvedDesktopConfig) -> Unit>()
     private val stateLock = Any()
+    private var allowManualEndpointRecovery = true
     private val current = AtomicReference(resolveCurrent())
 
     fun current(): ResolvedDesktopConfig {
@@ -41,6 +43,7 @@ internal class DesktopConfigService(
                 manualEndpointOverride = manualEndpointOverride
             )
         )
+        allowManualEndpointRecovery = !manualEndpointOverride
         return synchronized(stateLock) { updateCurrentLocked() }
     }
 
@@ -57,10 +60,6 @@ internal class DesktopConfigService(
     private fun maybeRefreshAutoConfig() {
         synchronized(stateLock) {
             val cached = current.get()
-            if (cached.config.usesManualEndpointOverride) {
-                return
-            }
-
             val fingerprint = runtimeSummaryFingerprintProvider()
             if (fingerprint == cached.runtimeSummaryFingerprint) {
                 return
@@ -83,10 +82,23 @@ internal class DesktopConfigService(
     }
 
     private fun resolveCurrent(): CachedResolvedDesktopConfig {
+        val settings = settingsStore.load()
+        val localRuntimeEndpoint = localRuntimeEndpointProvider()
+        val normalizedManualBaseUrl = DesktopConfigResolver.normalizeBaseUrl(settings.apiGatewayBaseUrl)
+        val manualEndpointReachable = normalizedManualBaseUrl
+            ?.takeIf {
+                allowManualEndpointRecovery &&
+                settings.endpointSelectionMode == EndpointSelectionMode.MANUAL &&
+                    localRuntimeEndpoint?.runtimeMode == RuntimeEndpointMode.K8S &&
+                    DesktopConfigResolver.isLoopbackBaseUrl(it)
+            }
+            ?.let { endpointHealthProbe(it) }
+
         val resolvedConfig = DesktopConfigResolver.resolve(
             environment = environmentProvider(),
-            settings = settingsStore.load(),
-            localRuntimeEndpoint = localRuntimeEndpointProvider()
+            settings = settings,
+            localRuntimeEndpoint = localRuntimeEndpoint,
+            manualEndpointReachable = manualEndpointReachable
         )
         return CachedResolvedDesktopConfig(
             config = resolvedConfig,

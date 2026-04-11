@@ -12,8 +12,9 @@ import java.nio.file.attribute.FileTime
 object JarvisPaths {
     private const val LOCAL_RUNTIME_MODE = "local"
     private const val K8S_RUNTIME_MODE = "k8s"
-    private const val DEFAULT_LOCAL_API_GATEWAY = "https://127.0.0.1:18080"
+    private const val DEFAULT_LOCAL_API_GATEWAY = "http://127.0.0.1:8080"
     private const val DEFAULT_REMOTE_API_GATEWAY = "https://api.jarvis.local"
+    private const val DEFAULT_REMOTE_GRAFANA = "https://grafana.jarvis.local"
     private val userHome: String = System.getProperty("user.home")
     private val jarvisRoot: Path = Paths.get(userHome, ".jarvis")
     
@@ -37,6 +38,7 @@ object JarvisPaths {
     val launcherPid: Path = run.resolve("launcher.pid")
     val desktopPid: Path = run.resolve("desktop.pid")
     val lastRunSummary: Path = run.resolve("last-run.json")
+    val observabilityStatus: Path = run.resolve("observability-status.json")
     
     // Stage 12: Release source tracking
     val releaseSourceFile: Path = jarvisRoot.resolve("app").resolve("RELEASE_SOURCE")
@@ -46,7 +48,8 @@ object JarvisPaths {
         val status: String?,
         val apiUrl: String?,
         val voiceUrl: String?,
-        val runtimeMode: String?
+        val runtimeMode: String?,
+        val grafanaUrl: String?
     )
     
     /**
@@ -167,22 +170,13 @@ object JarvisPaths {
         }
 
         val summary = loadRuntimeRunSummary()
-        val summaryMode = summary?.runtimeMode
+        val summaryMode = normalizeRuntimeMode(summary?.runtimeMode)
         val summaryStatus = summary?.status
-        if (summaryMode.equals(LOCAL_RUNTIME_MODE, ignoreCase = true) &&
-            !summaryStatus.equals("stopped", ignoreCase = true)
-        ) {
-            return LOCAL_RUNTIME_MODE
+        if (summaryMode != null && !summaryStatus.equals("stopped", ignoreCase = true)) {
+            return summaryMode
         }
 
-        val projectRootLooksLocal = runCatching {
-            val projectRoot = getProjectRoot()
-            Files.exists(projectRoot.resolve("scripts/runtime-up.sh")) &&
-                Files.exists(projectRoot.resolve("pom.xml")) &&
-                Files.isDirectory(projectRoot.resolve("apps"))
-        }.getOrDefault(false)
-
-        return if (projectRootLooksLocal) LOCAL_RUNTIME_MODE else K8S_RUNTIME_MODE
+        return K8S_RUNTIME_MODE
     }
     
     /**
@@ -212,24 +206,42 @@ object JarvisPaths {
             System.getenv("JARVIS_API_BASE_URL")
             ?: System.getenv("API_URL")
         )
-        val summary = loadRuntimeRunSummary()
-        val summaryUrl = normalizeBaseUrl(summary?.apiUrl)
-        val summaryMode = summary?.runtimeMode
-        val summaryStatus = summary?.status
-        if (isLocalRuntime() && summaryMode.equals(LOCAL_RUNTIME_MODE, ignoreCase = true) &&
-            !summaryStatus.equals("stopped", ignoreCase = true) &&
-            !summaryUrl.isNullOrBlank()
-        ) {
-            if (envUrl.isNullOrBlank() || isLocalUrl(envUrl)) {
-                return summaryUrl
-            }
-        }
-
         if (!envUrl.isNullOrBlank()) {
             return envUrl
         }
 
+        val summary = loadRuntimeRunSummary()
+        val summaryUrl = normalizeBaseUrl(summary?.apiUrl)
+        val summaryMode = normalizeRuntimeMode(summary?.runtimeMode)
+        val summaryStatus = summary?.status
+        if (isLocalRuntime() &&
+            summaryMode == LOCAL_RUNTIME_MODE &&
+            !summaryStatus.equals("stopped", ignoreCase = true) &&
+            !summaryUrl.isNullOrBlank()
+        ) {
+            return summaryUrl
+        }
+
         return if (isLocalRuntime()) DEFAULT_LOCAL_API_GATEWAY else DEFAULT_REMOTE_API_GATEWAY
+    }
+
+    fun getGrafanaUrl(): String? {
+        if (isLocalRuntime()) {
+            return null
+        }
+
+        val summary = loadRuntimeRunSummary()
+        val summaryUrl = normalizeBaseUrl(summary?.grafanaUrl)
+        val summaryMode = normalizeRuntimeMode(summary?.runtimeMode)
+        val summaryStatus = summary?.status
+        if (summaryMode == K8S_RUNTIME_MODE &&
+            !summaryStatus.equals("stopped", ignoreCase = true) &&
+            !summaryUrl.isNullOrBlank()
+        ) {
+            return summaryUrl
+        }
+
+        return DEFAULT_REMOTE_GRAFANA
     }
 
     fun loadRuntimeRunSummary(): RuntimeRunSummary? {
@@ -242,7 +254,8 @@ object JarvisPaths {
             status = extractJsonString(raw, "status"),
             apiUrl = normalizeBaseUrl(extractJsonString(raw, "apiUrl")),
             voiceUrl = extractJsonString(raw, "voiceUrl")?.trim()?.trimEnd('/'),
-            runtimeMode = extractJsonString(raw, "runtimeMode")
+            runtimeMode = extractJsonString(raw, "runtimeMode"),
+            grafanaUrl = normalizeBaseUrl(extractJsonString(raw, "grafanaUrl"))
         )
     }
 
@@ -251,9 +264,30 @@ object JarvisPaths {
         val summaryText = if (summary == null) {
             "last-run=missing"
         } else {
-            "last-run(status=${summary.status ?: "unknown"}, api=${summary.apiUrl ?: "n/a"}, mode=${summary.runtimeMode ?: "n/a"})"
+            "last-run(status=${summary.status ?: "unknown"}, api=${summary.apiUrl ?: "n/a"}, grafana=${summary.grafanaUrl ?: "n/a"}, mode=${summary.runtimeMode ?: "n/a"})"
         }
-        return "runtimeMode=${getRuntimeMode()}, apiGateway=${getApiGatewayUrl()}, $summaryText"
+        return "runtimeMode=${getRuntimeMode()}, apiGateway=${getApiGatewayUrl()}, grafana=${getGrafanaUrl() ?: "n/a"}, $summaryText"
+    }
+
+    fun writeRuntimeRunSummary(
+        status: String,
+        apiUrl: String,
+        voiceUrl: String,
+        runtimeMode: String,
+        grafanaUrl: String? = null
+    ) {
+        ensureDirectories()
+        val payload = """
+            {
+              "timestamp": "${escapeJson(instantNow())}",
+              "status": "${escapeJson(status)}",
+              "apiUrl": "${escapeJson(normalizeBaseUrl(apiUrl) ?: apiUrl.trim())}",
+              "voiceUrl": "${escapeJson(voiceUrl.trim().trimEnd('/'))}",
+              "runtimeMode": "${escapeJson(runtimeMode)}",
+              "grafanaUrl": "${escapeJson(grafanaUrl ?: "")}"
+            }
+        """.trimIndent()
+        Files.writeString(lastRunSummary, payload)
     }
 
     private fun normalizeRuntimeMode(runtimeMode: String?): String? {
@@ -268,6 +302,14 @@ object JarvisPaths {
         val normalized = url.trim().lowercase()
         return normalized.contains("127.0.0.1") || normalized.contains("localhost")
     }
+
+    private fun escapeJson(value: String): String {
+        return value
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+    }
+
+    private fun instantNow(): String = java.time.OffsetDateTime.now().toString()
 
     private fun normalizeBaseUrl(url: String?): String? {
         val trimmed = url?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() } ?: return null

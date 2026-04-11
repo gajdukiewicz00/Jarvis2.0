@@ -8,6 +8,10 @@ spec:
     metadata:
       annotations:
         jarvis.io/internal-tls-slice-api-gateway-security-service: api-gateway-security-service-v1
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8088"
+        prometheus.io/scheme: https
     spec:
       containers:
         - name: security-service

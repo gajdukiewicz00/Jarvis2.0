@@ -2,7 +2,7 @@
 # Jarvis 2.0 - Ingress with TLS (Production Standard)
 # =============================================================================
 # Iteration 1.5 (Stage 7): HTTPS/TLS as mandatory standard
-# Domains: api.jarvis.local (REST API) and voice.jarvis.local (WebSocket)
+# Domains: api.jarvis.local (REST API), voice.jarvis.local (WebSocket), grafana.jarvis.local (observability)
 # =============================================================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -48,6 +48,7 @@ spec:
     - hosts:
         - api.jarvis.local
         - voice.jarvis.local
+        - grafana.jarvis.local
       secretName: jarvis-tls
   rules:
     # API Gateway (REST API)
@@ -79,4 +80,14 @@ spec:
                 name: api-gateway
                 port:
                   number: 8080
-
+    # Grafana (Observability)
+    - host: grafana.jarvis.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grafana
+                port:
+                  number: 3000

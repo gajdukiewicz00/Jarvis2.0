@@ -185,6 +185,16 @@ resolve_last_run_api_url() {
     printf '%s' "${api_url%/}"
 }
 
+candidate_local_runtime_api_url() {
+    if resolve_local_runtime_api_url_from_env_file; then
+        return 0
+    fi
+    if resolve_last_run_api_url; then
+        return 0
+    fi
+    return 1
+}
+
 resolve_local_runtime_api_url_from_env_file() {
     local env_file="${HOME}/.jarvis/run/local-runtime/local.env"
     [[ -f "${env_file}" ]] || return 1
@@ -202,9 +212,36 @@ resolve_local_runtime_api_url_from_env_file() {
 }
 
 resolve_local_runtime_api_url() {
-    resolve_local_runtime_api_url_from_env_file || \
-        resolve_last_run_api_url || \
-        printf 'http://127.0.0.1:8080'
+    if candidate_local_runtime_api_url; then
+        return 0
+    fi
+    log "WARNING: No local runtime env file or last-run.json found; using default http://127.0.0.1:8080"
+    printf 'http://127.0.0.1:8080'
+}
+
+active_local_runtime_api_url() {
+    local candidate="$(
+        candidate_local_runtime_api_url 2>/dev/null || true
+    )"
+    [[ -n "${candidate}" ]] || return 1
+
+    local readiness_url="${candidate%/}/actuator/health/readiness"
+    local -a curl_args=(--silent --show-error --fail --max-time 3)
+    if [[ "${readiness_url}" == https://* ]]; then
+        local ca_cert="${HOME}/.jarvis/tls/jarvis-ca.crt"
+        if [[ -f "${ca_cert}" ]]; then
+            curl_args+=(--cacert "${ca_cert}")
+        fi
+    fi
+
+    local body
+    body="$(curl "${curl_args[@]}" "${readiness_url}" 2>/dev/null || true)"
+    if grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"' <<<"${body}"; then
+        printf '%s' "${candidate%/}"
+        return 0
+    fi
+
+    return 1
 }
 
 ensure_repo_gui_artifacts() {
@@ -393,19 +430,42 @@ export JARVIS_PROJECT_ROOT="${PROJECT_ROOT}"
 export JARVIS_LOG_DIR="${LOG_DIR}"
 export JARVIS_AUTO_START="${JARVIS_AUTO_START:-true}"
 if [[ -z "${JARVIS_RUNTIME_MODE:-}" ]]; then
-    export JARVIS_RUNTIME_MODE="$([[ -n "${SOURCE_REPO_ROOT}" ]] && echo "local" || echo "k8s")"
+    LOCAL_RUNTIME_API_URL="$(active_local_runtime_api_url || true)"
+    if [[ -n "${LOCAL_RUNTIME_API_URL}" ]]; then
+        export JARVIS_RUNTIME_MODE="local"
+        log "JARVIS_RUNTIME_MODE not set; detected active local runtime at ${LOCAL_RUNTIME_API_URL}; defaulting to local"
+    else
+        export JARVIS_RUNTIME_MODE="k8s"
+        log "JARVIS_RUNTIME_MODE not set; defaulting to k8s"
+    fi
 else
     export JARVIS_RUNTIME_MODE
 fi
 if [[ "${JARVIS_RUNTIME_MODE}" == "local" ]]; then
     export JARVIS_AUTO_BOOTSTRAP="${JARVIS_AUTO_BOOTSTRAP:-false}"
-    LOCAL_RUNTIME_API_URL="$(resolve_local_runtime_api_url)"
+    LOCAL_RUNTIME_API_URL="${LOCAL_RUNTIME_API_URL:-$(resolve_local_runtime_api_url)}"
     export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-${LOCAL_RUNTIME_API_URL}}"
     export JARVIS_USE_TLS="${JARVIS_USE_TLS:-$( [[ "${JARVIS_API_BASE_URL}" == https://* ]] && echo true || echo false )}"
 else
     export JARVIS_AUTO_BOOTSTRAP="${JARVIS_AUTO_BOOTSTRAP:-true}"
     export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
     export JARVIS_USE_TLS="${JARVIS_USE_TLS:-true}"
+
+    # K8s pre-flight: verify minimal prerequisites before starting JVM
+    k8s_preflight_ok="true"
+    if [[ ! -f "${HOME}/.jarvis/kubeconfig" ]] && [[ ! -f "/etc/rancher/k3s/k3s.yaml" ]]; then
+        if ! command -v k3s >/dev/null 2>&1; then
+            k8s_preflight_ok="false"
+            log "K8S PRE-FLIGHT FAIL: No kubeconfig and k3s not installed"
+            notify "Kubernetes not configured.\n\nNo kubeconfig found at ~/.jarvis/kubeconfig\nand k3s is not installed.\n\nInstall k3s first:\n  curl -sfL https://get.k3s.io | sh -\n\nOr switch to local mode:\n  JARVIS_RUNTIME_MODE=local"
+        else
+            log "K8S PRE-FLIGHT: kubeconfig missing but k3s is installed; bootstrap will handle setup"
+        fi
+    fi
+    if [[ "${k8s_preflight_ok}" == "false" ]]; then
+        exit 1
+    fi
+    log "K8S PRE-FLIGHT: ok (mode=k8s, kubeconfig-or-k3s=present)"
 fi
 export JARVIS_AUTO_INSTALL_DEPS="${JARVIS_AUTO_INSTALL_DEPS:-true}"
 if [[ -n "${JARVIS_ENABLE_LLM:-}" ]]; then

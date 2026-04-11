@@ -6,7 +6,8 @@ import okhttp3.WebSocketListener
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.jarvis.desktop.config.AppConfig
-import org.jarvis.desktop.config.ResolvedDesktopConfig
+import org.jarvis.desktop.config.DesktopSettings
+import org.jarvis.desktop.config.PreferencesDesktopSettingsStore
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotSame
@@ -23,22 +24,20 @@ class VoiceWebSocketClientStaleCallbackTest {
 
     private val primaryServer = MockWebServer()
     private val replacementServer = MockWebServer()
-    private lateinit var originalConfig: ResolvedDesktopConfig
+    private val settingsStore = PreferencesDesktopSettingsStore()
+    private lateinit var originalSettings: DesktopSettings
     private var client: VoiceWebSocketClient? = null
 
     @BeforeEach
     fun setUp() {
-        originalConfig = AppConfig.current()
+        originalSettings = settingsStore.load()
     }
 
     @AfterEach
     fun tearDown() {
         client?.disconnect()
-        AppConfig.saveSettings(
-            apiGatewayBaseUrl = originalConfig.apiGatewayBaseUrl,
-            locale = originalConfig.locale,
-            manualEndpointOverride = originalConfig.usesManualEndpointOverride
-        )
+        settingsStore.save(originalSettings)
+        AppConfig.reload()
         runCatching { primaryServer.shutdown() }
         runCatching { replacementServer.shutdown() }
     }

@@ -158,8 +158,9 @@ class VoiceWebSocketClient(
             synchronized(stateLock) {
                 connectInProgress = false
             }
-            logger.error("❌ Voice WS connect bootstrap failed: {}", e.message, e)
-            dispatchToUi { onStateChange("ERROR: ${e.message}") }
+            val formatted = TransportErrorFormatter.describeFailure("Voice WebSocket", resolvedUrl, e)
+            logger.error("❌ {}", formatted.diagnosticMessage, e)
+            dispatchToUi { onStateChange("ERROR: ${formatted.userMessage}") }
             if (shouldReconnect) {
                 scheduleReconnect()
             }
@@ -551,24 +552,28 @@ class VoiceWebSocketClient(
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
         if (!isCurrentSocket(webSocket)) {
-            logger.debug("Ignoring stale Voice WS closing callback: code={}, reason={}", code, reason)
+            val formatted = TransportErrorFormatter.describeClose("Voice WebSocket", resolvedUrl, code, reason)
+            logger.debug("Ignoring stale Voice WS closing callback: {}", formatted.diagnosticMessage)
             return
         }
-        logger.warn("⚠️ Voice WS closing: code={}, reason={}", code, reason)
+        val formatted = TransportErrorFormatter.describeClose("Voice WebSocket", resolvedUrl, code, reason)
+        logger.warn("⚠️ {}", formatted.diagnosticMessage)
         // Don't set isConnected=false here, wait for onClosed
     }
     
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         synchronized(stateLock) {
             if (this.webSocket !== webSocket) {
-                logger.debug("Ignoring stale Voice WS closed callback: code={}, reason={}", code, reason)
+                val formatted = TransportErrorFormatter.describeClose("Voice WebSocket", resolvedUrl, code, reason)
+                logger.debug("Ignoring stale Voice WS closed callback: {}", formatted.diagnosticMessage)
                 return
             }
             connectInProgress = false
             this.webSocket = null
             isConnected = false
         }
-        logger.warn("🔌 Voice WS closed: code={}, reason={}", code, reason)
+        val formatted = TransportErrorFormatter.describeClose("Voice WebSocket", resolvedUrl, code, reason)
+        logger.warn("🔌 {}", formatted.diagnosticMessage)
         dispatchToUi { onStateChange("DISCONNECTED") }
         
         // Auto-reconnect if not intentional close (1000 = normal close)
@@ -580,7 +585,8 @@ class VoiceWebSocketClient(
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         synchronized(stateLock) {
             if (this.webSocket !== webSocket) {
-                logger.debug("Ignoring stale Voice WS failure callback: {}", t.message)
+                val formatted = TransportErrorFormatter.describeFailure("Voice WebSocket", resolvedUrl, t, response)
+                logger.debug("Ignoring stale Voice WS failure callback: {}", formatted.diagnosticMessage)
                 return
             }
             connectInProgress = false
@@ -595,8 +601,9 @@ class VoiceWebSocketClient(
             }
         }
 
-        logger.error("❌ Voice WS failure: {}, code={}", t.message, response?.code)
-        dispatchToUi { onStateChange("ERROR: ${t.message}") }
+        val formatted = TransportErrorFormatter.describeFailure("Voice WebSocket", resolvedUrl, t, response)
+        logger.error("❌ {}", formatted.diagnosticMessage, t)
+        dispatchToUi { onStateChange("ERROR: ${formatted.userMessage}") }
 
         // Auto-reconnect on failure
         if (shouldReconnect) {
@@ -653,7 +660,12 @@ class VoiceWebSocketClient(
             )
             true
         } catch (e: Exception) {
-            logger.error("Voice WS token refresh failed: {}", e.message, e)
+            val formatted = TransportErrorFormatter.describeFailure(
+                channel = "Voice auth refresh",
+                endpoint = "${AppConfig.current().apiGatewayBaseUrl}/auth/refresh",
+                throwable = e
+            )
+            logger.error("{}", formatted.diagnosticMessage, e)
             if (clearTokensOnFailure) {
                 TokenManager.clearTokens()
             }

@@ -49,6 +49,10 @@ class DevicesTab(private val apiClient: ApiClient) {
         loadDevices()
     }
 
+    fun refresh() {
+        loadDevices()
+    }
+
     private fun loadDevices() {
         statusLabel.text = "Loading smart-home devices..."
         statusLabel.style = "-fx-text-fill: #1565c0; -fx-font-weight: bold;"

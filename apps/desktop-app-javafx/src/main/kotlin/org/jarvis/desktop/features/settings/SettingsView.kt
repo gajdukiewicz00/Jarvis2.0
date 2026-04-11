@@ -187,7 +187,7 @@ class SettingsView(
             add(settingLabel("Manual override"), 0, 1)
             add(manualOverrideCheckBox, 1, 1)
             add(settingLabel("Pinned gateway URL"), 0, 2)
-            add(gatewayUrlField.apply { promptText = "https://127.0.0.1:18080" }, 1, 2)
+            add(gatewayUrlField.apply { promptText = "http://127.0.0.1:8080" }, 1, 2)
             add(settingLabel("Active source"), 0, 3)
             add(sourceLabel, 1, 3)
             add(settingLabel("Endpoint decision"), 0, 4)

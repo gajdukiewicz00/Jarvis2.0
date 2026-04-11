@@ -18,5 +18,6 @@ public interface LlmServiceClient {
     LlmChatResponse chat(
             @RequestBody LlmChatRequest request,
             @RequestHeader("X-Correlation-ID") String correlationId,
-            @RequestHeader(value = "X-User-Id", required = false) String userId);
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
+            @RequestHeader(value = "X-Model-Profile", required = false) String modelProfile);
 }

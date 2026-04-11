@@ -1,8 +1,8 @@
 # =============================================================================
-# LLM Server Deployment - GPU-enabled (RTX 5070, 12GB VRAM)
+# LLM Server Deployment
 # =============================================================================
-# Runs llama.cpp backend by default for optimal VRAM usage
-# Model: h2ogpt-7b-chat-q4_k_m.gguf (Q4_K_M quantization)
+# K8S defaults to a CPU-safe llama.cpp profile until the cluster has an
+# NVIDIA device plugin and allocatable gpu resources.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -33,12 +33,6 @@ spec:
         fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
-      # GPU scheduling (Stage: perf/hardware)
-      # Tolerations for GPU nodes (if cluster uses taints)
-      tolerations:
-        - key: nvidia.com/gpu
-          operator: Exists
-          effect: NoSchedule
       containers:
         - name: llm-server
           image: jarvis/llm-server
@@ -53,24 +47,23 @@ spec:
             - containerPort: 5000
               name: http
           env:
-            # Backend selection (llamacpp = GGUF, lighter on VRAM)
+            # CPU-safe backend profile for clusters without a GPU plugin.
             - name: LLM_BACKEND
               value: "llamacpp"
             - name: DEVICE
-              value: "cuda"
-            # Explicit GPU flags (Stage: perf/hardware)
+              value: "cpu"
             - name: LLM_DEVICE
-              value: "gpu"
+              value: "cpu"
             - name: ENABLE_GPU
-              value: "true"
-            # Model paths
+              value: "false"
+            # Model path (seed the PVC with scripts/seed-llm-model-pvc.sh)
             - name: MODEL_PATH
-              value: "/models/h2ogpt-4096-llama2-7b-chat"
+              value: "/models"
             - name: GGUF_MODEL_PATH
-              value: "/models/h2ogpt-7b-chat-q4_k_m.gguf"
-            # llama.cpp settings for 12GB VRAM
+              value: "/models/qwen2.5-3b-instruct-q4_k_m.gguf"
+            # llama.cpp settings
             - name: N_GPU_LAYERS
-              value: "35"  # Safe default, ~8GB VRAM usage
+              value: "0"
             - name: N_CTX
               value: "4096"
             - name: N_BATCH
@@ -94,13 +87,11 @@ spec:
               value: "false"
           resources:
             requests:
-              cpu: "2"
-              memory: "8Gi"
-              nvidia.com/gpu: 1
+              cpu: "1"
+              memory: "4Gi"
             limits:
               cpu: "8"
-              memory: "14Gi"
-              nvidia.com/gpu: 1
+              memory: "8Gi"
           volumeMounts:
             - name: llm-models
               mountPath: /models
@@ -144,17 +135,6 @@ spec:
           emptyDir: {}
         - name: app-cache
           emptyDir: {}
-      # Prefer nodes with GPU
-      affinity:
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference:
-                matchExpressions:
-                  - key: nvidia.com/gpu.present
-                    operator: In
-                    values:
-                      - "true"
 ---
 apiVersion: v1
 kind: Service

@@ -34,16 +34,18 @@ public class LlmOrchestratorController {
     @PostMapping("/orchestrate")
     public ResponseEntity<OrchestrationResponse> orchestrate(
             @Valid @RequestBody OrchestrationRequest request,
-            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId) {
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
+            @RequestHeader(value = "X-Model-Profile", required = false) String modelProfile) {
 
         if (correlationId == null) {
             correlationId = java.util.UUID.randomUUID().toString();
         }
 
         LogSanitizer sanitizer = logSanitizer();
-        log.info("🧠 Orchestration request: sessionId={}, userId={}, correlationId={}",
+        log.info("Orchestration request: sessionId={}, userId={}, profile={}, correlationId={}",
                 sanitizer.sanitizeId(request.getSessionId()),
                 sanitizer.sanitizeId(request.getUserId()),
+                modelProfile != null ? modelProfile : "orchestration",
                 correlationId);
 
         OrchestrationResponse response = orchestratorService.orchestrate(request, correlationId);

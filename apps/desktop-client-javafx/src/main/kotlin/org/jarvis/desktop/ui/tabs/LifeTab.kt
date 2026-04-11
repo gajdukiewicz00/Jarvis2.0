@@ -129,8 +129,14 @@ class LifeTab(private val apiClient: ApiClient) {
         tab.content = content
         tab.isClosable = false
     }
+
+    fun refresh() {
+        loadExpenses()
+    }
     
     private fun loadExpenses() {
+        statusLabel.text = "Loading recent expenses..."
+        statusLabel.style = "-fx-text-fill: #1565c0; -fx-font-weight: bold;"
         try {
             val response = apiClient.get("/life/finance/expenses")
             expenseListView.items.clear()
@@ -138,6 +144,13 @@ class LifeTab(private val apiClient: ApiClient) {
             // Type-safe JSON parsing with kotlinx.serialization
             val expenses = json.decodeFromString<List<ExpenseDTO>>(response)
             
+            if (expenses.isEmpty()) {
+                statusLabel.text = "No expenses recorded yet"
+                statusLabel.style = "-fx-text-fill: #455a64; -fx-font-weight: bold;"
+                expenseListView.items.add("No expenses yet. Add one above to populate Life.")
+                return
+            }
+
             // Display most recent 10 expenses
             expenses.reversed().take(10).forEach { expense ->
                 val displayText = "${expense.currency}${expense.amount} - ${expense.category} - ${expense.description ?: "N/A"}"

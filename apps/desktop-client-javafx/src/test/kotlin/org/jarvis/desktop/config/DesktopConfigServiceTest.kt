@@ -1,6 +1,7 @@
 package org.jarvis.desktop.config
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.Locale
@@ -44,7 +45,7 @@ class DesktopConfigServiceTest {
             environmentProvider = { emptyMap() },
             localRuntimeEndpointProvider = {
                 LocalRuntimeEndpointSnapshot(
-                    apiGatewayBaseUrl = "https://127.0.0.1:18080",
+                    apiGatewayBaseUrl = "http://127.0.0.1:8080",
                     reason = "runtime summary is active"
                 )
             }
@@ -52,7 +53,7 @@ class DesktopConfigServiceTest {
 
         val updated = service.saveSettings("https://api.jarvis.local", Locale.ENGLISH, manualEndpointOverride = false)
 
-        assertEquals("https://127.0.0.1:18080", updated.apiGatewayBaseUrl)
+        assertEquals("http://127.0.0.1:8080", updated.apiGatewayBaseUrl)
         assertEquals(ConfigSource.ACTIVE_LOCAL_RUNTIME, updated.apiGatewaySource)
         assertEquals(null, store.settings.apiGatewayBaseUrl)
         assertEquals(EndpointSelectionMode.AUTO, store.settings.endpointSelectionMode)
@@ -81,15 +82,15 @@ class DesktopConfigServiceTest {
 
         runtimeState.fingerprint = "last-run-ready"
         runtimeState.snapshot = LocalRuntimeEndpointSnapshot(
-            apiGatewayBaseUrl = "https://127.0.0.1:18080",
+            apiGatewayBaseUrl = "http://127.0.0.1:8080",
             reason = "Active local runtime detected from last-run.json"
         )
 
         val refreshed = service.current()
 
-        assertEquals("https://127.0.0.1:18080", refreshed.apiGatewayBaseUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/voice", refreshed.voiceWebSocketUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/pc-control", refreshed.pcControlWebSocketUrl)
+        assertEquals("http://127.0.0.1:8080", refreshed.apiGatewayBaseUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/voice", refreshed.voiceWebSocketUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/pc-control", refreshed.pcControlWebSocketUrl)
         assertEquals(ConfigSource.ACTIVE_LOCAL_RUNTIME, refreshed.apiGatewaySource)
         assertTrue(refreshed.apiGatewayReason.contains("last-run.json"))
     }
@@ -100,7 +101,7 @@ class DesktopConfigServiceTest {
         val runtimeState = MutableRuntimeState(
             fingerprint = "last-run-ready",
             snapshot = LocalRuntimeEndpointSnapshot(
-                apiGatewayBaseUrl = "https://127.0.0.1:18080",
+                apiGatewayBaseUrl = "http://127.0.0.1:8080",
                 reason = "Active local runtime detected from last-run.json"
             )
         )
@@ -111,15 +112,15 @@ class DesktopConfigServiceTest {
             runtimeSummaryFingerprintProvider = { runtimeState.fingerprint }
         )
 
-        assertEquals("https://127.0.0.1:18080", service.current().apiGatewayBaseUrl)
+        assertEquals("http://127.0.0.1:8080", service.current().apiGatewayBaseUrl)
 
         runtimeState.fingerprint = "last-run-stopped"
         runtimeState.snapshot = null
 
         val refreshed = service.current()
 
-        assertEquals("https://127.0.0.1:18080", refreshed.apiGatewayBaseUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/voice", refreshed.voiceWebSocketUrl)
+        assertEquals("http://127.0.0.1:8080", refreshed.apiGatewayBaseUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/voice", refreshed.voiceWebSocketUrl)
         assertEquals(ConfigSource.DEFAULT_LOCAL, refreshed.apiGatewaySource)
         assertTrue(refreshed.apiGatewayReason.contains("Falling back to local runtime default"))
     }
@@ -150,23 +151,23 @@ class DesktopConfigServiceTest {
 
         runtimeState.fingerprint = "last-run-ready"
         runtimeState.snapshot = LocalRuntimeEndpointSnapshot(
-            apiGatewayBaseUrl = "https://127.0.0.1:18080",
+            apiGatewayBaseUrl = "http://127.0.0.1:8080",
             reason = "Active local runtime detected from last-run.json"
         )
 
         val refreshed = service.current()
 
-        assertEquals("https://127.0.0.1:18080", refreshed.apiGatewayBaseUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/voice", refreshed.voiceWebSocketUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/pc-control", refreshed.pcControlWebSocketUrl)
+        assertEquals("http://127.0.0.1:8080", refreshed.apiGatewayBaseUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/voice", refreshed.voiceWebSocketUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/pc-control", refreshed.pcControlWebSocketUrl)
         assertEquals(ConfigSource.ACTIVE_LOCAL_RUNTIME, refreshed.apiGatewaySource)
         assertEquals(2, notifications.size)
-        assertEquals("wss://127.0.0.1:18080/ws/voice", notifications.last().voiceWebSocketUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/pc-control", notifications.last().pcControlWebSocketUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/voice", notifications.last().voiceWebSocketUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/pc-control", notifications.last().pcControlWebSocketUrl)
 
         runtimeState.fingerprint = "last-run-ready-again"
         runtimeState.snapshot = LocalRuntimeEndpointSnapshot(
-            apiGatewayBaseUrl = "https://127.0.0.1:18080",
+            apiGatewayBaseUrl = "http://127.0.0.1:8080",
             reason = "Active local runtime detected from last-run.json"
         )
 
@@ -205,7 +206,7 @@ class DesktopConfigServiceTest {
 
         runtimeState.fingerprint = "last-run-ready"
         runtimeState.snapshot = LocalRuntimeEndpointSnapshot(
-            apiGatewayBaseUrl = "https://127.0.0.1:18080",
+            apiGatewayBaseUrl = "http://127.0.0.1:8080",
             reason = "Active local runtime detected from last-run.json"
         )
 
@@ -213,8 +214,77 @@ class DesktopConfigServiceTest {
 
         assertEquals("https://api.jarvis.local", current.apiGatewayBaseUrl)
         assertEquals(ConfigSource.MANUAL_PERSISTED_SETTINGS, current.apiGatewaySource)
-        assertEquals(1, runtimeLookups.get(), "manual mode should not re-resolve from runtime-summary changes")
-        assertEquals(1, notifications.size)
+        assertEquals(2, runtimeLookups.get(), "fingerprint changes should still be re-evaluated for stale endpoint recovery")
+        assertEquals(2, notifications.size)
+        assertEquals(ConfigSource.MANUAL_PERSISTED_SETTINGS, notifications.last().apiGatewaySource)
+        assertTrue(notifications.last().apiGatewayReason.contains("was intentionally bypassed"))
+    }
+
+    @Test
+    fun `stale manual localhost override is recovered to active k8s runtime`() {
+        val service = DesktopConfigService(
+            settingsStore = InMemoryDesktopSettingsStore(
+                DesktopSettings(
+                    apiGatewayBaseUrl = "http://localhost:56747",
+                    localeTag = "en-US",
+                    endpointSelectionMode = EndpointSelectionMode.MANUAL
+                )
+            ),
+            environmentProvider = { emptyMap() },
+            localRuntimeEndpointProvider = {
+                LocalRuntimeEndpointSnapshot(
+                    apiGatewayBaseUrl = "https://api.jarvis.local",
+                    reason = "Active k8s runtime detected from last-run.json",
+                    runtimeMode = RuntimeEndpointMode.K8S
+                )
+            },
+            runtimeSummaryFingerprintProvider = { "last-run-k8s-ready" },
+            endpointHealthProbe = { false }
+        )
+
+        val resolved = service.current()
+
+        assertEquals("https://api.jarvis.local", resolved.apiGatewayBaseUrl)
+        assertEquals("wss://api.jarvis.local/ws/voice", resolved.voiceWebSocketUrl)
+        assertEquals(ConfigSource.ACTIVE_K8S_RUNTIME, resolved.apiGatewaySource)
+        assertFalse(resolved.usesManualEndpointOverride)
+        assertTrue(resolved.apiGatewayReason.contains("Recovered from stale manual localhost endpoint"))
+    }
+
+    @Test
+    fun `manual localhost override recovers after runtime summary switches to healthy k8s`() {
+        val runtimeState = MutableRuntimeState()
+        val service = DesktopConfigService(
+            settingsStore = InMemoryDesktopSettingsStore(
+                DesktopSettings(
+                    apiGatewayBaseUrl = "http://localhost:56747",
+                    localeTag = "en-US",
+                    endpointSelectionMode = EndpointSelectionMode.MANUAL
+                )
+            ),
+            environmentProvider = { emptyMap() },
+            localRuntimeEndpointProvider = { runtimeState.snapshot },
+            runtimeSummaryFingerprintProvider = { runtimeState.fingerprint },
+            endpointHealthProbe = { false }
+        )
+
+        val initial = service.current()
+        assertEquals("http://localhost:56747", initial.apiGatewayBaseUrl)
+        assertEquals(ConfigSource.MANUAL_PERSISTED_SETTINGS, initial.apiGatewaySource)
+
+        runtimeState.fingerprint = "last-run-k8s-ready"
+        runtimeState.snapshot = LocalRuntimeEndpointSnapshot(
+            apiGatewayBaseUrl = "https://api.jarvis.local",
+            reason = "Active k8s runtime detected from last-run.json",
+            runtimeMode = RuntimeEndpointMode.K8S
+        )
+
+        val recovered = service.current()
+
+        assertEquals("https://api.jarvis.local", recovered.apiGatewayBaseUrl)
+        assertEquals(ConfigSource.ACTIVE_K8S_RUNTIME, recovered.apiGatewaySource)
+        assertFalse(recovered.usesManualEndpointOverride)
+        assertTrue(recovered.apiGatewayReason.contains("Recovered from stale manual localhost endpoint"))
     }
 
     private class InMemoryDesktopSettingsStore(

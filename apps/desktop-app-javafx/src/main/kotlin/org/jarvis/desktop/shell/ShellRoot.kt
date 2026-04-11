@@ -8,9 +8,15 @@ import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.config.ResolvedDesktopConfig
+import org.jarvis.desktop.features.analytics.AnalyticsView
+import org.jarvis.desktop.features.ai.AiView
 import org.jarvis.desktop.features.diagnostics.DiagnosticsView
 import org.jarvis.desktop.features.home.HomeView
+import org.jarvis.desktop.features.life.LifeView
+import org.jarvis.desktop.features.pccontrol.PcControlView
+import org.jarvis.desktop.features.planner.PlannerView
 import org.jarvis.desktop.features.settings.SettingsView
+import org.jarvis.desktop.features.smarthome.SmartHomeView
 import org.jarvis.desktop.features.vision.VisionSecurityView
 import org.jarvis.desktop.features.voice.VoiceView
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
@@ -18,6 +24,10 @@ import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
 import org.jarvis.desktop.service.AuthService
 import org.jarvis.desktop.service.PcControlWebSocketClient
 import org.jarvis.desktop.service.SystemControlService
+import org.jarvis.desktop.service.TransportErrorFormatter
+import org.jarvis.launcher.JarvisPaths
+import org.jarvis.launcher.LauncherConfig
+import org.jarvis.launcher.LauncherSettings
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -28,7 +38,15 @@ class ShellRoot(
 ) : BorderPane() {
     private val navigator = ShellNavigator()
     private val topBar = ShellTopBar(navigator)
-    private val navPane = ShellNavPane(navigator)
+    private val launcherSettings: LauncherSettings = runCatching {
+        LauncherConfig(JarvisPaths.launcherConfig).load()
+    }.getOrDefault(LauncherSettings())
+    private val visibleRoutes: List<ShellRoute> = ShellRoute.visibleRoutes(
+        runtimeMode = JarvisPaths.getRuntimeMode(),
+        llmEnabled = launcherSettings.enableLlm,
+        memoryEnabled = launcherSettings.enableMemory
+    )
+    private val navPane = ShellNavPane(navigator, visibleRoutes)
     private val authService = AuthService()
     private val apiClient = ApiClient(authService = authService)
     private val runtimeMonitor = DesktopRuntimeMonitor()
@@ -128,12 +146,17 @@ class ShellRoot(
                 Thread.sleep(2_000)
                 pcWebSocketClient?.connect()
             } catch (e: Exception) {
-                runtimeMonitor.consumePcStatus("Connection failed")
+                val formatted = TransportErrorFormatter.describeFailure(
+                    channel = "PC Control WebSocket",
+                    endpoint = AppConfig.current().pcControlWebSocketUrl,
+                    throwable = e
+                )
+                runtimeMonitor.consumePcStatus("Connection failed: ${formatted.userMessage}")
                 runtimeMonitor.recordEvent(
                     DesktopRuntimeMonitor.EventSource.PC_CONTROL,
                     DesktopRuntimeMonitor.EventSeverity.ERROR,
                     "Desktop actions failed",
-                    e.message ?: "Failed to initialize desktop action channel"
+                    formatted.userMessage
                 )
             }
         }.apply {
@@ -148,15 +171,30 @@ class ShellRoot(
                 ShellRoute.HOME -> HomeView(
                     runtimeMonitor = runtimeMonitor,
                     onRefreshRuntime = ::refreshRuntimeHealthNow,
-                    onOpenVision = { navigator.navigateTo(ShellRoute.VISION_SECURITY) },
+                    onOpenPlanner = { navigator.navigateTo(ShellRoute.PLANNER) },
+                    onOpenLife = { navigator.navigateTo(ShellRoute.LIFE) },
+                    onOpenAnalytics = { navigator.navigateTo(ShellRoute.ANALYTICS) },
+                    onOpenPcControl = { navigator.navigateTo(ShellRoute.PC_CONTROL) },
+                    onOpenSmartHome = { navigator.navigateTo(ShellRoute.SMART_HOME) },
+                    onOpenVision = if (ShellRoute.VISION_SECURITY in visibleRoutes) {
+                        { navigator.navigateTo(ShellRoute.VISION_SECURITY) }
+                    } else {
+                        null
+                    },
                     onOpenVoice = { navigator.navigateTo(ShellRoute.VOICE) },
                     onOpenDiagnostics = { navigator.navigateTo(ShellRoute.DIAGNOSTICS) },
                     onOpenSettings = { navigator.navigateTo(ShellRoute.SETTINGS) }
                 )
+                ShellRoute.PLANNER -> PlannerView(apiClient)
+                ShellRoute.LIFE -> LifeView(apiClient)
+                ShellRoute.ANALYTICS -> AnalyticsView(apiClient)
+                ShellRoute.PC_CONTROL -> PcControlView(apiClient)
+                ShellRoute.SMART_HOME -> SmartHomeView(apiClient)
                 ShellRoute.VISION_SECURITY -> VisionSecurityView(apiClient)
                 ShellRoute.VOICE -> VoiceView(apiClient, runtimeMonitor)
                 ShellRoute.DIAGNOSTICS -> DiagnosticsView(apiClient)
                 ShellRoute.SETTINGS -> SettingsView(apiClient, ::handleLogout)
+                ShellRoute.AI -> AiView()
             }
         }
     }

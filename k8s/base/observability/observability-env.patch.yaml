@@ -1,0 +1,255 @@
+# Kustomize strategic-merge patch: inject observability-env ConfigMap
+# into all Spring Boot service deployments.
+# Each deployment gets envFrom: configMapRef: observability-env (optional).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8080"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: api-gateway
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8081"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: voice-gateway
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nlp-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8082"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: nlp-service
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8083"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: orchestrator
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pc-control
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8084"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: pc-control
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-tracker
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8085"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: life-tracker
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8087"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: analytics-service
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8092"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: planner-service
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8088"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: security-service
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-profile
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8089"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: user-profile
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-home-service
+  namespace: jarvis
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8086"
+        prometheus.io/scheme: http
+    spec:
+      containers:
+        - name: smart-home-service
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true

@@ -98,5 +98,4 @@ echo ""
 echo "To use with Jarvis:"
 echo "  1) Place the model in models/llm"
 echo "  2) Set env if needed: LLM_BACKEND=llamacpp"
-echo "  3) Ensure GGUF_MODEL_PATH points to /models/llm/$(basename $OUTPUT_PATH)"
-
+echo "  3) Ensure GGUF_MODEL_PATH points to /models/$(basename $OUTPUT_PATH)"

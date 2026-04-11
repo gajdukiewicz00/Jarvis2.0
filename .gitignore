@@ -82,6 +82,25 @@ postgres/
 *postgres-backup*
 .mvn/
 
+### Vision Security dataset / local artifacts ###
+/apps/vision-security-service/dataset/**/*.jpg
+/apps/vision-security-service/dataset/**/*.jpeg
+/apps/vision-security-service/dataset/**/*.png
+/apps/vision-security-service/dataset/**/*.webp
+/apps/vision-security-service/dataset/**/*.bmp
+/apps/vision-security-service/dataset/**/*.gif
+/apps/vision-security-service/dataset/**/*.tif
+/apps/vision-security-service/dataset/**/*.tiff
+/apps/vision-security-service/dataset/**/*.heic
+/apps/vision-security-service/dataset/**/*.avif
+/apps/vision-security-service/dataset/reports/dataset_summary.json
+/apps/vision-security-service/dataset/reports/duplicate_groups.json
+/apps/vision-security-service/dataset/reports/quality_report.json
+/apps/vision-security-service/dataset/reports/rejected_samples.json
+/apps/vision-security-service/**/users/*/enrollment/
+/apps/vision-security-service/**/users/*/incidents/
+/apps/vision-security-service/**/users/*/snapshots/
+
 ### Application logs ###
 **/logs/
 **/*.log

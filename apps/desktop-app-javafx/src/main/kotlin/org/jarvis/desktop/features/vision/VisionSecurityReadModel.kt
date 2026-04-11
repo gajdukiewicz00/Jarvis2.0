@@ -8,6 +8,10 @@ import java.time.Instant
 class VisionSecurityReadModel(
     private val apiClient: ApiClient
 ) {
+    companion object {
+        private const val LONG_RUNNING_ACTION_TIMEOUT_MS = 30_000
+    }
+
     private val objectMapper = jacksonObjectMapper()
 
     data class Snapshot(
@@ -97,8 +101,14 @@ class VisionSecurityReadModel(
         return ActionResult("Monitoring stopped", payload.path("lastReason").asText("Vision security monitoring is paused"))
     }
 
-    fun captureEnrollment(sampleCount: Int = 6): ActionResult {
-        val payload = objectMapper.readTree(apiClient.post("/vision-security/enrollment/capture", """{"sampleCount":$sampleCount}"""))
+    fun captureEnrollment(sampleCount: Int = 8): ActionResult {
+        val payload = objectMapper.readTree(
+            apiClient.post(
+                "/vision-security/enrollment/capture",
+                """{"sampleCount":$sampleCount}""",
+                LONG_RUNNING_ACTION_TIMEOUT_MS
+            )
+        )
         return ActionResult(
             "Owner enrollment updated",
             "Captured ${payload.path("sampleCount").asInt(sampleCount)} samples at ${payload.path("sampleDirectory").asText()}"
@@ -111,7 +121,9 @@ class VisionSecurityReadModel(
     }
 
     fun capturePipelineSnapshot(): ActionResult {
-        val payload = objectMapper.readTree(apiClient.post("/vision-security/pipeline/capture", "{}"))
+        val payload = objectMapper.readTree(
+            apiClient.post("/vision-security/pipeline/capture", "{}", LONG_RUNNING_ACTION_TIMEOUT_MS)
+        )
         return ActionResult(
             "Pipeline snapshot exported",
             payload.path("outputDirectory").asText("Vision pipeline stages were exported")

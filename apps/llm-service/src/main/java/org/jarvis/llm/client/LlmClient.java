@@ -78,6 +78,11 @@ public class LlmClient {
      */
     public ChatResponseDto chat(List<ChatMessageDto> messages, Integer maxTokens, Double temperature,
             String correlationId) {
+
+        if (!enabled) {
+            log.warn("[{}] LLM chat BLOCKED: jarvis.llm.enabled=false", correlationId);
+            throw new LlmClientException("LLM is disabled (jarvis.llm.enabled=false)", null);
+        }
         
         String url = llmServerUrl + "/api/v1/llm/chat";
         long startTime = System.currentTimeMillis();

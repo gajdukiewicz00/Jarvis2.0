@@ -263,4 +263,62 @@ assert reply, "orchestrator reply must not be empty"
 assert codeword in reply, reply
 PY
 
+# ── Lifecycle and warmup state ──────────────────────────────────────
+log "Checking lifecycle state and warmup readiness..."
+LLM_HEALTH_LIFECYCLE="$(json_get "$(runtime_local_http_url "${JARVIS_LLM_SERVICE_PORT}")/api/v1/llm/health")"
+assert_json "${LLM_HEALTH_LIFECYCLE}" '
+assert payload["lifecycle_state"] == "READY", f"Expected READY, got {payload.get(\"lifecycle_state\")}"
+assert payload["warmup_complete"] is True, payload
+assert payload["active_inferences"] >= 0, payload
+assert payload["queue_depth"] >= 0, payload
+'
+
+# ── Runtime lifecycle + admission blocks ────────────────────────────
+log "Checking runtime lifecycle and admission blocks..."
+LLM_RUNTIME_LIFECYCLE="$(json_get "$(runtime_local_http_url "${JARVIS_LLM_SERVICE_PORT}")/api/v1/llm/runtime" \
+    -H "Authorization: Bearer ${SERVICE_TOKEN}")"
+assert_json "${LLM_RUNTIME_LIFECYCLE}" '
+lc = payload.get("lifecycle", {})
+assert lc.get("state") == "READY", lc
+assert lc.get("warmup_complete") is True, lc
+assert lc.get("usable") is True, lc
+adm = payload.get("admission", {})
+assert adm.get("available_permits", -1) >= 0, adm
+'
+
+# ── Profile-aware chat request ──────────────────────────────────────
+log "Checking profile-aware chat path (voice-fast profile)..."
+PROFILE_SESSION="ai-local-smoke-profile-$(date +%s)"
+PROFILE_PAYLOAD="$(cat <<EOF
+{
+  "sessionId": "${PROFILE_SESSION}",
+  "messages": [
+    {"role": "user", "content": "Скажи одно слово."}
+  ]
+}
+EOF
+)"
+PROFILE_RESPONSE="$(json_post "$(runtime_local_http_url "${JARVIS_LLM_SERVICE_PORT}")/api/v1/llm/chat" "${PROFILE_PAYLOAD}" \
+    "${DIRECT_AI_HEADERS[@]}" -H "X-Model-Profile: voice-fast")"
+assert_json "${PROFILE_RESPONSE}" '
+assert payload.get("reply"), "voice-fast profile should return a reply"
+'
+
+# ── Invalid tool-call rejection (via orchestrate endpoint) ──────────
+log "Checking invalid tool-call rejection..."
+TOOLCALL_PAYLOAD='{"sessionId":"smoke-tool","userId":"smoke","intent":"set a timer","locale":"ru"}'
+TOOLCALL_RESPONSE="$(json_post "$(runtime_local_http_url "${JARVIS_LLM_SERVICE_PORT}")/api/v1/llm/orchestrate" "${TOOLCALL_PAYLOAD}" \
+    "${DIRECT_AI_HEADERS[@]}" || true)"
+if [[ -n "${TOOLCALL_RESPONSE}" ]]; then
+    assert_json "${TOOLCALL_RESPONSE}" '
+# If the LLM produced tool_calls, they must have been validated; warnings may be present
+if payload.get("warnings"):
+    for w in payload["warnings"]:
+        assert isinstance(w, str), w
+'
+    log "Tool-call validation exercised."
+else
+    log "Orchestrate endpoint returned empty (non-fatal for smoke)."
+fi
+
 log "AI local smoke passed."

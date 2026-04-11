@@ -88,6 +88,27 @@ class VoiceUxStatusTest {
         }
 
         @Test
+        fun `transport host lookup error`() {
+            val result = VoiceUxStatus.classifyRawError("Host not found for Voice WebSocket at ws://desktop.invalid/ws/voice.")
+            assertEquals(Severity.ERROR, result.severity)
+            assertTrue(result.headline.contains("host not found", ignoreCase = true))
+        }
+
+        @Test
+        fun `transport tls error`() {
+            val result = VoiceUxStatus.classifyRawError("TLS error while connecting to Voice WebSocket at wss://api.jarvis.local/ws/voice.")
+            assertEquals(Severity.ERROR, result.severity)
+            assertTrue(result.headline.contains("tls", ignoreCase = true))
+        }
+
+        @Test
+        fun `transport connection timeout error`() {
+            val result = VoiceUxStatus.classifyRawError("Connection to Voice WebSocket timed out at ws://localhost:8080/ws/voice.")
+            assertEquals(Severity.ERROR, result.severity)
+            assertTrue(result.headline.contains("timed out", ignoreCase = true))
+        }
+
+        @Test
         fun `audio recording error`() {
             val result = VoiceUxStatus.classifyRawError("Audio recording error: TargetDataLine failure")
             assertEquals(Severity.ERROR, result.severity)

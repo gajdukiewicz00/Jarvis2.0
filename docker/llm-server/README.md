@@ -1,57 +1,68 @@
 # LLM Server
 
-Local inference worker for Jarvis.
+This file stays here because it documents the local contract of the Docker/Python worker in this directory.
 
 ## Runtime Role
 
-- HTTP API consumed by `llm-service`
-- Local backend: `llama.cpp`
-- Expected local model format: `GGUF`
-- Default local port: `15000`
+- internal inference worker for `llm-service`
+- canonical local runtime path: `ENABLE_LLM=true ./scripts/runtime-up.sh`
+- canonical backend: `llamacpp`
+- default local health URL: `http://127.0.0.1:15000/health`
 
-## Local Runtime Contract
+## Local Model Contract
 
-`scripts/runtime-up.sh` is the canonical way to run this service locally.
+The worker expects either:
 
-It expects:
+- the canonical GGUF file at `~/.jarvis/models/llm/qwen2.5-3b-instruct-q4_k_m.gguf`, or
+- `JARVIS_LLM_MODEL_PATH` in `~/.jarvis/run/local-runtime/local.env`
 
-- one GGUF model under `~/.jarvis/models/llm/`, or
-- `JARVIS_LLM_MODEL_PATH` set in `~/.jarvis/run/local-runtime/local.env`
+Direct Docker usage follows the same contract:
 
-## Health
+```bash
+docker build -t jarvis-llm-server ./docker/llm-server
+docker run --rm -p 15000:5000 \
+  -v "$HOME/.jarvis/models/llm:/models:ro" \
+  jarvis-llm-server
+```
+
+That default container path assumes:
+
+- `LLM_BACKEND=llamacpp`
+- `GGUF_MODEL_PATH=/models/qwen2.5-3b-instruct-q4_k_m.gguf`
+- CPU-safe `llama-cpp-python` in the image by default
+
+If you explicitly switch to `LLM_BACKEND=transformers`, also point `MODEL_PATH` at a mounted HuggingFace model directory.
+For a transformers-capable image, build with:
+
+```bash
+docker build \
+  --build-arg REQUIREMENTS_FILE=requirements.txt \
+  --build-arg INSTALL_TORCH=true \
+  -t jarvis-llm-server-transformers \
+  ./docker/llm-server
+```
+
+For GPU offload inside Docker, opt in explicitly:
+
+```bash
+docker build \
+  --build-arg LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124 \
+  -t jarvis-llm-server-gpu \
+  ./docker/llm-server
+
+docker run --rm --gpus all -p 15000:5000 \
+  -e N_GPU_LAYERS=-1 \
+  -v "$HOME/.jarvis/models/llm:/models:ro" \
+  jarvis-llm-server-gpu
+```
+
+## Quick Checks
 
 ```bash
 curl http://127.0.0.1:15000/health
+./scripts/llm-smoke.sh
 ```
 
-## Direct Prompt Test
+See the canonical service doc for the full component map:
 
-```bash
-curl -X POST http://127.0.0.1:15000/api/v1/llm/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "messages": [
-      {"role": "system", "content": "You are Jarvis."},
-      {"role": "user", "content": "Reply with one short sentence."}
-    ]
-  }'
-```
-
-## Important Local Defaults
-
-- backend: `llamacpp`
-- package spec: `llama-cpp-python==0.3.19`
-- context window: `4096`
-- batch size: `512`
-- low concurrency: `CHAT_WORKERS=1`
-- canonical CPU default: `N_GPU_LAYERS=0`
-- verified GPU smoke profile: `N_GPU_LAYERS=-1`
-
-## Logs
-
-When started by the local runtime:
-
-```text
-~/.jarvis/logs/local-runtime/llm-server.log
-~/.jarvis/logs/local-runtime/llm-server-python-install.log
-```
+- `docs/services/llm-server.md`

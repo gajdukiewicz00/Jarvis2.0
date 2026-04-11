@@ -49,21 +49,21 @@ class AppConfigTest {
             settings = DesktopSettings()
         )
 
-        assertEquals("https://127.0.0.1:18080", resolved.apiGatewayBaseUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/voice", resolved.voiceWebSocketUrl)
+        assertEquals("http://127.0.0.1:8080", resolved.apiGatewayBaseUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/voice", resolved.voiceWebSocketUrl)
         assertEquals(ConfigSource.DEFAULT_LOCAL, resolved.apiGatewaySource)
     }
 
     @Test
-    @DisplayName("desktop defaults to localhost when no endpoint is configured")
-    fun zeroConfigDefaultsToLocalGateway() {
+    @DisplayName("zero-config defaults to k8s ingress when no endpoint or runtime mode is configured")
+    fun zeroConfigDefaultsToIngressGateway() {
         val resolved = AppConfig.resolve(
             environment = emptyMap(),
             settings = DesktopSettings()
         )
 
-        assertEquals("https://127.0.0.1:18080", resolved.apiGatewayBaseUrl)
-        assertEquals(ConfigSource.DEFAULT_LOCAL, resolved.apiGatewaySource)
+        assertEquals("https://api.jarvis.local", resolved.apiGatewayBaseUrl)
+        assertEquals(ConfigSource.DEFAULT_INGRESS, resolved.apiGatewaySource)
     }
 
     @Test
@@ -168,15 +168,15 @@ class AppConfigTest {
             environment = mapOf("JARVIS_API_BASE_URL" to "https://api.jarvis.local"),
             settings = DesktopSettings(apiGatewayBaseUrl = "https://api.jarvis.local"),
             localRuntimeEndpoint = LocalRuntimeEndpointSnapshot(
-                apiGatewayBaseUrl = "https://127.0.0.1:18080",
+                apiGatewayBaseUrl = "http://127.0.0.1:8080",
                 reason = "runtime summary says local runtime is healthy"
             )
         )
 
-        assertEquals("https://127.0.0.1:18080", resolved.apiGatewayBaseUrl)
-        assertEquals("https://127.0.0.1:18080/api/v1", resolved.apiBaseUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/voice", resolved.voiceWebSocketUrl)
-        assertEquals("wss://127.0.0.1:18080/ws/pc-control", resolved.pcControlWebSocketUrl)
+        assertEquals("http://127.0.0.1:8080", resolved.apiGatewayBaseUrl)
+        assertEquals("http://127.0.0.1:8080/api/v1", resolved.apiBaseUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/voice", resolved.voiceWebSocketUrl)
+        assertEquals("ws://127.0.0.1:8080/ws/pc-control", resolved.pcControlWebSocketUrl)
         assertEquals(ConfigSource.ACTIVE_LOCAL_RUNTIME, resolved.apiGatewaySource)
         assertEquals(false, resolved.usesManualEndpointOverride)
         assertEquals(
@@ -195,7 +195,7 @@ class AppConfigTest {
                 endpointSelectionMode = EndpointSelectionMode.MANUAL
             ),
             localRuntimeEndpoint = LocalRuntimeEndpointSnapshot(
-                apiGatewayBaseUrl = "https://127.0.0.1:18080",
+                apiGatewayBaseUrl = "http://127.0.0.1:8080",
                 reason = "runtime summary says local runtime is healthy"
             )
         )
@@ -203,5 +203,32 @@ class AppConfigTest {
         assertEquals("https://api.jarvis.local", resolved.apiGatewayBaseUrl)
         assertEquals(ConfigSource.MANUAL_PERSISTED_SETTINGS, resolved.apiGatewaySource)
         assertEquals(true, resolved.usesManualEndpointOverride)
+    }
+
+    @Test
+    @DisplayName("stale manual localhost override yields to healthy k8s runtime summary")
+    fun staleManualLocalhostOverrideYieldsToK8sRuntime() {
+        val resolved = AppConfig.resolve(
+            environment = emptyMap(),
+            settings = DesktopSettings(
+                apiGatewayBaseUrl = "http://localhost:56747",
+                endpointSelectionMode = EndpointSelectionMode.MANUAL
+            ),
+            localRuntimeEndpoint = LocalRuntimeEndpointSnapshot(
+                apiGatewayBaseUrl = "https://api.jarvis.local",
+                reason = "runtime summary says k8s ingress is healthy",
+                runtimeMode = RuntimeEndpointMode.K8S
+            ),
+            manualEndpointReachable = false
+        )
+
+        assertEquals("https://api.jarvis.local", resolved.apiGatewayBaseUrl)
+        assertEquals("wss://api.jarvis.local/ws/voice", resolved.voiceWebSocketUrl)
+        assertEquals(ConfigSource.ACTIVE_K8S_RUNTIME, resolved.apiGatewaySource)
+        assertEquals(false, resolved.usesManualEndpointOverride)
+        assertEquals(
+            "Recovered from stale manual localhost endpoint http://localhost:56747 pinned in desktop settings; active k8s runtime https://api.jarvis.local from launcher summary is healthy and was selected instead",
+            resolved.apiGatewayReason
+        )
     }
 }

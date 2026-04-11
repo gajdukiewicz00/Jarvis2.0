@@ -23,6 +23,11 @@ spec:
       app: llm-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8091"
+        prometheus.io/scheme: http
       labels:
         app: llm-service
         app.kubernetes.io/name: llm-service
@@ -56,6 +61,9 @@ spec:
           envFrom:
             - secretRef:
                 name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
           env:
             # LLM Server connection
             - name: LLM_SERVER_URL
@@ -102,14 +110,22 @@ spec:
             limits:
               cpu: "1"
               memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /api/v1/llm/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24  # 2 minutes for Spring Boot + LLM warmup
           readinessProbe:
             httpGet:
               path: /api/v1/llm/health
               port: http
-            initialDelaySeconds: 30
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 6
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /api/v1/llm/health

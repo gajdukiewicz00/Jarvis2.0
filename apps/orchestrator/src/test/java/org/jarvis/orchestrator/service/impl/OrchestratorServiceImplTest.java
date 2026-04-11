@@ -86,7 +86,7 @@ class OrchestratorServiceImplTest {
         CountDownLatch firstCallStarted = new CountDownLatch(1);
         CountDownLatch releaseLlmCalls = new CountDownLatch(1);
 
-        when(llmClient.chat(any(), anyString(), nullable(String.class))).thenAnswer(invocation -> {
+        when(llmClient.chat(any(), anyString(), nullable(String.class), anyString())).thenAnswer(invocation -> {
             firstCallStarted.countDown();
             releaseLlmCalls.await(3, TimeUnit.SECONDS);
             return new LlmChatResponse("llm-reply", Map.of(), "test-model", 1, "neutral");

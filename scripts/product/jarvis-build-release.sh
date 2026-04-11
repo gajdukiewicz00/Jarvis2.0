@@ -269,7 +269,7 @@ install_desktop_entry() {
 [Desktop Entry]
 Type=Application
 Name=Jarvis
-Comment=Jarvis launcher (local AI stack)
+Comment=Jarvis launcher (kubernetes-first stack)
 Exec=${JARVIS_APP}/bin/jarvis-launcher.sh
 Icon=${icon_path}
 Path=${JARVIS_APP}

@@ -23,7 +23,7 @@ class LocalRuntimeEndpointDetectorTest {
             {
               "runtimeMode": "local",
               "status": "ready",
-              "apiUrl": "https://127.0.0.1:18080",
+              "apiUrl": "http://127.0.0.1:8080",
               "timestamp": "2026-03-28T12:56:36Z"
             }
             """.trimIndent()
@@ -42,11 +42,49 @@ class LocalRuntimeEndpointDetectorTest {
         val snapshot = detector.detectActive()
 
         assertNotNull(snapshot)
-        assertEquals("https://127.0.0.1:18080", snapshot?.apiGatewayBaseUrl)
+        assertEquals("http://127.0.0.1:8080", snapshot?.apiGatewayBaseUrl)
+        assertEquals(RuntimeEndpointMode.LOCAL, snapshot?.runtimeMode)
         assertEquals(
-            listOf(URI.create("https://127.0.0.1:18080/actuator/health/readiness")),
+            listOf(URI.create("http://127.0.0.1:8080/actuator/health/readiness")),
             seenUris
         )
         assertTrue(snapshot?.reason?.contains("actuator readiness probe OK") == true)
+    }
+
+    @Test
+    fun `detectActive accepts k8s runtime summaries when ingress is healthy`(@TempDir tempDir: Path) {
+        val summaryPath = tempDir.resolve("last-run.json")
+        Files.writeString(
+            summaryPath,
+            """
+            {
+              "runtimeMode": "k8s",
+              "status": "ready",
+              "apiUrl": "https://api.jarvis.local",
+              "timestamp": "2026-04-08T21:47:33Z"
+            }
+            """.trimIndent()
+        )
+
+        val seenUris = mutableListOf<URI>()
+        val detector = LocalRuntimeEndpointDetector(
+            summaryPath = summaryPath,
+            healthProbe = { uri ->
+                seenUris += uri
+                true
+            },
+            clock = Clock.fixed(Instant.parse("2026-04-08T21:48:03Z"), ZoneOffset.UTC)
+        )
+
+        val snapshot = detector.detectActive()
+
+        assertNotNull(snapshot)
+        assertEquals("https://api.jarvis.local", snapshot?.apiGatewayBaseUrl)
+        assertEquals(RuntimeEndpointMode.K8S, snapshot?.runtimeMode)
+        assertEquals(
+            listOf(URI.create("https://api.jarvis.local/actuator/health/readiness")),
+            seenUris
+        )
+        assertTrue(snapshot?.reason?.contains("Active k8s runtime detected") == true)
     }
 }

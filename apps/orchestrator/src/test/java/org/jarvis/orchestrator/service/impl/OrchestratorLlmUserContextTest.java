@@ -62,7 +62,7 @@ class OrchestratorLlmUserContextTest {
 
         when(nlpClient.analyze(new NlpClient.AnalyzeRequest("какие у меня цели"))).thenReturn(
                 new NlpClient.NlpResult("fallback", java.util.Map.of()));
-        when(llmClient.chat(org.mockito.ArgumentMatchers.any(), eq("corr-1"), eq("user-42")))
+        when(llmClient.chat(org.mockito.ArgumentMatchers.any(), eq("corr-1"), eq("user-42"), eq("orchestration")))
                 .thenReturn(new LlmChatResponse("llm-reply", java.util.Map.of(), "stub", 1, "NEUTRAL"));
 
         String reply = service.processText("какие у меня цели", "ru", "corr-1", "user-42");
@@ -70,7 +70,7 @@ class OrchestratorLlmUserContextTest {
         assertEquals("llm-reply", reply);
         ArgumentCaptor<org.jarvis.orchestrator.dto.LlmChatRequest> requestCaptor =
                 ArgumentCaptor.forClass(org.jarvis.orchestrator.dto.LlmChatRequest.class);
-        verify(llmClient).chat(requestCaptor.capture(), eq("corr-1"), eq("user-42"));
+        verify(llmClient).chat(requestCaptor.capture(), eq("corr-1"), eq("user-42"), eq("orchestration"));
         assertEquals("user-42-corr-1", requestCaptor.getValue().sessionId());
         assertEquals("какие у меня цели", requestCaptor.getValue().messages().get(0).content());
     }

@@ -12,4 +12,5 @@ protobuf==4.25.1
 # bitsandbytes==0.42.0
 
 # llama-cpp-python is installed separately in Dockerfile if LLM_BACKEND=llamacpp
-# See: pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+# Default image: plain CPU-safe wheel. GPU image: add
+# --build-arg LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124

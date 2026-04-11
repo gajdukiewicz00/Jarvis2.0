@@ -11,7 +11,8 @@ import javafx.scene.layout.VBox
 import java.util.EnumMap
 
 class ShellNavPane(
-    private val navigator: ShellNavigator
+    private val navigator: ShellNavigator,
+    private val visibleRoutes: List<ShellRoute> = ShellRoute.entries
 ) : VBox(10.0) {
     private val routeGroup = ToggleGroup()
     private val navButtons = EnumMap<ShellRoute, ToggleButton>(ShellRoute::class.java)
@@ -25,7 +26,7 @@ class ShellNavPane(
         prefWidth = 220.0
         minWidth = 220.0
 
-        ShellRoute.entries.forEach { route ->
+        visibleRoutes.forEach { route ->
             val button = ToggleButton(route.navLabel).apply {
                 toggleGroup = routeGroup
                 maxWidth = Double.MAX_VALUE

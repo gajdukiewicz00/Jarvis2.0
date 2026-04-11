@@ -53,6 +53,11 @@ public class VisionSecurityProxyController {
         return client.captureEnrollment(body == null || body.isBlank() ? "{}" : body);
     }
 
+    @PostMapping(value = "/enrollment/import", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> importEnrollment(@RequestBody String body) {
+        return client.importEnrollment(body);
+    }
+
     @PostMapping("/enrollment/reset")
     public ResponseEntity<String> resetEnrollment() {
         return client.resetEnrollment();

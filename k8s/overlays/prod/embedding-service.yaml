@@ -35,6 +35,13 @@ spec:
         - name: embedding-service
           image: jarvis/embedding-service
           imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -lc
+            - |
+              model_ref="$(cat /app/.cache/sentence-transformers/models--intfloat--multilingual-e5-small/refs/main)"
+              export MODEL_NAME="/app/.cache/sentence-transformers/models--intfloat--multilingual-e5-small/snapshots/${model_ref}"
+              exec python3 -m uvicorn app.main:app --host "${HOST:-0.0.0.0}" --port "${PORT:-5001}"
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -44,14 +51,10 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: app-cache
-              mountPath: /app/.cache
           ports:
             - containerPort: 5001
               name: http
           env:
-            - name: MODEL_NAME
-              value: "intfloat/multilingual-e5-small"
             - name: HOST
               value: "0.0.0.0"
             - name: PORT
@@ -98,8 +101,6 @@ spec:
             failureThreshold: 3
       volumes:
         - name: tmp
-          emptyDir: {}
-        - name: app-cache
           emptyDir: {}
 ---
 apiVersion: v1

@@ -141,7 +141,7 @@ class DesktopRuntimeMonitor(
                 normalized.startsWith("Reconnecting", ignoreCase = true) -> {
                 updatePcControl(status(ConnectionState.CONNECTING, normalized))
             }
-            normalized.equals("Connection failed", ignoreCase = true) -> {
+            normalized.startsWith("Connection failed", ignoreCase = true) -> {
                 updatePcControl(status(ConnectionState.ERROR, "Desktop action channel connection failed"))
                 recordEvent(EventSource.PC_CONTROL, EventSeverity.ERROR, "Desktop actions failed", normalized)
             }

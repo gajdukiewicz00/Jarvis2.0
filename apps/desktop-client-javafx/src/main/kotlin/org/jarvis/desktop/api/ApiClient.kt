@@ -19,21 +19,41 @@ class ApiClient(
     private val configProvider: () -> ResolvedDesktopConfig = AppConfig::current,
     private val authService: AuthService? = null
 ) {
+    companion object {
+        private const val CONNECT_TIMEOUT_MS = 10_000
+        private const val DEFAULT_READ_TIMEOUT_MS = 10_000
+
+        /** Explicit model profile for desktop-originated requests. */
+        private const val DESKTOP_MODEL_PROFILE = "desktop-general"
+    }
+
     private val logger = LoggerFactory.getLogger(ApiClient::class.java)
 
     fun get(endpoint: String): String = executeWithAuthRetry {
-        executeGet(endpoint)
+        executeGet(endpoint, emptyMap())
     }
 
     fun post(endpoint: String, body: String): String = executeWithAuthRetry {
-        executePost(endpoint, body)
+        executePost(endpoint, body, DEFAULT_READ_TIMEOUT_MS, emptyMap())
+    }
+
+    fun post(endpoint: String, body: String, readTimeoutMs: Int): String = executeWithAuthRetry {
+        executePost(endpoint, body, readTimeoutMs, emptyMap())
+    }
+
+    fun getWithHeaders(endpoint: String, headers: Map<String, String>): String = executeWithAuthRetry {
+        executeGet(endpoint, headers)
+    }
+
+    fun postWithHeaders(endpoint: String, body: String, headers: Map<String, String>): String = executeWithAuthRetry {
+        executePost(endpoint, body, DEFAULT_READ_TIMEOUT_MS, headers)
     }
 
     fun postMultipart(endpoint: String, filename: String, fileBytes: ByteArray): String = executeWithAuthRetry {
         executeMultipart(endpoint, filename, fileBytes)
     }
 
-    private fun executeGet(endpoint: String): String {
+    private fun executeGet(endpoint: String, extraHeaders: Map<String, String>): String {
         val baseUrl = configProvider().apiBaseUrl
         val url = URL("$baseUrl$endpoint")
         val connection = url.openConnection() as HttpURLConnection
@@ -41,6 +61,8 @@ class ApiClient(
         try {
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("X-Model-Profile", DESKTOP_MODEL_PROFILE)
+            extraHeaders.forEach { (name, value) -> connection.setRequestProperty(name, value) }
             addAuthorization(connection)
             configureTimeouts(connection)
 
@@ -81,7 +103,12 @@ class ApiClient(
         }
     }
 
-    private fun executePost(endpoint: String, body: String): String {
+    private fun executePost(
+        endpoint: String,
+        body: String,
+        readTimeoutMs: Int,
+        extraHeaders: Map<String, String>
+    ): String {
         val baseUrl = configProvider().apiBaseUrl
         val url = URL("$baseUrl$endpoint")
         val connection = url.openConnection() as HttpURLConnection
@@ -89,9 +116,11 @@ class ApiClient(
         try {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Model-Profile", DESKTOP_MODEL_PROFILE)
+            extraHeaders.forEach { (name, value) -> connection.setRequestProperty(name, value) }
             addAuthorization(connection)
             connection.doOutput = true
-            configureTimeouts(connection)
+            configureTimeouts(connection, readTimeoutMs)
 
             connection.outputStream.use { os ->
                 os.write(body.toByteArray())
@@ -151,6 +180,7 @@ class ApiClient(
         try {
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+            connection.setRequestProperty("X-Model-Profile", DESKTOP_MODEL_PROFILE)
             addAuthorization(connection)
             connection.doOutput = true
             configureTimeouts(connection)
@@ -212,8 +242,12 @@ class ApiClient(
     }
 
     private fun configureTimeouts(connection: HttpURLConnection) {
-        connection.connectTimeout = 10000
-        connection.readTimeout = 10000
+        configureTimeouts(connection, DEFAULT_READ_TIMEOUT_MS)
+    }
+
+    private fun configureTimeouts(connection: HttpURLConnection, readTimeoutMs: Int) {
+        connection.connectTimeout = CONNECT_TIMEOUT_MS
+        connection.readTimeout = readTimeoutMs
     }
 
     private fun httpError(code: Int, body: String): Exception = when (code) {

@@ -8,6 +8,10 @@ spec:
     metadata:
       annotations:
         jarvis.io/internal-tls-slice-planner-api-gateway: planner-api-gateway-v1
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8443"
+        prometheus.io/scheme: https
     spec:
       containers:
         - name: api-gateway

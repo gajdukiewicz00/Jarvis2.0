@@ -71,6 +71,15 @@ class LlmChatSecurityIntegrationTest {
     @MockBean
     private AiRuntimeStatusService aiRuntimeStatusService;
 
+    @MockBean
+    private org.jarvis.llm.service.LlmLifecycleManager lifecycleManager;
+
+    @MockBean
+    private org.jarvis.llm.service.LlmAdmissionController admissionController;
+
+    @MockBean
+    private org.jarvis.llm.service.LlmMetrics llmMetrics;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.webAppContextSetup(context)
@@ -97,7 +106,7 @@ class LlmChatSecurityIntegrationTest {
     @Test
     void chatWithDelegatedUserUsesResolvedUserContext() throws Exception {
         String serviceToken = serviceJwtProvider.createToken("orchestrator", List.of("SVC_INTERNAL"));
-        when(llmService.processMessage(eq("session-1"), eq("user-123"), eq("Привет"), eq("corr-1"), eq(false)))
+        when(llmService.processMessage(eq("session-1"), eq("user-123"), eq("Привет"), eq("corr-1"), eq(false), any()))
                 .thenReturn(new ChatResponseDto("ok", Map.of("total", 2), "stub", 1, Emotion.NEUTRAL));
 
         mockMvc.perform(post("/api/v1/llm/chat")
@@ -116,13 +125,13 @@ class LlmChatSecurityIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reply").value("ok"));
 
-        verify(llmService).processMessage("session-1", "user-123", "Привет", "corr-1", false);
+        verify(llmService).processMessage(eq("session-1"), eq("user-123"), eq("Привет"), eq("corr-1"), eq(false), any());
     }
 
     @Test
     void chatWithServiceJwtButNoDelegatedUserFallsBackToSessionDerivedIdentity() throws Exception {
         String serviceToken = serviceJwtProvider.createToken("planner-service", List.of("SVC_INTERNAL"));
-        when(llmService.processMessage(eq("user-123-session"), eq((String) null), eq("Привет"), any(), eq(false)))
+        when(llmService.processMessage(eq("user-123-session"), eq((String) null), eq("Привет"), any(), eq(false), any()))
                 .thenReturn(new ChatResponseDto("ok", Map.of("total", 2), "stub", 1, Emotion.NEUTRAL));
 
         mockMvc.perform(post("/api/v1/llm/chat")
@@ -138,6 +147,6 @@ class LlmChatSecurityIntegrationTest {
                                 """))
                 .andExpect(status().isOk());
 
-        verify(llmService).processMessage(eq("user-123-session"), eq((String) null), eq("Привет"), any(), eq(false));
+        verify(llmService).processMessage(eq("user-123-session"), eq((String) null), eq("Привет"), any(), eq(false), any());
     }
 }

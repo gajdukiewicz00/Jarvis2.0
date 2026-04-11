@@ -8,6 +8,10 @@ spec:
     metadata:
       annotations:
         jarvis.io/internal-tls-slice: api-gateway-nlp-v1
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8082"
+        prometheus.io/scheme: https
     spec:
       containers:
         - name: nlp-service

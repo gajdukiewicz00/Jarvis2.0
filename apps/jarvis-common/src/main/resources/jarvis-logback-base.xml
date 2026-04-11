@@ -1,0 +1,31 @@
+<included>
+    <!--
+        Shared Logback appenders for Jarvis microservices.
+        Include this file from your logback-spring.xml:
+            <include resource="jarvis-logback-base.xml"/>
+    -->
+
+    <property name="PLAIN_PATTERN"
+              value="%d{ISO8601} [%thread] %-5level [traceId=%X{traceId:-}] [spanId=%X{spanId:-}] %logger{36} - %msg%n"/>
+
+    <!-- Human-readable console (default / dev) -->
+    <appender name="CONSOLE_PLAIN" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${PLAIN_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <!-- JSON structured console (observability stack / production) -->
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <includeMdcKeyName>requestId</includeMdcKeyName>
+            <includeMdcKeyName>userId</includeMdcKeyName>
+            <includeMdcKeyName>userRoles</includeMdcKeyName>
+            <timeZone>UTC</timeZone>
+            <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
+        </encoder>
+    </appender>
+</included>

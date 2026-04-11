@@ -49,50 +49,50 @@ resources:
 
 images:
   - name: jarvis/api-gateway
-    newName: jarvis/api-gateway
+    newName: localhost:5000/jarvis/api-gateway
     newTag: local
   - name: jarvis/security-service
-    newName: jarvis/security-service
+    newName: localhost:5000/jarvis/security-service
     newTag: local
   - name: jarvis/life-tracker
-    newName: jarvis/life-tracker
+    newName: localhost:5000/jarvis/life-tracker
     newTag: local
   - name: jarvis/analytics-service
-    newName: jarvis/analytics-service
+    newName: localhost:5000/jarvis/analytics-service
     newTag: local
   - name: jarvis/voice-gateway
-    newName: jarvis/voice-gateway
+    newName: localhost:5000/jarvis/voice-gateway
     newTag: local
   - name: jarvis/pc-control
-    newName: jarvis/pc-control
+    newName: localhost:5000/jarvis/pc-control
     newTag: local
   - name: jarvis/smart-home-service
-    newName: jarvis/smart-home-service
+    newName: localhost:5000/jarvis/smart-home-service
     newTag: local
   - name: jarvis/nlp-service
-    newName: jarvis/nlp-service
+    newName: localhost:5000/jarvis/nlp-service
     newTag: local
   - name: jarvis/orchestrator
-    newName: jarvis/orchestrator
+    newName: localhost:5000/jarvis/orchestrator
     newTag: local
   - name: jarvis/user-profile
-    newName: jarvis/user-profile
+    newName: localhost:5000/jarvis/user-profile
     newTag: local
   - name: jarvis/planner-service
-    newName: jarvis/planner-service
+    newName: localhost:5000/jarvis/planner-service
     newTag: local
   - name: jarvis/llm-server
-    newName: jarvis/llm-server
-    newTag: local
+    newName: localhost:5000/jarvis/llm-server
+    newTag: release-2026-04-09-k8s
   - name: jarvis/llm-service
-    newName: jarvis/llm-service
-    newTag: local
+    newName: localhost:5000/jarvis/llm-service
+    newTag: release-2026-04-09-k8s
   - name: jarvis/embedding-service
-    newName: jarvis/embedding-service
-    newTag: local
+    newName: localhost:5000/jarvis/embedding-service
+    newTag: release-2026-03-21
   - name: jarvis/memory-service
-    newName: jarvis/memory-service
-    newTag: local
+    newName: localhost:5000/jarvis/memory-service
+    newTag: release-2026-03-21
 
 patches:
   - path: ha-core-deployments.patch.yaml

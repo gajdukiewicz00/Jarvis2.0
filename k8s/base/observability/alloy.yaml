@@ -1,0 +1,241 @@
+# Grafana Alloy — Kubernetes-native log collection without hostPath mounts.
+# Uses the Kubernetes API (`loki.source.kubernetes`) instead of tailing node files,
+# which keeps the collector compatible with Jarvis prod hardening policies.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: jarvis
+  labels:
+    app: alloy
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: jarvis
+data:
+  config.alloy: |
+    discovery.kubernetes "jarvis_pods" {
+      role = "pod"
+
+      namespaces {
+        names = ["jarvis"]
+      }
+    }
+
+    discovery.relabel "jarvis_pods" {
+      targets = discovery.kubernetes.jarvis_pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_node_name"]
+        target_label  = "node"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+        regex         = "(.+)"
+        replacement   = "$1"
+        target_label  = "app"
+      }
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        regex         = "(.+)"
+        replacement   = "$1"
+        target_label  = "app"
+      }
+
+      rule {
+        replacement  = "jarvis"
+        target_label = "cluster"
+      }
+
+      rule {
+        replacement  = "jarvis/pods"
+        target_label = "job"
+      }
+    }
+
+    loki.source.kubernetes "jarvis_pods" {
+      targets    = discovery.relabel.jarvis_pods.output
+      forward_to = [loki.process.jarvis.receiver]
+    }
+
+    loki.source.kubernetes_events "jarvis_events" {
+      job_name   = "jarvis/events"
+      log_format = "logfmt"
+      namespaces = ["jarvis"]
+      forward_to = [loki.process.jarvis.receiver]
+    }
+
+    loki.process "jarvis" {
+      stage.json {
+        expressions = {
+          level = "level",
+        }
+      }
+
+      stage.labels {
+        values = {
+          level = "",
+        }
+      }
+
+      forward_to = [loki.write.default.receiver]
+    }
+
+    loki.write "default" {
+      endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+      }
+    }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: jarvis
+  labels:
+    app: alloy
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: jarvis
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: jarvis-alloy
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jarvis-alloy
+  namespace: jarvis
+  labels:
+    app.kubernetes.io/part-of: jarvis
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: jarvis-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: jarvis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alloy
+  namespace: jarvis
+  labels:
+    app: alloy
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+        app.kubernetes.io/name: alloy
+        app.kubernetes.io/part-of: jarvis
+    spec:
+      serviceAccountName: alloy
+      automountServiceAccountToken: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 473
+        runAsGroup: 473
+        fsGroup: 473
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.12.0
+          args:
+            - run
+            - /etc/alloy/config.alloy
+            - --server.http.listen-addr=0.0.0.0:12345
+            - --storage.path=/var/lib/alloy/data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 12345
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/alloy/data
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 12345
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 12345
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alloy
+  namespace: jarvis
+  labels:
+    app: alloy
+    app.kubernetes.io/name: alloy
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  selector:
+    app: alloy
+  ports:
+    - name: http
+      port: 12345
+      targetPort: 12345

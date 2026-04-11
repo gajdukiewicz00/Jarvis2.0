@@ -3,6 +3,7 @@ package org.jarvis.apigateway.config;
 import feign.RequestInterceptor;
 import feign.RequestTemplate;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.common.JarvisHttpHeaders;
 import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -65,13 +66,22 @@ public class FeignConfig {
                         log.debug("FeignConfig: Added X-User-Role header: {}", userRole);
                     }
 
-                    // Propagate trace ID from MDC
-                    String traceId = MDC.get("traceId");
+                    // Propagate model profile header for channel-aware inference
+                    String modelProfile = request.getHeader(JarvisHttpHeaders.MODEL_PROFILE);
+                    if (modelProfile != null) {
+                        template.header(JarvisHttpHeaders.MODEL_PROFILE, modelProfile);
+                    }
+
+                    // Propagate app-level correlation ID (see JarvisHttpHeaders for semantics)
+                    String correlationId = request.getHeader(JarvisHttpHeaders.CORRELATION_ID);
+                    if (correlationId != null) {
+                        template.header(JarvisHttpHeaders.CORRELATION_ID, correlationId);
+                    }
+
+                    // Propagate infrastructure trace ID from MDC (see JarvisHttpHeaders)
+                    String traceId = MDC.get(JarvisHttpHeaders.TRACE_ID_MDC_KEY);
                     if (traceId != null) {
-                        template.header("X-Trace-Id", traceId);
-                        log.info("Propagating traceId {} to {}", traceId, template.url());
-                    } else {
-                        log.info("No traceId found, but request is to: {}", template.url());
+                        template.header(JarvisHttpHeaders.TRACE_ID, traceId);
                     }
                 } else {
                     log.warn("FeignConfig: RequestContextHolder.getRequestAttributes() returned null");

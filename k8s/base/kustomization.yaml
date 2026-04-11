@@ -24,6 +24,17 @@ resources:
   - smart-home-service/deployment.yaml
   - mosquitto/deployment.yaml
   - postgres/statefulset.yaml
+  # Observability stack
+  - observability/prometheus.yaml
+  - observability/loki.yaml
+  - observability/tempo.yaml
+  - observability/grafana.yaml
+  - observability/alloy.yaml
+  - observability/env-config.yaml
+  - observability/networkpolicy.yaml
+
+patches:
+  - path: observability/observability-env.patch.yaml
 
 images:
   - name: jarvis/api-gateway

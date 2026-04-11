@@ -52,7 +52,8 @@ public abstract class BaseSecurityConfig {
         return new String[]{
             "/actuator/health",
             "/actuator/health/**",
-            "/actuator/info"
+            "/actuator/info",
+            "/actuator/prometheus"
         };
     }
 

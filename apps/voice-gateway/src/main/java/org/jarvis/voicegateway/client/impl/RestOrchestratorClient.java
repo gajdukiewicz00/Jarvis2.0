@@ -130,6 +130,8 @@ public class RestOrchestratorClient implements OrchestratorClient {
                     .uri(targetUrl)
                     .header("Authorization",
                             "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
+                    .header("X-Model-Profile", "voice-fast")
+                    .header("X-Correlation-ID", correlationId != null ? correlationId : "")
                     .contentType(MediaType.APPLICATION_JSON);
 
             if (userId != null && !userId.isBlank()) {

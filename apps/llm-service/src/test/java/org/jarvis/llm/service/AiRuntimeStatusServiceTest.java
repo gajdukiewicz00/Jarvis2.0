@@ -63,7 +63,12 @@ class AiRuntimeStatusServiceTest {
                 null,
                 null));
 
-        AiRuntimeStatusService service = new AiRuntimeStatusService(llmClient, memoryClient);
+        LlmLifecycleManager lifecycleManager = new LlmLifecycleManager(llmClient, memoryClient);
+        ReflectionTestUtils.setField(lifecycleManager, "llmEnabled", true);
+        ReflectionTestUtils.setField(lifecycleManager, "memoryEnabled", true);
+        lifecycleManager.refreshState();
+        LlmAdmissionController admissionController = new LlmAdmissionController(1, 8);
+        AiRuntimeStatusService service = new AiRuntimeStatusService(llmClient, memoryClient, lifecycleManager, admissionController);
         ReflectionTestUtils.setField(service, "llmEnabled", true);
         ReflectionTestUtils.setField(service, "llmBaseUrl", "http://127.0.0.1:15000");
         ReflectionTestUtils.setField(service, "memoryEnabled", true);
@@ -109,6 +114,182 @@ class AiRuntimeStatusServiceTest {
         assertThat(embedding.get("dimension")).isEqualTo(384);
         assertThat(vectorStore.get("available")).isEqualTo(true);
         assertThat(vectorStore.get("pgvectorAvailable")).isEqualTo(true);
+    }
+
+    @Test
+    void describeReportsDegradedWhenMemoryServiceDown() {
+        LlmClient llmClient = mock(LlmClient.class);
+        MemoryClient memoryClient = mock(MemoryClient.class);
+
+        when(llmClient.getHealth()).thenReturn(new LlmClient.LlmServerHealth(
+                true, "healthy", "llamacpp", true, "cpu", false, null,
+                "model.gguf", "/path/model.gguf",
+                Map.of("model_path", "/path/model.gguf"), null));
+        when(memoryClient.getHealth()).thenReturn(new MemoryClient.MemoryServiceHealth(
+                false, "error", false, false, false,
+                "http://127.0.0.1:8093", null, null, null,
+                "connection refused"));
+        when(memoryClient.isHealthy()).thenReturn(false);
+
+        LlmLifecycleManager lifecycleManager = new LlmLifecycleManager(llmClient, memoryClient);
+        ReflectionTestUtils.setField(lifecycleManager, "llmEnabled", true);
+        ReflectionTestUtils.setField(lifecycleManager, "memoryEnabled", true);
+        lifecycleManager.refreshState();
+
+        LlmAdmissionController admissionController = new LlmAdmissionController(1, 8);
+        AiRuntimeStatusService service = new AiRuntimeStatusService(
+                llmClient, memoryClient, lifecycleManager, admissionController);
+        ReflectionTestUtils.setField(service, "llmEnabled", true);
+        ReflectionTestUtils.setField(service, "llmBaseUrl", "http://127.0.0.1:15000");
+        ReflectionTestUtils.setField(service, "memoryEnabled", true);
+        ReflectionTestUtils.setField(service, "memoryServiceEnabled", true);
+        ReflectionTestUtils.setField(service, "memoryServiceUrl", "http://127.0.0.1:8093");
+        ReflectionTestUtils.setField(service, "configuredLlmProvider", "llamacpp");
+        ReflectionTestUtils.setField(service, "configuredLlmModelId", "test-model");
+        ReflectionTestUtils.setField(service, "configuredLlmModelPath", "/path/model.gguf");
+        ReflectionTestUtils.setField(service, "configuredEmbeddingModelId", "test-embed");
+        ReflectionTestUtils.setField(service, "configuredEmbeddingModelPath", "");
+        ReflectionTestUtils.setField(service, "canonicalLocalAiStack", "test-stack");
+        ReflectionTestUtils.setField(service, "configuredDeviceSetting", "cpu");
+        ReflectionTestUtils.setField(service, "configuredGpuLayers", 0);
+        ReflectionTestUtils.setField(service, "configuredLlamaCppPackageSpec", "llama-cpp-python==0.3.19");
+        ReflectionTestUtils.setField(service, "gpuStatusFile", "");
+        ReflectionTestUtils.setField(service, "datasourceUrl", "");
+
+        Map<String, Object> payload = service.describe();
+
+        assertThat(payload).containsEntry("status", "partial");
+        assertThat(payload).containsEntry("fullLocalAiReadiness", false);
+
+        Map<String, Object> lifecycle = castMap(payload.get("lifecycle"));
+        assertThat(lifecycle.get("state")).isEqualTo("DEGRADED");
+        assertThat(lifecycle.get("usable")).isEqualTo(true);
+        assertThat(lifecycle.get("reason")).isEqualTo("memory-service unavailable");
+
+        Map<String, Object> memory = castMap(payload.get("memory"));
+        assertThat(memory.get("available")).isEqualTo(false);
+        assertThat(memory.get("reason")).asString().contains("connection refused");
+
+        Map<String, Object> llm = castMap(payload.get("llm"));
+        assertThat(llm.get("available")).isEqualTo(true);
+    }
+
+    @Test
+    void describeReportsEmbeddingDownWhileMemoryDbUp() {
+        LlmClient llmClient = mock(LlmClient.class);
+        MemoryClient memoryClient = mock(MemoryClient.class);
+
+        when(llmClient.getHealth()).thenReturn(new LlmClient.LlmServerHealth(
+                true, "healthy", "llamacpp", true, "cpu", false, null,
+                "model.gguf", "/path/model.gguf",
+                Map.of(), null));
+        when(memoryClient.getHealth()).thenReturn(new MemoryClient.MemoryServiceHealth(
+                false, "degraded",
+                true,   // databaseUp
+                true,   // pgvectorAvailable
+                false,  // embeddingServiceUp — embedding is DOWN
+                "http://127.0.0.1:8093", null, null,
+                "embedding-service connection refused", null));
+        when(memoryClient.isHealthy()).thenReturn(false);
+
+        LlmLifecycleManager lifecycleManager = new LlmLifecycleManager(llmClient, memoryClient);
+        ReflectionTestUtils.setField(lifecycleManager, "llmEnabled", true);
+        ReflectionTestUtils.setField(lifecycleManager, "memoryEnabled", true);
+        lifecycleManager.refreshState();
+
+        LlmAdmissionController admissionController = new LlmAdmissionController(1, 8);
+        AiRuntimeStatusService service = new AiRuntimeStatusService(
+                llmClient, memoryClient, lifecycleManager, admissionController);
+        ReflectionTestUtils.setField(service, "llmEnabled", true);
+        ReflectionTestUtils.setField(service, "llmBaseUrl", "http://127.0.0.1:15000");
+        ReflectionTestUtils.setField(service, "memoryEnabled", true);
+        ReflectionTestUtils.setField(service, "memoryServiceEnabled", true);
+        ReflectionTestUtils.setField(service, "memoryServiceUrl", "http://127.0.0.1:8093");
+        ReflectionTestUtils.setField(service, "configuredLlmProvider", "llamacpp");
+        ReflectionTestUtils.setField(service, "configuredLlmModelId", "test-model");
+        ReflectionTestUtils.setField(service, "configuredLlmModelPath", "/path/model.gguf");
+        ReflectionTestUtils.setField(service, "configuredEmbeddingModelId", "test-embed");
+        ReflectionTestUtils.setField(service, "configuredEmbeddingModelPath", "");
+        ReflectionTestUtils.setField(service, "canonicalLocalAiStack", "test-stack");
+        ReflectionTestUtils.setField(service, "configuredDeviceSetting", "cpu");
+        ReflectionTestUtils.setField(service, "configuredGpuLayers", 0);
+        ReflectionTestUtils.setField(service, "configuredLlamaCppPackageSpec", "llama-cpp-python==0.3.19");
+        ReflectionTestUtils.setField(service, "gpuStatusFile", "");
+        ReflectionTestUtils.setField(service, "datasourceUrl", "");
+
+        Map<String, Object> payload = service.describe();
+
+        Map<String, Object> embedding = castMap(payload.get("embedding"));
+        assertThat(embedding.get("available")).isEqualTo(false);
+        assertThat(embedding.get("reason")).asString().contains("embedding-service connection refused");
+
+        Map<String, Object> vectorStore = castMap(payload.get("vectorStore"));
+        assertThat(vectorStore.get("databaseUp")).isEqualTo(true);
+        assertThat(vectorStore.get("pgvectorAvailable")).isEqualTo(true);
+        assertThat(vectorStore.get("available")).isEqualTo(true);
+
+        Map<String, Object> memory = castMap(payload.get("memory"));
+        assertThat(memory.get("available")).isEqualTo(false);
+        assertThat(memory.get("reason")).asString().contains("embedding-service connection refused");
+
+        Map<String, Object> lifecycle = castMap(payload.get("lifecycle"));
+        assertThat(lifecycle.get("state")).isEqualTo("DEGRADED");
+        assertThat(lifecycle.get("usable")).isEqualTo(true);
+    }
+
+    @Test
+    void describeReportsLlmOnlyWhenMemoryDisabled() {
+        LlmClient llmClient = mock(LlmClient.class);
+        MemoryClient memoryClient = mock(MemoryClient.class);
+
+        when(llmClient.getHealth()).thenReturn(new LlmClient.LlmServerHealth(
+                true, "healthy", "llamacpp", true, "cpu", false, null,
+                "model.gguf", "/path/model.gguf",
+                Map.of(), null));
+        when(memoryClient.getHealth()).thenReturn(new MemoryClient.MemoryServiceHealth(
+                false, "disabled", false, false, false,
+                "http://127.0.0.1:8093", null, null, null,
+                "memory.service.enabled=false"));
+
+        LlmLifecycleManager lifecycleManager = new LlmLifecycleManager(llmClient, memoryClient);
+        ReflectionTestUtils.setField(lifecycleManager, "llmEnabled", true);
+        ReflectionTestUtils.setField(lifecycleManager, "memoryEnabled", false);
+        lifecycleManager.refreshState();
+
+        LlmAdmissionController admissionController = new LlmAdmissionController(1, 8);
+        AiRuntimeStatusService service = new AiRuntimeStatusService(
+                llmClient, memoryClient, lifecycleManager, admissionController);
+        ReflectionTestUtils.setField(service, "llmEnabled", true);
+        ReflectionTestUtils.setField(service, "llmBaseUrl", "http://127.0.0.1:15000");
+        ReflectionTestUtils.setField(service, "memoryEnabled", false);
+        ReflectionTestUtils.setField(service, "memoryServiceEnabled", false);
+        ReflectionTestUtils.setField(service, "memoryServiceUrl", "http://127.0.0.1:8093");
+        ReflectionTestUtils.setField(service, "configuredLlmProvider", "llamacpp");
+        ReflectionTestUtils.setField(service, "configuredLlmModelId", "test-model");
+        ReflectionTestUtils.setField(service, "configuredLlmModelPath", "/path/model.gguf");
+        ReflectionTestUtils.setField(service, "configuredEmbeddingModelId", "test-embed");
+        ReflectionTestUtils.setField(service, "configuredEmbeddingModelPath", "");
+        ReflectionTestUtils.setField(service, "canonicalLocalAiStack", "test-stack");
+        ReflectionTestUtils.setField(service, "configuredDeviceSetting", "cpu");
+        ReflectionTestUtils.setField(service, "configuredGpuLayers", 0);
+        ReflectionTestUtils.setField(service, "configuredLlamaCppPackageSpec", "llama-cpp-python==0.3.19");
+        ReflectionTestUtils.setField(service, "gpuStatusFile", "");
+        ReflectionTestUtils.setField(service, "datasourceUrl", "");
+
+        Map<String, Object> payload = service.describe();
+
+        assertThat(payload).containsEntry("status", "llm-only");
+
+        Map<String, Object> lifecycle = castMap(payload.get("lifecycle"));
+        assertThat(lifecycle.get("state")).isEqualTo("READY");
+        assertThat(lifecycle.get("usable")).isEqualTo(true);
+
+        Map<String, Object> llm = castMap(payload.get("llm"));
+        assertThat(llm.get("available")).isEqualTo(true);
+
+        Map<String, Object> memory = castMap(payload.get("memory"));
+        assertThat(memory.get("available")).isEqualTo(false);
+        assertThat(memory.get("reason")).asString().contains("memory disabled");
     }
 
     @SuppressWarnings("unchecked")

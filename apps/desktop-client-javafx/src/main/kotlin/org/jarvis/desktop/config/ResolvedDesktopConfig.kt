@@ -17,6 +17,7 @@ data class ResolvedDesktopConfig(
 enum class ConfigSource(val description: String) {
     MANUAL_PERSISTED_SETTINGS("manual persisted settings"),
     ACTIVE_LOCAL_RUNTIME("active local runtime"),
+    ACTIVE_K8S_RUNTIME("active k8s runtime"),
     ENV_JARVIS_API_BASE_URL("environment JARVIS_API_BASE_URL"),
     ENV_API_URL("environment API_URL"),
     LEGACY_PERSISTED_SETTINGS("legacy persisted settings"),

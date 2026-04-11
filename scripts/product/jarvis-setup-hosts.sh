@@ -2,7 +2,7 @@
 # =============================================================================
 # Jarvis 2.0 - /etc/hosts Setup Script
 # =============================================================================
-# Iteration 1.5 (Stage 7): Add api.jarvis.local and voice.jarvis.local to /etc/hosts
+# Iteration 1.5 (Stage 7): Add api.jarvis.local, voice.jarvis.local, and grafana.jarvis.local to /etc/hosts
 # =============================================================================
 
 set -euo pipefail
@@ -44,7 +44,7 @@ echo "Jarvis 2.0 - /etc/hosts Setup"
 echo "=========================================="
 echo ""
 echo "Target IP: $HOST_IP"
-echo "Domains: api.jarvis.local, voice.jarvis.local"
+echo "Domains: api.jarvis.local, voice.jarvis.local, grafana.jarvis.local"
 echo ""
 
 # Check if running as root (required for /etc/hosts modification)
@@ -55,7 +55,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # Check if entries already exist
-if grep -q "api.jarvis.local" /etc/hosts && grep -q "voice.jarvis.local" /etc/hosts; then
+if grep -q "api.jarvis.local" /etc/hosts && grep -q "voice.jarvis.local" /etc/hosts && grep -q "grafana.jarvis.local" /etc/hosts; then
     # Check if IP matches
     EXISTING_IP=$(grep "api.jarvis.local" /etc/hosts | awk '{print $1}' | head -1)
     if [ "$EXISTING_IP" = "$HOST_IP" ]; then
@@ -66,13 +66,16 @@ if grep -q "api.jarvis.local" /etc/hosts && grep -q "voice.jarvis.local" /etc/ho
         echo "Removing old entries..."
         sed -i '/api\.jarvis\.local/d' /etc/hosts
         sed -i '/voice\.jarvis\.local/d' /etc/hosts
+        sed -i '/grafana\.jarvis\.local/d' /etc/hosts
     fi
 fi
 
 # Add entries
 echo "Adding entries to /etc/hosts..."
-echo "$HOST_IP api.jarvis.local" >> /etc/hosts
-echo "$HOST_IP voice.jarvis.local" >> /etc/hosts
+sed -i '/api\.jarvis\.local/d' /etc/hosts
+sed -i '/voice\.jarvis\.local/d' /etc/hosts
+sed -i '/grafana\.jarvis\.local/d' /etc/hosts
+echo "$HOST_IP api.jarvis.local voice.jarvis.local grafana.jarvis.local" >> /etc/hosts
 
 echo ""
 echo -e "${GREEN}✅ Entries added successfully${NC}"
@@ -80,6 +83,5 @@ echo ""
 echo "Verification:"
 echo "  grep jarvis.local /etc/hosts"
 echo ""
-
 
 

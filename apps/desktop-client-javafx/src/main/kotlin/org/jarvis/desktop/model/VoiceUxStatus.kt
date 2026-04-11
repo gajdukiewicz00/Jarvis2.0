@@ -62,6 +62,28 @@ object VoiceUxStatus {
                     "Check audio settings or connect a microphone"
                 )
 
+            "host not found" in lower || "dns lookup failed" in lower || "dns" in lower ->
+                StatusLine(
+                    "Voice host not found",
+                    Severity.ERROR,
+                    "Check the configured voice endpoint and DNS"
+                )
+
+            "tls error" in lower || "ssl" in lower || "certificate" in lower || "handshake failed" in lower ->
+                StatusLine(
+                    "Voice TLS error",
+                    Severity.ERROR,
+                    "Check certificates and trust settings for the voice endpoint"
+                )
+
+            ("timeout" in lower || "timed out" in lower) &&
+                ("connect" in lower || "connection" in lower || "websocket" in lower || "socket" in lower) ->
+                StatusLine(
+                    "Voice connection timed out",
+                    Severity.ERROR,
+                    "Check network connectivity or try again"
+                )
+
             "timeout" in lower || "timed out" in lower ->
                 StatusLine(
                     "Voice recognition timed out",
@@ -83,11 +105,25 @@ object VoiceUxStatus {
                     "Sign in again to restore voice control"
                 )
 
+            "could not connect" in lower || "connection refused" in lower ->
+                StatusLine(
+                    "Voice backend unavailable",
+                    Severity.ERROR,
+                    "Check if the voice gateway is running and the endpoint is correct"
+                )
+
             "not reachable" in lower || "unavailable" in lower ->
                 StatusLine(
                     "Voice backend unavailable",
                     Severity.ERROR,
                     "Voice gateway is not running or scaled to zero"
+                )
+
+            "closed unexpectedly" in lower || ("closed" in lower && ("websocket" in lower || "connection" in lower || "socket" in lower)) ->
+                StatusLine(
+                    "Voice connection lost",
+                    Severity.ERROR,
+                    "Jarvis will reconnect when the voice gateway is available"
                 )
 
             "websocket" in lower || "connection" in lower || "socket" in lower ->

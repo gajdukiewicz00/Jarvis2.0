@@ -1,17 +1,19 @@
 package org.jarvis.desktop.config
 
+import java.net.URI
 import java.util.Locale
 
 internal object DesktopConfigResolver {
-    private const val DEFAULT_LOCAL_API_GATEWAY = "https://127.0.0.1:18080"
+    private const val DEFAULT_LOCAL_API_GATEWAY = "http://127.0.0.1:8080"
     private const val DEFAULT_REMOTE_API_GATEWAY = "https://api.jarvis.local"
 
     fun resolve(
         environment: Map<String, String>,
         settings: DesktopSettings,
-        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot? = null
+        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot? = null,
+        manualEndpointReachable: Boolean? = null
     ): ResolvedDesktopConfig {
-        val resolvedBaseUrl = resolveApiGateway(environment, settings, localRuntimeEndpoint)
+        val resolvedBaseUrl = resolveApiGateway(environment, settings, localRuntimeEndpoint, manualEndpointReachable)
         val locale = resolveLocale(environment, settings)
 
         validateBaseUrl(
@@ -20,7 +22,8 @@ internal object DesktopConfigResolver {
             honorTlsEnv = resolvedBaseUrl.source !in setOf(
                 ConfigSource.MANUAL_PERSISTED_SETTINGS,
                 ConfigSource.LEGACY_PERSISTED_SETTINGS,
-                ConfigSource.ACTIVE_LOCAL_RUNTIME
+                ConfigSource.ACTIVE_LOCAL_RUNTIME,
+                ConfigSource.ACTIVE_K8S_RUNTIME
             )
         )
 
@@ -69,19 +72,37 @@ internal object DesktopConfigResolver {
         return localeTag?.trim()?.takeIf { it.isNotEmpty() }
     }
 
+    internal fun isLoopbackBaseUrl(url: String?): Boolean {
+        val normalized = normalizeBaseUrl(url) ?: return false
+        val host = runCatching { URI.create(normalized).host?.lowercase() }.getOrNull() ?: return false
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
+    }
+
     private fun resolveApiGateway(
         environment: Map<String, String>,
         settings: DesktopSettings,
-        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot?
+        localRuntimeEndpoint: LocalRuntimeEndpointSnapshot?,
+        manualEndpointReachable: Boolean?
     ): ResolvedValue<String> {
         val persistedBaseUrl = normalizeBaseUrl(settings.apiGatewayBaseUrl)
         val selectionMode = settings.endpointSelectionMode
 
         if (selectionMode == EndpointSelectionMode.MANUAL && persistedBaseUrl != null) {
+            if (localRuntimeEndpoint?.runtimeMode == RuntimeEndpointMode.K8S &&
+                isLoopbackBaseUrl(persistedBaseUrl) &&
+                manualEndpointReachable == false
+            ) {
+                return ResolvedValue(
+                    localRuntimeEndpoint.apiGatewayBaseUrl,
+                    ConfigSource.ACTIVE_K8S_RUNTIME,
+                    "Recovered from stale manual localhost endpoint $persistedBaseUrl pinned in desktop settings; active k8s runtime ${localRuntimeEndpoint.apiGatewayBaseUrl} from launcher summary is healthy and was selected instead",
+                    usesManualEndpointOverride = false
+                )
+            }
             val reason = buildString {
                 append("Manual endpoint override is pinned in desktop settings")
                 if (localRuntimeEndpoint != null) {
-                    append("; active local runtime ${localRuntimeEndpoint.apiGatewayBaseUrl} was intentionally bypassed")
+                    append("; active ${localRuntimeEndpoint.runtimeMode.description} runtime ${localRuntimeEndpoint.apiGatewayBaseUrl} was intentionally bypassed")
                 }
             }
             return ResolvedValue(
@@ -95,7 +116,7 @@ internal object DesktopConfigResolver {
         if (localRuntimeEndpoint != null) {
             return ResolvedValue(
                 localRuntimeEndpoint.apiGatewayBaseUrl,
-                ConfigSource.ACTIVE_LOCAL_RUNTIME,
+                localRuntimeEndpoint.configSource,
                 "${localRuntimeEndpoint.reason}; no manual endpoint override is active"
             )
         }
@@ -124,17 +145,17 @@ internal object DesktopConfigResolver {
             )
         }
 
-        return if (runtimeMode(environment) == "k8s") {
+        return if (runtimeMode(environment) == "local") {
+            ResolvedValue(
+                DEFAULT_LOCAL_API_GATEWAY,
+                ConfigSource.DEFAULT_LOCAL,
+                "Falling back to local runtime default because JARVIS_RUNTIME_MODE=local and no explicit endpoint source was available"
+            )
+        } else {
             ResolvedValue(
                 DEFAULT_REMOTE_API_GATEWAY,
                 ConfigSource.DEFAULT_INGRESS,
                 "Falling back to ingress default because no runtime-specific or explicit endpoint source was available"
-            )
-        } else {
-            ResolvedValue(
-                DEFAULT_LOCAL_API_GATEWAY,
-                ConfigSource.DEFAULT_LOCAL,
-                "Falling back to local runtime default because no runtime-specific or explicit endpoint source was available"
             )
         }
     }

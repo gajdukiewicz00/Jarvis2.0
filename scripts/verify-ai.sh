@@ -219,9 +219,10 @@ run_optional_smokes() {
 
 check_required_paths() {
     check_file "${PROJECT_ROOT}/README.md"
-    check_file "${PROJECT_ROOT}/ARCHITECTURE.md"
-    check_file "${PROJECT_ROOT}/docs/architecture.md"
-    check_file "${PROJECT_ROOT}/RUNBOOK_LLM.md"
+    check_file "${PROJECT_ROOT}/docs/services/llm-service.md"
+    check_file "${PROJECT_ROOT}/docs/services/llm-server.md"
+    check_file "${PROJECT_ROOT}/docs/services/memory-service.md"
+    check_file "${PROJECT_ROOT}/docs/services/embedding-service.md"
     check_file "${PROJECT_ROOT}/scripts/acceptance-ai.sh"
     check_file "${PROJECT_ROOT}/scripts/product/jarvis-run-acceptance.sh"
     check_file "${PROJECT_ROOT}/scripts/setup-ai-local.sh"

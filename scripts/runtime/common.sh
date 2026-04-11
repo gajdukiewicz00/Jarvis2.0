@@ -340,6 +340,42 @@ print(secrets.token_urlsafe(48))
 PY
 }
 
+recover_postgres_password_from_container() {
+    command -v docker >/dev/null 2>&1 || return 1
+    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 1
+
+    local pw
+    pw="$(
+        docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \
+            "${POSTGRES_CONTAINER}" 2>/dev/null \
+        | sed -n 's/^POSTGRES_PASSWORD=//p'
+    )"
+    [[ -n "${pw}" ]] || return 1
+    printf '%s' "${pw}"
+}
+
+validate_postgres_credentials() {
+    command -v docker >/dev/null 2>&1 || return 0
+    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 0
+
+    local container_pw
+    container_pw="$(recover_postgres_password_from_container)" || return 0
+
+    if [[ "${POSTGRES_PASSWORD}" != "${container_pw}" || "${SPRING_DATASOURCE_PASSWORD}" != "${container_pw}" ]]; then
+        warn "Postgres password drift detected: runtime password does not match container ${POSTGRES_CONTAINER}."
+        warn "Auto-correcting runtime credentials to match the initialized container."
+        POSTGRES_PASSWORD="${container_pw}"
+        SPRING_DATASOURCE_PASSWORD="${container_pw}"
+        export POSTGRES_PASSWORD SPRING_DATASOURCE_PASSWORD
+        if [[ -f "${LOCAL_ENV_FILE}" ]]; then
+            local _escaped_pw
+            _escaped_pw="$(printf '%q' "${container_pw}")"
+            sed -i "s|^SPRING_DATASOURCE_PASSWORD=.*|SPRING_DATASOURCE_PASSWORD=${_escaped_pw}|" "${LOCAL_ENV_FILE}"
+            sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${_escaped_pw}|" "${LOCAL_ENV_FILE}"
+        fi
+    fi
+}
+
 default_stt_provider() {
     printf 'vosk'
 }
@@ -510,7 +546,15 @@ ensure_local_env() {
 
     : "${SPRING_DATASOURCE_URL:=jdbc:postgresql://127.0.0.1:${JARVIS_LOCAL_POSTGRES_PORT:-5432}/jarvis}"
     : "${SPRING_DATASOURCE_USERNAME:=jarvis}"
-    : "${SPRING_DATASOURCE_PASSWORD:=$(random_secret)}"
+    if [[ -z "${SPRING_DATASOURCE_PASSWORD:-}" ]]; then
+        local _recovered_pw
+        if _recovered_pw="$(recover_postgres_password_from_container)"; then
+            SPRING_DATASOURCE_PASSWORD="${_recovered_pw}"
+            log "Recovered Postgres password from existing container ${POSTGRES_CONTAINER}"
+        else
+            SPRING_DATASOURCE_PASSWORD="$(random_secret)"
+        fi
+    fi
     : "${POSTGRES_USER:=${SPRING_DATASOURCE_USERNAME}}"
     : "${POSTGRES_PASSWORD:=${SPRING_DATASOURCE_PASSWORD}}"
     : "${JWT_SECRET:=$(random_secret)}"
@@ -1015,6 +1059,9 @@ finally:
 PY
     then
         log "PostgreSQL already reachable at ${host}:${port}"
+        if managed_postgres_matches_target "${host}" "${port}"; then
+            validate_postgres_credentials
+        fi
         ensure_local_postgres_extensions "${db}"
         return 0
     fi
@@ -1023,6 +1070,7 @@ PY
 
     if docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1; then
         if is_truthy "${JARVIS_KEEP_LOCAL_POSTGRES_DATA:-false}"; then
+            validate_postgres_credentials
             log "Starting existing PostgreSQL container ${POSTGRES_CONTAINER}..."
             docker start "${POSTGRES_CONTAINER}" >/dev/null
         else
@@ -1192,8 +1240,13 @@ start_service() {
     pid_file="$(service_pid_file "${service}")"
 
     if service_is_running "${service}"; then
-        log "${service} is already running."
-        return 0
+        if [[ -f "${pid_file}" && "${jar}" -nt "${pid_file}" ]]; then
+            log "${service} is running with an older packaged JAR; restarting."
+            stop_service "${service}"
+        else
+            log "${service} is already running."
+            return 0
+        fi
     fi
 
     [[ -f "${jar}" ]] || fail "Missing JAR for ${service}: ${jar}"

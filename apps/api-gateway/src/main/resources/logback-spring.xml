@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="jarvis-logback-base.xml"/>
+
+    <!-- API Gateway keeps a rolling file appender for operational debugging -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/api-gateway.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/api-gateway-%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${PLAIN_PATTERN}</pattern>
+        </encoder>
+    </appender>
+
+    <springProfile name="observability">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!observability">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_PLAIN"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+</configuration>

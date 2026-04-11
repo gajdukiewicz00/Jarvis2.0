@@ -20,6 +20,13 @@ SECRETS_FILE="${JARVIS_HOME}/secrets/secrets.env"
 LOG_DIR="${JARVIS_LOG_DIR:-${JARVIS_HOME}/logs}"
 BACKEND_LOG="${LOG_DIR}/backend-launch.log"
 RUN_SUMMARY="${JARVIS_HOME}/run/last-run.json"
+OBSERVABILITY_KUSTOMIZATION_DIR="${K8S_DIR}/base/observability"
+OBSERVABILITY_VERIFY_SCRIPT="${PROJECT_DIR}/scripts/verify-observability.sh"
+GRAFANA_DASHBOARD_PROVISION_SCRIPT="${PROJECT_DIR}/scripts/provision-grafana-dashboards.sh"
+GRAFANA_ADMIN_SYNC_SCRIPT="${PROJECT_DIR}/scripts/sync-grafana-admin.sh"
+GRAFANA_SECRET_NAME="jarvis-secrets"
+GRAFANA_SECRET_USER_KEY="GRAFANA_ADMIN_USER"
+GRAFANA_SECRET_PASSWORD_KEY="GRAFANA_ADMIN_PASSWORD"
 
 # Feature flags
 ENABLE_LLM="${ENABLE_LLM:-false}"
@@ -60,6 +67,14 @@ MEMORY_SERVICES=(
     "memory-service"
 )
 
+OBSERVABILITY_DEPLOYMENTS=(
+    "grafana"
+    "prometheus"
+    "loki"
+    "tempo"
+    "alloy"
+)
+
 # Colors
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -73,7 +88,9 @@ RUN_ERROR=""
 RUN_WARNINGS=()
 RUN_API_URL="https://api.jarvis.local"
 RUN_VOICE_URL="wss://voice.jarvis.local"
+RUN_GRAFANA_URL="https://grafana.jarvis.local"
 OPTIONAL_FAILED="false"
+GRAFANA_RESTART_REQUIRED="false"
 
 write_run_summary() {
     mkdir -p "${JARVIS_HOME}/run" "${LOG_DIR}"
@@ -97,8 +114,10 @@ write_run_summary() {
   "status": "${RUN_STATUS}",
   "error": "${RUN_ERROR//\"/\\\"}",
   "warnings": ${warnings_json},
+  "runtimeMode": "k8s",
   "apiUrl": "${RUN_API_URL}",
   "voiceUrl": "${RUN_VOICE_URL}",
+  "grafanaUrl": "${RUN_GRAFANA_URL}",
   "enableLlm": "${ENABLE_LLM}",
   "enableMemory": "${ENABLE_MEMORY}",
   "enableGpu": "${ENABLE_GPU}"
@@ -242,6 +261,178 @@ run_privileged() {
     fail "Privileged operation requires sudo or pkexec: $*"
 }
 
+host_global_ipv4s() {
+    ip -4 -o addr show scope global 2>/dev/null | awk '{split($4, cidr, "/"); print cidr[1]}' || true
+}
+
+host_has_global_ipv4() {
+    local target="$1"
+    [[ -n "${target}" ]] || return 1
+    host_global_ipv4s | grep -Fxq "${target}"
+}
+
+default_route_ipv4() {
+    local src=""
+    local iface=""
+
+    src="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')"
+    if [[ -n "${src}" ]]; then
+        printf '%s' "${src}"
+        return 0
+    fi
+
+    iface="$(ip -4 route show default 2>/dev/null | awk 'NR == 1 {print $5}')"
+    if [[ -n "${iface}" ]]; then
+        ip -4 -o addr show dev "${iface}" scope global 2>/dev/null | awk 'NR == 1 {split($4, cidr, "/"); print cidr[1]}'
+        return 0
+    fi
+
+    host_global_ipv4s | awk '
+        $0 !~ /^127\./ &&
+        $0 !~ /^10\.42\./ &&
+        $0 !~ /^10\.43\./ &&
+        $0 !~ /^172\.(17|18|19)\./ {
+            print
+            exit
+        }
+    '
+}
+
+api_listener_reachable() {
+    local target_ip="$1"
+    [[ -n "${target_ip}" ]] || return 1
+    curl -sk --connect-timeout 3 --max-time 5 "https://${target_ip}:6443/version" >/dev/null 2>&1
+}
+
+write_k3s_network_config() {
+    local desired_ip="$1"
+    local target_file="/etc/rancher/k3s/config.yaml"
+    local tmp_file=""
+
+    tmp_file="$(mktemp -t jarvis-k3s-config-XXXXXX)"
+    if run_privileged test -f "${target_file}"; then
+        run_privileged cat "${target_file}" > "${tmp_file}"
+    fi
+
+    if grep -Eq '^[[:space:]]*node-ip:' "${tmp_file}"; then
+        sed -i -E "s#^[[:space:]]*node-ip:.*#node-ip: ${desired_ip}#" "${tmp_file}"
+    else
+        printf '\nnode-ip: %s\n' "${desired_ip}" >> "${tmp_file}"
+    fi
+
+    if grep -Eq '^[[:space:]]*advertise-address:' "${tmp_file}"; then
+        sed -i -E "s#^[[:space:]]*advertise-address:.*#advertise-address: ${desired_ip}#" "${tmp_file}"
+    else
+        printf 'advertise-address: %s\n' "${desired_ip}" >> "${tmp_file}"
+    fi
+
+    run_privileged install -d -m 755 /etc/rancher/k3s
+
+    if run_privileged test -f "${target_file}" && run_privileged cmp -s "${tmp_file}" "${target_file}"; then
+        rm -f "${tmp_file}"
+        return 1
+    fi
+
+    run_privileged install -m 600 "${tmp_file}" "${target_file}"
+    rm -f "${tmp_file}"
+    return 0
+}
+
+wait_for_k3s_network_alignment() {
+    local expected_ip="$1"
+    local node_name="$2"
+    local deadline=$((SECONDS + 180))
+
+    while (( SECONDS < deadline )); do
+        local current_node_ip=""
+        local current_endpoint_ip=""
+
+        if ! kubectl cluster-info --request-timeout=5s >/dev/null 2>&1; then
+            sleep 3
+            continue
+        fi
+
+        current_node_ip="$(kubectl get node "${node_name}" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true)"
+        current_endpoint_ip="$(kubectl get endpoints kubernetes -n default -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)"
+
+        if [[ "${current_node_ip}" == "${expected_ip}" && "${current_endpoint_ip}" == "${expected_ip}" ]]; then
+            return 0
+        fi
+
+        sleep 3
+    done
+
+    return 1
+}
+
+# Single-node k3s can retain a dead InternalIP after a host network change.
+# That breaks kubernetes.default.svc for in-cluster clients like Prometheus,
+# Alloy, and Kyverno, so repair the advertised node IP before workload checks.
+ensure_k3s_network_alignment() {
+    local node_name=""
+    local node_ip=""
+    local endpoint_ip=""
+    local desired_ip=""
+    local needs_repair="false"
+    local -a reasons=()
+
+    if ! is_k3s_context; then
+        return 0
+    fi
+    if ! command -v systemctl >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
+        return 0
+    fi
+    if [[ "$(systemctl show -p LoadState --value k3s 2>/dev/null || true)" != "loaded" ]]; then
+        return 0
+    fi
+
+    node_name="$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+    [[ -n "${node_name}" ]] || return 0
+
+    desired_ip="$(default_route_ipv4)"
+    [[ -n "${desired_ip}" ]] || {
+        warn "Unable to determine the current host IPv4 for k3s network alignment"
+        return 0
+    }
+
+    node_ip="$(kubectl get node "${node_name}" -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true)"
+    endpoint_ip="$(kubectl get endpoints kubernetes -n default -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null || true)"
+
+    if [[ -n "${node_ip}" ]] && ! host_has_global_ipv4 "${node_ip}"; then
+        needs_repair="true"
+        reasons+=("node InternalIP ${node_ip} is not assigned on this host")
+    fi
+    if [[ -n "${node_ip}" ]] && ! api_listener_reachable "${node_ip}"; then
+        needs_repair="true"
+        reasons+=("node InternalIP ${node_ip}:6443 is not reachable")
+    fi
+    if [[ -n "${endpoint_ip}" ]] && ! api_listener_reachable "${endpoint_ip}"; then
+        needs_repair="true"
+        reasons+=("service/kubernetes endpoint ${endpoint_ip}:6443 is not reachable")
+    fi
+
+    if [[ "${needs_repair}" != "true" ]]; then
+        return 0
+    fi
+
+    if ! api_listener_reachable "${desired_ip}"; then
+        fail "Detected stale k3s control-plane IP (${node_ip:-unknown}), but current host IP ${desired_ip}:6443 is not reachable"
+    fi
+
+    warn "Detected stale k3s control-plane networking: ${reasons[*]}"
+    info "Aligning k3s node-ip and advertise-address to ${desired_ip}"
+    write_k3s_network_config "${desired_ip}" || true
+
+    info "Restarting k3s to refresh node/${node_name} and service/kubernetes..."
+    run_privileged systemctl restart k3s
+
+    if ! wait_for_k3s_network_alignment "${desired_ip}" "${node_name}"; then
+        fail "k3s restarted but node/${node_name} and service/kubernetes did not converge to ${desired_ip}"
+    fi
+
+    info "k3s control-plane networking aligned to ${desired_ip}"
+}
+
 is_k3s_context() {
     local ctx
     local kubelet_version
@@ -370,14 +561,83 @@ ensure_namespace() {
     fi
 }
 
+read_env_file_value() {
+    local file_path="$1"
+    local key="$2"
+    [[ -f "${file_path}" ]] || return 0
+
+    python3 - "${file_path}" "${key}" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+target = sys.argv[2]
+
+for raw in path.read_text(encoding="utf-8").splitlines():
+    stripped = raw.strip()
+    if not stripped or stripped.startswith("#") or "=" not in raw:
+        continue
+    key, value = raw.split("=", 1)
+    if key.strip() != target:
+        continue
+    value = value.strip().strip('"').strip("'")
+    print(value)
+    break
+PY
+}
+
+secret_key_value() {
+    local key="$1"
+    local encoded
+    encoded="$(kubectl get secret "${GRAFANA_SECRET_NAME}" -n "${NAMESPACE}" -o "jsonpath={.data.${key}}" 2>/dev/null || true)"
+    [[ -n "${encoded}" ]] || return 0
+    printf '%s' "${encoded}" | base64 -d 2>/dev/null || true
+}
+
+grafana_secret_sync_required() {
+    if ! kubectl get secret "${GRAFANA_SECRET_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local secret_user secret_password
+    secret_user="$(secret_key_value "${GRAFANA_SECRET_USER_KEY}")"
+    secret_password="$(secret_key_value "${GRAFANA_SECRET_PASSWORD_KEY}")"
+
+    if [[ -z "${secret_user}" || -z "${secret_password}" ]]; then
+        return 0
+    fi
+
+    if [[ ! -f "${SECRETS_FILE}" ]]; then
+        return 1
+    fi
+
+    local file_user file_password
+    file_user="$(read_env_file_value "${SECRETS_FILE}" "${GRAFANA_SECRET_USER_KEY}")"
+    file_password="$(read_env_file_value "${SECRETS_FILE}" "${GRAFANA_SECRET_PASSWORD_KEY}")"
+
+    if [[ -z "${file_user}" || -z "${file_password}" ]]; then
+        return 0
+    fi
+
+    [[ "${file_user}" != "${secret_user}" || "${file_password}" != "${secret_password}" ]]
+}
+
 ensure_secrets() {
-    if kubectl get secret jarvis-secrets -n "${NAMESPACE}" >/dev/null 2>&1; then
+    if kubectl get secret "${GRAFANA_SECRET_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1 && ! grafana_secret_sync_required; then
         return 0
     fi
 
     if [[ -f "${SECRETS_FILE}" ]]; then
+        local grafana_exists="false"
+        if kubectl get deployment grafana -n "${NAMESPACE}" >/dev/null 2>&1; then
+            grafana_exists="true"
+        fi
+
         info "Applying local secrets..."
         "${PROJECT_DIR}/scripts/product/jarvis-secrets-apply.sh" >/dev/null
+        if [[ "${grafana_exists}" == "true" ]]; then
+            GRAFANA_RESTART_REQUIRED="true"
+        fi
         return 0
     fi
 
@@ -390,11 +650,7 @@ ensure_secrets() {
 }
 
 ensure_tls() {
-    if [[ -f "${TLS_DIR}/jarvis.crt" && -f "${TLS_DIR}/jarvis.key" ]]; then
-        return 0
-    fi
-
-    info "Generating TLS certificates..."
+    info "Ensuring TLS certificates are current..."
     "${PROJECT_DIR}/scripts/product/jarvis-generate-certs.sh" >/dev/null
 }
 
@@ -508,6 +764,11 @@ wait_workload() {
     local required="${4:-true}"
     local message="${5:-${kind}/${name} not ready}"
 
+    if workload_is_ready "${kind}" "${name}"; then
+        info "${kind}/${name} already available"
+        return 0
+    fi
+
     if kubectl rollout status "${kind}/${name}" -n "${NAMESPACE}" --timeout="${timeout}" >/dev/null 2>&1; then
         return 0
     fi
@@ -571,6 +832,121 @@ assess_optional_workloads() {
     fi
 }
 
+observability_stack_ready() {
+    local deployment
+    for deployment in "${OBSERVABILITY_DEPLOYMENTS[@]}"; do
+        if ! workload_is_ready deployment "${deployment}"; then
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+deployment_is_paused() {
+    local name="$1"
+    [[ "$(kubectl get deployment "${name}" -n "${NAMESPACE}" -o jsonpath='{.spec.paused}' 2>/dev/null || true)" == "true" ]]
+}
+
+apply_observability_manifests() {
+    local apply_output=""
+
+    if [[ ! -f "${OBSERVABILITY_KUSTOMIZATION_DIR}/kustomization.yaml" ]]; then
+        fail "Missing observability kustomization: ${OBSERVABILITY_KUSTOMIZATION_DIR}/kustomization.yaml"
+    fi
+
+    if ! apply_output="$(kubectl apply -k "${OBSERVABILITY_KUSTOMIZATION_DIR}" 2>&1)"; then
+        echo "${apply_output}" >&2
+        fail "Failed to apply observability kustomization: ${OBSERVABILITY_KUSTOMIZATION_DIR}"
+    fi
+
+    if grep -Eq 'configmap/grafana-datasources (created|configured)' <<<"${apply_output}"; then
+        GRAFANA_RESTART_REQUIRED="true"
+        info "Grafana provisioning config changed; a Grafana restart will be performed"
+    fi
+}
+
+resume_paused_observability_deployments() {
+    local deployment
+
+    for deployment in "${OBSERVABILITY_DEPLOYMENTS[@]}"; do
+        if ! deployment_is_paused "${deployment}"; then
+            continue
+        fi
+
+        info "Resuming paused deployment/${deployment}..."
+        if ! kubectl rollout resume "deployment/${deployment}" -n "${NAMESPACE}" >/dev/null; then
+            fail "Failed to resume paused deployment/${deployment}"
+        fi
+
+        if [[ "${deployment}" == "grafana" ]]; then
+            GRAFANA_RESTART_REQUIRED="true"
+        fi
+    done
+}
+
+restart_grafana_if_needed() {
+    if [[ "${GRAFANA_RESTART_REQUIRED}" != "true" ]]; then
+        return 0
+    fi
+
+    info "Restarting Grafana to reload provisioned datasources and dashboards..."
+    if ! kubectl rollout restart deployment/grafana -n "${NAMESPACE}" >/dev/null; then
+        fail "Failed to restart deployment/grafana after provisioning changes"
+    fi
+}
+
+ensure_observability_stack() {
+    info "Reconciling observability stack..."
+    apply_observability_manifests
+    resume_paused_observability_deployments
+    restart_grafana_if_needed
+
+    info "Waiting for Grafana / Prometheus / Loki / Tempo / Alloy..."
+    wait_workload deployment grafana 180s true "deployment/grafana not ready"
+    wait_workload deployment prometheus 180s true "deployment/prometheus not ready"
+    wait_workload deployment loki 180s true "deployment/loki not ready"
+    wait_workload deployment tempo 180s true "deployment/tempo not ready"
+    wait_workload deployment alloy 180s true "deployment/alloy not ready"
+
+    info "Observability stack ready"
+}
+
+verify_observability_stack() {
+    if [[ ! -x "${OBSERVABILITY_VERIFY_SCRIPT}" ]]; then
+        fail "Missing observability verification script: ${OBSERVABILITY_VERIFY_SCRIPT}"
+    fi
+
+    info "Verifying Grafana / Loki / Alloy / provisioning / Loki log ingestion..."
+    if ! "${OBSERVABILITY_VERIFY_SCRIPT}"; then
+        fail "Observability verification failed. See ${JARVIS_HOME}/run/observability-status.json for details."
+    fi
+
+    info "Observability verification passed"
+}
+
+provision_grafana_dashboards() {
+    if [[ ! -x "${GRAFANA_DASHBOARD_PROVISION_SCRIPT}" ]]; then
+        fail "Missing Grafana dashboard provisioning script: ${GRAFANA_DASHBOARD_PROVISION_SCRIPT}"
+    fi
+
+    info "Provisioning Grafana dashboards from repo files..."
+    if ! "${GRAFANA_DASHBOARD_PROVISION_SCRIPT}"; then
+        fail "Grafana dashboard provisioning failed"
+    fi
+}
+
+sync_grafana_admin_credentials() {
+    if [[ ! -x "${GRAFANA_ADMIN_SYNC_SCRIPT}" ]]; then
+        fail "Missing Grafana admin sync script: ${GRAFANA_ADMIN_SYNC_SCRIPT}"
+    fi
+
+    info "Synchronizing Grafana admin credentials from jarvis-secrets..."
+    if ! "${GRAFANA_ADMIN_SYNC_SCRIPT}"; then
+        fail "Grafana admin credential sync failed"
+    fi
+}
+
 print_ready_status() {
     local overall_status="$1"
 
@@ -579,11 +955,13 @@ print_ready_status() {
     echo ""
     echo -e "  ${CYAN}API Gateway (HTTPS):${NC} ${RUN_API_URL}"
     echo -e "  ${CYAN}Voice Gateway (WSS):${NC} ${RUN_VOICE_URL}"
+    echo -e "  ${CYAN}Grafana:${NC} ${RUN_GRAFANA_URL}"
     echo ""
     echo -e "${CYAN}Status:${NC} ${overall_status}"
     echo -e "${YELLOW}Next:${NC}"
-    echo "  - Trust CA: sudo ./scripts/product/jarvis-install-tls.sh"
-    echo "  - /etc/hosts: sudo ./scripts/product/jarvis-setup-hosts.sh"
+    echo "  - Open monitoring: ${RUN_GRAFANA_URL}"
+    echo "  - Grafana credentials: ${SECRETS_FILE} (${GRAFANA_SECRET_USER_KEY} / ${GRAFANA_SECRET_PASSWORD_KEY})"
+    echo "  - Observability proof: ${JARVIS_HOME}/run/observability-status.json"
 }
 
 maybe_skip_redeploy() {
@@ -594,6 +972,8 @@ maybe_skip_redeploy() {
     if ! backend_core_ready; then
         return 1
     fi
+
+    verify_observability_stack
 
     info "Backend already running and core workloads are ready; skipping rebuild/reapply"
     assess_optional_workloads
@@ -617,12 +997,49 @@ print_header() {
     echo ""
 }
 
+preflight_check_port_conflicts() {
+    local -a conflict_ports=(80 443)
+    if is_truthy "${ENABLE_PORT_FORWARD}"; then
+        conflict_ports+=(8080)
+    fi
+    local blocking_found="false"
+
+    for port in "${conflict_ports[@]}"; do
+        local listener_pid
+        listener_pid="$(ss -tlnp "sport = :${port}" 2>/dev/null | awk 'NR>1 {print $0}' || true)"
+        if [[ -z "${listener_pid}" ]]; then
+            continue
+        fi
+
+        if echo "${listener_pid}" | grep -q "docker-proxy"; then
+            blocking_found="true"
+            warn "docker-proxy is listening on port ${port} — likely a stale Docker container with restart policy"
+            warn "  Identified listener: $(echo "${listener_pid}" | head -1)"
+            warn "  Fix: docker ps --filter 'publish=${port}' | identify the container | docker rm -f <id>"
+        elif echo "${listener_pid}" | grep -q "traefik"; then
+            warn "traefik is listening on port ${port} — will attempt to resolve via ensure_ingress_routing"
+        elif echo "${listener_pid}" | grep -q "nginx"; then
+            : # likely our ingress-nginx, expected
+        else
+            warn "Unknown process listening on port ${port}: $(echo "${listener_pid}" | head -1)"
+        fi
+    done
+
+    if [[ "${blocking_found}" == "true" ]]; then
+        fail "Stale Docker listener(s) detected on ingress ports. Remove them before launching Jarvis k8s stack. Run: docker ps --format '{{.ID}} {{.Ports}}' to identify, then docker rm -f <id>."
+    fi
+}
+
 # === Start ===
 print_header
 
 require_cmd kubectl
 ensure_kubeconfig
 ensure_cluster
+ensure_k3s_network_alignment
+
+info "Pre-flight: checking for port conflicts..."
+preflight_check_port_conflicts
 
 info "Ensuring ingress-nginx..."
 ensure_ingress_nginx
@@ -639,6 +1056,10 @@ ensure_secrets
 info "Ensuring TLS..."
 ensure_tls
 apply_tls_secret
+
+ensure_observability_stack
+sync_grafana_admin_credentials
+provision_grafana_dashboards
 
 rotate_backend_log
 
@@ -761,6 +1182,9 @@ API_URL="https://api.jarvis.local"
 VOICE_WS_URL="wss://voice.jarvis.local"
 RUN_API_URL="${API_URL}"
 RUN_VOICE_URL="${VOICE_WS_URL}"
+RUN_GRAFANA_URL="https://grafana.jarvis.local"
+
+verify_observability_stack
 
 if [[ "${OPTIONAL_FAILED}" == "true" ]]; then
     RUN_STATUS="degraded"
@@ -773,7 +1197,15 @@ write_run_summary
 
 if [[ "${ENABLE_PORT_FORWARD}" == "true" ]]; then
     info "Starting port-forward (debug)..."
-    kubectl port-forward svc/api-gateway 8080:8080 -n "${NAMESPACE}" >/dev/null 2>&1 &
-    kubectl port-forward svc/voice-gateway 8081:8081 -n "${NAMESPACE}" >/dev/null 2>&1 &
-    echo -e "  ${CYAN}[DEBUG]${NC} http://localhost:8080"
+    if ss -tlnp "sport = :8080" 2>/dev/null | grep -q '^LISTEN'; then
+        warn "Port 8080 already in use; skipping port-forward for api-gateway"
+    else
+        kubectl port-forward svc/api-gateway 8080:8080 -n "${NAMESPACE}" >/dev/null 2>&1 &
+        echo -e "  ${CYAN}[DEBUG]${NC} http://localhost:8080"
+    fi
+    if ss -tlnp "sport = :8081" 2>/dev/null | grep -q '^LISTEN'; then
+        warn "Port 8081 already in use; skipping port-forward for voice-gateway"
+    else
+        kubectl port-forward svc/voice-gateway 8081:8081 -n "${NAMESPACE}" >/dev/null 2>&1 &
+    fi
 fi

@@ -22,6 +22,8 @@ public class AiRuntimeStatusService {
 
     private final LlmClient llmClient;
     private final MemoryClient memoryClient;
+    private final LlmLifecycleManager lifecycleManager;
+    private final LlmAdmissionController admissionController;
 
     @Value("${jarvis.llm.enabled:false}")
     private boolean llmEnabled;
@@ -183,10 +185,28 @@ public class AiRuntimeStatusService {
         gpu.put("statusFile", gpuStatusFile);
         gpu.put("canonicalCpuBaseline", canonicalCpuBaseline);
 
+        LlmLifecycleManager.State lifecycleState = lifecycleManager.getState();
+        Map<String, Object> lifecycle = new LinkedHashMap<>();
+        lifecycle.put("state", lifecycleState.name());
+        lifecycle.put("reason", lifecycleManager.getStateReason());
+        lifecycle.put("warmup_complete", lifecycleManager.isWarmupComplete());
+        lifecycle.put("usable", lifecycleManager.isUsable());
+        lifecycle.put("last_state_change", lifecycleManager.getLastStateChange().toString());
+
+        Map<String, Object> admission = new LinkedHashMap<>();
+        admission.put("active_inferences", admissionController.getActiveInferences());
+        admission.put("queue_depth", admissionController.getQueueDepth());
+        admission.put("total_admitted", admissionController.getTotalAdmitted());
+        admission.put("rejected_count", admissionController.getRejectedCount());
+        admission.put("timeout_count", admissionController.getTimeoutCount());
+        admission.put("available_permits", admissionController.getAvailablePermits());
+
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("service", "llm-service");
         summary.put("status", topLevelStatus(llmEnabled, llmAvailable, memoryRequired, memoryAvailable));
         summary.put("fullLocalAiReadiness", fullLocalAiReadiness);
+        summary.put("lifecycle", lifecycle);
+        summary.put("admission", admission);
         summary.put("routing", routing);
         summary.put("maturity", maturity);
         summary.put("localDefaultStack", localDefaultStack);

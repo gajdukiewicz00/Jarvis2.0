@@ -3,7 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JARVIS_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
-RUNTIME_MODE="${JARVIS_RUNTIME_MODE:-local}"
 
 LOG_DIR="$HOME/.jarvis/logs"
 mkdir -p "$LOG_DIR"
@@ -60,12 +59,37 @@ resolve_last_run_api_url() {
   printf '%s' "${api_url%/}"
 }
 
+detect_runtime_mode() {
+  if [[ -n "${JARVIS_RUNTIME_MODE:-}" ]]; then
+    printf '%s' "${JARVIS_RUNTIME_MODE}"
+    return 0
+  fi
+
+  if [[ -f "${HOME}/.jarvis/run/local-runtime/local.env" ]]; then
+    if curl -fsS "http://127.0.0.1:8080/actuator/health/readiness" >/dev/null 2>&1; then
+      printf 'local'
+      return 0
+    fi
+  fi
+
+  printf 'k8s'
+}
+
+RUNTIME_MODE="$(detect_runtime_mode)"
+
 backend_running=false
 BACKEND_SCRIPT="./jarvis-launch.sh"
 
 if [[ "${RUNTIME_MODE}" == "local" ]]; then
   LOCAL_RUNTIME_API_URL="$(resolve_last_run_api_url || true)"
-  export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-${LOCAL_RUNTIME_API_URL:-https://127.0.0.1:18080}}"
+  if [[ -z "${JARVIS_API_BASE_URL:-}" ]]; then
+    if [[ -n "${LOCAL_RUNTIME_API_URL:-}" ]]; then
+      export JARVIS_API_BASE_URL="${LOCAL_RUNTIME_API_URL}"
+    else
+      echo "WARNING: JARVIS_API_BASE_URL is not set and no active local runtime was detected; defaulting to http://127.0.0.1:8080" >&2
+      export JARVIS_API_BASE_URL="http://127.0.0.1:8080"
+    fi
+  fi
   export JARVIS_USE_TLS="${JARVIS_USE_TLS:-$( [[ "${JARVIS_API_BASE_URL}" == https://* ]] && echo true || echo false )}"
   BACKEND_SCRIPT="./scripts/runtime-up.sh"
   CURL_ARGS=(-fsS)
@@ -88,7 +112,13 @@ else
   fi
 fi
 
-if [ "$backend_running" = false ]; then
+if [[ "${RUNTIME_MODE}" == "local" ]]; then
+  (
+    cd "$JARVIS_HOME"
+    ENABLE_LLM=true ENABLE_MEMORY=true "${BACKEND_SCRIPT}"
+  ) >"$BACKEND_LOG" 2>&1
+  echo "Refreshed local backend. Log: $BACKEND_LOG"
+elif [ "$backend_running" = false ]; then
   (
     cd "$JARVIS_HOME"
     ENABLE_LLM=true ENABLE_MEMORY=true "${BACKEND_SCRIPT}"
@@ -101,7 +131,8 @@ fi
 
 (
   cd "$JARVIS_HOME"
-  mvn -q -pl apps/desktop-app-javafx -am -DskipTests javafx:run
+  mvn -q -pl apps/desktop-app-javafx -am -DskipTests install
+  mvn -q -f apps/desktop-app-javafx/pom.xml -DskipTests org.openjfx:javafx-maven-plugin:0.0.8:run
 ) >"$CLIENT_LOG" 2>&1 &
 echo "Started desktop UI. Log: $CLIENT_LOG"
 if [[ -n "$TRUSTSTORE_PATH" ]]; then

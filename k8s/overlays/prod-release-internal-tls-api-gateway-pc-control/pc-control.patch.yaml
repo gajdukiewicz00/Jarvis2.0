@@ -8,6 +8,10 @@ spec:
     metadata:
       annotations:
         jarvis.io/internal-tls-slice-api-gateway-pc-control: api-gateway-pc-control-v1
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8084"
+        prometheus.io/scheme: https
     spec:
       containers:
         - name: pc-control

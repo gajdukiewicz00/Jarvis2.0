@@ -57,6 +57,17 @@ public class VisionSecurityController {
         return ResponseEntity.ok(manager.captureEnrollment(authentication.getName(), sampleCount));
     }
 
+    @PostMapping("/enrollment/import")
+    public ResponseEntity<EnrollmentResult> importEnrollment(
+            Authentication authentication,
+            @RequestBody EnrollmentImportRequest request
+    ) throws Exception {
+        return ResponseEntity.ok(manager.importEnrollmentFromDataset(
+                authentication.getName(),
+                java.nio.file.Path.of(request.datasetDirectory())
+        ));
+    }
+
     @PostMapping("/enrollment/reset")
     public ResponseEntity<VisionSecurityStatus> resetEnrollment(Authentication authentication) throws Exception {
         return ResponseEntity.ok(manager.resetEnrollment(authentication.getName()));
@@ -94,5 +105,8 @@ public class VisionSecurityController {
     }
 
     public record EnrollmentCaptureRequest(Integer sampleCount) {
+    }
+
+    public record EnrollmentImportRequest(String datasetDirectory) {
     }
 }

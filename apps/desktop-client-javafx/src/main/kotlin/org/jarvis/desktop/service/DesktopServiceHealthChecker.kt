@@ -155,10 +155,11 @@ class DesktopServiceHealthChecker(
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    val formatted = TransportErrorFormatter.describeFailure("WebSocket probe", url, t, response)
                     outcome.set(
                         when (response?.code) {
-                            401, 403 -> ProbeOutcome(Status.UNAUTHORIZED, "HTTP ${response.code}")
-                            else -> ProbeOutcome(Status.OFFLINE, response?.message ?: t.message ?: "WebSocket handshake failed")
+                            401, 403 -> ProbeOutcome(Status.UNAUTHORIZED, formatted.diagnosticMessage)
+                            else -> ProbeOutcome(Status.OFFLINE, formatted.diagnosticMessage)
                         }
                     )
                     latch.countDown()

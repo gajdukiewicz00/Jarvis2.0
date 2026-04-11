@@ -3,6 +3,8 @@ package org.jarvis.llm.controller;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatRequestDto;
 import org.jarvis.llm.service.AiRuntimeStatusService;
+import org.jarvis.llm.service.LlmAdmissionController;
+import org.jarvis.llm.service.LlmLifecycleManager;
 import org.jarvis.llm.service.LlmService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -20,10 +22,13 @@ class LlmRestControllerGuardTest {
     void shouldReturnBadRequestWhenMessagesAreEmpty() {
         LlmService llmService = mock(LlmService.class);
         AiRuntimeStatusService aiRuntimeStatusService = mock(AiRuntimeStatusService.class);
-        LlmRestController controller = new LlmRestController(llmService, aiRuntimeStatusService);
+        LlmLifecycleManager lifecycleManager = mock(LlmLifecycleManager.class);
+        LlmAdmissionController admissionController = new LlmAdmissionController(1, 4);
+        LlmRestController controller = new LlmRestController(
+                llmService, aiRuntimeStatusService, lifecycleManager, admissionController);
         ChatRequestDto request = new ChatRequestDto("session-1", List.of(), 256, 0.5);
 
-        ResponseEntity<?> response = controller.chat(request, null, null);
+        ResponseEntity<?> response = controller.chat(request, null, null, null);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verifyNoInteractions(llmService);
@@ -33,11 +38,14 @@ class LlmRestControllerGuardTest {
     void shouldReturnBadRequestWhenLastMessageIsBlank() {
         LlmService llmService = mock(LlmService.class);
         AiRuntimeStatusService aiRuntimeStatusService = mock(AiRuntimeStatusService.class);
-        LlmRestController controller = new LlmRestController(llmService, aiRuntimeStatusService);
+        LlmLifecycleManager lifecycleManager = mock(LlmLifecycleManager.class);
+        LlmAdmissionController admissionController = new LlmAdmissionController(1, 4);
+        LlmRestController controller = new LlmRestController(
+                llmService, aiRuntimeStatusService, lifecycleManager, admissionController);
         ChatMessageDto message = new ChatMessageDto(ChatMessageDto.Role.USER, "   ");
         ChatRequestDto request = new ChatRequestDto("session-1", List.of(message), 256, 0.5);
 
-        ResponseEntity<?> response = controller.chat(request, null, null);
+        ResponseEntity<?> response = controller.chat(request, null, null, null);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         verifyNoInteractions(llmService);

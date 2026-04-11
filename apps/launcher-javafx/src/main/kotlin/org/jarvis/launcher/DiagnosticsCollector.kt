@@ -80,9 +80,23 @@ class DiagnosticsCollector {
                     diagnostics.appendLine("runtimeMode: ${lastRunSummary.runtimeMode ?: "unknown"}")
                     diagnostics.appendLine("apiUrl: ${lastRunSummary.apiUrl ?: "n/a"}")
                     diagnostics.appendLine("voiceUrl: ${lastRunSummary.voiceUrl ?: "n/a"}")
+                    diagnostics.appendLine("grafanaUrl: ${lastRunSummary.grafanaUrl ?: "n/a"}")
                     diagnostics.appendLine("timestamp: ${lastRunSummary.timestamp ?: "n/a"}")
                 } else {
                     diagnostics.appendLine("missing")
+                }
+                diagnostics.appendLine("")
+
+                diagnostics.appendLine("--- Observability Verification ---")
+                try {
+                    val observabilitySummary = JarvisPaths.observabilityStatus
+                    if (Files.exists(observabilitySummary)) {
+                        diagnostics.appendLine(Files.readString(observabilitySummary).trim())
+                    } else {
+                        diagnostics.appendLine("missing")
+                    }
+                } catch (e: Exception) {
+                    diagnostics.appendLine("Error reading observability summary: ${e.message}")
                 }
                 diagnostics.appendLine("")
                 

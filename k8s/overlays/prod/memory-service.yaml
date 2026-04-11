@@ -24,6 +24,11 @@ spec:
       app: memory-service
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8093"
+        prometheus.io/scheme: http
       labels:
         app: memory-service
         app.kubernetes.io/name: memory-service
@@ -57,6 +62,9 @@ spec:
           envFrom:
             - secretRef:
                 name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
           env:
             # Database connection
             - name: SPRING_DATASOURCE_URL

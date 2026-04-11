@@ -11,10 +11,22 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
+internal enum class RuntimeEndpointMode(val description: String) {
+    LOCAL("local"),
+    K8S("k8s")
+}
+
 internal data class LocalRuntimeEndpointSnapshot(
     val apiGatewayBaseUrl: String,
-    val reason: String
-)
+    val reason: String,
+    val runtimeMode: RuntimeEndpointMode = RuntimeEndpointMode.LOCAL
+) {
+    val configSource: ConfigSource
+        get() = when (runtimeMode) {
+            RuntimeEndpointMode.LOCAL -> ConfigSource.ACTIVE_LOCAL_RUNTIME
+            RuntimeEndpointMode.K8S -> ConfigSource.ACTIVE_K8S_RUNTIME
+        }
+}
 
 internal class LocalRuntimeEndpointDetector(
     private val summaryPath: Path = Paths.get(System.getProperty("user.home"), ".jarvis", "run", "last-run.json"),
@@ -38,10 +50,11 @@ internal class LocalRuntimeEndpointDetector(
         }
 
         val summary = runCatching { Files.readString(summaryPath) }.getOrNull() ?: return null
-        val runtimeMode = extractJsonString(summary, "runtimeMode")?.trim()?.lowercase() ?: "local"
-        if (runtimeMode != "local") {
-            return null
-        }
+        val runtimeMode = when (extractJsonString(summary, "runtimeMode")?.trim()?.lowercase()) {
+            "local" -> RuntimeEndpointMode.LOCAL
+            "k8s" -> RuntimeEndpointMode.K8S
+            else -> null
+        } ?: return null
 
         val status = extractJsonString(summary, "status")?.trim()?.lowercase() ?: return null
         if (status == "stopped") {
@@ -50,9 +63,7 @@ internal class LocalRuntimeEndpointDetector(
 
         val apiGatewayBaseUrl = DesktopConfigResolver.normalizeBaseUrl(extractJsonString(summary, "apiUrl"))
             ?: return null
-        val healthUri = URI.create("${apiGatewayBaseUrl.trimEnd('/')}/actuator/health/readiness")
-        val reachable = runCatching { healthProbe(healthUri) }.getOrDefault(false)
-        if (!reachable) {
+        if (!isReady(apiGatewayBaseUrl)) {
             return null
         }
 
@@ -64,8 +75,21 @@ internal class LocalRuntimeEndpointDetector(
 
         return LocalRuntimeEndpointSnapshot(
             apiGatewayBaseUrl = apiGatewayBaseUrl,
-            reason = "Active local runtime detected from ${summaryPath.toAbsolutePath()} (status=$status$ageSuffix, actuator readiness probe OK)"
+            reason = "Active ${runtimeMode.description} runtime detected from ${summaryPath.toAbsolutePath()} (status=$status$ageSuffix, actuator readiness probe OK)",
+            runtimeMode = runtimeMode
         )
+    }
+
+    fun isReady(baseUrl: String): Boolean {
+        val normalizedBaseUrl = DesktopConfigResolver.normalizeBaseUrl(baseUrl) ?: return false
+        val healthUri = URI.create("${normalizedBaseUrl.trimEnd('/')}/actuator/health/readiness")
+        return runCatching { healthProbe(healthUri) }.getOrDefault(false)
+    }
+
+    fun isReachable(baseUrl: String): Boolean {
+        val normalizedBaseUrl = DesktopConfigResolver.normalizeBaseUrl(baseUrl) ?: return false
+        val healthUri = URI.create("${normalizedBaseUrl.trimEnd('/')}/actuator/health/readiness")
+        return runCatching { defaultReachabilityProbe()(healthUri) }.getOrDefault(false)
     }
 
     private fun extractJsonString(json: String, key: String): String? {
@@ -96,6 +120,23 @@ internal class LocalRuntimeEndpointDetector(
                     HttpResponse.BodyHandlers.ofString()
                 )
                 response.statusCode() in 200..299 && response.body().contains("\"UP\"", ignoreCase = true)
+            }
+        }
+
+        private fun defaultReachabilityProbe(): (URI) -> Boolean {
+            val client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(1))
+                .build()
+            return { uri ->
+                client.send(
+                    HttpRequest.newBuilder()
+                        .uri(uri)
+                        .timeout(Duration.ofSeconds(1))
+                        .GET()
+                        .build(),
+                    HttpResponse.BodyHandlers.discarding()
+                )
+                true
             }
         }
     }

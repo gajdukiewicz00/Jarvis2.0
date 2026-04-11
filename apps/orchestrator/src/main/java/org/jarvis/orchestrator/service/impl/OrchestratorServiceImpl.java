@@ -862,6 +862,13 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     }
 
     /**
+     * Explicit model profile for orchestrator-originated LLM calls.
+     * Ensures deterministic profile selection when no inbound HTTP request
+     * context is available (executor thread pool strips servlet attributes).
+     */
+    static final String ORCHESTRATOR_DEFAULT_PROFILE = "orchestration";
+
+    /**
      * Call LLM service with circuit breaker, timeout, and fallback.
      * 
      * If LLM is disabled, times out, or circuit is open → returns rule-based phrase immediately.
@@ -883,8 +890,8 @@ public class OrchestratorServiceImpl implements OrchestratorService {
 
         // Call LLM with timeout
         try {
-            log.info("🧠 Calling LLM for text: '{}', timeout={}s, correlationId={}", 
-                    text, llmTimeoutSeconds, correlationId);
+            log.info("🧠 Calling LLM for text: '{}', timeout={}s, profile={}, correlationId={}",
+                    text, llmTimeoutSeconds, ORCHESTRATOR_DEFAULT_PROFILE, correlationId);
 
             String sessionId = (userId != null && !userId.isBlank())
                     ? userId + "-" + correlationId
@@ -892,9 +899,9 @@ public class OrchestratorServiceImpl implements OrchestratorService {
             var message = new org.jarvis.orchestrator.dto.LlmChatRequest.Message("user", text);
             var request = new org.jarvis.orchestrator.dto.LlmChatRequest(sessionId, java.util.List.of(message));
 
-            // Execute with timeout
+            // Execute with timeout — explicit profile avoids null-header fallback on executor threads
             Future<org.jarvis.orchestrator.dto.LlmChatResponse> future = llmExecutor.submit(
-                    () -> llmClient.chat(request, correlationId, userId));
+                    () -> llmClient.chat(request, correlationId, userId, ORCHESTRATOR_DEFAULT_PROFILE));
 
             org.jarvis.orchestrator.dto.LlmChatResponse response;
             try {

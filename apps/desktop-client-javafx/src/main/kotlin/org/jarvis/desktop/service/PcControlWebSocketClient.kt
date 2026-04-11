@@ -354,14 +354,16 @@ class PcControlWebSocketClient(
 
     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
         isConnected = false
-        logger.info("WebSocket closing: $code / $reason")
+        val formatted = TransportErrorFormatter.describeClose("PC Control WebSocket", resolvedUrl, code, reason)
+        logger.info("{}", formatted.diagnosticMessage)
         updateStatus("Disconnected")
     }
     
     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
         isConnected = false
-        logger.info("WebSocket closed: $code / $reason")
-        updateStatus("Disconnected")
+        val formatted = TransportErrorFormatter.describeClose("PC Control WebSocket", resolvedUrl, code, reason)
+        logger.info("{}", formatted.diagnosticMessage)
+        updateStatus(if (code == 1000) "Disconnected" else "Connection failed: ${formatted.userMessage}")
         
         // Auto-reconnect if not intentional close
         if (code != 1000 && reconnectAttempts < maxReconnectAttempts) {
@@ -371,12 +373,13 @@ class PcControlWebSocketClient(
 
     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
         isConnected = false
-        logger.warn("WebSocket failure: ${t.message}")
-        updateStatus("Connection failed")
-
         if (response?.code == 401 && handleUnauthorizedFailure("PC Control WebSocket upgrade rejected with HTTP 401")) {
             return
         }
+
+        val formatted = TransportErrorFormatter.describeFailure("PC Control WebSocket", resolvedUrl, t, response)
+        logger.warn("{}", formatted.diagnosticMessage, t)
+        updateStatus("Connection failed: ${formatted.userMessage}")
 
         if (reconnectAttempts < maxReconnectAttempts) {
             scheduleReconnect()
@@ -466,7 +469,12 @@ class PcControlWebSocketClient(
             )
             true
         } catch (e: Exception) {
-            logger.error("PC Control token refresh failed: {}", e.message, e)
+            val formatted = TransportErrorFormatter.describeFailure(
+                channel = "PC Control auth refresh",
+                endpoint = "${AppConfig.current().apiGatewayBaseUrl}/auth/refresh",
+                throwable = e
+            )
+            logger.error("{}", formatted.diagnosticMessage, e)
             if (clearTokensOnFailure) {
                 TokenManager.clearTokens()
             }

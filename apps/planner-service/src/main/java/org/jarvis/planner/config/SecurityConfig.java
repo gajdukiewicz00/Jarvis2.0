@@ -3,6 +3,7 @@ package org.jarvis.planner.config;
 import org.jarvis.common.security.BaseSecurityConfig;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 @Profile("!dev")
 public class SecurityConfig extends BaseSecurityConfig {
 }

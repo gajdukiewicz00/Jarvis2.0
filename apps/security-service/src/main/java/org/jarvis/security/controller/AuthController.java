@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
 import org.jarvis.security.config.GlobalExceptionHandler.UserAlreadyExistsException;
 import org.jarvis.security.dto.AuthResponse;
+import org.jarvis.security.dto.ChangePasswordRequest;
 import org.jarvis.security.dto.LoginRequest;
 import org.jarvis.security.dto.RefreshRequest;
 import org.jarvis.security.dto.RegisterRequest;
@@ -25,6 +26,8 @@ import java.util.Map;
  * - POST /auth/register - Register new user
  * - POST /auth/login - Login and get JWT tokens  
  * - POST /auth/refresh - Refresh access token
+ * - POST /auth/logout - Revoke current refresh token
+ * - POST /auth/password/change - Change password and revoke prior refresh tokens
  * - GET /auth/me - Get current user info
  */
 @Slf4j
@@ -89,6 +92,15 @@ public class AuthController {
     }
 
     /**
+     * Logout by revoking the supplied refresh token.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
+        authService.logout(request.refreshToken());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
      * Get current user info from JWT token.
      * 
      * @param authHeader Authorization header with Bearer token
@@ -117,6 +129,27 @@ public class AuthController {
         userInfo.put("enabled", user.isEnabled());
         
         return ResponseEntity.ok(userInfo);
+    }
+
+    /**
+     * Change password and issue a new token pair for the current session.
+     */
+    @PostMapping("/password/change")
+    public ResponseEntity<AuthResponse> changePassword(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @Valid @RequestBody ChangePasswordRequest request) {
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new AuthenticationException("MISSING_TOKEN", "Missing or invalid Authorization header");
+        }
+
+        String token = authHeader.substring(7).trim();
+        if (token.isEmpty()) {
+            throw new AuthenticationException("EMPTY_TOKEN", "Token is empty");
+        }
+
+        AuthResponse response = authService.changePassword(token, request);
+        return ResponseEntity.ok(response);
     }
 
     /**

@@ -3,6 +3,7 @@ package org.jarvis.apigateway.websocket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -13,39 +14,78 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * WebSocket handler for desktop-side PC control sessions.
- *
- * Sessions are tracked by authenticated user ID so internal services can route
- * actions to the correct desktop instead of broadcasting blindly.
- *
- * The handler now waits for desktop ACKs so callers can distinguish
- * "message delivered" from "desktop action really executed".
- */
 @Slf4j
 @Component
 public class PcControlWebSocketHandler extends TextWebSocketHandler {
-    private static final long DEFAULT_ACK_TIMEOUT_MS = 4_000L;
+
+    static final long DEFAULT_ACK_TIMEOUT_MS = 4_000L;
+    static final long HEARTBEAT_INTERVAL_MS = 30_000L;
+    static final long STALE_SESSION_TIMEOUT_MS = 90_000L;
+
+    private static final CloseStatus STALE_SESSION_CLOSE_STATUS = new CloseStatus(4001, "stale_session");
+    private static final CloseStatus REPLACED_SESSION_CLOSE_STATUS = new CloseStatus(4002, "replaced_by_reconnect");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final ConcurrentHashMap<String, ClientSession> clientSessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ClientSessionState> clientSessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PendingAction> pendingActions = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "pc-control-ws-heartbeat");
+        thread.setDaemon(true);
+        return thread;
+    });
 
-    private record ClientSession(
-            WebSocketSession session,
-            String clientType,
-            String clientId,
-            String userId,
-            String username) {
+    public PcControlWebSocketHandler() {
+        heartbeatExecutor.scheduleAtFixedRate(
+                this::heartbeatSweep,
+                HEARTBEAT_INTERVAL_MS,
+                HEARTBEAT_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
+    }
+
+    private static final class ClientSessionState {
+        private final WebSocketSession session;
+        private volatile String clientType;
+        private volatile String clientId;
+        private volatile String userId;
+        private volatile String username;
+        private volatile long lastSeenAt;
+
+        private ClientSessionState(WebSocketSession session,
+                                   String clientType,
+                                   String clientId,
+                                   String userId,
+                                   String username) {
+            this.session = session;
+            this.clientType = clientType;
+            this.clientId = clientId;
+            this.userId = userId;
+            this.username = username;
+            touch();
+        }
+
+        private void update(String clientType, String clientId, String userId, String username) {
+            this.clientType = clientType;
+            this.clientId = clientId;
+            this.userId = userId;
+            this.username = username;
+            touch();
+        }
+
+        private void touch() {
+            this.lastSeenAt = System.currentTimeMillis();
+        }
     }
 
     public record DispatchResult(
@@ -82,7 +122,7 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
     private static final class PendingAction {
         private final String requestId;
         private final String action;
-        private final AtomicInteger expectedTargets = new AtomicInteger(-1);
+        private final Set<String> expectedTargets = ConcurrentHashMap.newKeySet();
         private final ConcurrentHashMap<String, ActionAck> acknowledgements = new ConcurrentHashMap<>();
         private final CompletableFuture<DispatchAcknowledgements> completion = new CompletableFuture<>();
 
@@ -91,16 +131,23 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
             this.action = action;
         }
 
-        private void setExpectedTargets(int expected) {
-            expectedTargets.set(Math.max(expected, 0));
+        private void setExpectedTargets(Collection<String> targets) {
+            expectedTargets.clear();
+            expectedTargets.addAll(targets);
             completeIfSatisfied();
         }
 
-        private void acknowledge(ActionAck ack) {
-            String key = ack.sessionId() != null && !ack.sessionId().isBlank()
-                    ? ack.sessionId()
-                    : UUID.randomUUID().toString();
+        private void acknowledge(String sessionId, ActionAck ack) {
+            String key = sessionId != null && !sessionId.isBlank() ? sessionId : UUID.randomUUID().toString();
             acknowledgements.put(key, ack);
+            completeIfSatisfied();
+        }
+
+        private void markTargetUnavailable(String sessionId, String userId, String reason) {
+            if (sessionId == null || !expectedTargets.contains(sessionId) || acknowledgements.containsKey(sessionId)) {
+                return;
+            }
+            acknowledgements.put(sessionId, new ActionAck(requestId, action, false, reason, sessionId, userId));
             completeIfSatisfied();
         }
 
@@ -115,28 +162,36 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         }
 
         private DispatchAcknowledgements snapshot() {
-            return new DispatchAcknowledgements(
-                    Math.max(expectedTargets.get(), 0),
-                    Map.copyOf(acknowledgements));
+            return new DispatchAcknowledgements(expectedTargets.size(), Map.copyOf(acknowledgements));
         }
 
         private void completeIfSatisfied() {
-            int expected = expectedTargets.get();
-            if (expected >= 0 && acknowledgements.size() >= expected && !completion.isDone()) {
+            if (!completion.isDone() && acknowledgements.keySet().containsAll(expectedTargets)) {
                 completion.complete(snapshot());
             }
         }
     }
 
+    @PreDestroy
+    void shutdownHeartbeat() {
+        heartbeatExecutor.shutdownNow();
+    }
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
         String userId = principalName(session.getPrincipal());
-        log.info("🔌 PC Control WebSocket connected: session={}, userId={}", session.getId(), userId);
-        clientSessions.put(session.getId(), new ClientSession(session, "UNKNOWN", session.getId(), userId, null));
+        ClientSessionState state = new ClientSessionState(session, "UNKNOWN", session.getId(), userId, null);
+        clientSessions.put(session.getId(), state);
+        log.info("PC Control WebSocket connected: session={}, userId={}", session.getId(), userId);
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+        ClientSessionState state = clientSessions.get(session.getId());
+        if (state != null) {
+            state.touch();
+        }
+
         String payload = message.getPayload();
         log.debug("Received from {}: {}", session.getId(), payload);
 
@@ -161,17 +216,20 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         String username = readText(json, "username", null);
         String requestedUserId = readText(json, "userId", null);
         String normalizedClient = normalizeClientType(client);
-        String resolvedUserId = principalName(session.getPrincipal());
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            resolvedUserId = requestedUserId;
-        }
+        String principalUserId = principalName(session.getPrincipal());
+        String resolvedUserId = (principalUserId == null || principalUserId.isBlank())
+                ? requestedUserId
+                : principalUserId;
 
-        clientSessions.put(
+        evictReplacedSessions(session.getId(), clientId, resolvedUserId);
+
+        ClientSessionState state = clientSessions.computeIfAbsent(
                 session.getId(),
-                new ClientSession(session, normalizedClient, clientId, resolvedUserId, username));
+                ignored -> new ClientSessionState(session, normalizedClient, clientId, resolvedUserId, username));
+        state.update(normalizedClient, clientId, resolvedUserId, username);
 
         log.info(
-                "✅ Client identified: type={}, session={}, clientId={}, userId={}, username={}",
+                "Client identified: type={}, session={}, clientId={}, userId={}, username={}",
                 normalizedClient,
                 session.getId(),
                 clientId,
@@ -181,13 +239,31 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         sendMessage(session, createMessage("ACK", "message", "Connected to PC Control"));
     }
 
+    private void evictReplacedSessions(String currentSessionId, String clientId, String userId) {
+        if (clientId == null || clientId.isBlank()) {
+            return;
+        }
+        List<ClientSessionState> replacements = clientSessions.values().stream()
+                .filter(state -> !currentSessionId.equals(state.session.getId()))
+                .filter(state -> clientId.equals(state.clientId))
+                .filter(state -> userId == null || userId.isBlank() || userId.equals(state.userId))
+                .toList();
+
+        for (ClientSessionState replacement : replacements) {
+            log.info("Replacing stale/reconnected desktop session: oldSession={}, clientId={}, userId={}",
+                    replacement.session.getId(), replacement.clientId, replacement.userId);
+            closeQuietly(replacement.session, REPLACED_SESSION_CLOSE_STATUS);
+            removeSession(replacement.session, "Desktop session replaced by reconnect");
+        }
+    }
+
     private void handleAck(WebSocketSession session, JsonNode json) {
         String requestId = readText(json, "requestId", null);
         String action = readText(json, "action", "");
         boolean success = json.has("success") && json.get("success").asBoolean();
         String error = readText(json, "error", null);
-        ClientSession clientSession = clientSessions.get(session.getId());
-        String userId = clientSession != null ? clientSession.userId() : principalName(session.getPrincipal());
+        ClientSessionState state = clientSessions.get(session.getId());
+        String userId = state != null ? state.userId : principalName(session.getPrincipal());
 
         log.info(
                 "Action ACK received: requestId={}, action={}, success={}, sessionId={}, userId={}, error={}",
@@ -210,19 +286,19 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        pendingAction.acknowledge(new ActionAck(requestId, action, success, error, session.getId(), userId));
+        pendingAction.acknowledge(session.getId(), new ActionAck(requestId, action, success, error, session.getId(), userId));
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        log.info("🔌 PC Control WebSocket disconnected: {} ({})", session.getId(), status);
-        clientSessions.remove(session.getId());
+        log.info("PC Control WebSocket disconnected: {} ({})", session.getId(), status);
+        removeSession(session, "Desktop websocket disconnected");
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
-        log.error("WebSocket transport error for {}: {}", session.getId(), exception.getMessage());
-        clientSessions.remove(session.getId());
+        log.warn("WebSocket transport error for {}: {}", session.getId(), exception.getMessage());
+        removeSession(session, "Desktop websocket transport error");
     }
 
     public DispatchResult dispatchPcAction(
@@ -241,7 +317,7 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
             String userId,
             String correlationId,
             long ackTimeoutMs) {
-        List<ClientSession> targets = resolveTargets(sessionId, userId);
+        List<ClientSessionState> targets = resolveTargets(sessionId, userId);
         if (targets.isEmpty()) {
             String status = sessionId != null && !sessionId.isBlank()
                     ? "session_not_found"
@@ -281,15 +357,17 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         pendingActions.put(requestId, pendingAction);
 
         int deliveredClients = 0;
+        List<String> deliveredSessionIds = new ArrayList<>();
         try {
             String message = pcActionMessage(action, params, requestId, correlationId);
-            for (ClientSession clientSession : targets) {
-                if (sendMessage(clientSession.session(), message)) {
+            for (ClientSessionState clientSession : targets) {
+                if (sendMessage(clientSession.session, message)) {
                     deliveredClients++;
+                    deliveredSessionIds.add(clientSession.session.getId());
                 }
             }
 
-            pendingAction.setExpectedTargets(deliveredClients);
+            pendingAction.setExpectedTargets(deliveredSessionIds);
             if (deliveredClients == 0) {
                 log.warn("Eligible desktop executors found but message delivery failed: action={}, requestId={}",
                         action, requestId);
@@ -337,7 +415,7 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
     public int getConnectedClientsCount() {
         return (int) clientSessions.values().stream()
                 .filter(this::isPcControlClient)
-                .filter(cs -> cs.session().isOpen())
+                .filter(state -> state.session.isOpen())
                 .count();
     }
 
@@ -345,11 +423,11 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         return getConnectedClientsCount() > 0;
     }
 
-    private List<ClientSession> resolveTargets(String sessionId, String userId) {
-        List<ClientSession> targets = new ArrayList<>();
+    private List<ClientSessionState> resolveTargets(String sessionId, String userId) {
+        List<ClientSessionState> targets = new ArrayList<>();
         if (sessionId != null && !sessionId.isBlank()) {
-            ClientSession clientSession = clientSessions.get(sessionId);
-            if (clientSession != null && isPcControlClient(clientSession) && clientSession.session().isOpen()) {
+            ClientSessionState clientSession = clientSessions.get(sessionId);
+            if (clientSession != null && isPcControlClient(clientSession) && clientSession.session.isOpen()) {
                 targets.add(clientSession);
             }
             return targets;
@@ -358,15 +436,15 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
         if (userId != null && !userId.isBlank()) {
             clientSessions.values().stream()
                     .filter(this::isPcControlClient)
-                    .filter(cs -> userId.equals(cs.userId()))
-                    .filter(cs -> cs.session().isOpen())
+                    .filter(state -> userId.equals(state.userId))
+                    .filter(state -> state.session.isOpen())
                     .forEach(targets::add);
             return targets;
         }
 
         clientSessions.values().stream()
                 .filter(this::isPcControlClient)
-                .filter(cs -> cs.session().isOpen())
+                .filter(state -> state.session.isOpen())
                 .forEach(targets::add);
         return targets;
     }
@@ -442,6 +520,36 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
                 userId);
     }
 
+    private void heartbeatSweep() {
+        long now = System.currentTimeMillis();
+        for (ClientSessionState state : clientSessions.values()) {
+            if (!state.session.isOpen()) {
+                removeSession(state.session, "Desktop websocket session is no longer open");
+                continue;
+            }
+            if (!isPcControlClient(state)) {
+                continue;
+            }
+            if (now - state.lastSeenAt > STALE_SESSION_TIMEOUT_MS) {
+                log.warn("Closing stale desktop websocket session: session={}, clientId={}, userId={}, lastSeenAgoMs={}",
+                        state.session.getId(), state.clientId, state.userId, now - state.lastSeenAt);
+                closeQuietly(state.session, STALE_SESSION_CLOSE_STATUS);
+                removeSession(state.session, "Desktop websocket session became stale");
+                continue;
+            }
+            sendMessage(state.session, createMessage("PING", "timestamp", String.valueOf(now)));
+        }
+    }
+
+    private void removeSession(WebSocketSession session, String reason) {
+        ClientSessionState removed = clientSessions.remove(session.getId());
+        if (removed == null) {
+            return;
+        }
+        pendingActions.values().forEach(pendingAction ->
+                pendingAction.markTargetUnavailable(session.getId(), removed.userId, reason));
+    }
+
     private String buildRequestId(String correlationId) {
         String token = UUID.randomUUID().toString();
         if (correlationId == null || correlationId.isBlank()) {
@@ -476,14 +584,26 @@ public class PcControlWebSocketHandler extends TextWebSocketHandler {
                 return true;
             }
         } catch (IOException e) {
-            log.error("Failed to send message to {}: {}", session.getId(), e.getMessage());
+            log.warn("Failed to send message to {}: {}", session.getId(), e.getMessage());
+            removeSession(session, "Failed to deliver websocket message");
         }
         return false;
     }
 
-    private boolean isPcControlClient(ClientSession clientSession) {
-        return "PC_CONTROL_CLIENT".equalsIgnoreCase(clientSession.clientType())
-                || "DESKTOP".equalsIgnoreCase(clientSession.clientType());
+    private void closeQuietly(WebSocketSession session, CloseStatus status) {
+        if (session == null || !session.isOpen()) {
+            return;
+        }
+        try {
+            session.close(status);
+        } catch (IOException e) {
+            log.debug("Failed to close websocket session {} cleanly: {}", session.getId(), e.getMessage());
+        }
+    }
+
+    private boolean isPcControlClient(ClientSessionState state) {
+        return "PC_CONTROL_CLIENT".equalsIgnoreCase(state.clientType)
+                || "DESKTOP".equalsIgnoreCase(state.clientType);
     }
 
     private String normalizeClientType(String client) {

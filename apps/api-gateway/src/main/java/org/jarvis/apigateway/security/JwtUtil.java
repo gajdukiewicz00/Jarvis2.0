@@ -14,8 +14,9 @@ import java.util.Date;
  * JWT Utility for validating tokens in the API Gateway.
  * Mirrors the logic from security-service but focused on validation only.
  * <p>
- * Supports optional issuer enforcement via {@code jarvis.jwt.enforce-issuer=true}.
- * When enabled, tokens with a mismatched or missing issuer are rejected.
+ * Supports issuer enforcement via {@code jarvis.jwt.enforce-issuer=true}.
+ * The default is enabled so gateway-side validation matches the issuer contract
+ * emitted by {@code security-service}.
  */
 @Slf4j
 @Component
@@ -28,7 +29,7 @@ public class JwtUtil {
     public JwtUtil(
             @Value("${jarvis.jwt.secret}") String secret,
             @Value("${jarvis.jwt.issuer:jarvis}") String issuer,
-            @Value("${jarvis.jwt.enforce-issuer:false}") boolean enforceIssuer) {
+            @Value("${jarvis.jwt.enforce-issuer:true}") boolean enforceIssuer) {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.issuer = issuer;
         this.enforceIssuer = enforceIssuer;
@@ -69,6 +70,16 @@ public class JwtUtil {
             log.warn("JWT validation failed: {}", e.getMessage());
             throw e;
         }
+    }
+
+    public boolean isAccessToken(Claims claims) {
+        if (claims == null) {
+            return false;
+        }
+
+        String legacyType = claims.get("type", String.class);
+        String canonicalType = claims.get("token_type", String.class);
+        return "access".equals(legacyType) || "access".equals(canonicalType);
     }
 
     /**

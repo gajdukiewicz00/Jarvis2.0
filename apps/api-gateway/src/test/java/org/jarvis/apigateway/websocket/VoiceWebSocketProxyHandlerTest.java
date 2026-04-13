@@ -13,6 +13,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
+import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
@@ -23,11 +24,15 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,6 +61,7 @@ class VoiceWebSocketProxyHandlerTest {
         when(clientSession.getId()).thenReturn("client-1");
         when(clientSession.isOpen()).thenReturn(true);
         when(clientSession.getHandshakeHeaders()).thenReturn(new HttpHeaders());
+        lenient().when(backendSession.isOpen()).thenReturn(true);
         when(serviceJwtProvider.isEnabled()).thenReturn(true);
         when(serviceJwtProvider.createToken("api-gateway", List.of("SVC_INTERNAL"))).thenReturn("svc-token");
 
@@ -92,6 +98,7 @@ class VoiceWebSocketProxyHandlerTest {
     @Test
     void afterConnectionEstablishedUsesPrincipalAndHandshakeHeadersWhenSecurityContextIsEmpty() throws Exception {
         HttpHeaders handshakeHeaders = new HttpHeaders();
+        handshakeHeaders.add(HttpHeaders.AUTHORIZATION, "Bearer edge-access-token");
         handshakeHeaders.add("X-Username", "runtime-smoke");
         handshakeHeaders.add("X-User-Roles", "USER");
         when(clientSession.getHandshakeHeaders()).thenReturn(handshakeHeaders);
@@ -101,6 +108,7 @@ class VoiceWebSocketProxyHandlerTest {
         when(backendClient.execute(any(), any(WebSocketHttpHeaders.class), eq(URI.create("ws://127.0.0.1:8081/ws/voice"))))
                 .thenAnswer(invocation -> {
                     WebSocketHttpHeaders headers = invocation.getArgument(1);
+                    assertNull(headers.getFirst(HttpHeaders.AUTHORIZATION));
                     org.junit.jupiter.api.Assertions.assertEquals("42", headers.getFirst("X-User-Id"));
                     org.junit.jupiter.api.Assertions.assertEquals("runtime-smoke", headers.getFirst("X-Username"));
                     org.junit.jupiter.api.Assertions.assertEquals("USER", headers.getFirst("X-User-Roles"));
@@ -127,21 +135,13 @@ class VoiceWebSocketProxyHandlerTest {
     void handleTextMessageBuffersInitialConfigUntilBackendSessionIsReady() throws Exception {
         CompletableFuture<WebSocketSession> backendFuture = new CompletableFuture<>();
         CountDownLatch backendConnectStarted = new CountDownLatch(1);
-        when(backendSession.isOpen()).thenReturn(true);
         when(backendClient.execute(any(), any(WebSocketHttpHeaders.class), eq(URI.create("ws://127.0.0.1:8081/ws/voice"))))
                 .thenAnswer(invocation -> {
                     backendConnectStarted.countDown();
                     return backendFuture;
                 });
 
-        Thread connectThread = new Thread(() -> {
-            try {
-                handler.afterConnectionEstablished(clientSession);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        });
-        connectThread.start();
+        Thread connectThread = startAsyncConnection();
 
         assertTrue(backendConnectStarted.await(1, TimeUnit.SECONDS));
 
@@ -155,5 +155,66 @@ class VoiceWebSocketProxyHandlerTest {
                 message instanceof TextMessage textMessage
                         && textMessage.getPayload().equals(configMessage.getPayload())));
         verify(clientSession, never()).close(CloseStatus.SERVER_ERROR);
+    }
+
+    @Test
+    void bufferOverflowClosesClientWithExplicitGatewayError() throws Exception {
+        CompletableFuture<WebSocketSession> backendFuture = new CompletableFuture<>();
+        CountDownLatch backendConnectStarted = new CountDownLatch(1);
+        when(backendClient.execute(any(), any(WebSocketHttpHeaders.class), eq(URI.create("ws://127.0.0.1:8081/ws/voice"))))
+                .thenAnswer(invocation -> {
+                    backendConnectStarted.countDown();
+                    return backendFuture;
+                });
+
+        Thread connectThread = startAsyncConnection();
+        assertTrue(backendConnectStarted.await(1, TimeUnit.SECONDS));
+
+        for (int i = 0; i < 9; i++) {
+            handler.handleTextMessage(clientSession, new TextMessage("{\"seq\":" + i + "}"));
+        }
+
+        backendFuture.complete(backendSession);
+        connectThread.join(1_000L);
+
+        verify(clientSession).sendMessage(argThat(message ->
+                message instanceof TextMessage textMessage
+                        && textMessage.getPayload().contains("\"code\":\"BUFFER_OVERFLOW\"")));
+        verify(clientSession).close(argThat(status ->
+                status.getCode() == 4508 && "voice_gateway_buffer_overflow".equals(status.getReason())));
+    }
+
+    @Test
+    void backendClosureAfterAttachSendsExplicitUnavailableErrorToClient() throws Exception {
+        AtomicReference<WebSocketHandler> backendHandler = new AtomicReference<>();
+        when(backendClient.execute(any(), any(WebSocketHttpHeaders.class), eq(URI.create("ws://127.0.0.1:8081/ws/voice"))))
+                .thenAnswer(invocation -> {
+                    backendHandler.set(invocation.getArgument(0));
+                    return CompletableFuture.completedFuture(backendSession);
+                });
+
+        handler.afterConnectionEstablished(clientSession);
+
+        assertNotNull(backendHandler.get());
+        backendHandler.get().afterConnectionClosed(backendSession, new CloseStatus(1011, "backend_down"));
+
+        verify(clientSession).sendMessage(argThat(message ->
+                message instanceof TextMessage textMessage
+                        && textMessage.getPayload().contains("\"code\":\"UPSTREAM_UNAVAILABLE\"")
+                        && textMessage.getPayload().contains("\"upstreamService\":\"voice-gateway\"")));
+        verify(clientSession).close(argThat(status ->
+                status.getCode() == 1011 && "backend_down".equals(status.getReason())));
+    }
+
+    private Thread startAsyncConnection() {
+        Thread connectThread = new Thread(() -> {
+            try {
+                handler.afterConnectionEstablished(clientSession);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+        connectThread.start();
+        return connectThread;
     }
 }

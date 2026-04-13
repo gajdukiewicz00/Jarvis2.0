@@ -36,9 +36,7 @@ Kubernetes / product runtime:
 
 Desktop run paths:
 
-- `mvn -pl apps/desktop-app-javafx -am javafx:run`
-- `mvn -pl apps/desktop-client-javafx -am javafx:run`
-- `mvn -pl apps/launcher-javafx -am javafx:run`
+- `mvn -f apps/desktop-javafx/pom.xml org.openjfx:javafx-maven-plugin:0.0.8:run`
 
 Current reality notes:
 
@@ -66,9 +64,7 @@ Current reality notes:
 | `smart-home-service` | smart-home API | local + k8s | implemented with static catalog | [docs/services/smart-home-service.md](docs/services/smart-home-service.md) |
 | `llm-service` | authenticated AI facade | optional local + optional k8s | implemented, optional | [docs/services/llm-service.md](docs/services/llm-service.md) |
 | `memory-service` | semantic memory/vector service | optional local + optional k8s | implemented, optional | [docs/services/memory-service.md](docs/services/memory-service.md) |
-| `desktop-client-javafx` | desktop client/module | local desktop | implemented | [docs/services/desktop-client-javafx.md](docs/services/desktop-client-javafx.md) |
-| `desktop-app-javafx` | shell desktop app | local desktop | implemented | [docs/services/desktop-app-javafx.md](docs/services/desktop-app-javafx.md) |
-| `launcher-javafx` | launcher/operator app | local desktop | implemented | [docs/services/launcher-javafx.md](docs/services/launcher-javafx.md) |
+| `desktop-javafx` | unified desktop launcher + shell | local desktop | implemented | [docs/services/desktop-javafx.md](docs/services/desktop-javafx.md) |
 | `docker/llm-server` | Python inference worker | optional local + optional k8s | implemented, optional | [docs/services/llm-server.md](docs/services/llm-server.md) |
 | `docker/embedding-service` | Python embedding worker | optional local + optional k8s | implemented, optional | [docs/services/embedding-service.md](docs/services/embedding-service.md) |
 | `postgres` | runtime datastore | local managed container + k8s | implemented infra, optional pgvector overlay | [docs/services/postgres.md](docs/services/postgres.md) |

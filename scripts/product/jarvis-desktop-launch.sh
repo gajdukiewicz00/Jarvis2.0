@@ -131,8 +131,8 @@ fi
 
 (
   cd "$JARVIS_HOME"
-  mvn -q -pl apps/desktop-app-javafx -am -DskipTests install
-  mvn -q -f apps/desktop-app-javafx/pom.xml -DskipTests org.openjfx:javafx-maven-plugin:0.0.8:run
+  mvn -q -pl apps/desktop-javafx -am -DskipTests install
+  mvn -q -f apps/desktop-javafx/pom.xml -DskipTests org.openjfx:javafx-maven-plugin:0.0.8:run
 ) >"$CLIENT_LOG" 2>&1 &
 echo "Started desktop UI. Log: $CLIENT_LOG"
 if [[ -n "$TRUSTSTORE_PATH" ]]; then

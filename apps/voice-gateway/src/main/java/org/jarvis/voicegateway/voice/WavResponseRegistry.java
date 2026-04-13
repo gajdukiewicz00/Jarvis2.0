@@ -11,9 +11,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -93,6 +95,13 @@ public class WavResponseRegistry {
 
     public int getLoadedProfileCount() {
         return profiles.size();
+    }
+
+    public Set<String> getReferencedAssetIds() {
+        LinkedHashSet<String> assetIds = new LinkedHashSet<>();
+        profiles.values().forEach(profile -> assetIds.addAll(profile.assets().values()));
+        assetIds.removeIf(assetId -> assetId == null || assetId.isBlank());
+        return Set.copyOf(assetIds);
     }
 
     private ResponseProfile profile(String responseKey) {

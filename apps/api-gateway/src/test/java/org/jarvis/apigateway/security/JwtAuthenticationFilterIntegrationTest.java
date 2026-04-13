@@ -2,12 +2,13 @@ package org.jarvis.apigateway.security;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.jarvis.apigateway.client.OrchestratorClient;
+import jakarta.servlet.Filter;
+import jakarta.servlet.http.HttpServletRequest;
 import org.jarvis.apigateway.controller.OrchestratorProxyController;
+import org.jarvis.apigateway.proxy.DownstreamProxyService;
 import org.jarvis.common.JarvisCommonAutoConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import jakarta.servlet.Filter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,14 +30,16 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
-import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
@@ -47,18 +50,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 SecurityFilterAutoConfiguration.class
         },
         properties = {
-        "jarvis.jwt.enabled=true",
-        "jarvis.jwt.secret=0123456789012345678901234567890123456789012345678901234567890123",
-        "jarvis.jwt.issuer=jarvis",
-        "service.jwt.secret=service-secret-01234567890123456789012345678901",
-        "logging.level.org.jarvis.apigateway.security.JwtAuthFilter=DEBUG"
-})
+                "jarvis.jwt.enabled=true",
+                "jarvis.jwt.secret=0123456789012345678901234567890123456789012345678901234567890123",
+                "jarvis.jwt.issuer=jarvis",
+                "services.orchestrator.url=http://orchestrator.test",
+                "service.jwt.secret=service-secret-01234567890123456789012345678901",
+                "logging.level.org.jarvis.apigateway.security.JwtAuthFilter=DEBUG"
+        })
 @AutoConfigureMockMvc(addFilters = false)
-@Import({ SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class })
+@Import({SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class})
 @ActiveProfiles("test")
 class JwtAuthenticationFilterIntegrationTest {
-
-    private MockMvc mockMvc;
 
     @Autowired
     private WebApplicationContext context;
@@ -67,12 +69,13 @@ class JwtAuthenticationFilterIntegrationTest {
     @Qualifier("springSecurityFilterChain")
     private Filter springSecurityFilterChain;
 
-    @MockBean
-    private OrchestratorClient orchestratorClient;
-
     @Value("${jarvis.jwt.secret}")
     private String jwtSecret;
 
+    @MockBean
+    private DownstreamProxyService downstreamProxyService;
+
+    private MockMvc mockMvc;
     private SecretKey secretKey;
 
     @BeforeEach
@@ -88,9 +91,10 @@ class JwtAuthenticationFilterIntegrationTest {
         mockMvc.perform(post("/api/v1/orchestrator/execute")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"hello\"}"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("MISSING_TOKEN"));
 
-        verifyNoInteractions(orchestratorClient);
+        verify(downstreamProxyService, never()).forward(any(HttpServletRequest.class), any(), any());
     }
 
     @Test
@@ -99,38 +103,54 @@ class JwtAuthenticationFilterIntegrationTest {
                         .header("Authorization", "Bearer invalid.token.value")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"hello\"}"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("MALFORMED_TOKEN"));
 
-        verifyNoInteractions(orchestratorClient);
+        verify(downstreamProxyService, never()).forward(any(HttpServletRequest.class), any(), any());
     }
 
     @Test
     void requestWithExpiredTokenReturns401() throws Exception {
-        String expiredToken = buildToken(Instant.now().minusSeconds(60));
-
         mockMvc.perform(post("/api/v1/orchestrator/execute")
-                        .header("Authorization", "Bearer " + expiredToken)
+                        .header("Authorization", "Bearer " + buildToken(Instant.now().minusSeconds(60)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"hello\"}"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("TOKEN_EXPIRED"));
 
-        verifyNoInteractions(orchestratorClient);
+        verify(downstreamProxyService, never()).forward(any(HttpServletRequest.class), any(), any());
     }
 
     @Test
-    void requestWithValidTokenReturns200AndProxiesRequest() throws Exception {
-        String validToken = buildToken(Instant.now().plusSeconds(300));
-
-        when(orchestratorClient.execute(anyMap())).thenReturn(ResponseEntity.ok("ok"));
+    void requestWithValidTokenAddsDownstreamUserHeaders() throws Exception {
+        when(downstreamProxyService.forward(any(HttpServletRequest.class), eq("orchestrator"), eq("http://orchestrator.test")))
+                .thenReturn(ResponseEntity.ok("ok".getBytes(StandardCharsets.UTF_8)));
 
         mockMvc.perform(post("/api/v1/orchestrator/execute")
-                        .header("Authorization", "Bearer " + validToken)
+                        .header("Authorization", "Bearer " + buildToken(Instant.now().plusSeconds(300)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"hello\"}"))
                 .andExpect(status().isOk())
-                .andExpect(content().string("ok"));
+                .andExpect(content().bytes("ok".getBytes(StandardCharsets.UTF_8)));
 
-        verify(orchestratorClient).execute(Map.of("text", "hello"));
+        verify(downstreamProxyService).forward(
+                argThat(request -> "user-1".equals(request.getHeader("X-User-Id"))
+                        && "test-user".equals(request.getHeader("X-Username"))
+                        && "USER".equals(request.getHeader("X-User-Roles"))),
+                eq("orchestrator"),
+                eq("http://orchestrator.test"));
+    }
+
+    @Test
+    void requestWithRefreshTokenReturns401() throws Exception {
+        mockMvc.perform(post("/api/v1/orchestrator/execute")
+                        .header("Authorization", "Bearer " + buildRefreshToken(Instant.now().plusSeconds(300)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\":\"hello\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("INVALID_TOKEN_TYPE"));
+
+        verify(downstreamProxyService, never()).forward(any(HttpServletRequest.class), any(), any());
     }
 
     private String buildToken(Instant expiresAt) {
@@ -139,6 +159,20 @@ class JwtAuthenticationFilterIntegrationTest {
                 .subject("user-1")
                 .claim("username", "test-user")
                 .claim("roles", "USER")
+                .claim("type", "access")
+                .issuer("jarvis")
+                .issuedAt(Date.from(now.minusSeconds(1)))
+                .expiration(Date.from(expiresAt))
+                .signWith(secretKey)
+                .compact();
+    }
+
+    private String buildRefreshToken(Instant expiresAt) {
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .subject("user-1")
+                .claim("type", "refresh")
+                .issuer("jarvis")
                 .issuedAt(Date.from(now.minusSeconds(1)))
                 .expiration(Date.from(expiresAt))
                 .signWith(secretKey)

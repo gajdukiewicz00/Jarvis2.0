@@ -2,6 +2,7 @@ package org.jarvis.llm.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.security.GatewayAuthFilter;
+import org.jarvis.common.security.ServiceJwtFilter;
 import org.jarvis.common.security.ServiceJwtProvider;
 import org.jarvis.llm.dto.UserPreferencesDto;
 import org.jarvis.llm.model.CommunicationStyle;
@@ -80,7 +81,8 @@ public class UserProfileClient {
             log.debug("[{}] Fetching preferences from: {}", correlationId, url);
 
             HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(ServiceJwtFilter.SERVICE_TOKEN_HEADER,
+                    serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
             headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
             ResponseEntity<UserPreferencesDto> response = restTemplate.exchange(
                     url,
@@ -117,7 +119,8 @@ public class UserProfileClient {
         try {
             String url = userProfileUrl + "/api/v1/user-profile/" + userId + "/goals";
             HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(ServiceJwtFilter.SERVICE_TOKEN_HEADER,
+                    serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
             headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
 
             ResponseEntity<List<UserGoalResponse>> response = restTemplate.exchange(

@@ -899,7 +899,10 @@ service_health_url() {
 
 service_ready_pattern() {
     case "$1" in
-        api-gateway|security-service|user-profile|nlp-service|orchestrator|voice-gateway|pc-control|vision-security-service|smart-home-service|life-tracker|analytics-service|planner-service)
+        voice-gateway)
+            printf '"status"[[:space:]]*:[[:space:]]*"(UP|DEGRADED)"'
+            ;;
+        api-gateway|security-service|user-profile|nlp-service|orchestrator|pc-control|vision-security-service|smart-home-service|life-tracker|analytics-service|planner-service)
             printf '"status"[[:space:]]*:[[:space:]]*"UP"'
             ;;
         llm-server) printf '"status"[[:space:]]*:[[:space:]]*"healthy"' ;;
@@ -1316,10 +1319,12 @@ start_service() {
         export PLANNER_URL
         export MANAGEMENT_HEALTH_RABBIT_ENABLED
         export MANAGEMENT_HEALTH_KAFKA_ENABLED
+        export SPRING_AUTOCONFIGURE_EXCLUDE
 
         case "${service}" in
             voice-gateway)
                 export JARVIS_ORCHESTRATOR_URL="$(runtime_local_http_url "${JARVIS_ORCHESTRATOR_PORT}")"
+                export SPRING_AUTOCONFIGURE_EXCLUDE="org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration,org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration"
                 ;;
             llm-service)
                 export JARVIS_LLM_ENABLED="true"

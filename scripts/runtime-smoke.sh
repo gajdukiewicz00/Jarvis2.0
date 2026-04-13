@@ -39,6 +39,7 @@ fi
 PUBLIC_API_BASE_URL="$(runtime_api_base_url)"
 VOICE_WS_URL="$(runtime_voice_ws_url)"
 PC_WS_URL="$(runtime_pc_ws_url)"
+VOICE_GATEWAY_BASE_URL="$(runtime_local_http_url "${JARVIS_VOICE_GATEWAY_PORT}")"
 RUNTIME_JAVA_TOOL_OPTIONS="$(runtime_java_tool_options "${JAVA_TOOL_OPTIONS:-}")"
 
 export ENABLE_LLM="${SMOKE_INCLUDE_LLM}"
@@ -53,9 +54,20 @@ PC_OUTPUT_FILE="${RUNTIME_DIR}/pc-probe.log"
 PC_READY_FILE="${RUNTIME_DIR}/pc-probe.ready"
 VOICE_OUTPUT_FILE="${RUNTIME_DIR}/voice-probe.log"
 VOICE_READY_FILE="${RUNTIME_DIR}/voice-probe.ready"
+VOICE_WS_WAV_FILE="${RUNTIME_DIR}/voice-ws-roundtrip.wav"
+VOICE_WS_TRACE_FILE="${RUNTIME_DIR}/voice-ws-roundtrip.log"
+VOICE_TIMEOUT_TRACE_FILE="${RUNTIME_DIR}/voice-ws-timeout.log"
 STUB_LOG_FILE="${LOG_DIR}/llm-server-stub.log"
 
-rm -f "${LLM_CAPTURE_FILE}" "${PC_OUTPUT_FILE}" "${PC_READY_FILE}" "${VOICE_OUTPUT_FILE}" "${VOICE_READY_FILE}"
+rm -f \
+    "${LLM_CAPTURE_FILE}" \
+    "${PC_OUTPUT_FILE}" \
+    "${PC_READY_FILE}" \
+    "${VOICE_OUTPUT_FILE}" \
+    "${VOICE_READY_FILE}" \
+    "${VOICE_WS_WAV_FILE}" \
+    "${VOICE_WS_TRACE_FILE}" \
+    "${VOICE_TIMEOUT_TRACE_FILE}"
 
 if [[ "${SMOKE_INCLUDE_LLM}" == "true" ]]; then
     log "Starting local LLM smoke stub..."
@@ -157,6 +169,22 @@ done
 grep -q '"action":"VOLUME_UP"' "${PC_OUTPUT_FILE}" || fail "Desktop probe did not receive orchestrator action"
 
 log "Checking voice runtime status endpoint..."
+VOICE_READINESS_STATUS="$(curl -fsS "${VOICE_GATEWAY_BASE_URL}/actuator/health/readiness")"
+python3 - "${VOICE_READINESS_STATUS}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+assert payload["status"] in {"UP", "DEGRADED"}, payload["status"]
+components = payload["components"]
+assert set(components.keys()) == {"stt", "tts", "assets", "orchestrator", "websocket"}, components
+assert components["stt"] == "UP", components
+assert components["websocket"] == "UP", components
+assert components["assets"] == "UP", components
+assert components["orchestrator"] == "UP", components
+assert components["tts"] in {"UP", "DOWN"}, components
+PY
+
 VOICE_RUNTIME_STATUS="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/voice/runtime" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}")"
 python3 - "${VOICE_RUNTIME_STATUS}" <<'PY'
@@ -174,12 +202,82 @@ assert payload["routing"]["publicWebSocketPath"] == "/ws/voice"
 assert payload["routing"]["notificationPath"] == "/internal/voice/notify"
 assert payload["maturity"]["textCommandPath"] == "verified"
 assert payload["maturity"]["voiceNotifications"] == "verified-text"
+assert payload["readiness"]["status"] in {"UP", "DEGRADED"}
+assert payload["readiness"]["components"]["stt"] == "UP"
+assert payload["readiness"]["components"]["websocket"] == "UP"
 assert payload["tts"]["status"] in {"available", "degraded", "unavailable", "disabled"}
 assert isinstance(payload["tts"]["available"], bool)
 assert payload["stt"]["configuredProvider"] in {"vosk", "whisper", "noop"}
 PY
 
+log "Checking voice diagnostics status endpoint..."
+VOICE_DIAGNOSTICS_STATUS="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/voice/diagnostics" -fsS \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}")"
+python3 - "${VOICE_DIAGNOSTICS_STATUS}" <<'PY'
+import json
+import sys
+
+payload = json.loads(sys.argv[1])
+assert payload["service"] == "voice-gateway", payload
+assert payload["status"] in {"UP", "DEGRADED"}, payload["status"]
+assert payload["capture"]["managedBy"] == "desktop-client", payload["capture"]
+assert payload["capture"]["microphoneProbe"] == "not-applicable", payload["capture"]
+assert payload["execution"]["primaryCommandLoop"] == "rule-based", payload["execution"]
+assert payload["execution"]["orchestratorRequiredForFullCommandSet"] is True, payload["execution"]
+assert payload["execution"]["runtimeCapabilitySource"] == "/api/v1/capabilities", payload["execution"]
+assert payload["stt"]["componentStatus"] == "UP", payload["stt"]
+assert payload["stt"]["working"] is True, payload["stt"]
+assert payload["websocket"]["componentStatus"] == "UP", payload["websocket"]
+assert payload["websocket"]["working"] is True, payload["websocket"]
+assert payload["assets"]["componentStatus"] == "UP", payload["assets"]
+assert "componentStatus" in payload["tts"], payload["tts"]
+assert "componentStatus" in payload["orchestrator"], payload["orchestrator"]
+assert payload["apiGatewayRoute"]["status"] == "UP", payload["apiGatewayRoute"]
+PY
+
+log "Checking voice websocket end-to-end roundtrip..."
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/voice/synthesize" -fsS \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H 'Content-Type: application/json' \
+    -o "${VOICE_WS_WAV_FILE}" \
+    -d '{"text":"volume up please","languageCode":"en-US","voiceName":"en-US-Wavenet-D"}'
+
+JAVA_TOOL_OPTIONS="${RUNTIME_JAVA_TOOL_OPTIONS}" java "${ROOT_DIR}/scripts/runtime/VoiceWsScenario.java" \
+    "${VOICE_WS_URL}" \
+    "${VOICE_WS_TRACE_FILE}" \
+    "${ACCESS_TOKEN}" \
+    "${USER_ID}" \
+    "${USERNAME}" \
+    roundtrip \
+    runtime-smoke-ws \
+    en-US \
+    "${VOICE_WS_WAV_FILE}"
+
+grep -q '"type":"TRANSCRIPT_PARTIAL"' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not emit partial transcripts"
+grep -q '"type":"TRANSCRIPT_FINAL"' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not emit a final transcript"
+grep -q '"type":"RESPONSE"' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not emit a RESPONSE frame"
+grep -q '"action":"VOLUME_UP"' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not resolve the expected VOLUME_UP action"
+grep -q '"executionSucceeded":true' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not execute successfully"
+grep -q '^IN_BINARY bytes=' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not return voice audio"
+grep -q '"state":"DONE"' "${VOICE_WS_TRACE_FILE}" || fail "Voice websocket roundtrip did not complete with DONE state"
+
+log "Checking voice websocket timeout recovery..."
+JAVA_TOOL_OPTIONS="${RUNTIME_JAVA_TOOL_OPTIONS}" java "${ROOT_DIR}/scripts/runtime/VoiceWsScenario.java" \
+    "${VOICE_WS_URL}" \
+    "${VOICE_TIMEOUT_TRACE_FILE}" \
+    "${ACCESS_TOKEN}" \
+    "${USER_ID}" \
+    "${USERNAME}" \
+    timeout \
+    runtime-smoke-timeout \
+    en-US
+
+grep -q '"code":"TIMEOUT"' "${VOICE_TIMEOUT_TRACE_FILE}" || fail "Voice websocket timeout scenario did not emit TIMEOUT error"
+grep -q '"action":"STT_TIMEOUT"' "${VOICE_TIMEOUT_TRACE_FILE}" || fail "Voice websocket timeout scenario did not emit STT_TIMEOUT response"
+grep -q '"state":"TIMEOUT"' "${VOICE_TIMEOUT_TRACE_FILE}" || fail "Voice websocket timeout scenario did not report TIMEOUT state"
+
 log "Checking voice command proxy -> real orchestrator reply..."
+voice_command_volume_up_before="$(grep -c '"action":"VOLUME_UP"' "${PC_OUTPUT_FILE}" 2>/dev/null || true)"
 VOICE_COMMAND_REPLY="$(curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/voice/command" -fsS \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
@@ -188,16 +286,27 @@ python3 - "${VOICE_COMMAND_REPLY}" <<'PY'
 import sys
 
 reply = sys.argv[1].strip()
+normalized = reply.lower()
 assert reply, "voice command reply must not be empty"
 assert reply != "Processed: сделай громче", "voice command must return the real orchestrator reply, not a placeholder"
+assert "ошибка" not in normalized, f"voice command must not return a generic error reply: {reply!r}"
+assert "не удалось" not in normalized, f"voice command must not return a capability failure reply: {reply!r}"
+assert "error" not in normalized, f"voice command must not return an error reply: {reply!r}"
 PY
+for _ in $(seq 1 20); do
+    voice_command_volume_up_after="$(grep -c '"action":"VOLUME_UP"' "${PC_OUTPUT_FILE}" 2>/dev/null || true)"
+    if [[ "${voice_command_volume_up_after}" -gt "${voice_command_volume_up_before}" ]]; then
+        break
+    fi
+    sleep 1
+done
+voice_command_volume_up_after="$(grep -c '"action":"VOLUME_UP"' "${PC_OUTPUT_FILE}" 2>/dev/null || true)"
+[[ "${voice_command_volume_up_after}" -gt "${voice_command_volume_up_before}" ]] || fail "Voice command proxy did not trigger a new VOLUME_UP desktop action"
 
 log "Checking planner focus action -> desktop scenario..."
-curl -fsS \
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/planner/actions/focus-mode?mode=WORK" -fsS \
     -X POST \
-    -H "Authorization: Bearer ${SERVICE_TOKEN}" \
-    -H "X-User-Id: ${USER_ID}" \
-    "${PLANNER_URL}/api/v1/planner/actions/focus-mode?mode=WORK" >/dev/null
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" >/dev/null
 
 for _ in $(seq 1 20); do
     if grep -q '"action":"SCENARIO"' "${PC_OUTPUT_FILE}" 2>/dev/null; then
@@ -209,13 +318,11 @@ grep -q '"action":"SCENARIO"' "${PC_OUTPUT_FILE}" || fail "Desktop probe did not
 
 log "Checking planner reminder -> desktop and voice notifications..."
 NOW_TS="$(date -u -Is)"
-curl -fsS \
+curl_with_runtime_tls "${PUBLIC_API_BASE_URL}/api/v1/planner/reminders" -fsS \
     -X POST \
-    -H "Authorization: Bearer ${SERVICE_TOKEN}" \
-    -H "X-User-Id: ${USER_ID}" \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
     -H 'Content-Type: application/json' \
-    -d "{\"message\":\"Runtime smoke reminder\",\"reminderTime\":\"${NOW_TS}\",\"reminderType\":\"ONCE\"}" \
-    "${PLANNER_URL}/api/v1/planner/reminders" >/dev/null
+    -d "{\"message\":\"Runtime smoke reminder\",\"reminderTime\":\"${NOW_TS}\",\"reminderType\":\"ONCE\"}" >/dev/null
 
 for _ in $(seq 1 80); do
     if grep -q 'Runtime smoke reminder' "${PC_OUTPUT_FILE}" 2>/dev/null && \

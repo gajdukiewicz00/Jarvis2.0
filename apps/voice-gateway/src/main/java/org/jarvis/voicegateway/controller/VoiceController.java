@@ -4,7 +4,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.client.OrchestratorClient;
 import org.jarvis.voicegateway.service.SttService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -148,7 +151,7 @@ public class VoiceController {
     @PostMapping("/command")
     public String processTextCommand(@RequestBody TextCommandRequest request) {
         log.info("Received text command: {}", request.text());
-        return orchestratorClient.sendCommandWithResponse(request.text());
+        return orchestratorClient.sendCommandWithResponse(request.text(), currentUserId());
     }
 
     public record TextCommandRequest(String text) {
@@ -177,23 +180,28 @@ public class VoiceController {
                     "No speech recognized in the supplied audio"));
         }
 
-        boolean forwardedToOrchestrator = false;
         try {
-            orchestratorClient.sendCommand(transcribedText);
-            forwardedToOrchestrator = true;
+            orchestratorClient.sendCommand(transcribedText, currentUserId());
             log.info("Forwarded transcript to orchestrator: {}", transcribedText);
+            return ResponseEntity.ok(buildTranscriptionResponse(
+                    true,
+                    transcribedText,
+                    languageCode,
+                    true,
+                    wavValidated,
+                    null,
+                    null));
         } catch (RuntimeException e) {
             log.warn("Failed to forward transcript to orchestrator: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(buildTranscriptionResponse(
+                    false,
+                    transcribedText,
+                    languageCode,
+                    false,
+                    wavValidated,
+                    "ORCHESTRATOR_UNAVAILABLE",
+                    "Transcript was recognized but the orchestrator could not be reached"));
         }
-
-        return ResponseEntity.ok(buildTranscriptionResponse(
-                true,
-                transcribedText,
-                languageCode,
-                forwardedToOrchestrator,
-                wavValidated,
-                null,
-                null));
     }
 
     private Map<String, Object> buildTranscriptionResponse(
@@ -216,6 +224,22 @@ public class VoiceController {
             response.put("error", errorMessage);
         }
         return response;
+    }
+
+    private String currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return null;
+        }
+        Object details = authentication.getDetails();
+        if ("service-jwt".equals(details)) {
+            return null;
+        }
+        String name = authentication.getName();
+        if (name == null || name.isBlank() || "anonymousUser".equalsIgnoreCase(name)) {
+            return null;
+        }
+        return name;
     }
 
     // Helper class for WAV validation results

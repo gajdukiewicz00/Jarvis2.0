@@ -16,7 +16,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Service-to-service JWT provider. Creates and validates internal JWT tokens.
+ * Service-to-service JWT provider for Jarvis' internal trust plane.
+ * Creates and validates internal JWT tokens without consulting {@code security-service}.
+ *
+ * <p>This is intentionally separate from user JWT handling:
+ * {@code security-service} owns the user-auth plane, while this provider owns the
+ * shared internal service-token contract used by runtime services.</p>
+ *
+ * <p>Rotation is single-key only. The provider reads one active HMAC secret from
+ * configuration and does not implement {@code kid}, key rings, or multi-key validation.</p>
  *
  * <p>Registered as a bean by {@link org.jarvis.common.JarvisCommonAutoConfiguration}.</p>
  */

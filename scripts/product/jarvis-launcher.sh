@@ -3,7 +3,7 @@
 # =============================================================================
 # Jarvis 2.0 - Launcher Wrapper Script (Product)
 # =============================================================================
-# Wrapper for JavaFX launcher JAR.
+# Wrapper for the unified JavaFX desktop JAR.
 # Ensures proper Java environment and logging.
 # Used by desktop entry to launch Jarvis without terminal.
 # =============================================================================
@@ -249,65 +249,47 @@ ensure_repo_gui_artifacts() {
     [[ -n "${repo_root}" ]] || return 0
     is_valid_repo_root "${repo_root}" || return 0
 
-    local launcher_target="${repo_root}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
-    local desktop_shell_target="${repo_root}/apps/desktop-app-javafx/target/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-    local launcher_stale="false"
-    local desktop_shell_stale="false"
+    local desktop_target="${repo_root}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar"
+    local desktop_stale="false"
 
-    if jar_is_stale "${launcher_target}" \
+    if jar_is_stale "${desktop_target}" \
         "${repo_root}/pom.xml" \
-        "${repo_root}/apps/launcher-javafx/pom.xml" \
-        "${repo_root}/apps/launcher-javafx/src"; then
-        launcher_stale="true"
+        "${repo_root}/apps/desktop-javafx/pom.xml" \
+        "${repo_root}/apps/desktop-javafx/src"; then
+        desktop_stale="true"
     fi
 
-    if jar_is_stale "${desktop_shell_target}" \
-        "${repo_root}/pom.xml" \
-        "${repo_root}/apps/desktop-app-javafx/pom.xml" \
-        "${repo_root}/apps/desktop-app-javafx/src" \
-        "${repo_root}/apps/desktop-client-javafx/pom.xml" \
-        "${repo_root}/apps/desktop-client-javafx/src"; then
-        desktop_shell_stale="true"
-    fi
-
-    if [[ "${launcher_stale}" == "true" || "${desktop_shell_stale}" == "true" ]]; then
+    if [[ "${desktop_stale}" == "true" ]]; then
         local mvn_bin
         mvn_bin="$(resolve_maven_bin || true)"
         if [[ -z "${mvn_bin}" || ! -x "${mvn_bin}" ]]; then
             log "ERROR: Maven not found; cannot refresh GUI artifacts from ${repo_root}"
-            notify "Не найден Maven. GUI launcher не может пересобрать актуальные launcher/desktop shell артефакты без терминала."
+            notify "Не найден Maven. GUI launcher не может пересобрать актуальный desktop-javafx артефакт без терминала."
             exit 1
         fi
 
-        log "GUI sources are newer than packaged artifacts; rebuilding launcher + desktop shell from ${repo_root}"
+        log "GUI sources are newer than packaged artifacts; rebuilding desktop-javafx from ${repo_root}"
         if ! (
             cd "${repo_root}" &&
-                "${mvn_bin}" -q -pl apps/launcher-javafx,apps/desktop-app-javafx -am -DskipTests package
+                "${mvn_bin}" -q -pl apps/desktop-javafx -am -DskipTests package
         ) >>"${LOG}" 2>&1; then
             log "ERROR: GUI rebuild failed for ${repo_root}"
-            notify "Jarvis не смог пересобрать актуальные launcher/desktop shell артефакты. Проверь ${LOG}."
+            notify "Jarvis не смог пересобрать актуальный desktop-javafx артефакт. Проверь ${LOG}."
             exit 1
         fi
     fi
 
-    [[ -f "${launcher_target}" ]] || {
-        log "ERROR: Missing launcher JAR after refresh: ${launcher_target}"
-        notify "Не найден launcher JAR после обновления: ${launcher_target}"
-        exit 1
-    }
-    [[ -f "${desktop_shell_target}" ]] || {
-        log "ERROR: Missing desktop shell JAR after refresh: ${desktop_shell_target}"
-        notify "Не найден desktop shell JAR после обновления: ${desktop_shell_target}"
+    [[ -f "${desktop_target}" ]] || {
+        log "ERROR: Missing desktop-javafx JAR after refresh: ${desktop_target}"
+        notify "Не найден desktop-javafx JAR после обновления: ${desktop_target}"
         exit 1
     }
 
-    sync_file_if_needed "${launcher_target}" "${JARVIS_APP}/launcher.jar"
-    sync_file_if_needed "${desktop_shell_target}" "${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-    rm -f "${JARVIS_APP}"/desktop-client-javafx-*.jar 2>/dev/null || true
+    sync_file_if_needed "${desktop_target}" "${JARVIS_APP}/desktop-javafx.jar"
     sync_executable_if_needed "${repo_root}/scripts/product/jarvis-launcher.sh" "${JARVIS_APP}/bin/jarvis-launcher.sh"
-    if [[ -f "${repo_root}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
+    if [[ -f "${repo_root}/apps/desktop-javafx/src/main/resources/logback.xml" ]]; then
         sync_file_if_needed \
-            "${repo_root}/apps/launcher-javafx/src/main/resources/logback.xml" \
+            "${repo_root}/apps/desktop-javafx/src/main/resources/logback.xml" \
             "${JARVIS_APP}/config/logback.xml"
     fi
 }
@@ -375,24 +357,24 @@ PROJECT_ROOT="${SOURCE_REPO_ROOT:-${INSTALL_ROOT}}"
 
 REPO_LAUNCHER_JAR=""
 if [[ -n "${SOURCE_REPO_ROOT}" ]]; then
-    REPO_LAUNCHER_JAR="${SOURCE_REPO_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
+    REPO_LAUNCHER_JAR="${SOURCE_REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar"
 fi
 
 if [[ -n "${REPO_LAUNCHER_JAR}" && -f "${REPO_LAUNCHER_JAR}" ]]; then
     JAR="${REPO_LAUNCHER_JAR}"
-    log "Using source repo launcher JAR: ${JAR}"
+    log "Using source repo desktop-javafx JAR: ${JAR}"
 else
-    JAR="${JARVIS_APP}/launcher.jar"
-    log "Using product install launcher JAR: ${JAR}"
+    JAR="${JARVIS_APP}/desktop-javafx.jar"
+    log "Using product install desktop-javafx JAR: ${JAR}"
 fi
 
 if [[ ! -f "${JAR}" ]]; then
-    log "ERROR: Launcher JAR not found at ${JAR}"
-    notify "Не найден Launcher JAR:\n${JAR}\n\nПроверь launcher build/install path."
+    log "ERROR: desktop-javafx JAR not found at ${JAR}"
+    notify "Не найден desktop-javafx JAR:\n${JAR}\n\nПроверь desktop build/install path."
     exit 1
 fi
 
-log "Launcher JAR: ${JAR}"
+log "Desktop JAR: ${JAR}"
 log "Source repo root: ${SOURCE_REPO_ROOT:-none}"
 log "Install root: ${INSTALL_ROOT}"
 
@@ -492,11 +474,11 @@ fi
 
 # 5) Launch JavaFX application (detached, no terminal)
 log "Starting launcher..."
-log "Launch mode: runtime=${JARVIS_RUNTIME_MODE}, api=${JARVIS_API_BASE_URL}, projectRoot=${PROJECT_ROOT}, launcherJar=${JAR}"
+log "Launch mode: runtime=${JARVIS_RUNTIME_MODE}, api=${JARVIS_API_BASE_URL}, projectRoot=${PROJECT_ROOT}, desktopJar=${JAR}"
 
 # Determine logback config path
-if [[ -n "${SOURCE_REPO_ROOT}" && -f "${SOURCE_REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
-    LOGBACK_CONFIG="${SOURCE_REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml"
+if [[ -n "${SOURCE_REPO_ROOT}" && -f "${SOURCE_REPO_ROOT}/apps/desktop-javafx/src/main/resources/logback.xml" ]]; then
+    LOGBACK_CONFIG="${SOURCE_REPO_ROOT}/apps/desktop-javafx/src/main/resources/logback.xml"
 elif [[ -f "${JARVIS_APP}/config/logback.xml" ]]; then
     LOGBACK_CONFIG="${JARVIS_APP}/config/logback.xml"
 else

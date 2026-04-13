@@ -20,4 +20,9 @@ public class VoiceRuntimeController {
     public ResponseEntity<Map<String, Object>> runtime() {
         return ResponseEntity.ok(voiceRuntimeStatusService.describe());
     }
+
+    @GetMapping("/diagnostics")
+    public ResponseEntity<Map<String, Object>> diagnostics() {
+        return ResponseEntity.ok(voiceRuntimeStatusService.describeDiagnostics());
+    }
 }

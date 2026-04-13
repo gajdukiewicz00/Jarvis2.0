@@ -4,8 +4,7 @@
 # Jarvis 2.0 - Release Build Script
 # =============================================================================
 # Builds a release artifact (tar.gz) containing:
-# - launcher.jar
-# - unified desktop shell JAR
+# - desktop-javafx-${VERSION}.jar
 # - install scripts
 # - desktop file template
 # - documentation
@@ -42,32 +41,21 @@ mkdir -p "${RELEASE_DIR}"
 # NOTE: We assume JARs are already built via Maven (developer run).
 # This script will fail fast with a clear message if they are missing.
 
-# Locate launcher JAR
+# Locate unified desktop JAR
 cd "${REPO_ROOT}"
-LAUNCHER_JAR="${REPO_ROOT}/apps/launcher-javafx/target/launcher-javafx-${VERSION}.jar"
-if [[ ! -f "$LAUNCHER_JAR" ]]; then
-    echo "ERROR: Launcher JAR not found: $LAUNCHER_JAR"
+DESKTOP_JAR="${REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-${VERSION}.jar"
+if [[ ! -f "$DESKTOP_JAR" ]]; then
+    echo "ERROR: Unified desktop JAR not found: $DESKTOP_JAR"
     echo "Please build it first:"
-    echo "  mvn -pl apps/launcher-javafx -DskipTests clean package"
+    echo "  mvn -pl apps/desktop-javafx -DskipTests clean package"
     exit 1
 fi
-echo "  ✅ Launcher JAR found: $LAUNCHER_JAR"
-
-# Locate unified desktop shell JAR
-DESKTOP_APP_JAR="${REPO_ROOT}/apps/desktop-app-javafx/target/desktop-app-javafx-${VERSION}.jar"
-if [[ ! -f "$DESKTOP_APP_JAR" ]]; then
-    echo "ERROR: Desktop shell JAR not found: $DESKTOP_APP_JAR"
-    echo "Please build it first:"
-    echo "  mvn -pl apps/desktop-app-javafx -am -DskipTests clean package"
-    exit 1
-fi
-echo "  ✅ Desktop shell JAR found: $DESKTOP_APP_JAR"
+echo "  ✅ Unified desktop JAR found: $DESKTOP_JAR"
 
 # Copy JARs
 echo "Copying JARs..."
-cp "$LAUNCHER_JAR" "${RELEASE_DIR}/launcher.jar"
-cp "$DESKTOP_APP_JAR" "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar"
-echo "  ✅ JARs copied"
+cp "$DESKTOP_JAR" "${RELEASE_DIR}/desktop-javafx-${VERSION}.jar"
+echo "  ✅ Unified desktop JAR copied"
 
 # Copy core launch scripts
 echo "Copying core launch scripts..."
@@ -95,8 +83,8 @@ echo "  ✅ Install scripts copied"
 # Copy config
 echo "Copying config..."
 mkdir -p "${RELEASE_DIR}/config"
-if [[ -f "${REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
-    cp "${REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" "${RELEASE_DIR}/config/"
+if [[ -f "${REPO_ROOT}/apps/desktop-javafx/src/main/resources/logback.xml" ]]; then
+    cp "${REPO_ROOT}/apps/desktop-javafx/src/main/resources/logback.xml" "${RELEASE_DIR}/config/"
     echo "  ✅ Config copied"
 fi
 
@@ -149,7 +137,7 @@ if [[ -f "$SHA256SUMS_FILE" ]]; then
     echo "Verifying release integrity..."
     if command -v sha256sum >/dev/null 2>&1; then
         cd "${RELEASE_DIR}"
-        # Stage 12: Check only files that exist in release folder (launcher.jar, install.sh)
+        # Stage 12: Check only files that exist in release folder (desktop-javafx jar, install.sh)
         # Archive checksum is for external verification, skip it here
         if sha256sum -c SHA256SUMS 2>&1 | grep -v "\.tar\.gz" | grep -q "FAILED\|WARNING"; then
             echo "  ❌ Integrity check FAILED (checksums do not match)"
@@ -161,7 +149,7 @@ if [[ -f "$SHA256SUMS_FILE" ]]; then
         else
             # Check if only archive check failed (acceptable, archive is external)
             CHECK_OUTPUT=$(sha256sum -c SHA256SUMS 2>&1 || true)
-            if echo "$CHECK_OUTPUT" | grep -q "\.tar\.gz.*FAILED" && ! echo "$CHECK_OUTPUT" | grep -qE "(launcher\.jar|install\.sh).*FAILED"; then
+            if echo "$CHECK_OUTPUT" | grep -q "\.tar\.gz.*FAILED" && ! echo "$CHECK_OUTPUT" | grep -qE "(desktop-javafx-.*\.jar|install\.sh).*FAILED"; then
                 echo "  ✅ Integrity check passed (release files OK, archive check skipped)"
             else
                 echo "  ❌ Integrity check FAILED (checksums do not match)"
@@ -214,11 +202,7 @@ echo ""
 
 # Copy files
 echo "Installing files..."
-cp "${RELEASE_DIR}/launcher.jar" "${JARVIS_APP}/"
-if [[ -f "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" ]]; then
-    cp "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" "${JARVIS_APP}/"
-fi
-rm -f "${JARVIS_APP}"/desktop-client-javafx-*.jar 2>/dev/null || true
+cp "${RELEASE_DIR}/desktop-javafx-${VERSION}.jar" "${JARVIS_APP}/desktop-javafx.jar"
 cp "${RELEASE_DIR}/jarvis-launch.sh" "${JARVIS_APP}/"
 cp "${RELEASE_DIR}/jarvis-stop.sh" "${JARVIS_APP}/"
 cp "${RELEASE_DIR}/jarvis-logs.sh" "${JARVIS_APP}/"
@@ -525,8 +509,7 @@ Or use the install script from the repository:
 
 ## Contents
 
-- \`launcher.jar\` - Launcher application
-- \`desktop-app-javafx-${VERSION}.jar\` - Unified desktop shell
+- \`desktop-javafx-${VERSION}.jar\` - Unified desktop launcher + shell
 - \`bin/\` - Scripts (jarvis-launcher.sh, jarvis-stop.sh, jarvis-diagnostics.sh)
 - \`config/\` - Configuration files
 - \`docs/\` - Documentation
@@ -565,14 +548,14 @@ EOF
 
 # Calculate checksums (Stage 12: use relative paths inside release folder)
 cd "${RELEASE_DIR}"
-LAUNCHER_SHA256=$(sha256sum "launcher.jar" | cut -d' ' -f1)
+DESKTOP_SHA256=$(sha256sum "desktop-javafx-${VERSION}.jar" | cut -d' ' -f1)
 INSTALL_SHA256=$(sha256sum "install.sh" | cut -d' ' -f1)
 cd "${REPO_ROOT}/target/release"
 ARCHIVE_SHA256=$(sha256sum "${RELEASE_NAME}.tar.gz" | cut -d' ' -f1)
 
 # Write checksums (Stage 12: relative paths only, no absolute paths)
 cat >> "${SHA256SUMS_FILE}" <<EOF
-${LAUNCHER_SHA256}  launcher.jar
+${DESKTOP_SHA256}  desktop-javafx-${VERSION}.jar
 ${INSTALL_SHA256}  install.sh
 ${ARCHIVE_SHA256}  ${RELEASE_NAME}.tar.gz
 EOF

@@ -3,6 +3,8 @@ package org.jarvis.apigateway.config;
 import feign.FeignException;
 import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.apigateway.capability.CapabilityUnavailableException;
+import org.jarvis.apigateway.proxy.UpstreamProxyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.ConnectException;
 import java.net.UnknownHostException;
@@ -41,6 +44,78 @@ public class GlobalExceptionHandler {
 
     private static final Pattern SERVICE_NAME_PATTERN = Pattern.compile("http://([^/:]+)");
     private static final Pattern PATH_PATTERN = Pattern.compile("http://[^/]+(/[^\\s\\]]+)");
+
+    // =========================================================================
+    // Capability / Proxy Errors
+    // =========================================================================
+
+    @ExceptionHandler(CapabilityUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleCapabilityUnavailable(
+            CapabilityUnavailableException ex, WebRequest request) {
+
+        log.info("Capability unavailable [{}:{}]: {}", ex.downstreamService(), ex.capability(), ex.getMessage());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", ex.status().value());
+        body.put("error", ex.errorCode());
+        body.put("message", ex.getMessage());
+        body.put("capability", ex.capability());
+        body.put("upstreamService", ex.downstreamService());
+        body.put("runtimeMode", ex.runtimeMode().id());
+        if (!ex.supportedRuntimeModes().isEmpty()) {
+            body.put("supportedRuntimeModes", ex.supportedRuntimeModes());
+        }
+        if (!ex.details().isEmpty()) {
+            body.put("details", ex.details());
+        }
+        body.put("service", "api-gateway");
+        body.put("path", extractRequestPath(request));
+
+        return new ResponseEntity<>(body, ex.status());
+    }
+
+    @ExceptionHandler(UpstreamProxyException.class)
+    public ResponseEntity<Map<String, Object>> handleUpstreamProxyException(
+            UpstreamProxyException ex, WebRequest request) {
+
+        log.warn("Proxy failure [{}{}]: {} ({})",
+                ex.downstreamService(),
+                ex.upstreamPath(),
+                ex.errorCode(),
+                ex.getMessage());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", ex.status().value());
+        body.put("error", ex.errorCode());
+        body.put("message", ex.getMessage());
+        body.put("upstreamService", ex.downstreamService());
+        body.put("upstreamPath", ex.upstreamPath());
+        if (ex.upstreamStatus() != null) {
+            body.put("upstreamStatus", ex.upstreamStatus());
+        }
+        if (ex.upstreamBody() != null) {
+            body.put("upstreamBody", ex.upstreamBody());
+        }
+        body.put("service", "api-gateway");
+        body.put("path", extractRequestPath(request));
+
+        return new ResponseEntity<>(body, ex.status());
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatusException(
+            ResponseStatusException ex, WebRequest request) {
+
+        String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
+        return buildErrorResponse(
+                HttpStatus.valueOf(ex.getStatusCode().value()),
+                "REQUEST_REJECTED",
+                message,
+                request
+        );
+    }
 
     // =========================================================================
     // Feign/Upstream Service Errors

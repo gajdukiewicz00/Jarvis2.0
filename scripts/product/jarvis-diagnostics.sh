@@ -26,9 +26,9 @@ Stop script: ${PROJECT_ROOT}/jarvis-stop.sh
   Exists: $([ -f "${PROJECT_ROOT}/jarvis-stop.sh" ] && echo "YES" || echo "NO")
   Executable: $([ -x "${PROJECT_ROOT}/jarvis-stop.sh" ] && echo "YES" || echo "NO")
 
-=== Launcher ===
-Launcher JAR: ${PROJECT_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar
-  Exists: $([ -f "${PROJECT_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar" ] && echo "YES" || echo "NO")
+=== Desktop JavaFX ===
+Unified desktop JAR: ${PROJECT_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar
+  Exists: $([ -f "${PROJECT_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar" ] && echo "YES" || echo "NO")
 
 === Java ===
 Java: $(which java 2>/dev/null || echo "NOT FOUND")

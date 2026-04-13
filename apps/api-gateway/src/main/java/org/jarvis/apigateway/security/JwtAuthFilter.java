@@ -54,9 +54,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/actuator/prometheus",
             "/auth/login",
             "/auth/register",
+            "/auth/logout",
             "/auth/refresh",
             "/api/v1/security/auth/login",
             "/api/v1/security/auth/register",
+            "/api/v1/security/auth/logout",
             "/api/v1/security/auth/refresh");
 
     public JwtAuthFilter(JwtUtil jwtUtil) {
@@ -109,6 +111,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         // ── Single parse via JwtUtil ──────────────────────────────────
         try {
             Claims claims = jwtUtil.validateToken(token);
+            if (!jwtUtil.isAccessToken(claims)) {
+                sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "INVALID_TOKEN_TYPE",
+                        "Access token is required");
+                return;
+            }
 
             String userId = claims.getSubject();
             String username = claims.get("username", String.class);

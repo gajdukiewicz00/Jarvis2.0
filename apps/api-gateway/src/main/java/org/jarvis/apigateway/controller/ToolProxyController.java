@@ -1,156 +1,48 @@
 package org.jarvis.apigateway.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.jarvis.apigateway.client.LifeTrackerClient;
-import org.jarvis.apigateway.client.MemoryServiceClient;
-import org.jarvis.apigateway.client.PlannerClient;
+import org.jarvis.apigateway.capability.GatewayCapabilityService;
+import org.jarvis.apigateway.proxy.DownstreamProxyService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
-import java.util.Map;
-
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/tools")
 @RequiredArgsConstructor
 public class ToolProxyController {
 
-    private final PlannerClient plannerClient;
-    private final LifeTrackerClient lifeTrackerClient;
-    private final MemoryServiceClient memoryServiceClient;
+    private final DownstreamProxyService downstreamProxyService;
+    private final GatewayCapabilityService gatewayCapabilityService;
 
-    @Value("${services.planner.url:http://planner-service:8092}")
+    @Value("${services.planner.url}")
     private String plannerServiceUrl;
 
-    @Value("${services.memory.enabled:false}")
-    private boolean memoryServiceEnabled;
+    @Value("${services.life-tracker.url}")
+    private String lifeTrackerUrl;
 
-    @PostMapping("/todo/create")
-    public ResponseEntity<Map<String, Object>> createTodo(
-            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool create_todo");
-        String userId = requireUserId();
-        return plannerClient.createTodo(userId, idempotencyKey, payload);
-    }
+    @Value("${services.memory.url}")
+    private String memoryServiceUrl;
 
-    @PostMapping("/todo/update")
-    public ResponseEntity<Map<String, Object>> updateTodo(
-            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool update_todo");
-        String userId = requireUserId();
-        return plannerClient.updateTodo(userId, idempotencyKey, payload);
-    }
-
-    @PostMapping("/todo/complete")
-    public ResponseEntity<Map<String, Object>> completeTodo(
-            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool complete_todo");
-        String userId = requireUserId();
-        return plannerClient.completeTodo(userId, idempotencyKey, payload);
-    }
-
-    @PostMapping("/todo/list")
-    public ResponseEntity<List<Map<String, Object>>> listTodos(
-            @RequestBody Map<String, Object> payload) {
-        String userId = requireUserId();
-        log.info("Proxying tool list_todos for userId={}, plannerServiceUrl={}", userId, plannerServiceUrl);
-        return plannerClient.listTodos(userId, payload);
-    }
-
-    @PostMapping("/calendar/create")
-    public ResponseEntity<Map<String, Object>> createEvent(
-            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool create_event");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolCreateEvent(userId, idempotencyKey, payload);
-    }
-
-    @PostMapping("/calendar/move")
-    public ResponseEntity<Map<String, Object>> moveEvent(
-            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool move_event");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolMoveEvent(userId, idempotencyKey, payload);
-    }
-
-    @PostMapping("/calendar/list")
-    public ResponseEntity<List<Map<String, Object>>> listEvents(
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool list_events");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolListEvents(userId, payload);
-    }
-
-    @PostMapping("/calendar/free-slot")
-    public ResponseEntity<Map<String, Object>> findFreeSlot(
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool find_free_slot");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolFindFreeSlot(userId, payload);
-    }
-
-    @PostMapping("/finance/transactions")
-    public ResponseEntity<List<Map<String, Object>>> listTransactions(
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool list_transactions");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolListTransactions(userId, payload);
-    }
-
-    @PostMapping("/finance/summary")
-    public ResponseEntity<Map<String, Object>> summarizeMonth(
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool summarize_month");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolSummarizeMonth(userId, payload);
-    }
-
-    @PostMapping("/finance/analysis")
-    public ResponseEntity<Map<String, Object>> analyzeSpending(
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool analyze_spending");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolAnalyzeSpending(userId, payload);
-    }
-
-    @PostMapping("/finance/budget-status")
-    public ResponseEntity<Map<String, Object>> budgetStatus(
-            @RequestBody Map<String, Object> payload) {
-        log.info("Proxying tool budget_status");
-        String userId = requireUserId();
-        return lifeTrackerClient.toolBudgetStatus(userId, payload);
-    }
-
-    @PostMapping("/memory/search")
-    public ResponseEntity<Map<String, Object>> searchMemory(
-            @RequestBody Map<String, Object> payload) {
-        if (!memoryServiceEnabled) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "Memory tooling is disabled in the core backend runtime");
+    @RequestMapping(value = {"", "/**"},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
+    public ResponseEntity<byte[]> proxy(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        if (path.startsWith("/api/v1/tools/todo")) {
+            return downstreamProxyService.forward(request, "planner-service", plannerServiceUrl);
         }
-        log.info("Proxying tool search_memory");
-        String userId = requireUserId();
-        return memoryServiceClient.searchMemory(userId, payload);
-    }
-
-    private String requireUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing authentication");
+        if (path.startsWith("/api/v1/tools/calendar") || path.startsWith("/api/v1/tools/finance")) {
+            return downstreamProxyService.forward(request, "life-tracker", lifeTrackerUrl);
         }
-        return authentication.getName();
+        if (path.startsWith("/api/v1/tools/memory")) {
+            gatewayCapabilityService.requireMemorySupport("memory-tooling");
+            return downstreamProxyService.forward(request, "memory-service", memoryServiceUrl);
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Unsupported tool route");
     }
 }

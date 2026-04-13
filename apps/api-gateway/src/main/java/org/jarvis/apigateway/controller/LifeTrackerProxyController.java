@@ -1,69 +1,27 @@
 package org.jarvis.apigateway.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.jarvis.apigateway.client.LifeTrackerClient;
+import org.jarvis.apigateway.proxy.DownstreamProxyService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.Map;
-
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/life")
 @RequiredArgsConstructor
 public class LifeTrackerProxyController {
 
-    private final LifeTrackerClient lifeClient;
+    private final DownstreamProxyService downstreamProxyService;
+
     @Value("${services.life-tracker.url}")
     private String lifeTrackerUrl;
 
-    // Finance endpoints
-    @PostMapping("/finance/expenses")
-    public ResponseEntity<Map<String, Object>> addExpense(@RequestBody Map<String, Object> expense) {
-        log.info("Proxying POST /api/v1/life/finance/expenses: amount={}", expense.get("amount"));
-        return lifeClient.addExpense(expense);
-    }
-
-    @GetMapping("/finance/expenses")
-    public ResponseEntity<List<Map<String, Object>>> getExpenses(
-            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId) {
-        log.info("Proxying GET /api/v1/life/finance/expenses to {} (smokeRunId={})",
-                lifeTrackerUrl, smokeRunId != null ? smokeRunId : "none");
-        return lifeClient.getExpenses();
-    }
-
-    // Time tracking endpoints
-    @PostMapping("/time/start")
-    public ResponseEntity<Map<String, Object>> startTimer(@RequestBody Map<String, String> request) {
-        log.info("Proxying POST /api/v1/life/time/start: activity={}", request.get("activity"));
-        return lifeClient.startTimer(request);
-    }
-
-    @PostMapping("/time/stop")
-    public ResponseEntity<Map<String, Object>> stopTimer() {
-        log.info("Proxying POST /api/v1/life/time/stop");
-        return lifeClient.stopTimer();
-    }
-
-    @GetMapping("/time/records")
-    public ResponseEntity<List<Map<String, Object>>> getTimeRecords() {
-        log.info("Proxying GET /api/v1/life/time/records");
-        return lifeClient.getTimeRecords();
-    }
-
-    // Calendar endpoints
-    @PostMapping("/calendar/event")
-    public ResponseEntity<Map<String, Object>> addEvent(@RequestBody Map<String, Object> event) {
-        log.info("Proxying POST /api/v1/life/calendar/event: title={}", event.get("title"));
-        return lifeClient.addEvent(event);
-    }
-
-    @GetMapping("/calendar/events")
-    public ResponseEntity<List<Map<String, Object>>> getEvents() {
-        log.info("Proxying GET /api/v1/life/calendar/events");
-        return lifeClient.getEvents();
+    @RequestMapping(value = {"", "/**"},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
+    public ResponseEntity<byte[]> proxy(HttpServletRequest request) {
+        return downstreamProxyService.forward(request, "life-tracker", lifeTrackerUrl);
     }
 }

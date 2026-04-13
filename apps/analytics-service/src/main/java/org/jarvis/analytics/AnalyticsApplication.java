@@ -1,6 +1,5 @@
 package org.jarvis.analytics;
 
-import org.jarvis.analytics.config.FeignAuthConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -9,7 +8,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 import java.time.Clock;
 
 @SpringBootApplication
-@EnableFeignClients(defaultConfiguration = FeignAuthConfig.class)
+@EnableFeignClients
 public class AnalyticsApplication {
     public static void main(String[] args) {
         SpringApplication.run(AnalyticsApplication.class, args);

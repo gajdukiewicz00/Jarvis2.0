@@ -2,17 +2,23 @@ package org.jarvis.security.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import io.jsonwebtoken.Claims;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
 import org.jarvis.security.dto.AuthResponse;
+import org.jarvis.security.dto.ChangePasswordRequest;
 import org.jarvis.security.dto.LoginRequest;
 import org.jarvis.security.dto.RegisterRequest;
+import org.jarvis.security.model.RefreshToken;
 import org.jarvis.security.model.User;
+import org.jarvis.security.repository.RefreshTokenRepository;
 import org.jarvis.security.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * Authentication service handling user registration, login, and token management.
@@ -23,8 +29,15 @@ import java.util.Locale;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+
+    private static final String REVOKE_REASON_ROTATED = "REFRESH_ROTATED";
+    private static final String REVOKE_REASON_LOGOUT = "USER_LOGOUT";
+    private static final String REVOKE_REASON_REUSE = "REFRESH_REUSE_DETECTED";
+    private static final String REVOKE_REASON_PASSWORD_CHANGED = "PASSWORD_CHANGED";
+    private static final String REVOKE_REASON_ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
 
     /**
      * Check if username already exists.
@@ -51,7 +64,7 @@ public class AuthService {
         User user = User.builder()
                 .username(request.username())
                 .password(passwordEncoder.encode(request.password()))
-                .role(request.role() != null ? request.role() : "USER")
+                .role("USER")
                 .enabled(true)
                 .build();
 
@@ -89,7 +102,7 @@ public class AuthService {
      * @return Auth response with JWT tokens
      * @throws AuthenticationException if credentials are invalid
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
         // Find user by username
         User user = userRepository.findByUsername(request.username())
@@ -119,31 +132,53 @@ public class AuthService {
      * @return Auth response with new JWT tokens
      * @throws AuthenticationException if refresh token is invalid
      */
-    @Transactional(readOnly = true)
+    @Transactional(noRollbackFor = AuthenticationException.class)
     public AuthResponse refresh(String refreshToken) {
-        // Validate refresh token type
-        if (!jwtService.isRefreshToken(refreshToken)) {
-            throw new AuthenticationException("INVALID_TOKEN", "Invalid refresh token");
-        }
+        Claims claims = jwtService.validateRefreshToken(refreshToken);
+        Long userId = Long.parseLong(jwtService.extractUserId(claims));
+        UUID tokenId = jwtService.extractTokenId(claims);
 
-        // Check expiration
-        if (jwtService.isTokenExpired(refreshToken)) {
-            throw new AuthenticationException("TOKEN_EXPIRED", "Refresh token has expired");
-        }
-
-        // Extract user ID from refresh token
-        String userId = jwtService.extractUserId(refreshToken);
-        User user = userRepository.findById(Long.parseLong(userId))
-                .orElseThrow(() -> new AuthenticationException(
-                    "USER_NOT_FOUND", "User not found"));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthenticationException("USER_NOT_FOUND", "User not found"));
 
         // Check if user is still enabled
         if (!user.isEnabled()) {
+            revokeAllRefreshTokens(user.getId(), REVOKE_REASON_ACCOUNT_DISABLED);
             throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
         }
 
+        if (tokenId == null) {
+            throw new AuthenticationException("INVALID_TOKEN",
+                    "Refresh token is missing server-side session state; please log in again");
+        }
+
+        RefreshToken storedToken = refreshTokenRepository.findById(tokenId)
+                .orElseThrow(() -> new AuthenticationException("INVALID_TOKEN", "Unknown refresh token"));
+
+        Instant now = Instant.now();
+        if (storedToken.getRevokedAt() != null) {
+            if (storedToken.getReplacedByTokenId() != null) {
+                revokeAllRefreshTokens(user.getId(), REVOKE_REASON_REUSE);
+                log.warn("Refresh token reuse detected for user {}", user.getUsername());
+                throw new AuthenticationException("TOKEN_REUSED",
+                        "Refresh token reuse detected; all active sessions were revoked");
+            }
+            throw new AuthenticationException("TOKEN_REVOKED", "Refresh token has been revoked");
+        }
+
+        if (!storedToken.isActive(now)) {
+            throw new AuthenticationException("TOKEN_EXPIRED", "Refresh token has expired");
+        }
+
+        JwtService.IssuedRefreshToken replacementToken = jwtService.generateRefreshToken(user.getId().toString());
+        storedToken.setRevokedAt(now);
+        storedToken.setReplacedByTokenId(replacementToken.tokenId());
+        storedToken.setRevokeReason(REVOKE_REASON_ROTATED);
+        refreshTokenRepository.save(storedToken);
+        persistRefreshToken(user.getId(), replacementToken);
+
         log.debug("Token refreshed for user: {}", user.getUsername());
-        return generateAuthResponse(user);
+        return buildAuthResponse(user, replacementToken.token());
     }
 
     /**
@@ -156,15 +191,14 @@ public class AuthService {
     @Transactional(readOnly = true)
     public User getUserFromToken(String token) {
         try {
-            // Check expiration first
-            if (jwtService.isTokenExpired(token)) {
-                throw new AuthenticationException("TOKEN_EXPIRED", "Token has expired");
+            Claims claims = jwtService.validateAccessToken(token);
+            Long userId = Long.parseLong(jwtService.extractUserId(claims));
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new AuthenticationException("USER_NOT_FOUND", "User not found"));
+            if (!user.isEnabled()) {
+                throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
             }
-            
-            String userId = jwtService.extractUserId(token);
-            return userRepository.findById(Long.parseLong(userId))
-                    .orElseThrow(() -> new AuthenticationException(
-                        "USER_NOT_FOUND", "User not found"));
+            return user;
         } catch (AuthenticationException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -173,16 +207,58 @@ public class AuthService {
         }
     }
 
+    @Transactional
+    public void logout(String refreshToken) {
+        Claims claims = jwtService.validateRefreshToken(refreshToken);
+        UUID tokenId = jwtService.extractTokenId(claims);
+        if (tokenId == null) {
+            throw new AuthenticationException("INVALID_TOKEN",
+                    "Refresh token is missing server-side session state; please log in again");
+        }
+
+        refreshTokenRepository.findById(tokenId).ifPresent(storedToken -> {
+            if (storedToken.getRevokedAt() == null) {
+                storedToken.setRevokedAt(Instant.now());
+                storedToken.setRevokeReason(REVOKE_REASON_LOGOUT);
+                refreshTokenRepository.save(storedToken);
+            }
+        });
+    }
+
+    @Transactional
+    public AuthResponse changePassword(String accessToken, ChangePasswordRequest request) {
+        User user = getUserFromToken(accessToken);
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new AuthenticationException("INVALID_CREDENTIALS", "Current password is incorrect");
+        }
+
+        if (passwordEncoder.matches(request.newPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("New password must be different from the current password");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.newPassword()));
+        userRepository.save(user);
+        revokeAllRefreshTokens(user.getId(), REVOKE_REASON_PASSWORD_CHANGED);
+
+        log.info("Password changed for user {}", user.getUsername());
+        return generateAuthResponse(user);
+    }
+
     /**
      * Generate auth response with access and refresh tokens.
      */
     private AuthResponse generateAuthResponse(User user) {
+        JwtService.IssuedRefreshToken refreshToken = jwtService.generateRefreshToken(user.getId().toString());
+        persistRefreshToken(user.getId(), refreshToken);
+        return buildAuthResponse(user, refreshToken.token());
+    }
+
+    private AuthResponse buildAuthResponse(User user, String refreshToken) {
         String accessToken = jwtService.generateAccessToken(
                 user.getId().toString(),
                 user.getUsername(),
                 user.getRole());
-
-        String refreshToken = jwtService.generateRefreshToken(user.getId().toString());
 
         return new AuthResponse(
                 accessToken,
@@ -190,5 +266,18 @@ public class AuthService {
                 jwtService.getAccessExpirationMs() / 1000, // Convert to seconds
                 user.getUsername(),
                 user.getRole());
+    }
+
+    private void persistRefreshToken(Long userId, JwtService.IssuedRefreshToken refreshToken) {
+        refreshTokenRepository.save(RefreshToken.builder()
+                .tokenId(refreshToken.tokenId())
+                .userId(userId)
+                .issuedAt(refreshToken.issuedAt())
+                .expiresAt(refreshToken.expiresAt())
+                .build());
+    }
+
+    private void revokeAllRefreshTokens(Long userId, String reason) {
+        refreshTokenRepository.revokeAllActiveTokensForUser(userId, Instant.now(), reason);
     }
 }

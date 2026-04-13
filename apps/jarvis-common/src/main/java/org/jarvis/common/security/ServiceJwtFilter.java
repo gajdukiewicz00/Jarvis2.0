@@ -24,7 +24,7 @@ import java.util.List;
 @Slf4j
 public class ServiceJwtFilter extends OncePerRequestFilter {
 
-    private static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
+    public static final String SERVICE_TOKEN_HEADER = "X-Service-Token";
     private final ServiceJwtProvider jwtProvider;
 
     public ServiceJwtFilter(ServiceJwtProvider jwtProvider) {
@@ -63,10 +63,6 @@ public class ServiceJwtFilter extends OncePerRequestFilter {
         String header = request.getHeader(SERVICE_TOKEN_HEADER);
         if (header != null && !header.isBlank()) {
             return header.trim();
-        }
-        String auth = request.getHeader("Authorization");
-        if (auth != null && auth.startsWith("Bearer ")) {
-            return auth.substring(7).trim();
         }
         return null;
     }

@@ -1,0 +1,637 @@
+.root {
+    -jarvis-bg: #0B0F14;
+    -jarvis-surface: #121821;
+    -jarvis-surface-elevated: #18212B;
+    -jarvis-outline: #2A3441;
+    -jarvis-primary: #7CC7FF;
+    -jarvis-secondary: #A78BFA;
+    -jarvis-success: #34D399;
+    -jarvis-warning: #FBBF24;
+    -jarvis-error: #F87171;
+    -jarvis-text-primary: #E6EDF3;
+    -jarvis-text-secondary: #9FB0C3;
+    -jarvis-space-s: 8px;
+    -jarvis-space-m: 12px;
+    -jarvis-space-l: 16px;
+    -jarvis-space-xl: 24px;
+    -fx-background-color: -jarvis-bg;
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-family: "Segoe UI", "Noto Sans", "Arial", sans-serif;
+    -fx-font-size: 14px;
+}
+
+.label {
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.text-field {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-prompt-text-fill: -jarvis-text-secondary;
+    -fx-padding: 10px 14px;
+}
+
+.combo-box {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 2px 4px;
+}
+
+.combo-box .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.combo-box .arrow-button {
+    -fx-background-color: transparent;
+}
+
+.combo-box-popup .list-view {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-border-color: -jarvis-outline;
+}
+
+.combo-box-popup .list-cell {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.combo-box-popup .list-cell:hover,
+.combo-box-popup .list-cell:filled:selected {
+    -fx-background-color: rgba(124, 199, 255, 0.16);
+}
+
+.check-box .text {
+    -fx-fill: -jarvis-text-primary;
+}
+
+.check-box > .box {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+}
+
+.check-box:selected > .box {
+    -fx-background-color: rgba(124, 199, 255, 0.18);
+    -fx-border-color: rgba(124, 199, 255, 0.45);
+}
+
+.check-box:selected > .box > .mark {
+    -fx-background-color: -jarvis-primary;
+}
+
+.shell-root {
+    -fx-background-color: -jarvis-bg;
+}
+
+.shell-top-bar {
+    -fx-background-color: linear-gradient(to bottom, -jarvis-surface-elevated, -jarvis-surface);
+    -fx-border-color: transparent transparent -jarvis-outline transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.shell-app-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.shell-route-title {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 13px;
+}
+
+.shell-top-meta {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.shell-profile-chip {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 999px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 999px;
+    -fx-padding: 8px 12px;
+}
+
+.shell-status-pill {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 999px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 999px;
+    -fx-padding: 8px 12px;
+    -fx-font-weight: bold;
+}
+
+.shell-status-tone-muted {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.shell-status-tone-info {
+    -fx-text-fill: -jarvis-primary;
+}
+
+.shell-status-tone-success {
+    -fx-text-fill: -jarvis-success;
+}
+
+.shell-status-tone-warning {
+    -fx-text-fill: -jarvis-warning;
+}
+
+.shell-status-tone-error {
+    -fx-text-fill: -jarvis-error;
+}
+
+.shell-nav {
+    -fx-background-color: -jarvis-surface;
+    -fx-border-color: transparent -jarvis-outline transparent transparent;
+    -fx-border-width: 0 1px 0 0;
+}
+
+.shell-nav-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-padding: 12px 14px;
+    -fx-background-radius: 14px;
+    -fx-border-radius: 14px;
+    -fx-border-color: transparent;
+    -fx-cursor: hand;
+}
+
+.shell-nav-button:hover {
+    -fx-background-color: rgba(124, 199, 255, 0.10);
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.shell-nav-button:selected {
+    -fx-background-color: rgba(124, 199, 255, 0.16);
+    -fx-border-color: rgba(124, 199, 255, 0.35);
+    -fx-text-fill: -jarvis-primary;
+}
+
+.shell-nav-footer {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+}
+
+.shell-content-host {
+    -fx-background-color: -jarvis-bg;
+}
+
+.shell-home-view,
+.shell-planner-view,
+.shell-life-view,
+.shell-analytics-view,
+.shell-pc-control-view,
+.shell-smart-home-view,
+.shell-ai-view,
+.shell-vision-view,
+.shell-voice-view,
+.shell-settings-view,
+.shell-diagnostics-view,
+.shell-placeholder {
+    -fx-background-color: -jarvis-surface;
+    -fx-background-radius: 18px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 18px;
+}
+
+.shell-route-scroll {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.shell-route-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.shell-placeholder-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.shell-placeholder-body {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 14px;
+}
+
+.shell-page-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+}
+
+.shell-page-subtitle {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 14px;
+}
+
+.shell-section-card {
+    -fx-background-color: -jarvis-surface;
+    -fx-background-radius: 18px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 18px;
+    -fx-padding: 18px;
+}
+
+.shell-section-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.shell-section-subtitle {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.vision-summary-card,
+.vision-capability-card,
+.vision-info-card,
+.vision-incident-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+}
+
+.vision-metric-grid,
+.vision-capability-grid {
+    -fx-pref-wrap-length: 1120px;
+}
+
+.vision-incident-list {
+    -fx-spacing: 12px;
+}
+
+.vision-path-label {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    -fx-font-size: 12px;
+}
+
+.diagnostics-scroll {
+    -fx-background-color: transparent;
+}
+
+.diagnostics-note,
+.diagnostics-updated-label,
+.diagnostics-meta {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.diagnostics-summary-grid {
+    -fx-pref-wrap-length: 1120px;
+}
+
+.diagnostics-status-pill {
+    -fx-padding: 8px 14px;
+}
+
+.diagnostics-summary-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.diagnostics-summary-title {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+}
+
+.diagnostics-summary-headline {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.diagnostics-summary-detail {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.diagnostics-facts-grid {
+    -fx-pref-wrap-length: 980px;
+}
+
+.diagnostics-metric-card,
+.diagnostics-nested-card,
+.diagnostics-log-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 14px 16px;
+}
+
+.diagnostics-metric-card {
+    -fx-padding: 12px 14px;
+}
+
+.diagnostics-metric-title,
+.diagnostics-info-label,
+.diagnostics-check-target,
+.diagnostics-check-detail,
+.diagnostics-log-path,
+.diagnostics-reason-line,
+.diagnostics-empty-state {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.diagnostics-metric-title,
+.diagnostics-info-label {
+    -fx-font-size: 12px;
+}
+
+.diagnostics-metric-value,
+.diagnostics-block-title,
+.diagnostics-check-title {
+    -fx-font-weight: bold;
+}
+
+.diagnostics-info-grid {
+    -fx-padding: 2px 0 0 0;
+}
+
+.diagnostics-info-value {
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.diagnostics-code-value,
+.diagnostics-log-path {
+    -fx-font-family: "Monaco", "Courier New", monospace;
+    -fx-font-size: 12px;
+}
+
+.diagnostics-check-list,
+.diagnostics-log-list,
+.diagnostics-reasons-list {
+    -fx-padding: 2px 0 0 0;
+}
+
+.diagnostics-check-row {
+    -fx-background-color: -jarvis-surface;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 14px 16px;
+}
+
+.shell-action-button {
+    -fx-background-color: rgba(124, 199, 255, 0.16);
+    -fx-border-color: rgba(124, 199, 255, 0.35);
+    -fx-border-radius: 14px;
+    -fx-background-radius: 14px;
+    -fx-text-fill: -jarvis-primary;
+    -fx-padding: 10px 16px;
+    -fx-cursor: hand;
+}
+
+.shell-action-button:hover {
+    -fx-background-color: rgba(124, 199, 255, 0.22);
+}
+
+.shell-action-button-danger {
+    -fx-background-color: rgba(248, 113, 113, 0.16);
+    -fx-border-color: rgba(248, 113, 113, 0.35);
+    -fx-border-radius: 14px;
+    -fx-background-radius: 14px;
+    -fx-text-fill: -jarvis-error;
+    -fx-padding: 10px 16px;
+    -fx-cursor: hand;
+}
+
+.shell-action-button-danger:hover {
+    -fx-background-color: rgba(248, 113, 113, 0.22);
+}
+
+.home-overall-card {
+    -fx-background-color: linear-gradient(to bottom right, rgba(124, 199, 255, 0.08), -jarvis-surface);
+}
+
+.home-status-grid {
+    -fx-pref-wrap-length: 980px;
+}
+
+.home-status-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.home-overall-headline {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.home-status-detail {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.home-meta-label {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.home-action-grid {
+    -fx-pref-wrap-length: 900px;
+}
+
+.home-events-list {
+    -fx-padding: 2px 0 0 0;
+}
+
+.home-empty-state {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 16px;
+}
+
+.home-event-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-border-width: 1px;
+    -fx-padding: 14px 16px;
+}
+
+.home-event-meta {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+}
+
+.home-event-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.home-event-details {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.home-event-tone-info {
+    -fx-border-color: rgba(124, 199, 255, 0.35);
+}
+
+.home-event-tone-success {
+    -fx-border-color: rgba(52, 211, 153, 0.40);
+}
+
+.home-event-tone-warning {
+    -fx-border-color: rgba(251, 191, 36, 0.45);
+}
+
+.home-event-tone-error {
+    -fx-border-color: rgba(248, 113, 113, 0.50);
+}
+
+.settings-header-actions {
+    -fx-alignment: center-right;
+}
+
+.settings-feedback-row {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 12px 14px;
+}
+
+.settings-feedback-text,
+.settings-meta-label,
+.settings-check-target,
+.settings-check-detail,
+.settings-field-label,
+.settings-plain-value,
+.settings-decision-value {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.settings-card-grid {
+    -fx-pref-wrap-length: 1120px;
+}
+
+.settings-section-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.settings-form-grid {
+    -fx-padding: 2px 0 0 0;
+}
+
+.settings-field-label {
+    -fx-font-size: 13px;
+}
+
+.settings-plain-value {
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.settings-code-value {
+    -fx-font-family: "Monaco", "Courier New", monospace;
+    -fx-font-size: 12px;
+}
+
+.settings-decision-value {
+    -fx-max-width: 420px;
+}
+
+.settings-check-list {
+    -fx-padding: 4px 0 0 0;
+}
+
+.settings-check-row {
+    -fx-background-color: -jarvis-surface;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 14px 16px;
+}
+
+.settings-check-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.diagnostics-readonly-area {
+    -fx-control-inner-background: -jarvis-surface-elevated;
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-background-radius: 14px;
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-family: "Monaco", "Courier New", monospace;
+    -fx-font-size: 12px;
+}
+
+.diagnostics-readonly-area .content {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+/* ── AI Runtime tab ── */
+
+.ai-overall-card {
+    -fx-background-color: linear-gradient(to bottom right, rgba(167, 139, 250, 0.08), -jarvis-surface);
+}
+
+.ai-overall-headline {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+}
+
+.ai-overall-detail {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.ai-feedback-row {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 12px 14px;
+}
+
+.ai-feedback-text {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.ai-status-grid {
+    -fx-pref-wrap-length: 1120px;
+}
+
+.ai-status-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.ai-info-card {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.ai-detail-label {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.ai-code-label {
+    -fx-font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    -fx-font-size: 12px;
+    -fx-font-weight: normal;
+}
+
+.ai-meta-label {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.ai-field-label {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 13px;
+}
+
+.ai-form-grid {
+    -fx-padding: 2px 0 0 0;
+}
+
+.ai-action-grid {
+    -fx-pref-wrap-length: 900px;
+}

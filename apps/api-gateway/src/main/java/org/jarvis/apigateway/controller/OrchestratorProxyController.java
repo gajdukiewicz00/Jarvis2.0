@@ -1,33 +1,27 @@
 package org.jarvis.apigateway.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.jarvis.apigateway.client.OrchestratorClient;
+import org.jarvis.apigateway.proxy.DownstreamProxyService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
-
-@Slf4j
 @RestController
 @RequestMapping("/api/v1/orchestrator")
 @RequiredArgsConstructor
 public class OrchestratorProxyController {
 
-    private final OrchestratorClient orchestratorClient;
+    private final DownstreamProxyService downstreamProxyService;
+
     @Value("${services.orchestrator.url}")
     private String orchestratorUrl;
 
-    @PostMapping("/execute")
-    public ResponseEntity<String> execute(
-            @RequestHeader(value = "X-Smoke-Run-Id", required = false) String smokeRunId,
-            @RequestBody Map<String, String> request) {
-        log.info("Proxying POST /api/v1/orchestrator/execute to {}: text={}, intent={}, smokeRunId={}",
-                orchestratorUrl,
-                request.get("text"),
-                request.get("intent"),
-                smokeRunId != null ? smokeRunId : "none");
-        return orchestratorClient.execute(request);
+    @RequestMapping(value = {"", "/**"},
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
+    public ResponseEntity<byte[]> proxy(HttpServletRequest request) {
+        return downstreamProxyService.forward(request, "orchestrator", orchestratorUrl);
     }
 }

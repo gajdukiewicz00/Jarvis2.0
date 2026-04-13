@@ -90,7 +90,9 @@ public class WsProbe {
         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
             textBuffer.append(data);
             if (last) {
-                appendLine(output, textBuffer.toString());
+                String message = textBuffer.toString();
+                appendLine(output, message);
+                handleInboundText(webSocket, message);
                 textBuffer.setLength(0);
             }
             webSocket.request(1);
@@ -117,6 +119,36 @@ public class WsProbe {
             closed.countDown();
         }
 
+        private void handleInboundText(WebSocket webSocket, String message) {
+            if (!"pc".equalsIgnoreCase(mode)) {
+                return;
+            }
+
+            String type = jsonField(message, "type");
+            if ("PING".equals(type)) {
+                webSocket.sendText("{\"type\":\"PONG\"}", true);
+                return;
+            }
+
+            if (!"PC_ACTION".equals(type)) {
+                return;
+            }
+
+            String requestId = jsonField(message, "requestId");
+            String action = jsonField(message, "action");
+            if (requestId == null || requestId.isBlank()) {
+                return;
+            }
+
+            String ack = "{"
+                    + "\"type\":\"ACK\","
+                    + "\"requestId\":\"" + escape(requestId) + "\","
+                    + "\"action\":\"" + escape(action != null ? action : "") + "\","
+                    + "\"success\":true"
+                    + "}";
+            webSocket.sendText(ack, true);
+        }
+
         private static void appendLine(Path path, String value) {
             try {
                 Files.writeString(path, value + System.lineSeparator(),
@@ -141,6 +173,43 @@ public class WsProbe {
                 return "";
             }
             return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        }
+
+        private static String jsonField(String payload, String field) {
+            if (payload == null || field == null) {
+                return null;
+            }
+            String key = "\"" + field + "\"";
+            int keyIndex = payload.indexOf(key);
+            if (keyIndex < 0) {
+                return null;
+            }
+            int colonIndex = payload.indexOf(':', keyIndex + key.length());
+            if (colonIndex < 0) {
+                return null;
+            }
+            int firstQuote = payload.indexOf('"', colonIndex + 1);
+            if (firstQuote < 0) {
+                return null;
+            }
+            int cursor = firstQuote + 1;
+            boolean escaped = false;
+            StringBuilder value = new StringBuilder();
+            while (cursor < payload.length()) {
+                char current = payload.charAt(cursor);
+                if (escaped) {
+                    value.append(current);
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else if (current == '"') {
+                    return value.toString();
+                } else {
+                    value.append(current);
+                }
+                cursor++;
+            }
+            return null;
         }
     }
 }

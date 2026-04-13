@@ -1,18 +1,26 @@
 package org.jarvis.apigateway.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.jarvis.apigateway.client.VoiceGatewayClient;
+import org.jarvis.apigateway.proxy.DownstreamProxyService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -20,62 +28,61 @@ import static org.mockito.Mockito.when;
 class VoiceProxyControllerTest {
 
     @Mock
+    private DownstreamProxyService downstreamProxyService;
+
+    @Mock
     private VoiceGatewayClient voiceGatewayClient;
 
     @InjectMocks
     private VoiceProxyController controller;
 
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(controller, "voiceGatewayUrl", "http://voice-gateway");
+    }
+
     @Test
-    void transcribeStreamDelegatesLanguageToVoiceGatewayClient() {
-        byte[] audio = "pcm".getBytes(StandardCharsets.UTF_8);
-        Map<String, Object> payload = Map.of("success", true, "languageCode", "en-US");
-        when(voiceGatewayClient.transcribeStream(audio, "en-US")).thenReturn(ResponseEntity.ok(payload));
+    void transcribeRoutesMultipartRequestsThroughVoiceGatewayClient() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "sample.wav",
+                "audio/wav",
+                new byte[] {1, 2, 3});
+        ResponseEntity<Map<String, Object>> expected = ResponseEntity.ok(Map.of(
+                "success", true,
+                "text", "volume up"));
+        when(voiceGatewayClient.transcribe(file, "en-US")).thenReturn(expected);
+
+        ResponseEntity<Map<String, Object>> response = controller.transcribe(file, "en-US");
+
+        assertEquals(expected, response);
+        verify(voiceGatewayClient).transcribe(file, "en-US");
+    }
+
+    @Test
+    void transcribeStreamRoutesOctetStreamRequestsThroughVoiceGatewayClient() {
+        byte[] audio = new byte[] {9, 8, 7, 6};
+        ResponseEntity<Map<String, Object>> expected = ResponseEntity.ok(Map.of(
+                "success", true,
+                "text", "hello"));
+        when(voiceGatewayClient.transcribeStream(audio, "en-US")).thenReturn(expected);
 
         ResponseEntity<Map<String, Object>> response = controller.transcribeStream(audio, "en-US");
 
-        assertEquals(200, response.getStatusCode().value());
-        assertEquals("en-US", response.getBody().get("languageCode"));
+        assertEquals(expected, response);
         verify(voiceGatewayClient).transcribeStream(audio, "en-US");
     }
 
     @Test
-    void commandDelegatesToVoiceGatewayClient() {
-        Map<String, String> request = Map.of("text", "hello jarvis");
-        when(voiceGatewayClient.command(request)).thenReturn(ResponseEntity.ok("Assistant reply"));
+    void otherVoiceRoutesStillUseDownstreamProxy() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/voice/diagnostics");
+        ResponseEntity<byte[]> expected = ResponseEntity.ok("diagnostics".getBytes(StandardCharsets.UTF_8));
+        when(downstreamProxyService.forward(request, "voice-gateway", "http://voice-gateway"))
+                .thenReturn(expected);
 
-        ResponseEntity<String> response = controller.command("smoke-voice-1", request);
+        ResponseEntity<byte[]> response = controller.proxy(request);
 
-        assertEquals(200, response.getStatusCode().value());
-        assertEquals("Assistant reply", response.getBody());
-        verify(voiceGatewayClient).command(request);
-    }
-
-    @Test
-    void synthesizeDelegatesToVoiceGatewayClientAndPreservesHeaders() {
-        Map<String, Object> request = Map.of("text", "Привет");
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("X-Jarvis-Tts-Status", "degraded");
-        headers.add("X-Jarvis-Tts-Actual-Provider", "espeak");
-        byte[] audio = new byte[] {1, 2, 3};
-        when(voiceGatewayClient.synthesize(request)).thenReturn(ResponseEntity.ok().headers(headers).body(audio));
-
-        ResponseEntity<byte[]> response = controller.synthesize(request);
-
-        assertEquals(200, response.getStatusCode().value());
-        assertEquals("degraded", response.getHeaders().getFirst("X-Jarvis-Tts-Status"));
-        assertEquals("espeak", response.getHeaders().getFirst("X-Jarvis-Tts-Actual-Provider"));
-        verify(voiceGatewayClient).synthesize(request);
-    }
-
-    @Test
-    void runtimeDelegatesToVoiceGatewayClient() {
-        Map<String, Object> runtime = Map.of("status", "partial");
-        when(voiceGatewayClient.runtime()).thenReturn(ResponseEntity.ok(runtime));
-
-        ResponseEntity<Map<String, Object>> response = controller.runtime();
-
-        assertEquals(200, response.getStatusCode().value());
-        assertEquals("partial", response.getBody().get("status"));
-        verify(voiceGatewayClient).runtime();
+        assertArrayEquals(expected.getBody(), response.getBody());
+        verify(downstreamProxyService).forward(any(HttpServletRequest.class), eq("voice-gateway"), eq("http://voice-gateway"));
     }
 }

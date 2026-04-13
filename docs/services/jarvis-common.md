@@ -10,7 +10,9 @@ Shared Java library.
 
 ## 3. Purpose
 
-Provides reusable Spring configuration, service-to-service security helpers, Feign defaults, and logging/PII guard utilities used by multiple Jarvis services.
+Provides reusable Spring configuration, service-to-service security helpers,
+gateway-delegated user propagation, Feign defaults, and logging/PII guard utilities
+used by multiple Jarvis services.
 
 ## 4. Current Reality
 
@@ -54,7 +56,15 @@ None.
 
 ## 11. Security Model
 
-Implements shared service-to-service auth helpers and common Spring Security building blocks used by downstream services.
+Implements the shared internal-auth contract used by downstream services:
+
+- `X-Service-Token` is the canonical internal service-auth header
+- `X-User-Id` / `X-User-Roles` carry gateway-delegated user context only after a valid service JWT
+- downstream services authenticate internal callers via service JWT first, then optionally switch to the delegated user principal
+- service JWTs are issued and validated locally from `service.jwt.*`; `security-service` is not in this validation path
+- delegated user roles intentionally exclude internal-only authority `SVC_INTERNAL`
+- rotation is single-key hard cutover only; there is no `kid`/multi-key support
+- the platform-wide split is documented in `docs/security/AUTH_MODEL.md`
 
 ## 12. How To Run / Test
 
@@ -72,3 +82,4 @@ Implemented shared library.
 
 - Behavior is only meaningful in the context of consuming services.
 - Real auth/runtime behavior must be verified in each application that imports this module.
+- This module does not issue user JWTs; `security-service` remains the user-auth authority.

@@ -2,6 +2,7 @@ package org.jarvis.voicegateway.voice;
 
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.voicegateway.audio.CanonicalWavAudio;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.yaml.snakeyaml.Yaml;
@@ -64,12 +65,15 @@ public class VoiceAssetLoader {
                 return null;
             }
             try (InputStream is = resource.getInputStream()) {
-                byte[] data = is.readAllBytes();
-                log.info("Loaded voice asset: {} ({} bytes)", assetId, data.length);
+                byte[] data = CanonicalWavAudio.normalizeToCanonicalWav(is.readAllBytes());
+                log.info("Loaded voice asset: {} ({} bytes, canonical)", assetId, data.length);
                 return data;
             }
         } catch (IOException e) {
             log.warn("Failed to load voice asset {}: {}", assetId, e.getMessage());
+            return null;
+        } catch (RuntimeException e) {
+            log.warn("Voice asset {} is unusable: {}", assetId, e.getMessage());
             return null;
         }
     }
@@ -83,6 +87,10 @@ public class VoiceAssetLoader {
 
     public int getActiveAssetCount() {
         return manifestResources.size();
+    }
+
+    public List<String> getActiveAssetIds() {
+        return manifestResources.keySet().stream().sorted().toList();
     }
 
     private void loadManifest() {

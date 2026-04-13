@@ -67,45 +67,32 @@ if [[ "$FROM_RELEASE" == "true" ]]; then
         echo "ERROR: Release directory not found: $RELEASE_DIR"
         exit 1
     fi
-    
-    LAUNCHER_JAR="${RELEASE_DIR}/launcher.jar"
-    if [[ ! -f "$LAUNCHER_JAR" ]]; then
-        echo "ERROR: launcher.jar not found in release directory: $RELEASE_DIR"
+
+    VERSION=$(cat "${RELEASE_DIR}/VERSION" 2>/dev/null || echo "unknown")
+    DESKTOP_JAR="${RELEASE_DIR}/desktop-javafx-${VERSION}.jar"
+    if [[ ! -f "$DESKTOP_JAR" ]]; then
+        DESKTOP_JAR="$(find "${RELEASE_DIR}" -maxdepth 1 -type f -name 'desktop-javafx-*.jar' | head -1 || true)"
+    fi
+    if [[ -z "${DESKTOP_JAR}" ]] || [[ ! -f "$DESKTOP_JAR" ]]; then
+        echo "ERROR: desktop-javafx release JAR not found in release directory: $RELEASE_DIR"
         exit 1
     fi
-    
-    VERSION=$(cat "${RELEASE_DIR}/VERSION" 2>/dev/null || echo "unknown")
+
     echo "Installing version: $VERSION"
 else
     # Original repo-based install
-    LAUNCHER_JAR="${REPO_ROOT}/apps/launcher-javafx/target/launcher-javafx-0.1.0-SNAPSHOT.jar"
-    if [[ ! -f "$LAUNCHER_JAR" ]]; then
-        echo "ERROR: Launcher JAR not found: $LAUNCHER_JAR"
-        echo "Please build launcher first:"
-        echo "  mvn -pl apps/launcher-javafx -DskipTests clean package"
+    DESKTOP_JAR="${REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar"
+    if [[ ! -f "$DESKTOP_JAR" ]]; then
+        echo "ERROR: Unified desktop JAR not found: $DESKTOP_JAR"
+        echo "Please build desktop-javafx first:"
+        echo "  mvn -pl apps/desktop-javafx -DskipTests clean package"
         exit 1
     fi
 fi
 
-# Copy launcher JAR
-echo "Installing launcher JAR..."
-cp "$LAUNCHER_JAR" "${JARVIS_APP}/launcher.jar"
-echo "  ✅ ${JARVIS_APP}/launcher.jar"
-
-# Optional: Copy desktop UI JAR
-if [[ "$FROM_RELEASE" == "false" ]]; then
-    DESKTOP_APP_JAR="${REPO_ROOT}/apps/desktop-app-javafx/target/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-    if [[ -f "$DESKTOP_APP_JAR" ]]; then
-        cp "$DESKTOP_APP_JAR" "${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-        echo "  ✅ ${JARVIS_APP}/desktop-app-javafx-0.1.0-SNAPSHOT.jar"
-    fi
-elif [[ "$FROM_RELEASE" == "true" ]]; then
-    if [[ -f "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" ]]; then
-        cp "${RELEASE_DIR}/desktop-app-javafx-${VERSION}.jar" "${JARVIS_APP}/"
-        echo "  ✅ ${JARVIS_APP}/desktop-app-javafx-${VERSION}.jar"
-    fi
-fi
-rm -f "${JARVIS_APP}"/desktop-client-javafx-*.jar 2>/dev/null || true
+echo "Installing unified desktop JAR..."
+cp "$DESKTOP_JAR" "${JARVIS_APP}/desktop-javafx.jar"
+echo "  ✅ ${JARVIS_APP}/desktop-javafx.jar"
 
 # Stage 11: Copy scripts from release or repo
 if [[ "$FROM_RELEASE" == "true" ]]; then
@@ -167,10 +154,10 @@ else
     echo "  ✅ ${JARVIS_BIN}/jarvis-system-setup.sh"
     echo "  ✅ ${JARVIS_BIN}/verify-prod.sh"
     
-    # Copy logback config (for launcher logging)
-    if [[ -f "${REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" ]]; then
+    # Copy logback config (for unified desktop logging)
+    if [[ -f "${REPO_ROOT}/apps/desktop-javafx/src/main/resources/logback.xml" ]]; then
         mkdir -p "${JARVIS_APP}/config"
-        cp "${REPO_ROOT}/apps/launcher-javafx/src/main/resources/logback.xml" "${JARVIS_APP}/config/"
+        cp "${REPO_ROOT}/apps/desktop-javafx/src/main/resources/logback.xml" "${JARVIS_APP}/config/"
         echo "  ✅ ${JARVIS_APP}/config/logback.xml"
     fi
     
@@ -184,8 +171,7 @@ else
         cp "${REPO_ROOT}/icons/jarvis-icon.png" "${JARVIS_APP}/assets/icons/jarvis.png"
         echo "  ✅ ${JARVIS_APP}/assets/icons/jarvis.png (from legacy location)"
     else
-        echo "  ${YELLOW}⚠️${NC}  Icon not found, desktop entry will use default icon"
-        WARNINGS=$((WARNINGS + 1))
+        echo "  WARNING: Icon not found, desktop entry will use default icon"
     fi
     if [[ -f "${REPO_ROOT}/assets/icons/jarvis.svg" ]]; then
         cp "${REPO_ROOT}/assets/icons/jarvis.svg" "${JARVIS_APP}/assets/icons/"

@@ -46,6 +46,13 @@ class BasicIntentHandlerTest {
         }
 
         @Test
+        @DisplayName("Russian: 'прибавь громкость' (desktop UI example) -> VOLUME_UP")
+        void volumeUpRussianUiExample() {
+            IntentResult result = handle("прибавь громкость");
+            assertIntent(result, "VOLUME_UP", true);
+        }
+
+        @Test
         @DisplayName("Russian: 'сделать громче' (Vosk variation) -> VOLUME_UP")
         void volumeUpRussianVoskVariation() {
             IntentResult result = handle("сделать громче");

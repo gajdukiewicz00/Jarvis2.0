@@ -2,6 +2,7 @@ package org.jarvis.llm.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.security.GatewayAuthFilter;
+import org.jarvis.common.security.ServiceJwtFilter;
 import org.jarvis.common.security.ServiceJwtProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,7 +71,8 @@ public class MemoryClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Correlation-ID", correlationId);
-            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(ServiceJwtFilter.SERVICE_TOKEN_HEADER,
+                    serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
             headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
@@ -126,7 +128,8 @@ public class MemoryClient {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Correlation-ID", correlationId);
-            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(ServiceJwtFilter.SERVICE_TOKEN_HEADER,
+                    serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
             headers.set(GatewayAuthFilter.USER_ID_HEADER, userId);
 
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
@@ -167,7 +170,8 @@ public class MemoryClient {
         try {
             String url = memoryServiceUrl + "/memory/health";
             HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+            headers.set(ServiceJwtFilter.SERVICE_TOKEN_HEADER,
+                    serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
             ResponseEntity<Map> response = restTemplate.exchange(
                     url,
                     HttpMethod.GET,

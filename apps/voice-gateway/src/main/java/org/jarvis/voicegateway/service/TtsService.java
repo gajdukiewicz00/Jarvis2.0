@@ -4,18 +4,13 @@ import com.google.cloud.texttospeech.v1.*;
 import com.google.protobuf.ByteString;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.voicegateway.audio.CanonicalWavAudio;
 import org.jarvis.voicegateway.exception.TtsUnavailableException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
-import javax.sound.sampled.AudioFileFormat;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioInputStream;
-import javax.sound.sampled.AudioSystem;
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
@@ -37,8 +32,6 @@ public class TtsService {
 
     private static final String PROVIDER_GOOGLE = "google";
     private static final String PROVIDER_ESPEAK = "espeak";
-    private static final float CANONICAL_SAMPLE_RATE = 16000f;
-
     @Value("${tts.enabled:true}")
     private boolean ttsEnabled;
 
@@ -349,40 +342,8 @@ public class TtsService {
     }
 
     private byte[] normalizeEspeakAudio(byte[] wavData) {
-        try (AudioInputStream input = AudioSystem.getAudioInputStream(new ByteArrayInputStream(wavData))) {
-            AudioFormat sourceFormat = input.getFormat();
-            AudioFormat targetFormat = new AudioFormat(
-                    AudioFormat.Encoding.PCM_SIGNED,
-                    CANONICAL_SAMPLE_RATE,
-                    16,
-                    1,
-                    2,
-                    CANONICAL_SAMPLE_RATE,
-                    false);
-
-            if (sourceFormat.matches(targetFormat)) {
-                return wavData;
-            }
-
-            try (AudioInputStream converted = AudioSystem.getAudioInputStream(targetFormat, input);
-                    ByteArrayOutputStream pcmOutput = new ByteArrayOutputStream()) {
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = converted.read(buffer)) != -1) {
-                    pcmOutput.write(buffer, 0, read);
-                }
-
-                byte[] pcmBytes = pcmOutput.toByteArray();
-                long frameLength = pcmBytes.length / targetFormat.getFrameSize();
-                try (AudioInputStream normalized = new AudioInputStream(
-                        new ByteArrayInputStream(pcmBytes),
-                        targetFormat,
-                        frameLength);
-                        ByteArrayOutputStream wavOutput = new ByteArrayOutputStream()) {
-                    AudioSystem.write(normalized, AudioFileFormat.Type.WAVE, wavOutput);
-                    return wavOutput.toByteArray();
-                }
-            }
+        try {
+            return CanonicalWavAudio.normalizeToCanonicalWav(wavData);
         } catch (Exception e) {
             log.warn("Failed to normalize eSpeak WAV to canonical 16kHz mono PCM. Returning raw WAV: {}",
                     e.getMessage());

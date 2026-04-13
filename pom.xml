@@ -50,9 +50,7 @@
         <module>apps/llm-service</module>
         <module>apps/memory-service</module>
         <module>apps/smart-home-service</module>
-        <module>apps/desktop-client-javafx</module>
-        <module>apps/desktop-app-javafx</module>
-        <module>apps/launcher-javafx</module>
+        <module>apps/desktop-javafx</module>
     </modules>
 
     <dependencyManagement>

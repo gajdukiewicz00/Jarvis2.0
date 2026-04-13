@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jarvis.voicegateway.client.OrchestratorClient;
 import org.jarvis.voicegateway.rules.RuleBasedVoiceCommandService;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
+import org.jarvis.voicegateway.service.LocalIntentExecutionService;
 import org.jarvis.voicegateway.service.SttService;
 import org.jarvis.voicegateway.service.TtsService;
 import org.jarvis.voicegateway.rules.VoiceCommandActionDispatcher;
@@ -58,6 +59,8 @@ class VoiceWebSocketHandlerUserContextTest {
     @Mock
     private IntentService intentService;
     @Mock
+    private LocalIntentExecutionService localIntentExecutionService;
+    @Mock
     private OrchestratorClient orchestratorClient;
     @Mock
     private WebSocketSession session;
@@ -76,10 +79,11 @@ class VoiceWebSocketHandlerUserContextTest {
                 voiceCommandActionDispatcher,
                 wavResponseRegistry,
                 intentService,
+                localIntentExecutionService,
                 orchestratorClient,
                 new ObjectMapper());
 
-        when(sttService.createSession(any())).thenReturn(recognitionSession);
+        lenient().when(sttService.createSession(any())).thenReturn(recognitionSession);
         when(ttsService.describeRuntime()).thenReturn(Map.of(
                 "available", true,
                 "status", "available",
@@ -156,10 +160,12 @@ class VoiceWebSocketHandlerUserContextTest {
     }
 
     @Test
-    void afterConnectionEstablishedKeepsSessionAliveWhenSttIsUnavailable() throws Exception {
+    void startRejectsVoiceSessionWhenSttIsUnavailable() throws Exception {
         when(sttService.createSession(any())).thenThrow(new IllegalStateException("model missing"));
-
         handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"START","correlationId":"corr-stt","language":"ru-RU"}
+                """.trim()));
 
         Map<?, ?> sessions = (Map<?, ?>) ReflectionTestUtils.getField(handler, "sessions");
         Object context = sessions.get("voice-session");
@@ -176,7 +182,8 @@ class VoiceWebSocketHandlerUserContextTest {
                         && payload.contains("\"ttsAvailable\":true"));
         boolean sttUnavailableSent = messageCaptor.getAllValues().stream()
                 .map(TextMessage::getPayload)
-                .anyMatch(payload -> payload.contains("\"action\":\"STT_UNAVAILABLE\""));
+                .anyMatch(payload -> payload.contains("\"action\":\"STT_UNAVAILABLE\"")
+                        && payload.contains("\"failureCode\":\"STT_UNAVAILABLE\""));
 
         assertEquals(true, connectedStateSent);
         assertEquals(true, sttUnavailableSent);
@@ -194,10 +201,7 @@ class VoiceWebSocketHandlerUserContextTest {
         Object context = sessions.get("voice-session");
 
         assertEquals("en-US", ReflectionTestUtils.getField(context, "language"));
-        verify(recognitionSession).close();
-        verify(sttService).createSession("ru-RU");
-        verify(sttService).createSession("en-US");
-        verify(sttService, times(2)).createSession(any());
+        verify(sttService, times(0)).createSession(any());
     }
 
     @Test
@@ -213,10 +217,8 @@ class VoiceWebSocketHandlerUserContextTest {
 
         assertEquals("en-US", ReflectionTestUtils.getField(context, "language"));
         assertEquals("corr-1", ReflectionTestUtils.getField(context, "correlationId"));
-        verify(recognitionSession).close();
-        verify(sttService).createSession("ru-RU");
         verify(sttService).createSession("en-US");
-        verify(sttService, times(2)).createSession(any());
+        verify(sttService, times(1)).createSession(any());
     }
 
     @Test

@@ -62,6 +62,7 @@ services:
     url: ${ORCHESTRATOR_URL:http://orchestrator:8083}
   pc-control:
     url: ${PC_CONTROL_URL:http://pc-control:8084}
+    stub-mode: ${PC_CONTROL_STUB_MODE:false}
   vision-security:
     enabled: ${VISION_SECURITY_ENABLED:false}
     url: ${VISION_SECURITY_URL:http://vision-security-service:8094}
@@ -79,6 +80,7 @@ services:
     enabled: ${MEMORY_SERVICE_ENABLED:false}
     url: ${MEMORY_SERVICE_URL:http://memory-service:8093}
   llm:
+    enabled: ${JARVIS_LLM_ENABLED:false}
     url: ${LLM_SERVICE_URL:http://llm-service:8091}
 
 # Circuit Breaker
@@ -126,6 +128,8 @@ rate-limit:
 # JWT Configuration (canonical namespace: jarvis.jwt.*)
 # ──────────────────────────────────────────────────────────
 jarvis:
+  runtime:
+    mode: ${JARVIS_RUNTIME_MODE:}
   jwt:
     enabled: true
     secret: ${JWT_SECRET}

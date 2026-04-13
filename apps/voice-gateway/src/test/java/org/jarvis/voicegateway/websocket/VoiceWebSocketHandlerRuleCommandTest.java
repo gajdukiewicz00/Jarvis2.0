@@ -5,6 +5,7 @@ import org.jarvis.voicegateway.client.OrchestratorClient;
 import org.jarvis.voicegateway.rules.RuleBasedVoiceCommandService;
 import org.jarvis.voicegateway.rules.VoiceCommandActionDispatcher;
 import org.jarvis.voicegateway.rules.VoiceCommandCatalog;
+import org.jarvis.voicegateway.service.LocalIntentExecutionService;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
 import org.jarvis.voicegateway.service.SttService;
 import org.jarvis.voicegateway.service.TtsService;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -56,6 +58,8 @@ class VoiceWebSocketHandlerRuleCommandTest {
     @Mock
     private IntentService intentService;
     @Mock
+    private LocalIntentExecutionService localIntentExecutionService;
+    @Mock
     private OrchestratorClient orchestratorClient;
     @Mock
     private WebSocketSession session;
@@ -74,10 +78,11 @@ class VoiceWebSocketHandlerRuleCommandTest {
                 voiceCommandActionDispatcher,
                 wavResponseRegistry,
                 intentService,
+                localIntentExecutionService,
                 orchestratorClient,
                 new ObjectMapper());
 
-        when(sttService.createSession(any())).thenReturn(recognitionSession);
+        lenient().when(sttService.createSession(any())).thenReturn(recognitionSession);
         when(ttsService.describeRuntime()).thenReturn(Map.of(
                 "available", true,
                 "status", "available",

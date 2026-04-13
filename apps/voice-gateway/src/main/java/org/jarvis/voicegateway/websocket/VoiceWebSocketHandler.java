@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.client.OrchestratorClient;
 import org.jarvis.voicegateway.rules.RuleBasedVoiceCommandService;
+import org.jarvis.voicegateway.service.LocalIntentExecutionService;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
 import org.jarvis.voicegateway.service.SttService;
 import org.jarvis.voicegateway.service.TtsService;
@@ -31,7 +32,6 @@ import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Component
@@ -45,6 +45,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     private final VoiceCommandActionDispatcher voiceCommandActionDispatcher;
     private final WavResponseRegistry wavResponseRegistry;
     private final IntentService intentService;
+    private final LocalIntentExecutionService localIntentExecutionService;
     private final OrchestratorClient orchestratorClient;
     private final ObjectMapper objectMapper;
 
@@ -54,8 +55,13 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
 
-    // Counter for audio chunk logging (to avoid spam)
-    private final AtomicInteger chunkCounter = new AtomicInteger(0);
+    private enum SessionPhase {
+        IDLE,
+        STARTED,
+        STREAMING,
+        PROCESSING,
+        DONE
+    }
 
     private record CommandResponseOutcome(
             String action,
@@ -74,15 +80,16 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String userId = resolveUserId(session);
         String effectiveLanguage = canonicalRecognitionLanguage(defaultLanguage);
-        StreamingRecognitionSession recognitionSession = tryCreateRecognitionSession(effectiveLanguage);
         SessionContext ctx = new SessionContext(
                 session,
-                recognitionSession,
+                null,
                 effectiveLanguage,
                 userId);
         sessions.put(session.getId(), ctx);
 
+        Map<String, Object> sttRuntime = sttService.describeRuntime();
         Map<String, Object> ttsRuntime = ttsService.describeRuntime();
+        boolean sttAvailable = Boolean.TRUE.equals(sttRuntime.get("available"));
         boolean ttsAvailable = Boolean.TRUE.equals(ttsRuntime.get("available"));
 
         log.info("🎙️ Voice WS open: session={}, userId={}, username={}, requestedDefaultLanguage={}, effectiveRecognitionLanguage={}, sttAvailable={}, ttsAvailable={}",
@@ -91,25 +98,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 firstHeader(session, "X-Username"),
                 defaultLanguage,
                 ctx.language,
-                recognitionSession != null,
+                sttAvailable,
                 ttsAvailable);
 
-        Map<String, Object> statePayload = new LinkedHashMap<>();
-        statePayload.put("type", "STATE");
-        statePayload.put("state", "CONNECTED");
-        statePayload.put("language", ctx.language);
-        statePayload.put("sttAvailable", recognitionSession != null);
-        statePayload.put("ttsAvailable", ttsAvailable);
-        statePayload.put("ttsStatus", String.valueOf(ttsRuntime.getOrDefault("status", "unknown")));
-        Object ttsReason = ttsRuntime.get("reason");
-        if (ttsReason != null) {
-            statePayload.put("ttsReason", String.valueOf(ttsReason));
-        }
-        sendJsonMessage(session, statePayload);
-
-        if (recognitionSession == null) {
-            sendSttUnavailable(session, ctx.language, null);
-        }
+        sendState(ctx, "CONNECTED");
     }
 
     @Override
@@ -120,71 +112,106 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         try {
             Map<String, Object> msg = objectMapper.readValue(payload, Map.class);
             String type = (String) msg.get("type");
+            SessionContext ctx = sessions.get(session.getId());
+            if (ctx == null) {
+                return;
+            }
 
             if ("START".equalsIgnoreCase(type)) {
-                // New voice command session started
                 String correlationId = (String) msg.get("correlationId");
                 Object rawLanguage = msg.get("language");
                 String requestedLanguage = rawLanguage != null ? String.valueOf(rawLanguage) : null;
-                SessionContext ctx = sessions.get(session.getId());
-                if (ctx != null) {
-                    ctx.correlationId = correlationId;
-                    ctx.language = canonicalRecognitionLanguage(requestedLanguage != null ? requestedLanguage : ctx.language);
-                    // Reset recognition session for new command
-                    if (ctx.recognitionSession != null) {
-                        ctx.recognitionSession.close();
-                    }
-                    ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
-                    chunkCounter.set(0);
-                    log.info("🎤 Voice command started, correlationId={}, session={}, requestedLanguage={}, effectiveRecognitionLanguage={}",
-                            correlationId, session.getId(), requestedLanguage, ctx.language);
-
-                    if (ctx.recognitionSession == null) {
-                        sendSttUnavailable(session, ctx.language, correlationId);
-                    }
+                if (ctx.phase == SessionPhase.STARTED || ctx.phase == SessionPhase.STREAMING || ctx.phase == SessionPhase.PROCESSING) {
+                    protocolError(ctx, "DUPLICATE_START", "Voice session already started.");
+                    return;
                 }
+                resetSession(ctx, true);
+                ctx.correlationId = correlationId;
+                ctx.language = canonicalRecognitionLanguage(requestedLanguage != null ? requestedLanguage : ctx.language);
+                ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
+                if (ctx.recognitionSession == null) {
+                    ctx.phase = SessionPhase.DONE;
+                    sendSttUnavailable(session, ctx.language, correlationId);
+                    sendState(ctx, "STT_UNAVAILABLE");
+                    return;
+                }
+                ctx.phase = SessionPhase.STARTED;
+                log.info("🎤 Voice command started, correlationId={}, session={}, requestedLanguage={}, effectiveRecognitionLanguage={}",
+                        correlationId, session.getId(), requestedLanguage, ctx.language);
+                sendState(ctx, "STARTED");
             } else if ("CONFIG".equals(type)) {
                 log.info("🎛️ Voice WS config received: session={}, payload={}", session.getId(), payload);
                 Map<String, Object> cfg = (Map<String, Object>) msg.get("config");
                 if (cfg != null && cfg.containsKey("language")) {
+                    if (ctx.phase == SessionPhase.STREAMING || ctx.phase == SessionPhase.PROCESSING) {
+                        protocolError(ctx, "CONFIG_NOT_ALLOWED", "Cannot change language while audio is streaming.");
+                        return;
+                    }
                     String lang = String.valueOf(cfg.get("language"));
                     updateLanguage(session, lang);
-                    SessionContext ctx = sessions.get(session.getId());
                     log.info("✅ Voice WS config accepted: session={}, requestedLanguage={}, effectiveRecognitionLanguage={}",
                             session.getId(),
                             lang,
                             ctx != null ? ctx.language : canonicalRecognitionLanguage(lang));
+                    sendState(ctx, "CONFIGURED");
                 } else {
                     log.warn("Rejected voice config for session {}: missing language in {}", session.getId(), cfg);
+                    protocolError(ctx, "CONFIG_INVALID", "Voice config must include language.");
                 }
             } else if ("END".equalsIgnoreCase(type)) {
                 String correlationId = (String) msg.get("correlationId");
-                SessionContext ctx = sessions.get(session.getId());
-                if (ctx != null && correlationId != null) {
+                if (correlationId != null) {
                     ctx.correlationId = correlationId; // Ensure it's set
+                }
+                if (ctx.phase == SessionPhase.STARTED && ctx.receivedAudioBytes == 0) {
+                    protocolError(ctx, "NO_AUDIO_RECEIVED", "Voice session ended before any audio was received.");
+                    resetSession(ctx, true);
+                    ctx.phase = SessionPhase.DONE;
+                    sendState(ctx, "DONE");
+                    return;
+                }
+                if (ctx.phase != SessionPhase.STREAMING) {
+                    protocolError(ctx, "END_NOT_ALLOWED", "END is only valid while audio is streaming.");
+                    return;
                 }
                 log.info("⏹️ End-of-speech received, correlationId={}, session={}",
                         correlationId, session.getId());
                 finalizeRecognition(session);
             } else if ("TIMEOUT".equalsIgnoreCase(type)) {
-                // STT timeout - client didn't hear a final transcript
                 String correlationId = (String) msg.get("correlationId");
-                SessionContext ctx = sessions.get(session.getId());
-                if (ctx != null) {
+                if (correlationId != null) {
                     ctx.correlationId = correlationId;
+                }
+                if (ctx.phase != SessionPhase.STARTED && ctx.phase != SessionPhase.STREAMING) {
+                    protocolError(ctx, "TIMEOUT_NOT_ALLOWED", "Timeout can only be requested for an active voice session.");
+                    return;
                 }
                 log.info("⏰ STT timeout received, sending timeout phrase, correlationId={}", correlationId);
                 handleSttTimeout(session, correlationId);
+                resetSession(ctx, true);
+                ctx.phase = SessionPhase.DONE;
+                sendState(ctx, "TIMEOUT");
+            } else {
+                protocolError(ctx, "UNKNOWN_MESSAGE_TYPE", "Unsupported voice websocket message type.");
             }
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             log.warn("Invalid WS payload, sessionId={}", session.getId(), e);
-            sendJsonMessage(session, Map.of("error", "invalid_payload"));
+            SessionContext ctx = sessions.get(session.getId());
+            if (ctx != null) {
+                protocolError(ctx, "INVALID_PAYLOAD", "Voice websocket payload must be valid JSON.");
+            }
         } catch (IllegalArgumentException e) {
             log.warn("Bad WS input, sessionId={}", session.getId(), e);
-            sendJsonMessage(session, Map.of("error", "bad_request"));
+            SessionContext ctx = sessions.get(session.getId());
+            if (ctx != null) {
+                protocolError(ctx, "BAD_REQUEST", e.getMessage());
+            }
         } catch (RuntimeException e) {
             log.error("Error parsing text message, sessionId={}", session.getId(), e);
-            sendJsonMessage(session, Map.of("error", "internal_error"));
+            SessionContext ctx = sessions.get(session.getId());
+            if (ctx != null) {
+                protocolError(ctx, "INTERNAL_ERROR", "Voice websocket text handling failed.");
+            }
         }
     }
 
@@ -198,8 +225,19 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         byte[] data = new byte[buffer.remaining()];
         buffer.get(data);
 
+        if (ctx.phase != SessionPhase.STARTED && ctx.phase != SessionPhase.STREAMING) {
+            protocolError(ctx, "AUDIO_BEFORE_START", "Audio chunks require an active START command.");
+            return;
+        }
+
+        if (ctx.phase == SessionPhase.STARTED) {
+            ctx.phase = SessionPhase.STREAMING;
+            sendState(ctx, "STREAMING");
+        }
+        ctx.receivedAudioBytes += data.length;
+
         // Log every 10th chunk to avoid spam
-        int chunkNum = chunkCounter.incrementAndGet();
+        int chunkNum = ++ctx.chunkCounter;
         if (chunkNum == 1 || chunkNum % 10 == 0) {
             log.debug("📦 Audio chunk #{}: {} bytes, correlationId={}, session={}",
                     chunkNum, data.length, ctx.correlationId, session.getId());
@@ -207,15 +245,18 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
         StreamingRecognitionSession recognitionSession = ctx.recognitionSession;
         if (recognitionSession == null) {
+            ctx.phase = SessionPhase.DONE;
             sendSttUnavailable(session, ctx.language, ctx.correlationId);
+            sendState(ctx, "STT_UNAVAILABLE");
             return;
         }
 
         if (recognitionSession.acceptWaveForm(data, data.length)) {
             String result = recognitionSession.getResult();
             log.info("🔇 Silence detected -> finalizing transcript, correlationId={}", ctx.correlationId);
+            ctx.phase = SessionPhase.PROCESSING;
+            sendState(ctx, "PROCESSING");
             processRecognitionResult(ctx, result, true);
-            ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
         } else {
             String partial = recognitionSession.getPartialResult();
             if (partial != null && !partial.isEmpty()) {
@@ -227,8 +268,15 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
     private void processRecognitionResult(SessionContext ctx, String json, boolean isFinal) {
         try {
-            if (json == null || json.isEmpty())
+            if (json == null || json.isEmpty()) {
+                if (isFinal) {
+                    protocolError(ctx, "NO_SPEECH_RECOGNIZED", noSpeechMessage(ctx.language));
+                    resetSession(ctx, true);
+                    ctx.phase = SessionPhase.DONE;
+                    sendState(ctx, "DONE");
+                }
                 return;
+            }
 
             // JSON: {"text": "..."} or {"partial": "..."}
             Map<String, String> result = objectMapper.readValue(json, Map.class);
@@ -244,6 +292,11 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     log.info("📝 Final STT result: '{}', correlationId={}", text, ctx.correlationId);
                     handleCommand(ctx, text);
                 }
+            } else if (isFinal) {
+                protocolError(ctx, "NO_SPEECH_RECOGNIZED", noSpeechMessage(ctx.language));
+                resetSession(ctx, true);
+                ctx.phase = SessionPhase.DONE;
+                sendState(ctx, "DONE");
             }
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             log.warn("Invalid recognition JSON, correlationId={}", ctx.correlationId, e);
@@ -278,6 +331,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         boolean executionSucceeded = false;
         boolean executionFailed = false;
         String failureReason = null;
+        String outcomeSource = "intent";
 
         try {
             log.info("🎯 Processing command: '{}', correlationId={}, detectedLang={}", text, correlationId, lang);
@@ -332,10 +386,28 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 }
             } catch (RuntimeException e) {
                 failureReason = e.getMessage();
+                log.error("❌ Failed to call orchestrator, correlationId={}, error={}", correlationId, e.getMessage());
                 if (actionResolved) {
+                    LocalIntentExecutionService.ExecutionResult fallbackResult = localIntentExecutionService.execute(
+                            action,
+                            intent.getParameters(),
+                            lang,
+                            correlationId,
+                            ctx.userId);
+                    outcomeSource = "local_fallback";
+                    action = fallbackResult.action() != null ? fallbackResult.action() : action;
+                    if (fallbackResult.responseText() != null && !fallbackResult.responseText().isBlank()) {
+                        responseText = fallbackResult.responseText();
+                    }
+                    actionResolved = fallbackResult.actionResolved();
+                    executorFound = fallbackResult.executorFound();
+                    executionAttempted = fallbackResult.executionAttempted();
+                    executionSucceeded = fallbackResult.executionSucceeded();
+                    executionFailed = fallbackResult.executionFailed();
+                    failureReason = fallbackResult.failureReason();
+                } else {
                     executionFailed = true;
                 }
-                log.error("❌ Failed to call orchestrator, correlationId={}, error={}", correlationId, e.getMessage());
             }
         } catch (RuntimeException e) {
             failureReason = e.getMessage();
@@ -350,12 +422,12 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
         boolean handled = isHandled(actionResolved, executionAttempted, executionSucceeded, executionFailed, failureReason);
         if (shouldUseFailureResponse(actionResolved, executionSucceeded, executionFailed, failureReason)) {
-            responseText = commandFailureMessage(lang);
+            responseText = commandFailureMessage(lang, failureReason);
         }
         if (responseText == null || responseText.isBlank()) {
             responseText = handled
                     ? (lang.startsWith("ru") ? "Команда обработана." : "Command processed.")
-                    : commandFailureMessage(lang);
+                    : commandFailureMessage(lang, failureReason);
         }
 
         CommandResponseOutcome outcome = new CommandResponseOutcome(
@@ -369,7 +441,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 executionSucceeded,
                 executionFailed,
                 failureReason);
-        logCommandOutcome("intent", action, outcome, correlationId);
+        logCommandOutcome(outcomeSource, action, outcome, correlationId);
 
         // Send response to client - wrapped in try-catch to prevent WS close
         sendCommandResponse(ctx.session, outcome, correlationId);
@@ -398,6 +470,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             log.error("Failed to send voice audio over WS, correlationId={}", correlationId, e);
         } catch (RuntimeException e) {
             log.error("Failed to resolve/synthesize voice audio, correlationId={}", correlationId, e);
+        } finally {
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "DONE");
         }
     }
 
@@ -416,7 +492,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     dispatchResult.executionSucceeded(),
                     dispatchResult.executionFailed(),
                     dispatchResult.failureReason())) {
-                responseText = commandFailureMessage(lang);
+                responseText = commandFailureMessage(lang, dispatchResult.failureReason());
             }
 
             CommandResponseOutcome outcome = new CommandResponseOutcome(
@@ -448,7 +524,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         } catch (RuntimeException e) {
             log.error("❌ Error executing rule-based command: id={}, action={}, correlationId={}",
                     match.command().id(), action, correlationId, e);
-            String errorText = commandFailureMessage(lang);
+            String errorText = commandFailureMessage(lang, e.getMessage());
             CommandResponseOutcome outcome = new CommandResponseOutcome(
                     action,
                     errorText,
@@ -469,6 +545,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     languageCode(lang),
                     voiceName(lang));
             sendAudioResponse(ctx.session, audio, correlationId);
+        } finally {
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "DONE");
         }
     }
 
@@ -515,7 +595,13 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 && (executionFailed || (failureReason != null && !failureReason.isBlank()));
     }
 
-    private String commandFailureMessage(String lang) {
+    private String commandFailureMessage(String lang, String failureReason) {
+        if (failureReason != null) {
+            String normalizedReason = failureReason.toUpperCase(Locale.ROOT);
+            if (normalizedReason.contains("CAPABILITY_UNAVAILABLE") || normalizedReason.contains("UNSUPPORTED")) {
+                return capabilityUnavailableMessage(lang);
+            }
+        }
         return lang.startsWith("ru")
                 ? "Не удалось выполнить команду."
                 : "I couldn't execute that command.";
@@ -553,6 +639,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             payload.put("correlationId", correlationId);
             if (outcome.failureReason() != null && !outcome.failureReason().isBlank()) {
                 payload.put("failureReason", outcome.failureReason());
+                payload.put("failureCode", reasonCode(outcome.failureReason()));
             }
             sendJsonMessage(session, payload);
         } catch (RuntimeException e) {
@@ -581,8 +668,12 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         log.info("Voice WS closed: session={}, status={}", session.getId(), status);
         SessionContext ctx = sessions.remove(session.getId());
-        if (ctx != null && ctx.recognitionSession != null) {
-            ctx.recognitionSession.close();
+        if (ctx != null) {
+            if (ctx.phase == SessionPhase.STARTED || ctx.phase == SessionPhase.STREAMING || ctx.phase == SessionPhase.PROCESSING) {
+                log.warn("Voice WS session ended mid-command: session={}, phase={}, correlationId={}, reasonCode=CLIENT_DISCONNECTED",
+                        session.getId(), ctx.phase, ctx.correlationId);
+            }
+            resetSession(ctx, true);
         }
     }
 
@@ -686,16 +777,19 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         log.info("Updating session {} recognition language: previous={}, requested={}, effective={}",
                 session.getId(), previousLanguage, language, effectiveLanguage);
         try {
-            if (ctx.recognitionSession != null) {
-                ctx.recognitionSession.close();
-            }
             ctx.language = effectiveLanguage;
-            ctx.recognitionSession = tryCreateRecognitionSession(effectiveLanguage);
-            if (ctx.recognitionSession == null) {
-                sendSttUnavailable(session, effectiveLanguage, ctx.correlationId);
+            if (ctx.phase == SessionPhase.STARTED) {
+                resetSession(ctx, false);
+                ctx.recognitionSession = tryCreateRecognitionSession(effectiveLanguage);
+                if (ctx.recognitionSession == null) {
+                    ctx.phase = SessionPhase.DONE;
+                    sendSttUnavailable(session, effectiveLanguage, ctx.correlationId);
+                    sendState(ctx, "STT_UNAVAILABLE");
+                }
             }
         } catch (RuntimeException e) {
             log.error("Failed to update language for session {}", session.getId(), e);
+            protocolError(ctx, "LANGUAGE_UPDATE_FAILED", "Failed to apply the requested language.");
         }
     }
 
@@ -716,24 +810,32 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         SessionContext ctx = sessions.get(session.getId());
         if (ctx == null || ctx.recognitionSession == null) {
             log.warn("Finalize called but no session context/recognizer for {}", session.getId());
-            sendSttUnavailable(session, ctx != null ? ctx.language : defaultLanguage, ctx != null ? ctx.correlationId : null);
+            if (ctx != null) {
+                protocolError(ctx, "RECOGNIZER_UNAVAILABLE", sttUnavailableMessage(ctx.language));
+                ctx.phase = SessionPhase.DONE;
+                sendState(ctx, "DONE");
+            }
             return;
         }
         log.info("Finalizing recognition (END marker) for session {}", session.getId());
+        ctx.phase = SessionPhase.PROCESSING;
+        sendState(ctx, "PROCESSING");
         String result = ctx.recognitionSession.getResult();
         processRecognitionResult(ctx, result, true);
-        ctx.recognitionSession = tryCreateRecognitionSession(ctx.language);
     }
 
     private void sendSttUnavailable(WebSocketSession session, String language, String correlationId) {
         String lang = language != null ? language : defaultLanguage;
         String message = sttUnavailableMessage(lang);
-        sendJsonMessage(session, Map.of(
-                "type", "RESPONSE",
-                "action", "STT_UNAVAILABLE",
-                "handled", false,
-                "text", message,
-                "correlationId", correlationId != null ? correlationId : ""));
+        sendErrorFrame(session, "STT_UNAVAILABLE", message, correlationId);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "RESPONSE");
+        payload.put("action", "STT_UNAVAILABLE");
+        payload.put("handled", false);
+        payload.put("text", message);
+        payload.put("correlationId", correlationId != null ? correlationId : "");
+        payload.put("failureCode", "STT_UNAVAILABLE");
+        sendJsonMessage(session, payload);
         try {
             byte[] audio = voiceOutputService.resolveAndGetAudio(
                     "stt_unavailable",
@@ -768,33 +870,22 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
         log.info("⏰ Generating STT timeout response, lang={}, correlationId={}", lang, correlationId);
 
-        // Get timeout phrase from orchestrator
         try {
-            String timeoutResponse = orchestratorClient.sendIntent(
-                    "STT_TIMEOUT",
-                    java.util.Map.of(),
-                    lang,
-                    correlationId,
-                    null,
-                    ctx != null ? ctx.userId : null);
-
-            if (timeoutResponse == null || timeoutResponse.isBlank()) {
-                timeoutResponse = lang.startsWith("en")
-                        ? "Sir, I couldn't hear you well."
-                        : "Сэр, я вас плохо расслышал.";
-            }
+            String timeoutResponse = lang.startsWith("en")
+                    ? "Sir, I couldn't hear you well."
+                    : "Сэр, я вас плохо расслышал.";
 
             log.info("⏰ Timeout response: '{}', correlationId={}", timeoutResponse, correlationId);
 
-            // Send response to client
-            sendJsonMessage(session, java.util.Map.of(
+            sendErrorFrame(session, "TIMEOUT", timeoutResponse, correlationId);
+            sendJsonMessage(session, Map.of(
                     "type", "RESPONSE",
                     "action", "STT_TIMEOUT",
                     "handled", true,
                     "text", timeoutResponse,
-                    "correlationId", correlationId != null ? correlationId : ""));
+                    "correlationId", correlationId != null ? correlationId : "",
+                    "failureCode", "TIMEOUT"));
 
-            // Hybrid voice: pre-recorded for stt_timeout when available
             byte[] audio = voiceOutputService.resolveAndGetAudio(
                     "stt_timeout",
                     timeoutResponse,
@@ -824,6 +915,86 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         return canonicalRecognitionLanguage(lang).startsWith("en")
                 ? "en-US-Wavenet-D"
                 : "ru-RU-Wavenet-A";
+    }
+
+    private String capabilityUnavailableMessage(String lang) {
+        return lang.startsWith("ru")
+                ? "Эта возможность сейчас недоступна."
+                : "That capability is unavailable right now.";
+    }
+
+    private String noSpeechMessage(String lang) {
+        return lang != null && lang.toLowerCase(Locale.ROOT).startsWith("en")
+                ? "No speech was recognized in this voice session."
+                : "В этой голосовой сессии не удалось распознать речь.";
+    }
+
+    private void protocolError(SessionContext ctx, String code, String message) {
+        if (ctx == null) {
+            return;
+        }
+        log.warn("Voice WS protocol error: session={}, phase={}, correlationId={}, code={}, message={}",
+                ctx.session.getId(), ctx.phase, ctx.correlationId, code, message);
+        ctx.lastErrorCode = code;
+        sendErrorFrame(ctx.session, code, message, ctx.correlationId);
+    }
+
+    private void sendErrorFrame(WebSocketSession session, String code, String message, String correlationId) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "ERROR");
+        payload.put("code", code);
+        payload.put("message", message);
+        if (correlationId != null) {
+            payload.put("correlationId", correlationId);
+        }
+        sendJsonMessage(session, payload);
+    }
+
+    private void sendState(SessionContext ctx, String state) {
+        if (ctx == null) {
+            return;
+        }
+        Map<String, Object> sttRuntime = sttService.describeRuntime();
+        Map<String, Object> ttsRuntime = ttsService.describeRuntime();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "STATE");
+        payload.put("state", state);
+        payload.put("language", ctx.language);
+        payload.put("phase", ctx.phase.name());
+        payload.put("sttAvailable", Boolean.TRUE.equals(sttRuntime.get("available")));
+        payload.put("ttsAvailable", Boolean.TRUE.equals(ttsRuntime.get("available")));
+        payload.put("ttsStatus", String.valueOf(ttsRuntime.getOrDefault("status", "unknown")));
+        Object ttsReason = ttsRuntime.get("reason");
+        if (ttsReason != null) {
+            payload.put("ttsReason", String.valueOf(ttsReason));
+        }
+        if (ctx.lastErrorCode != null) {
+            payload.put("lastErrorCode", ctx.lastErrorCode);
+        }
+        sendJsonMessage(ctx.session, payload);
+    }
+
+    private void resetSession(SessionContext ctx, boolean clearCorrelationId) {
+        if (ctx == null) {
+            return;
+        }
+        if (ctx.recognitionSession != null) {
+            ctx.recognitionSession.close();
+            ctx.recognitionSession = null;
+        }
+        ctx.chunkCounter = 0;
+        ctx.receivedAudioBytes = 0;
+        if (clearCorrelationId) {
+            ctx.correlationId = null;
+        }
+    }
+
+    private String reasonCode(String failureReason) {
+        if (failureReason == null || failureReason.isBlank()) {
+            return null;
+        }
+        int separatorIndex = failureReason.indexOf(':');
+        return separatorIndex > 0 ? failureReason.substring(0, separatorIndex).trim() : failureReason;
     }
 
     private String canonicalRecognitionLanguage(String language) {
@@ -865,6 +1036,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         String language;
         String correlationId;
         String userId;
+        SessionPhase phase = SessionPhase.IDLE;
+        int chunkCounter;
+        long receivedAudioBytes;
+        String lastErrorCode;
 
         SessionContext(WebSocketSession session, StreamingRecognitionSession recognitionSession, String language,
                 String userId) {

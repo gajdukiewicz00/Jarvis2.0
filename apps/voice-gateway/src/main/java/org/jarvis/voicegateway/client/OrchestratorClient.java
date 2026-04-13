@@ -18,11 +18,19 @@ public interface OrchestratorClient {
      */
     void sendCommand(String text);
 
+    default void sendCommand(String text, String userId) {
+        sendCommand(text);
+    }
+
     /**
      * Send raw text command and return the orchestrator reply when the caller
      * needs an actual assistant response instead of a fire-and-forget ack.
      */
     String sendCommandWithResponse(String text);
+
+    default String sendCommandWithResponse(String text, String userId) {
+        return sendCommandWithResponse(text);
+    }
     
     /**
      * Send structured intent to orchestrator for execution.

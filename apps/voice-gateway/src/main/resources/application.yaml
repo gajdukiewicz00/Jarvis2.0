@@ -66,6 +66,11 @@ management:
       show-details: when_authorized
       probes:
         enabled: true
+      status:
+        order: down,out-of-service,degraded,up,unknown
+      group:
+        readiness:
+          include: voiceReadiness
   metrics:
     tags:
       application: ${spring.application.name}

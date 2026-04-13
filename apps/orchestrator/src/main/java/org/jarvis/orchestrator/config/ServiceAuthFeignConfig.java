@@ -2,6 +2,7 @@ package org.jarvis.orchestrator.config;
 
 import feign.RequestInterceptor;
 import org.jarvis.common.JarvisHttpHeaders;
+import org.jarvis.common.security.ServiceJwtFilter;
 import org.jarvis.common.security.ServiceJwtProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -19,8 +20,8 @@ public class ServiceAuthFeignConfig {
                                                      @Value("${spring.application.name:orchestrator}") String serviceName) {
         return template -> {
             template.header(
-                    "Authorization",
-                    "Bearer " + serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
+                    ServiceJwtFilter.SERVICE_TOKEN_HEADER,
+                    serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")));
 
             ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attrs != null) {

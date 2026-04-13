@@ -44,6 +44,9 @@ public class FeignAuthConfig {
             if (authentication == null || !authentication.isAuthenticated()) {
                 return;
             }
+            if (!shouldPropagateDelegatedUser(authentication)) {
+                return;
+            }
 
             if (!template.headers().containsKey(GatewayAuthFilter.USER_ID_HEADER)) {
                 template.header(GatewayAuthFilter.USER_ID_HEADER, authentication.getName());
@@ -51,11 +54,24 @@ public class FeignAuthConfig {
             if (!template.headers().containsKey(GatewayAuthFilter.USER_ROLES_HEADER)) {
                 String roles = authentication.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
+                        .filter(authority -> authority != null && !authority.isBlank())
+                        .filter(authority -> !"SVC_INTERNAL".equals(authority))
                         .collect(Collectors.joining(","));
                 if (!roles.isBlank()) {
                     template.header(GatewayAuthFilter.USER_ROLES_HEADER, roles);
                 }
             }
         };
+    }
+
+    private boolean shouldPropagateDelegatedUser(Authentication authentication) {
+        boolean serviceAuthorityPresent = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("SVC_INTERNAL"::equals);
+        if (!serviceAuthorityPresent) {
+            return true;
+        }
+        Object details = authentication.getDetails();
+        return details instanceof String detail && detail.startsWith("delegated-by:");
     }
 }

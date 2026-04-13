@@ -1,6 +1,7 @@
 package org.jarvis.voicegateway.service;
 
 import lombok.RequiredArgsConstructor;
+import org.jarvis.voicegateway.health.VoiceReadinessService;
 import org.jarvis.voicegateway.rules.RuleBasedVoiceCommandService;
 import org.jarvis.voicegateway.service.intent.ConfiguredIntentHandler;
 import org.jarvis.voicegateway.voice.VoiceAssetLoader;
@@ -21,6 +22,7 @@ public class VoiceRuntimeStatusService {
     private final WavResponseRegistry wavResponseRegistry;
     private final RuleBasedVoiceCommandService ruleBasedVoiceCommandService;
     private final ConfiguredIntentHandler configuredIntentHandler;
+    private final VoiceReadinessService voiceReadinessService;
 
     @Value("${jarvis.voice.pre-recorded.enabled:true}")
     private boolean preRecordedEnabled;
@@ -34,6 +36,7 @@ public class VoiceRuntimeStatusService {
     public Map<String, Object> describe() {
         Map<String, Object> stt = new LinkedHashMap<>(sttService.describeRuntime());
         Map<String, Object> tts = new LinkedHashMap<>(ttsService.describeRuntime());
+        VoiceReadinessService.Snapshot readinessSnapshot = voiceReadinessService.currentSnapshot();
 
         boolean sttAvailable = Boolean.TRUE.equals(stt.get("available"));
         boolean ttsAvailable = Boolean.TRUE.equals(tts.get("available"));
@@ -75,6 +78,11 @@ public class VoiceRuntimeStatusService {
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("service", "voice-gateway");
         summary.put("status", sttAvailable && ttsAvailable ? "ready" : "partial");
+        summary.put("readiness", Map.of(
+                "status", readinessSnapshot.status(),
+                "components", readinessSnapshot.components(),
+                "componentDetails", readinessSnapshot.componentDetails(),
+                "apiGatewayRoute", readinessSnapshot.apiGatewayRoute()));
         summary.put("localDefaultStack", localDefaultStack);
         summary.put("routing", routing);
         summary.put("maturity", maturity);
@@ -82,5 +90,102 @@ public class VoiceRuntimeStatusService {
         summary.put("tts", tts);
         summary.put("preRecorded", preRecorded);
         return summary;
+    }
+
+    public Map<String, Object> describeDiagnostics() {
+        VoiceReadinessService.Snapshot readinessSnapshot = voiceReadinessService.currentSnapshot();
+        Map<String, Object> stt = new LinkedHashMap<>(sttService.describeRuntime());
+        Map<String, Object> tts = new LinkedHashMap<>(ttsService.describeRuntime());
+
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        diagnostics.put("service", "voice-gateway");
+        diagnostics.put("status", readinessSnapshot.status());
+        diagnostics.put("capture", captureDiagnostics());
+        diagnostics.put("execution", executionDiagnostics());
+        diagnostics.put("stt", providerDiagnostics(stt, readinessSnapshot.componentDetails().get("stt")));
+        diagnostics.put("tts", providerDiagnostics(tts, readinessSnapshot.componentDetails().get("tts")));
+        diagnostics.put("assets", componentDiagnostics(readinessSnapshot.componentDetails().get("assets")));
+        diagnostics.put("preRecorded", preRecordedDiagnostics());
+        diagnostics.put("orchestrator", componentDiagnostics(readinessSnapshot.componentDetails().get("orchestrator")));
+        diagnostics.put("websocket", componentDiagnostics(readinessSnapshot.componentDetails().get("websocket")));
+        diagnostics.put("apiGatewayRoute", routeDiagnostics(readinessSnapshot.apiGatewayRoute()));
+        return diagnostics;
+    }
+
+    private Map<String, Object> captureDiagnostics() {
+        Map<String, Object> capture = new LinkedHashMap<>();
+        capture.put("managedBy", "desktop-client");
+        capture.put("microphoneProbe", "not-applicable");
+        capture.put("reason", "voice-gateway receives websocket PCM frames from clients and does not open host capture devices");
+        return capture;
+    }
+
+    private Map<String, Object> executionDiagnostics() {
+        Map<String, Object> execution = new LinkedHashMap<>();
+        execution.put("primaryCommandLoop", "rule-based");
+        execution.put("orchestratorRequiredForFullCommandSet", true);
+        execution.put("localFallbackEnabled", true);
+        execution.put("pcControlRequiresConnectedDesktopClient", true);
+        execution.put("pcControlWebSocketPath", "/ws/pc-control");
+        execution.put("runtimeCapabilitySource", "/api/v1/capabilities");
+        execution.put("readinessScope", java.util.List.of(
+                "stt",
+                "tts",
+                "assets",
+                "orchestrator",
+                "websocket",
+                "apiGatewayRoute"));
+        execution.put("notCoveredByReadiness", java.util.List.of(
+                "authenticated desktop executor presence",
+                "runtime-mode-specific pc-control support",
+                "smart-home provider execution availability"));
+        return execution;
+    }
+
+    private Map<String, Object> preRecordedDiagnostics() {
+        Map<String, Object> preRecorded = new LinkedHashMap<>();
+        preRecorded.put("enabled", preRecordedEnabled);
+        preRecorded.put("status", preRecordedEnabled ? "available" : "disabled");
+        preRecorded.put("activeAssetCount", voiceAssetLoader.getActiveAssetCount());
+        preRecorded.put("responseProfileCount", wavResponseRegistry.getLoadedProfileCount());
+        return preRecorded;
+    }
+
+    private Map<String, Object> providerDiagnostics(
+            Map<String, Object> runtime,
+            VoiceReadinessService.ComponentSnapshot snapshot) {
+        Map<String, Object> diagnostics = new LinkedHashMap<>(runtime);
+        diagnostics.putAll(componentDiagnostics(snapshot));
+        return diagnostics;
+    }
+
+    private Map<String, Object> componentDiagnostics(VoiceReadinessService.ComponentSnapshot snapshot) {
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        if (snapshot == null) {
+            diagnostics.put("componentStatus", "UNKNOWN");
+            diagnostics.put("working", false);
+            return diagnostics;
+        }
+        diagnostics.put("componentStatus", snapshot.status());
+        diagnostics.put("working", "UP".equals(snapshot.status()));
+        diagnostics.put("reasonCode", snapshot.reasonCode());
+        diagnostics.put("message", snapshot.message());
+        diagnostics.put("details", snapshot.details());
+        return diagnostics;
+    }
+
+    private Map<String, Object> routeDiagnostics(VoiceReadinessService.DownstreamRouteSnapshot snapshot) {
+        Map<String, Object> diagnostics = new LinkedHashMap<>();
+        if (snapshot == null) {
+            diagnostics.put("status", "UNKNOWN");
+            diagnostics.put("working", false);
+            return diagnostics;
+        }
+        diagnostics.put("status", snapshot.status());
+        diagnostics.put("working", "UP".equals(snapshot.status()));
+        diagnostics.put("reasonCode", snapshot.reasonCode());
+        diagnostics.put("message", snapshot.message());
+        diagnostics.put("details", snapshot.details());
+        return diagnostics;
     }
 }

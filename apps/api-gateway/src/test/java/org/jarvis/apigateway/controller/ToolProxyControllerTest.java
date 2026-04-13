@@ -1,80 +1,119 @@
 package org.jarvis.apigateway.controller;
 
-import org.jarvis.apigateway.client.LifeTrackerClient;
-import org.jarvis.apigateway.client.MemoryServiceClient;
-import org.jarvis.apigateway.client.PlannerClient;
-import org.junit.jupiter.api.AfterEach;
+import jakarta.servlet.http.HttpServletRequest;
+import org.jarvis.apigateway.capability.CapabilityUnavailableException;
+import org.jarvis.apigateway.capability.GatewayCapabilityService;
+import org.jarvis.apigateway.capability.RuntimeMode;
+import org.jarvis.apigateway.proxy.DownstreamProxyService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ToolProxyControllerTest {
 
     @Mock
-    private PlannerClient plannerClient;
+    private DownstreamProxyService downstreamProxyService;
 
     @Mock
-    private LifeTrackerClient lifeTrackerClient;
-
-    @Mock
-    private MemoryServiceClient memoryServiceClient;
+    private GatewayCapabilityService gatewayCapabilityService;
 
     @InjectMocks
     private ToolProxyController controller;
 
-    @AfterEach
-    void clearSecurityContext() {
-        SecurityContextHolder.clearContext();
+    @BeforeEach
+    void setUp() {
+        ReflectionTestUtils.setField(controller, "plannerServiceUrl", "http://planner-service");
+        ReflectionTestUtils.setField(controller, "lifeTrackerUrl", "http://life-tracker");
+        ReflectionTestUtils.setField(controller, "memoryServiceUrl", "http://memory-service");
     }
 
     @Test
-    void searchMemoryReturns503WhenOptionalMemoryRuntimeIsDisabled() {
-        authenticateAs("user-1");
-        ReflectionTestUtils.setField(controller, "memoryServiceEnabled", false);
+    void todoRoutesForwardToPlannerService() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tools/todo/list");
+        ResponseEntity<byte[]> expected = ResponseEntity.ok("planner".getBytes(StandardCharsets.UTF_8));
+        when(downstreamProxyService.forward(request, "planner-service", "http://planner-service"))
+                .thenReturn(expected);
 
-        ResponseStatusException exception = assertThrows(
-                ResponseStatusException.class,
-                () -> controller.searchMemory(Map.of("query", "plan"))
-        );
+        ResponseEntity<byte[]> response = controller.proxy(request);
 
-        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, exception.getStatusCode());
-        verifyNoInteractions(memoryServiceClient);
+        assertArrayEquals(expected.getBody(), response.getBody());
+        verify(downstreamProxyService).forward(request, "planner-service", "http://planner-service");
+        verify(gatewayCapabilityService, never()).requireMemorySupport(any());
     }
 
     @Test
-    void listTodosUsesAuthenticatedUserAsToolSourceOfTruth() {
-        authenticateAs("user-42");
+    void calendarRoutesForwardToLifeTracker() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/tools/calendar/upcoming");
+        ResponseEntity<byte[]> expected = ResponseEntity.ok("calendar".getBytes(StandardCharsets.UTF_8));
+        when(downstreamProxyService.forward(request, "life-tracker", "http://life-tracker"))
+                .thenReturn(expected);
 
-        controller.listTodos(Map.of("status", "OPEN"));
+        ResponseEntity<byte[]> response = controller.proxy(request);
 
-        verify(plannerClient).listTodos("user-42", Map.of("status", "OPEN"));
-        verifyNoInteractions(lifeTrackerClient, memoryServiceClient);
+        assertArrayEquals(expected.getBody(), response.getBody());
+        verify(downstreamProxyService).forward(request, "life-tracker", "http://life-tracker");
+        verify(gatewayCapabilityService, never()).requireMemorySupport(any());
     }
 
-    private void authenticateAs(String userId) {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        userId,
-                        "n/a",
-                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
-                )
-        );
+    @Test
+    void memoryRoutesRequireExplicitCapabilitySupport() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/tools/memory/search");
+        CapabilityUnavailableException exception = new CapabilityUnavailableException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "FEATURE_DISABLED",
+                "Memory tooling is disabled in this runtime",
+                "memory-service",
+                "memory-tooling",
+                RuntimeMode.LOCAL,
+                List.of("local", "dev", "k8s"),
+                Map.of("serviceEnabled", false));
+        doThrow(exception).when(gatewayCapabilityService).requireMemorySupport("memory-tooling");
+
+        CapabilityUnavailableException thrown = assertThrows(
+                CapabilityUnavailableException.class,
+                () -> controller.proxy(request));
+
+        assertEquals("FEATURE_DISABLED", thrown.errorCode());
+        verify(gatewayCapabilityService).requireMemorySupport("memory-tooling");
+        verify(downstreamProxyService, never()).forward(any(HttpServletRequest.class), eq("memory-service"), any());
+    }
+
+    @Test
+    void unsupportedToolRouteReturnsNotFound() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/tools/unknown");
+
+        ResponseStatusException thrown = assertThrows(ResponseStatusException.class, () -> controller.proxy(request));
+
+        assertEquals(HttpStatus.NOT_FOUND, thrown.getStatusCode());
+        assertEquals("Unsupported tool route", thrown.getReason());
+        verifyNoDownstreamCalls();
+    }
+
+    private void verifyNoDownstreamCalls() {
+        verify(downstreamProxyService, never()).forward(any(HttpServletRequest.class), any(), any());
+        verify(gatewayCapabilityService, never()).requireMemorySupport("memory-tooling");
     }
 }

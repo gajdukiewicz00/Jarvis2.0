@@ -25,6 +25,7 @@ import org.springframework.web.context.WebApplicationContext;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -120,5 +121,32 @@ class ServiceJwtInternalRouteIntegrationTest {
                 org.mockito.ArgumentMatchers.eq(null),
                 org.mockito.ArgumentMatchers.eq("user-123"),
                 org.mockito.ArgumentMatchers.eq(null));
+    }
+
+    @Test
+    void internalPcControlRouteRejectsServiceJwtInAuthorizationHeader() throws Exception {
+        String serviceToken = serviceJwtProvider.createToken("planner-service", List.of("SVC_INTERNAL"));
+
+        mockMvc.perform(post("/internal/pc-control/action")
+                        .header("Authorization", "Bearer " + serviceToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "action": "NOTIFY",
+                                  "userId": "user-123",
+                                  "params": {
+                                    "title": "Smoke",
+                                    "message": "Reminder"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        verify(webSocketHandler, never()).dispatchPcAction(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 }

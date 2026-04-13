@@ -22,7 +22,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,10 +56,24 @@ class AnalyticsControllerSecurityTest {
         String serviceToken = serviceJwtProvider.createToken("api-gateway", List.of("SVC_INTERNAL"));
 
         mockMvc.perform(get("/api/v1/analytics/overview")
-                        .header("Authorization", "Bearer " + serviceToken)
+                        .header("X-Service-Token", serviceToken)
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error", is("Missing X-User-Id delegated user context")));
+    }
+
+    @Test
+    void serviceTokenInAuthorizationHeaderIsRejected() throws Exception {
+        String serviceToken = serviceJwtProvider.createToken("api-gateway", List.of("SVC_INTERNAL"));
+
+        mockMvc.perform(get("/api/v1/analytics/overview")
+                        .header("Authorization", "Bearer " + serviceToken)
+                        .header("X-User-Id", "user-123")
+                        .header("X-User-Roles", "ROLE_USER")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isIn(401, 403));
+
+        verifyNoInteractions(lifeTrackerClient, analyticsService);
     }
 
     @Test
@@ -69,7 +85,7 @@ class AnalyticsControllerSecurityTest {
                         LocalDateTime.parse("2026-03-13T11:00:00"), 7200L)));
 
         mockMvc.perform(get("/api/v1/analytics/overview")
-                        .header("Authorization", "Bearer " + serviceToken)
+                        .header("X-Service-Token", serviceToken)
                         .header("X-User-Id", "user-123")
                         .header("X-User-Roles", "ROLE_USER")
                         .accept(MediaType.APPLICATION_JSON))

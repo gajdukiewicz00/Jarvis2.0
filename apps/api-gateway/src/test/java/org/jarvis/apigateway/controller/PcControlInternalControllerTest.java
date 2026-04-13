@@ -11,6 +11,8 @@ import org.springframework.http.ResponseEntity;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -26,11 +28,11 @@ class PcControlInternalControllerTest {
     @Test
     void sendActionRoutesToSpecificUserWhenUserIdIsProvided() {
         when(webSocketHandler.dispatchPcAction(
-                "NOTIFY",
-                new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(Map.of("message", "Planner reminder")),
-                null,
-                "user-42",
-                null))
+                eq("NOTIFY"),
+                argThat(jsonNode -> "Planner reminder".equals(jsonNode.path("message").asText())),
+                eq(null),
+                eq("user-42"),
+                eq(null)))
                 .thenReturn(new PcControlWebSocketHandler.DispatchResult(
                         "req-1",
                         "NOTIFY",
@@ -54,10 +56,10 @@ class PcControlInternalControllerTest {
 
         assertEquals(200, response.getStatusCode().value());
         verify(webSocketHandler).dispatchPcAction(
-                "NOTIFY",
-                new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(Map.of("message", "Planner reminder")),
-                null,
-                "user-42",
-                null);
+                eq("NOTIFY"),
+                argThat(jsonNode -> "Planner reminder".equals(jsonNode.path("message").asText())),
+                eq(null),
+                eq("user-42"),
+                eq(null));
     }
 }

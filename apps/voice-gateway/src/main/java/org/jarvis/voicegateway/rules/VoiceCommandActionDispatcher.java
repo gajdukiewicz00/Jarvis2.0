@@ -89,25 +89,46 @@ public class VoiceCommandActionDispatcher {
                 if (action.deviceId() == null || action.deviceId().isBlank()) {
                     throw new IllegalArgumentException("SMART_HOME rule command requires deviceId");
                 }
-                smartHomeActionGateway.execute(scopedUserId, action.deviceId(), action.name(), action.payload());
-                log.info(
-                        "🏠 Rule command routed to smart-home executor: id={}, deviceId={}, action={}, correlationId={}, userId={}",
-                        match.command().id(),
-                        action.deviceId(),
-                        action.name(),
-                        correlationId,
-                        scopedUserId);
-                yield new DispatchResult(
-                        true,
-                        true,
-                        true,
-                        true,
-                        false,
-                        null,
-                        action.name(),
-                        Map.of(
-                        "deviceId", action.deviceId(),
-                        "action", action.name()));
+                try {
+                    smartHomeActionGateway.execute(scopedUserId, action.deviceId(), action.name(), action.payload());
+                    log.info(
+                            "🏠 Rule command routed to smart-home executor: id={}, deviceId={}, action={}, correlationId={}, userId={}",
+                            match.command().id(),
+                            action.deviceId(),
+                            action.name(),
+                            correlationId,
+                            scopedUserId);
+                    yield new DispatchResult(
+                            true,
+                            true,
+                            true,
+                            true,
+                            false,
+                            null,
+                            action.name(),
+                            Map.of(
+                                    "deviceId", action.deviceId(),
+                                    "action", action.name()));
+                } catch (RuntimeException e) {
+                    log.warn(
+                            "🏠 Smart-home capability unavailable for rule command: id={}, deviceId={}, action={}, correlationId={}, error={}",
+                            match.command().id(),
+                            action.deviceId(),
+                            action.name(),
+                            correlationId,
+                            e.getMessage());
+                    yield new DispatchResult(
+                            true,
+                            true,
+                            true,
+                            false,
+                            true,
+                            "SMART_HOME_CAPABILITY_UNAVAILABLE: " + e.getMessage(),
+                            action.name(),
+                            Map.of(
+                                    "deviceId", action.deviceId(),
+                                    "action", action.name()));
+                }
             }
         };
     }

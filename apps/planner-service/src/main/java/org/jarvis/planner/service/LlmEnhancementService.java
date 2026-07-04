@@ -29,17 +29,17 @@ public class LlmEnhancementService {
     }
 
     public String generateDocument(String userId, String documentType, String context) {
-        throw new UnsupportedOperationException(
-                "Planner document generation is not implemented here; use llm-service directly");
+        log.info("Generating document '{}' for user: {}", documentType, userId);
+        return llmClient.generateDocument(userId, documentType, context);
     }
 
     public String generateSmartRecommendation(String userId, String context) {
-        throw new UnsupportedOperationException(
-                "Planner smart recommendations are rule-based; optional LLM recommendations live outside planner core");
+        log.info("Generating smart recommendation for user: {}", userId);
+        return llmClient.recommend(userId, context);
     }
 
     public String parseNaturalLanguageTask(String userId, String naturalLanguage) {
-        throw new UnsupportedOperationException(
-                "Natural-language task parsing is not implemented in planner-service; use llm-service directly");
+        log.info("Parsing NL task for user: {}", userId);
+        return llmClient.parseTask(userId, naturalLanguage);
     }
 }

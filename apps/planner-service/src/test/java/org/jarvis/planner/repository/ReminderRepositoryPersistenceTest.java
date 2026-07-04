@@ -4,6 +4,7 @@ import org.jarvis.planner.model.Reminder;
 import org.jarvis.planner.model.ReminderStatus;
 import org.jarvis.planner.model.ReminderType;
 import org.jarvis.planner.support.PlannerPostgresContainerSupport;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -16,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Tag("integration")
 class ReminderRepositoryPersistenceTest extends PlannerPostgresContainerSupport {
 
     @Autowired

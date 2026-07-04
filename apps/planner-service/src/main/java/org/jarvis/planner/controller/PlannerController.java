@@ -4,6 +4,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.planner.dto.DailyPlanDto;
 import org.jarvis.planner.dto.RecommendationDto;
+import org.jarvis.planner.model.Task;
+import org.jarvis.planner.model.TaskStatus;
+import org.jarvis.planner.repository.TaskRepository;
 import org.jarvis.planner.service.DailyPlanGenerator;
 import org.jarvis.planner.service.WeeklyPlanGenerator;
 import org.jarvis.planner.service.RecommendationEngine;
@@ -12,7 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,6 +30,7 @@ public class PlannerController {
     private final DailyPlanGenerator dailyPlanGenerator;
     private final WeeklyPlanGenerator weeklyPlanGenerator;
     private final RecommendationEngine recommendationEngine;
+    private final TaskRepository taskRepository;
     
     /**
      * Get daily plan
@@ -65,7 +71,53 @@ public class PlannerController {
         List<RecommendationDto> recommendations = recommendationEngine.generateRecommendations(userId);
         return ResponseEntity.ok(recommendations);
     }
-    
+
+    /**
+     * "What's the one thing to focus on now" — the single highest-priority open task.
+     */
+    @GetMapping("/focus")
+    public ResponseEntity<Map<String, Object>> getFocus(Authentication authentication) {
+        String userId = authentication.getName();
+        List<Task> active = taskRepository.findActiveTasks(userId);
+        if (active.isEmpty()) {
+            return ResponseEntity.ok(Map.of("hasFocus", false,
+                    "message", "Никаких срочных задач, сэр. Можно выдохнуть."));
+        }
+        Task top = active.get(0);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("hasFocus", true);
+        out.put("taskId", top.getId());
+        out.put("title", top.getTitle());
+        out.put("priority", top.getPriority());
+        out.put("dueDate", top.getDueDate());
+        out.put("openTasks", active.size());
+        out.put("message", "Главное сейчас, сэр: " + top.getTitle());
+        return ResponseEntity.ok(out);
+    }
+
+    /**
+     * End-of-day review — what got done, what is still open, what is overdue.
+     */
+    @GetMapping("/evening-review")
+    public ResponseEntity<Map<String, Object>> eveningReview(Authentication authentication) {
+        String userId = authentication.getName();
+        long done = taskRepository.countByUserIdAndStatus(userId, TaskStatus.DONE);
+        List<Task> active = taskRepository.findActiveTasks(userId);
+        Instant now = Instant.now();
+        long overdue = active.stream()
+                .filter(t -> t.getDueDate() != null && t.getDueDate().isBefore(now))
+                .count();
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("doneTotal", done);
+        out.put("stillOpen", active.size());
+        out.put("overdue", overdue);
+        out.put("topOpen", active.stream().limit(3).map(Task::getTitle).toList());
+        out.put("message", overdue > 0
+                ? "Вечерний обзор, сэр: просрочено " + overdue + ", открыто " + active.size() + "."
+                : "Вечерний обзор, сэр: открыто " + active.size() + " задач, просрочек нет.");
+        return ResponseEntity.ok(out);
+    }
+
     /**
      * Health check
      */

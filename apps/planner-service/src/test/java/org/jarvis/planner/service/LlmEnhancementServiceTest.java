@@ -31,14 +31,17 @@ class LlmEnhancementServiceTest {
     }
 
     @Test
-    void optionalPlaceholderOperationsAreExplicitlyUnsupported() {
-        LlmEnhancementService service = new LlmEnhancementService(mock(LlmServiceClient.class));
+    void optionalOperationsDelegateToLlmServiceClient() {
+        LlmServiceClient client = mock(LlmServiceClient.class);
+        when(client.generateDocument("user-1", "email", "context")).thenReturn("doc");
+        when(client.recommend("user-1", "context")).thenReturn("rec");
+        when(client.parseTask("user-1", "Напомни про встречу")).thenReturn("{\"title\":\"встреча\"}");
 
-        assertThrows(UnsupportedOperationException.class,
-                () -> service.generateDocument("user-1", "email", "context"));
-        assertThrows(UnsupportedOperationException.class,
-                () -> service.generateSmartRecommendation("user-1", "context"));
-        assertThrows(UnsupportedOperationException.class,
-                () -> service.parseNaturalLanguageTask("user-1", "Напомни про встречу"));
+        LlmEnhancementService service = new LlmEnhancementService(client);
+
+        assertEquals("doc", service.generateDocument("user-1", "email", "context"));
+        assertEquals("rec", service.generateSmartRecommendation("user-1", "context"));
+        assertEquals("{\"title\":\"встреча\"}",
+                service.parseNaturalLanguageTask("user-1", "Напомни про встречу"));
     }
 }

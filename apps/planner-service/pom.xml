@@ -8,13 +8,18 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>planner-service</artifactId>
     <name>Planner Service</name>
     <description>Personal assistant with planning, tasks, reminders, and habit analytics</description>
+
+    <properties>
+        <jib.container.port>8092</jib.container.port>
+        <jib.skip>false</jib.skip>
+    </properties>
 
     <dependencies>
         <!-- Jarvis common (security, filters, utilities) -->
@@ -103,6 +108,10 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

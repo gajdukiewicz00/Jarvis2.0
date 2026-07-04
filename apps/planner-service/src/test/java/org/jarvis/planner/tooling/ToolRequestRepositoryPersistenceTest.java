@@ -1,6 +1,7 @@
 package org.jarvis.planner.tooling;
 
 import org.jarvis.planner.support.PlannerPostgresContainerSupport;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -14,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Tag("integration")
 class ToolRequestRepositoryPersistenceTest extends PlannerPostgresContainerSupport {
 
     @Autowired

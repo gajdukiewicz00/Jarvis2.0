@@ -22,7 +22,12 @@ public class RestClientConfig {
             @Value("${spring.application.name}") String serviceName) {
         return builder
             .setConnectTimeout(Duration.ofSeconds(5))
-            .setReadTimeout(Duration.ofSeconds(10))
+            // The 14B brain routinely takes >10s for non-trivial generations
+            // (generate-document, daily plans). A 10s read-timeout turned those
+            // into spurious 503 LLM_UNAVAILABLE while short prompts passed,
+            // masking the issue in smoke tests. 60s matches the orchestrator's
+            // own LLM budget headroom.
+            .setReadTimeout(Duration.ofSeconds(60))
             .additionalInterceptors((request, body, execution) -> {
                 request.getHeaders().set(
                         ServiceJwtFilter.SERVICE_TOKEN_HEADER,

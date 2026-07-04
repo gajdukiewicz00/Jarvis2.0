@@ -5,6 +5,7 @@ import org.jarvis.planner.model.TaskPriority;
 import org.jarvis.planner.model.TaskSource;
 import org.jarvis.planner.model.TaskStatus;
 import org.jarvis.planner.support.PlannerPostgresContainerSupport;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@Tag("integration")
 class TaskRepositoryPersistenceTest extends PlannerPostgresContainerSupport {
 
     @Autowired

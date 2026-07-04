@@ -1,0 +1,69 @@
+name: K8s Tree Drift
+
+# Fails a PR into main if the canonical infra/k8s/overlays/prod render carries
+# any :local or :latest image tag outside the documented, intentionally
+# permanent allowlist. Pure client-side `kubectl kustomize` render — no
+# cluster access, no apply. See infra/k8s/README.md for the canonical-tree
+# policy and scripts/guards/reject-legacy-k8s-edits.sh for the companion
+# guard that freezes the legacy k8s/base/** tree.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/k8s/**"
+      - ".github/workflows/k8s-tree-drift.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  k8s-tree-drift:
+    name: infra/k8s/overlays/prod image-tag drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.0'
+
+      - name: Check for un-allowlisted :local/:latest image tags
+        run: |
+          set -euo pipefail
+
+          # Images intentionally pinned to :local forever. Anything else
+          # rendered from infra/k8s/overlays/prod must be pinned to a real,
+          # immutable tag or digest before it lands on main.
+          ALLOWLIST_PATTERN='(jarvis/pc-control:local|jarvis/embedding-service:local)$'
+
+          RENDERED="$(kubectl kustomize infra/k8s/overlays/prod)"
+
+          MATCHES="$(printf '%s\n' "${RENDERED}" | grep -E 'image:.*:(local|latest)$' || true)"
+
+          if [[ -z "${MATCHES}" ]]; then
+            echo "No :local/:latest image tags found in infra/k8s/overlays/prod."
+            exit 0
+          fi
+
+          DISALLOWED="$(printf '%s\n' "${MATCHES}" | grep -v -E "${ALLOWLIST_PATTERN}" || true)"
+
+          if [[ -n "${DISALLOWED}" ]]; then
+            echo "::error::Un-allowlisted :local/:latest image tag(s) found in infra/k8s/overlays/prod"
+            printf '%s\n' "${DISALLOWED}"
+            echo ""
+            echo "Only these are permanently allowlisted:"
+            echo "  - localhost:5000/jarvis/pc-control:local (intentional; workstation stub-mode control)"
+            echo "  - localhost:5000/jarvis/embedding-service:local (acceptable per infra/k8s/README.md)"
+            echo ""
+            echo "Pin the image(s) above to a released tag or digest, or extend the"
+            echo "allowlist in this workflow with a documented reason."
+            exit 1
+          fi
+
+          echo "Only allowlisted :local/:latest image tags found:"
+          printf '%s\n' "${MATCHES}"

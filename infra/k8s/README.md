@@ -16,8 +16,14 @@ Conventions:
 
 Compatibility:
 
-- The older `k8s/` tree is left in place because repo scripts and release artifacts still reference it.
-- New local production work should target `infra/k8s/overlays/prod`.
+- The older `k8s/` tree is frozen and quarantined: `k8s/base/**` accepts no
+  further edits, enforced by
+  [`scripts/guards/reject-legacy-k8s-edits.sh`](../../scripts/guards/reject-legacy-k8s-edits.sh).
+  It remains on disk only as historical reference; it is not a second live
+  source of truth.
+- `k8s/overlays/prod-release/**` is the sole exception — it stays writable
+  because `scripts/product/jarvis-promote-images.sh` can still target it.
+- All local production work targets `infra/k8s/overlays/prod`.
 
 Suggested flow:
 

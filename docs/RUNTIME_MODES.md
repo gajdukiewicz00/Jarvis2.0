@@ -40,8 +40,8 @@ Canonical entry point: [`./jarvis-launch.sh`](../jarvis-launch.sh) (or
 `make launch`).
 
 Brings up: k3s → ingress-nginx → TLS edge → namespace `jarvis-prod` →
-observability stack → core deployments from `k8s/overlays/prod` (rendered with
-`localhost:5000/jarvis/*:local` images via `prepare_prod_overlay`).
+observability stack → core deployments from `infra/k8s/overlays/prod`
+(rendered with `localhost:5000/jarvis/*:local` images via `prepare_prod_overlay`).
 
 Required deployments (all wait with timeout 180s):
 
@@ -54,8 +54,11 @@ pc-control, smart-home-service
 `voice-gateway` is optional unless `JARVIS_REQUIRE_VOICE_GATEWAY=true`.
 
 Image tag rule: `IMAGE_TAG=local` by default. The launcher rewrites
-`k8s/overlays/prod/kustomization.yaml` images on a temp copy at deploy time, so
-the on-disk overlay is kept stable.
+`infra/k8s/overlays/prod/kustomization.yaml` images on a temp copy at deploy
+time, so the on-disk overlay is kept stable. `JARVIS_K8S_DIR` can retarget the
+launcher at an alternate tree for migration smoke tests only (see
+[`infra/k8s/README.md`](../infra/k8s/README.md)); production tooling does not
+honor it.
 
 ## Mode 3 — Kubernetes (digest-pinned release overlay)
 
@@ -84,12 +87,13 @@ each carry their own README and target a specific service-pair edge (e.g.
 Canonical entry point:
 [`./scripts/product/jarvis-deploy-microk8s-prod.sh`](../scripts/product/jarvis-deploy-microk8s-prod.sh).
 
-Default overlay: `infra/k8s/overlays/prod` (NOT `k8s/`). This script and
-`scripts/verify-prod.sh` are the only canonical paths that read from
-`infra/k8s/`. Per [`infra/k8s/README.md`](../infra/k8s/README.md), this tree
-is the documented "canonical local production foundation" — but the workspace
-launcher (`jarvis-launch.sh`) still targets `k8s/`. **Treat both trees as live
-until the migration is closed; see LEGACY_AND_CLEANUP.md.**
+Default overlay: `infra/k8s/overlays/prod` (NOT `k8s/`). Per
+[`infra/k8s/README.md`](../infra/k8s/README.md), `infra/k8s/` is the canonical
+Kubernetes source of truth. `jarvis-launch.sh` (Mode 2) now targets
+`infra/k8s/` as well by default; `k8s/base/**` is frozen and quarantined
+(enforced by
+[`scripts/guards/reject-legacy-k8s-edits.sh`](../scripts/guards/reject-legacy-k8s-edits.sh)),
+so there is a single live tree, not two.
 
 `infra/k8s/base/` adds Kafka and RabbitMQ StatefulSets that `k8s/base/` lacks.
 
@@ -165,9 +169,12 @@ in Mode 1:
   **deleted in the working tree** (see `git status` snapshot 2026-05-08), so
   `kubectl scale deployment llm-server` will fail until either the manifest is
   regenerated or the launcher is updated to target only `host-model-daemon`.
-- **`infra/k8s/` vs `k8s/`** — running `jarvis-deploy-microk8s-prod.sh` against
-  a cluster previously launched by `jarvis-launch.sh` (or vice versa) can leave
-  duplicate / stale manifests because the trees have drifted.
+- ~~**`infra/k8s/` vs `k8s/`** drift between `jarvis-deploy-microk8s-prod.sh`
+  and `jarvis-launch.sh`~~ — resolved. Both now default to `infra/k8s/` as the
+  single canonical tree; `k8s/base/**` is frozen (see
+  [`infra/k8s/README.md`](../infra/k8s/README.md)). `JARVIS_K8S_DIR` can still
+  point `jarvis-launch.sh` at an alternate tree for migration smoke tests, but
+  that override is not honored by production tooling.
 - **Mobile (`apps/android-app`)** is a Gradle scaffold (Phase 12 Pass 1).
   No runtime mode produces an installed APK; build is operator-driven via
   `./gradlew assembleDebug` after running `gradle wrapper --gradle-version 8.5`.

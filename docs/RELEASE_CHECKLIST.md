@@ -59,12 +59,19 @@ For the audit findings driving the gate criteria see [docs/audit/JARVIS_AUDIT_RE
 ## 6. Documentation freshness (≤ 10 minutes)
 
 - [ ] [README.md](../README.md) Quickstart section runs successfully on a clean machine.
-- [ ] [docs/DEMO.md](DEMO.md) demo path runs successfully on a clean machine.
+- [ ] [docs/DEMO.md](DEMO.md) demo path runs successfully on a clean machine. **[1]**
 - [ ] [docs/CAPABILITIES.md](CAPABILITIES.md) status matrix matches the current code (no module says "active" while its tests fail).
 - [ ] [docs/COMPONENT_STATUS.md](COMPONENT_STATUS.md) audit date is within 2 weeks of release.
 - [ ] [docs/security/SECURITY.md](security/SECURITY.md) lists the current open hardening items and whether each is mitigated, accepted, or still open.
 - [ ] [SECURITY.md](../SECURITY.md) at root links to a working email and the canonical security docs.
 - [ ] No README link returns 404: `find . -name '*.md' -not -path './target/*' -not -path './.git/*' -exec grep -l '\](.*\.md)' {} \; | xargs -I{} sh -c 'echo === {} ===; grep -oE "\]\([^)]+\.md(#[^)]+)?\)" {}'` (manual link check).
+
+**[1]** `docs/DEMO.md` is now **SUPERSEDED** for the current k3s + Piper +
+Qwen3-14B stack (see the banner at the top of that file); the canonical demo
+path is [docs/HUMAN_LAYER_DEMO_RUNBOOK.md](HUMAN_LAYER_DEMO_RUNBOOK.md).
+Treat this checklist item as **N/A** until `docs/DEMO.md` is updated or
+retired — run the human-layer runbook's demo path instead and note that
+substitution in the release notes.
 
 ## 7. Tagging and announcement
 

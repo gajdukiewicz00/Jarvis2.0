@@ -63,4 +63,20 @@ class TtsServiceTest {
         assertThrows(TtsUnavailableException.class,
                 () -> service.synthesize("Hello", "en-US", "en-US-Wavenet-D", 1.0, 0.0));
     }
+
+    @Test
+    void piperRequestBodyIncludesSpeedWhenSpeakingRateProvided() {
+        String body = (String) ReflectionTestUtils.invokeMethod(
+                TtsService.class, "buildPiperRequestBody", "Привет", "ru-RU", 1.25);
+
+        assertEquals("{\"text\":\"Привет\",\"language\":\"ru-RU\",\"speed\":1.25}", body);
+    }
+
+    @Test
+    void piperRequestBodyOmitsSpeedWhenSpeakingRateIsNull() {
+        String body = (String) ReflectionTestUtils.invokeMethod(
+                TtsService.class, "buildPiperRequestBody", "Hello", "en-US", null);
+
+        assertEquals("{\"text\":\"Hello\",\"language\":\"en-US\"}", body);
+    }
 }

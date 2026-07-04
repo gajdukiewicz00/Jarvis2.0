@@ -63,6 +63,13 @@ spec:
               value: /models/stt/vosk/vosk-model-small-ru-0.22
             - name: JARVIS_VOSK_MODEL_PATH_EN
               value: /models/stt/vosk/vosk-model-small-en-us-0.15
+            # movie-JARVIS voice: Piper neural TTS via the host-tts-daemon
+            # selectorless Service (infra/k8s/base/host-tts-daemon). Falls back
+            # to eSpeak automatically if the daemon is unreachable.
+            - name: TTS_PROVIDER
+              value: piper
+            - name: TTS_PIPER_URL
+              value: http://host-tts-daemon.jarvis-prod.svc.cluster.local:18090
             - name: SPRING_AUTOCONFIGURE_EXCLUDE
               value: >-
                 org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,

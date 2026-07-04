@@ -221,7 +221,7 @@ public class TtsService {
 
         if (PROVIDER_PIPER.equals(selection.actualProvider())) {
             return new SynthesisResult(
-                    synthesizeWithPiper(text, languageCode),
+                    synthesizeWithPiper(text, languageCode, speakingRate),
                     selection.configuredProvider(),
                     PROVIDER_PIPER,
                     selection.status(),
@@ -323,10 +323,9 @@ public class TtsService {
     }
 
     /** Synthesize via the host-side Piper neural TTS daemon (HTTP). Returns canonical WAV. */
-    private byte[] synthesizeWithPiper(String text, String languageCode) {
+    private byte[] synthesizeWithPiper(String text, String languageCode, Double speakingRate) {
         try {
-            String lang = languageCode != null ? languageCode : "";
-            String body = "{\"text\":" + jsonString(text) + ",\"language\":" + jsonString(lang) + "}";
+            String body = buildPiperRequestBody(text, languageCode, speakingRate);
             java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create(piperUrl.replaceAll("/+$", "") + "/synthesize"))
                     .timeout(java.time.Duration.ofMillis(piperTimeoutMs))
@@ -350,6 +349,23 @@ public class TtsService {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Piper TTS synthesis failed: Interrupted", e);
         }
+    }
+
+    /**
+     * Build the JSON request body for the Piper daemon. {@code speakingRate} follows the same
+     * convention as Google TTS (1.0 = normal, &gt;1.0 = faster) and is forwarded as the daemon's
+     * "speed" field (scripts/jarvis-tts-daemon.py), which uses the identical convention.
+     */
+    private static String buildPiperRequestBody(String text, String languageCode, Double speakingRate) {
+        String lang = languageCode != null ? languageCode : "";
+        StringBuilder body = new StringBuilder("{\"text\":")
+                .append(jsonString(text))
+                .append(",\"language\":")
+                .append(jsonString(lang));
+        if (speakingRate != null && speakingRate > 0) {
+            body.append(",\"speed\":").append(speakingRate);
+        }
+        return body.append("}").toString();
     }
 
     private boolean checkPiperAvailable() {

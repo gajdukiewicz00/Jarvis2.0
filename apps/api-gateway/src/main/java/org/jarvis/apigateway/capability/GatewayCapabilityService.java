@@ -15,22 +15,28 @@ public class GatewayCapabilityService {
     private final RuntimeModeResolver runtimeModeResolver;
     private final PcControlWebSocketHandler pcControlWebSocketHandler;
     private final boolean visionSecurityEnabled;
+    private final boolean visionSecurityLocalBridge;
     private final boolean memoryServiceEnabled;
     private final boolean llmServiceEnabled;
     private final boolean pcControlStubMode;
+    private final boolean pcControlLocalBridge;
 
     public GatewayCapabilityService(RuntimeModeResolver runtimeModeResolver,
                                     PcControlWebSocketHandler pcControlWebSocketHandler,
                                     @Value("${services.vision-security.enabled:false}") boolean visionSecurityEnabled,
+                                    @Value("${services.vision-security.local-bridge:${VISION_SECURITY_LOCAL_BRIDGE:false}}") boolean visionSecurityLocalBridge,
                                     @Value("${services.memory.enabled:false}") boolean memoryServiceEnabled,
                                     @Value("${services.llm.enabled:${JARVIS_LLM_ENABLED:false}}") boolean llmServiceEnabled,
-                                    @Value("${services.pc-control.stub-mode:${PC_CONTROL_STUB_MODE:false}}") boolean pcControlStubMode) {
+                                    @Value("${services.pc-control.stub-mode:${PC_CONTROL_STUB_MODE:false}}") boolean pcControlStubMode,
+                                    @Value("${services.pc-control.local-bridge:${PC_CONTROL_LOCAL_BRIDGE:false}}") boolean pcControlLocalBridge) {
         this.runtimeModeResolver = runtimeModeResolver;
         this.pcControlWebSocketHandler = pcControlWebSocketHandler;
         this.visionSecurityEnabled = visionSecurityEnabled;
+        this.visionSecurityLocalBridge = visionSecurityLocalBridge;
         this.memoryServiceEnabled = memoryServiceEnabled;
         this.llmServiceEnabled = llmServiceEnabled;
         this.pcControlStubMode = pcControlStubMode;
+        this.pcControlLocalBridge = pcControlLocalBridge;
     }
 
     public void requireVisionSecuritySupport(String capability) {
@@ -43,10 +49,16 @@ public class GatewayCapabilityService {
                     "vision-security-service",
                     capability,
                     runtimeMode,
-                    List.of(RuntimeMode.LOCAL.id(), RuntimeMode.DEV.id()),
+                    List.of(RuntimeMode.LOCAL.id(), RuntimeMode.DEV.id(), RuntimeMode.K8S.id()),
                     Map.of("serviceEnabled", false));
         }
-        if (runtimeMode == RuntimeMode.K8S) {
+        // K8s mode is normally blocked because CV is workstation-local. The
+        // local-bridge flag is set by jarvis-launch.sh only after it has
+        // started the host vision-security-service process AND patched the
+        // selectorless Endpoints in infra/k8s/base/vision-security-service/
+        // to the host IP. While that bridge is wired we can safely let
+        // /api/v1/vision-security/** flow through to the workstation process.
+        if (runtimeMode == RuntimeMode.K8S && !visionSecurityLocalBridge) {
             throw new CapabilityUnavailableException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "UNSUPPORTED_RUNTIME_MODE",
@@ -55,7 +67,7 @@ public class GatewayCapabilityService {
                     capability,
                     runtimeMode,
                     List.of(RuntimeMode.LOCAL.id(), RuntimeMode.DEV.id()),
-                    Map.of("serviceEnabled", true));
+                    Map.of("serviceEnabled", true, "localBridge", false));
         }
     }
 
@@ -91,7 +103,7 @@ public class GatewayCapabilityService {
 
     public void requireDirectPcControlSupport(String capability) {
         RuntimeMode runtimeMode = runtimeModeResolver.currentMode();
-        if (pcControlStubMode || runtimeMode == RuntimeMode.K8S) {
+        if ((pcControlStubMode || runtimeMode == RuntimeMode.K8S) && !pcControlLocalBridge) {
             throw new CapabilityUnavailableException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "UNSUPPORTED_RUNTIME_MODE",
@@ -130,6 +142,7 @@ public class GatewayCapabilityService {
                         visionSecurityStatus(runtimeMode),
                         visionSecurityReason(runtimeMode)),
                 routeDescriptor("/api/v1/voice/**", "voice-gateway", true, "available", null),
+                routeDescriptor("/api/v1/status/report", "api-gateway", true, "available", null),
                 websocketDescriptor("/ws/voice", "voice-gateway", "available", null, null),
                 websocketDescriptor("/ws/pc-control", "desktop-clients", "session-dependent",
                         "Desktop availability depends on connected authenticated clients",
@@ -139,7 +152,19 @@ public class GatewayCapabilityService {
     }
 
     private String overallStatus(RuntimeMode runtimeMode) {
-        if (!llmServiceEnabled || !memoryServiceEnabled || runtimeMode == RuntimeMode.K8S || pcControlStubMode) {
+        if (!llmServiceEnabled || !memoryServiceEnabled) {
+            return "degraded";
+        }
+        if (runtimeMode == RuntimeMode.K8S) {
+            // K8S mode can be backend-ready while direct workstation control
+            // remains route-level unsupported. Keep that boundary in the
+            // /api/v1/pc/** descriptor instead of degrading the whole gateway.
+            if (visionSecurityEnabled && !visionSecurityLocalBridge) {
+                return "degraded";
+            }
+            return "ready";
+        }
+        if (pcControlStubMode) {
             return "degraded";
         }
         return "ready";
@@ -158,7 +183,7 @@ public class GatewayCapabilityService {
             return "disabled";
         }
         if (runtimeMode == RuntimeMode.K8S) {
-            return "unsupported-runtime";
+            return visionSecurityLocalBridge ? "available-via-local-bridge" : "unsupported-runtime";
         }
         return "available";
     }
@@ -168,7 +193,9 @@ public class GatewayCapabilityService {
             return "services.vision-security.enabled=false";
         }
         if (runtimeMode == RuntimeMode.K8S) {
-            return "vision-security-service is local-only";
+            return visionSecurityLocalBridge
+                    ? "Routed via vision-security-service selectorless Service to the workstation host"
+                    : "vision-security-service is local-only; set VISION_SECURITY_LOCAL_BRIDGE=true after wiring the host endpoints";
         }
         return null;
     }

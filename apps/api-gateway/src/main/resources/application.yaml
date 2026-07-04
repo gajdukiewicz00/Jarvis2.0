@@ -11,6 +11,16 @@ server:
 spring:
   application:
     name: api-gateway
+  # Phase 8: Kafka audit publisher (KillSwitch + AgentRegistry → jarvis.audit.events).
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: 1
+      retries: 1
+    admin:
+      fail-fast: false
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
@@ -63,11 +73,26 @@ services:
   pc-control:
     url: ${PC_CONTROL_URL:http://pc-control:8084}
     stub-mode: ${PC_CONTROL_STUB_MODE:false}
+    # When the host pc-control process is bridged into the cluster (selectorless
+    # host-pc-control Service + Endpoints to the workstation), this lets the
+    # direct /api/v1/pc/** routes flow through even in K8s runtime mode.
+    local-bridge: ${PC_CONTROL_LOCAL_BRIDGE:false}
   vision-security:
     enabled: ${VISION_SECURITY_ENABLED:false}
+    # local-bridge=true tells the gateway that even in k8s runtime mode the
+    # vision-security-service Service is wired (selectorless Service +
+    # patched Endpoints) to a workstation host process on port 8094 — the
+    # K8s-mode guard in GatewayCapabilityService is loosened accordingly.
+    # The launcher sets this when ./scripts/product/jarvis-vision-security-up.sh
+    # and apply-vision-security-host-endpoints.sh have both succeeded.
+    local-bridge: ${VISION_SECURITY_LOCAL_BRIDGE:false}
     url: ${VISION_SECURITY_URL:http://vision-security-service:8094}
   life-tracker:
     url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
+  sync-service:
+    url: ${SYNC_SERVICE_URL:http://sync-service:8095}
+  user-profile:
+    url: ${USER_PROFILE_URL:http://user-profile:8089}
   smart-home:
     url: ${SMART_HOME_URL:http://smart-home-service:8086}
   analytics:
@@ -145,13 +170,19 @@ jarvis:
       key-alias: ${JARVIS_GATEWAY_INTERNAL_HTTPS_KEY_ALIAS:api-gateway-internal}
 
 # Service-to-service JWT (used by FeignAuthConfig to sign X-Service-Token)
+# Production must set SERVICE_JWT_SECRET independently of JWT_SECRET (SECURITY_HARDENING_PLAN.md F-002).
+# The fallback to ${JWT_SECRET} is retained only so misconfigured local dev still boots; the
+# allow-shared-secret guard below prevents this fallback from being silently accepted in non-dev profiles.
 service:
   jwt:
     secret: ${SERVICE_JWT_SECRET:${JWT_SECRET}}
+    allow-shared-secret: ${SERVICE_JWT_ALLOW_SHARED_SECRET:false}
 jwt:
   secret: ${JWT_SECRET:}
 
 # CORS
+# Hardening (SECURITY_HARDENING_PLAN.md F-005): allowed-headers is an explicit list to match the
+# nginx-ingress narrower allow-list. "*" with allow-credentials=true is fragile if origins ever broaden.
 cors:
   enabled: true
   allowed-origins:
@@ -165,7 +196,14 @@ cors:
     - PATCH
     - OPTIONS
   allowed-headers:
-    - "*"
+    - Authorization
+    - Content-Type
+    - X-Requested-With
+    - X-User-Id
+    - X-Username
+    - X-User-Roles
+    - Accept
+    - Accept-Language
   allow-credentials: true
 
 logging:

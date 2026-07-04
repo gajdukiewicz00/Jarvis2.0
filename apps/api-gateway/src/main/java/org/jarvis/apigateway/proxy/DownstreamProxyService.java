@@ -299,6 +299,11 @@ public class DownstreamProxyService {
             }
             responseHeaders.put(headerName, values);
         });
+        // Defensive sweep: Spring's HttpHeaders is case-insensitive, but if any
+        // hop-by-hop header slipped through (e.g. due to upstream casing variants
+        // that bypassed the filter loop), ensure they are gone. Duplicate
+        // Transfer-Encoding from upstream + Tomcat causes nginx-ingress to 502.
+        HOP_BY_HOP_HEADERS.forEach(responseHeaders::remove);
         return responseHeaders;
     }
 

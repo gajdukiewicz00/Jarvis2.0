@@ -18,7 +18,7 @@ public class ProxyTimeoutPolicy {
 
     public Duration readTimeout(String downstreamService) {
         return switch (downstreamService) {
-            case "security-service", "life-tracker", "analytics-service", "vision-security-service", "planner-service" ->
+            case "security-service", "life-tracker", "analytics-service", "vision-security-service", "planner-service", "memory-service" ->
                     EXTENDED_READ_TIMEOUT;
             case "llm-service" -> LLM_READ_TIMEOUT;
             default -> DEFAULT_READ_TIMEOUT;

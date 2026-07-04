@@ -1,5 +1,6 @@
 package org.jarvis.apigateway.security;
 
+import org.jarvis.common.safety.SystemPanicState;
 import jakarta.servlet.Filter;
 import jakarta.servlet.http.HttpServletRequest;
 import org.jarvis.apigateway.controller.AuthProxyController;
@@ -48,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "service.jwt.secret=service-secret-01234567890123456789012345678901"
         })
 @AutoConfigureMockMvc(addFilters = false)
-@Import({SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class})
+@Import({SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class, SystemPanicState.class})
 @ActiveProfiles("test")
 class AuthProxySecurityIntegrationTest {
 

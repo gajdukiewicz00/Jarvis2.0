@@ -6,17 +6,33 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>api-gateway</artifactId>
+
+    <properties>
+        <jib.container.port>8080</jib.container.port>
+        <jib.skip>false</jib.skip>
+    </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.jarvis</groupId>
             <artifactId>jarvis-common</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 6: agent identity / heartbeat / kill-switch envelopes. -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>command-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 8: Kafka audit publisher (kill-switch + agent registration). -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -107,6 +123,18 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
+                <configuration>
+                    <container>
+                        <!-- Match the legacy Dockerfile WORKDIR /app so logback's
+                             relative `logs/api-gateway.log` resolves to /app/logs,
+                             which is the writable volumeMount in the deployment. -->
+                        <workingDirectory>/app</workingDirectory>
+                    </container>
+                </configuration>
             </plugin>
         </plugins>
     </build>

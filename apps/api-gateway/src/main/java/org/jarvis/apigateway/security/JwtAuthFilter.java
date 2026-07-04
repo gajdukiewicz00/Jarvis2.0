@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -45,7 +46,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
 
-    @Value("${jarvis.jwt.enabled:false}")
+    /**
+     * Default is fail-closed (true). An explicit {@code jarvis.jwt.enabled=false}
+     * is required to bypass JWT validation; this prevents misconfigured deployments
+     * (e.g. missing application.yaml profile) from silently disabling auth.
+     * See SECURITY_HARDENING_PLAN.md F-001.
+     */
+    @Value("${jarvis.jwt.enabled:true}")
     private boolean jwtEnabled;
 
     private static final List<String> PUBLIC_PATHS = List.of(
@@ -63,6 +70,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     public JwtAuthFilter(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;
+    }
+
+    @PostConstruct
+    void logResolvedState() {
+        if (jwtEnabled) {
+            log.info("JwtAuthFilter: JWT validation ENABLED (fail-closed default)");
+        } else {
+            log.warn("JwtAuthFilter: JWT validation DISABLED via jarvis.jwt.enabled=false. "
+                    + "Gateway will accept unauthenticated requests on protected paths. "
+                    + "This must NEVER be the case in production.");
+        }
     }
 
     @Override

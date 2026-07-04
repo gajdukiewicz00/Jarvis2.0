@@ -1,5 +1,6 @@
 package org.jarvis.apigateway.security;
 
+import org.jarvis.common.safety.SystemPanicState;
 import org.jarvis.apigateway.controller.PcControlInternalController;
 import org.jarvis.apigateway.websocket.PcControlWebSocketHandler;
 import org.jarvis.common.JarvisCommonAutoConfiguration;
@@ -45,7 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 "service.jwt.secret=service-secret-01234567890123456789012345678901"
         })
 @AutoConfigureMockMvc(addFilters = false)
-@Import({ SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class })
+@Import({ SecurityConfig.class, JwtAuthFilter.class, JwtUtil.class, JarvisCommonAutoConfiguration.class, SystemPanicState.class })
 @ActiveProfiles("test")
 class ServiceJwtInternalRouteIntegrationTest {
 

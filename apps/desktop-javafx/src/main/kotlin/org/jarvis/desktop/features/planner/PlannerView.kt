@@ -79,6 +79,14 @@ class PlannerView(
         styleClass += "shell-section-subtitle"
         isWrapText = true
     }
+    private val weeklyPlanLabel = Label("Loading this week's plan…").apply {
+        styleClass += "shell-section-subtitle"
+        isWrapText = true
+    }
+    private val tomorrowPlanLabel = Label("Loading tomorrow's plan…").apply {
+        styleClass += "shell-section-subtitle"
+        isWrapText = true
+    }
 
     init {
         styleClass += "shell-route-scroll"
@@ -170,10 +178,25 @@ class PlannerView(
             children += eveningReviewLabel
         }
 
+        val outlookSection = VBox(12.0).apply {
+            styleClass += "shell-section-card"
+            children += Label("This week & tomorrow").apply { styleClass += "shell-section-title" }
+            children += Label(
+                "Live from `/api/v1/planner/weekly` and `/api/v1/planner/daily?date=<tomorrow>`."
+            ).apply {
+                styleClass += "shell-section-subtitle"
+                isWrapText = true
+            }
+            children += Label("This week").apply { styleClass += "shell-section-title" }
+            children += weeklyPlanLabel
+            children += Label("Tomorrow").apply { styleClass += "shell-section-title" }
+            children += tomorrowPlanLabel
+        }
+
         return VBox(18.0).apply {
             styleClass += "shell-planner-view"
             padding = Insets(24.0)
-            children.addAll(header, feedbackRow, summary, briefSection, quickCapture, tasksSection)
+            children.addAll(header, feedbackRow, summary, briefSection, outlookSection, quickCapture, tasksSection)
         }
     }
 
@@ -193,10 +216,14 @@ class PlannerView(
                 val snapshot = readModel.loadSnapshot()
                 val focus = readModel.loadFocus()
                 val eveningReview = readModel.loadEveningReview()
+                val weeklyPlan = readModel.loadWeeklyPlan()
+                val tomorrowPlan = readModel.loadTomorrowPlan()
                 Platform.runLater {
                     renderSnapshot(snapshot)
                     renderBrief(focusLabel, focus)
                     renderBrief(eveningReviewLabel, eveningReview)
+                    renderBrief(weeklyPlanLabel, weeklyPlan)
+                    renderBrief(tomorrowPlanLabel, tomorrowPlan)
                     feedbackPill.text = "Ready"
                     applyTone(feedbackPill, "shell-status-tone-success")
                     feedbackLabel.text = "Planner tasks loaded from the gateway-backed todo tool flow."

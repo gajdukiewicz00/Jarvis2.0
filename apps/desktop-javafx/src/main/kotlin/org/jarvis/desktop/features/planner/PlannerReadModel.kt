@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import org.jarvis.desktop.api.ApiClient
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 class PlannerReadModel(
@@ -40,6 +41,22 @@ class PlannerReadModel(
     /** Evening review from `GET /api/v1/planner/evening-review`; degrades gracefully. */
     fun loadEveningReview(): BriefResult = loadBrief("/planner/evening-review")
 
+    /** This week's task distribution from `GET /api/v1/planner/weekly`; degrades gracefully. */
+    fun loadWeeklyPlan(): BriefResult =
+        runCatching { apiClient.get("/planner/weekly") }.fold(
+            onSuccess = { body -> BriefResult.Available(summarizeWeeklyPlan(body)) },
+            onFailure = { error -> BriefResult.Unavailable(error.message ?: "endpoint unavailable") }
+        )
+
+    /** Tomorrow's plan from `GET /api/v1/planner/daily?date=<ISO>`; degrades gracefully. */
+    fun loadTomorrowPlan(): BriefResult {
+        val tomorrow = LocalDate.now().plusDays(1)
+        return runCatching { apiClient.get("/planner/daily?date=$tomorrow") }.fold(
+            onSuccess = { body -> BriefResult.Available(summarizeDailyPlan(body)) },
+            onFailure = { error -> BriefResult.Unavailable(error.message ?: "endpoint unavailable") }
+        )
+    }
+
     private fun loadBrief(endpoint: String): BriefResult =
         runCatching { apiClient.get(endpoint) }.fold(
             onSuccess = { body -> BriefResult.Available(summarizeBrief(body)) },
@@ -61,6 +78,52 @@ class PlannerReadModel(
             return items.joinToString("\n") { "• ${it.path("title").asText(it.asText("item"))}" }
         }
         return body.trim().ifBlank { "(empty)" }
+    }
+
+    /** Formats the `days` map from `WeeklyPlanGenerator` (day -> task titles), in week order. */
+    private fun summarizeWeeklyPlan(body: String): String {
+        val root = runCatching { objectMapper.readTree(body) }.getOrNull()
+            ?: return body.trim().ifBlank { "(empty)" }
+        val days = root.path("days")
+        if (!days.isObject || days.size() == 0) {
+            val total = root.path("totalTasks").asInt(0)
+            return if (total == 0) "No tasks distributed across this week yet."
+            else "$total task(s) queued, but no day-by-day breakdown is available yet."
+        }
+        val sb = StringBuilder()
+        days.fields().forEach { entry ->
+            val titles = entry.value.takeIf(JsonNode::isArray)
+                ?.joinToString(", ") { it.asText() }
+                .orEmpty()
+            sb.append(entry.key.replaceFirstChar { it.uppercase() }).append(": ").append(titles).append('\n')
+        }
+        return sb.toString().trim().ifBlank { "No tasks distributed across this week yet." }
+    }
+
+    /** Formats `DailyPlanDto` (focus goal, morning/work/evening blocks, tasksForDay). */
+    private fun summarizeDailyPlan(body: String): String {
+        val root = runCatching { objectMapper.readTree(body) }.getOrNull()
+            ?: return body.trim().ifBlank { "(empty)" }
+        val sb = StringBuilder()
+        root.path("focusGoal").takeIf { !it.isMissingNode && !it.isNull && it.asText().isNotBlank() }
+            ?.let { sb.append("Focus: ").append(it.asText()).append('\n') }
+        val blocks = root.path("blocks")
+        if (blocks.isObject) {
+            listOf("morning", "work", "evening").forEach { block ->
+                val activities = blocks.path(block)
+                if (activities.isArray && activities.size() > 0) {
+                    val label = block.replaceFirstChar { it.uppercase() }
+                    sb.append(label).append(": ")
+                        .append(activities.joinToString("; ") { it.asText() })
+                        .append('\n')
+                }
+            }
+        }
+        val tasks = root.path("tasksForDay").takeIf(JsonNode::isArray)
+        if (tasks != null && tasks.size() > 0) {
+            sb.append("Tasks: ").append(tasks.joinToString(", ") { it.path("title").asText(it.asText("task")) })
+        }
+        return sb.toString().trim().ifBlank { "No plan details available yet." }
     }
 
     fun loadSnapshot(): Snapshot {

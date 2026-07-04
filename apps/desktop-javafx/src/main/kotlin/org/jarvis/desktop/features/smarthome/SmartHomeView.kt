@@ -1,42 +1,51 @@
 package org.jarvis.desktop.features.smarthome
 
+import javafx.geometry.Insets
 import javafx.scene.Node
 import javafx.scene.control.ScrollPane
-import javafx.scene.layout.BorderPane
+import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.shell.ShellRouteContent
 import org.jarvis.desktop.ui.tabs.DevicesTab
 
+/**
+ * Smart Home route — hosts the legacy [DevicesTab] device list plus the
+ * [ScenesView] section (list / create / activate / delete scenes) in a
+ * single scrollable page, mirroring the outer-ScrollPane + inner
+ * `shell-*-view` card layout used by [org.jarvis.desktop.features.planner.PlannerView].
+ */
 class SmartHomeView(
     apiClient: ApiClient
-) : BorderPane(), ShellRouteContent {
+) : ScrollPane(), ShellRouteContent {
     private val legacyDevicesTab = DevicesTab(apiClient)
     private val legacyContent: Node = requireNotNull(legacyDevicesTab.tab.content) {
         "DevicesTab content was not initialized"
     }
+    private val scenesView = ScenesView(apiClient)
 
     init {
-        styleClass += "shell-smart-home-view"
-        center = host(legacyContent)
+        styleClass += "shell-route-scroll"
+        isFitToWidth = true
+        hbarPolicy = ScrollBarPolicy.NEVER
+        vbarPolicy = ScrollBarPolicy.AS_NEEDED
+        content = VBox(18.0).apply {
+            styleClass += "shell-smart-home-view"
+            padding = Insets(24.0)
+            children += unwrap(legacyContent)
+            children += scenesView
+        }
     }
 
     override fun onRouteActivated() {
         legacyDevicesTab.refresh()
+        scenesView.refresh()
     }
 
-    private fun host(node: Node): Node {
-        return if (node is ScrollPane) {
-            node.apply {
-                isFitToWidth = true
-                styleClass += "shell-route-scroll"
-            }
-        } else {
-            ScrollPane(node).apply {
-                isFitToWidth = true
-                hbarPolicy = ScrollPane.ScrollBarPolicy.NEVER
-                vbarPolicy = ScrollPane.ScrollBarPolicy.AS_NEEDED
-                styleClass += "shell-route-scroll"
-            }
-        }
+    override fun onShellShutdown() {
+        scenesView.shutdown()
+    }
+
+    private fun unwrap(node: Node): Node {
+        return if (node is ScrollPane) node.content else node
     }
 }

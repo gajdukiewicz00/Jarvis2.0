@@ -42,10 +42,10 @@ public class ServiceJwtProvider {
             @Value("${service.jwt.issuer:jarvis-internal}") String issuer,
             @Value("${service.jwt.audience:jarvis-services}") String audience,
             @Value("${service.jwt.ttl-seconds:300}") long ttlSeconds,
-            @Value("${service.jwt.required:true}") boolean required) {
-        String secret = (serviceSecret != null && !serviceSecret.isBlank())
-                ? serviceSecret
-                : jwtSecret;
+            @Value("${service.jwt.required:true}") boolean required,
+            @Value("${service.jwt.allow-shared-secret:true}") boolean allowSharedSecret) {
+        boolean serviceSecretProvided = serviceSecret != null && !serviceSecret.isBlank();
+        String secret = serviceSecretProvided ? serviceSecret : jwtSecret;
         if (secret == null || secret.isBlank()) {
             if (required) {
                 throw new IllegalStateException("service.jwt.secret (or jwt.secret) is required");
@@ -59,6 +59,17 @@ public class ServiceJwtProvider {
         }
         if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new IllegalStateException("service.jwt.secret must be at least 32 bytes");
+        }
+        // Hardening (SECURITY_HARDENING_PLAN.md F-002): when service-plane and user-plane
+        // share the same HMAC secret, a single compromise breaks both auth planes. Production
+        // profiles should set service.jwt.allow-shared-secret=false to reject this.
+        boolean sharedWithUserPlane = !serviceSecretProvided
+                || (jwtSecret != null && secret.equals(jwtSecret));
+        if (sharedWithUserPlane && !allowSharedSecret) {
+            throw new IllegalStateException(
+                    "service.jwt.secret must be set independently of jwt.secret when "
+                            + "service.jwt.allow-shared-secret=false. Generate a distinct value with "
+                            + "`openssl rand -base64 48` and set SERVICE_JWT_SECRET in your environment.");
         }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.parser = Jwts.parser().verifyWith(this.key).build();

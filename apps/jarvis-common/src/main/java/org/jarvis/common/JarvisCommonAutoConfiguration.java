@@ -61,8 +61,9 @@ public class JarvisCommonAutoConfiguration {
             @Value("${service.jwt.issuer:jarvis-internal}") String issuer,
             @Value("${service.jwt.audience:jarvis-services}") String audience,
             @Value("${service.jwt.ttl-seconds:300}") long ttlSeconds,
-            @Value("${service.jwt.required:true}") boolean required) {
-        return new ServiceJwtProvider(serviceSecret, jwtSecret, issuer, audience, ttlSeconds, required);
+            @Value("${service.jwt.required:true}") boolean required,
+            @Value("${service.jwt.allow-shared-secret:true}") boolean allowSharedSecret) {
+        return new ServiceJwtProvider(serviceSecret, jwtSecret, issuer, audience, ttlSeconds, required, allowSharedSecret);
     }
 
     @Bean

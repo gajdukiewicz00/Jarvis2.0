@@ -30,6 +30,7 @@ class ServiceFeignAutoConfigurationTest {
                 "jarvis-internal",
                 "jarvis-services",
                 300,
+                true,
                 true);
 
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
@@ -61,6 +62,7 @@ class ServiceFeignAutoConfigurationTest {
                 "jarvis-internal",
                 "jarvis-services",
                 300,
+                true,
                 true);
 
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(

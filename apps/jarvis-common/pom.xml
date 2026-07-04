@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -16,6 +16,33 @@
     <description>Shared components for Jarvis microservices: security, rate limiting, utilities</description>
 
     <dependencies>
+        <!-- Phase 4: shared command schema (POJO library, no Spring deps inside). -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>command-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 8: shared event schema for the Kafka audit backbone. -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>event-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 4: Spring AMQP for the optional RabbitTopologyConfig. Marked
+             optional so services that don't talk to RabbitMQ aren't forced
+             to pull it in transitively. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Phase 8: Spring Kafka for KafkaTopologyConfig + AuditPublisher. Optional. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

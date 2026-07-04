@@ -19,6 +19,7 @@ class JarvisCommonAutoConfigurationTest {
                 "jarvis-internal",
                 "jarvis-services",
                 300,
+                true,
                 true
         );
 

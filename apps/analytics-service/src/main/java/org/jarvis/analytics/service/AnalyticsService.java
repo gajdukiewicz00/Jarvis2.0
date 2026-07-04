@@ -273,17 +273,34 @@ public class AnalyticsService {
         int normalizedDays = normalizePositive(trailingDays, "trailingDays");
         LocalDate cutoff = LocalDate.now(clock).minusDays(normalizedDays - 1L);
 
-        Map<LocalDate, Long> sleepByDay = safeList(lifeTrackerClient.getTimeRecords()).stream()
+        LocalDate today = LocalDate.now(clock);
+
+        // Legacy estimate: per-day sum of sleep-tagged time records (hours).
+        Map<LocalDate, Double> sleepByDay = new HashMap<>();
+        safeList(lifeTrackerClient.getTimeRecords()).stream()
                 .filter(this::hasDuration)
                 .filter(this::isSleepRecord)
                 .filter(record -> isWithinTrailingWindow(record, cutoff))
-                .collect(Collectors.groupingBy(
-                        record -> record.getStartTime().toLocalDate(),
-                        Collectors.summingLong(TimeRecordDTO::getDurationSeconds)));
+                .forEach(record -> sleepByDay.merge(record.getStartTime().toLocalDate(),
+                        record.getDurationSeconds() / 3600.0, Double::sum));
+
+        // Authoritative source: WellnessLog SLEEP entries (health-entry / phone
+        // Health Connect sync). numericValue = hours slept; latest entry per day
+        // wins and overrides the legacy time-record estimate. Without this, sleep
+        // logged via /wellness/health-entry was invisible → day-score read 0.0.
+        for (org.jarvis.analytics.dto.WellnessLogDTO w : safeList(lifeTrackerClient.getWellnessTrend("SLEEP"))) {
+            if (w == null || w.getNumericValue() == null || w.getDay() == null) {
+                continue;
+            }
+            if (w.getDay().isBefore(cutoff) || w.getDay().isAfter(today)) {
+                continue;
+            }
+            sleepByDay.put(w.getDay(), w.getNumericValue());
+        }
 
         double totalSleepHours = roundHours(sleepByDay.values().stream()
-                .mapToLong(Long::longValue)
-                .sum() / 3600.0);
+                .mapToDouble(Double::doubleValue)
+                .sum());
         int daysSampled = sleepByDay.size();
         Double averageHours = daysSampled > 0 ? roundHours(totalSleepHours / daysSampled) : null;
 

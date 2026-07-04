@@ -4,6 +4,7 @@ import org.jarvis.analytics.client.LifeTrackerClient;
 import org.jarvis.analytics.dto.OvertimeSummaryDTO;
 import org.jarvis.analytics.dto.SleepSummaryDTO;
 import org.jarvis.analytics.dto.TimeRecordDTO;
+import org.jarvis.analytics.dto.WellnessLogDTO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -65,6 +67,22 @@ class AnalyticsServiceTest {
     }
 
     @Test
+    void getSleepSummaryUsesWellnessSleepLogsAsAuthoritativeSource() {
+        // Sleep logged via /wellness/health-entry (phone Health Connect) — must be
+        // counted even though it is NOT a time-record. Was previously invisible.
+        when(lifeTrackerClient.getWellnessTrend("SLEEP")).thenReturn(List.of(
+                sleepLog(7.5, LocalDate.of(2026, 3, 13)),
+                sleepLog(6.0, LocalDate.of(2026, 3, 12)),
+                sleepLog(8.0, LocalDate.of(2026, 2, 20)))); // outside the 14-day window
+
+        SleepSummaryDTO result = analyticsService.getSleepSummary(14);
+
+        assertEquals(2, result.getDaysSampled());
+        assertEquals(13.5, result.getTotalSleepHours());
+        assertEquals(6.75, result.getAverageHours());
+    }
+
+    @Test
     void getOvertimeSummaryComputesTrackedWorkHoursAndExcessAboveBaseline() {
         when(lifeTrackerClient.getTimeRecords()).thenReturn(List.of(
                 workRecord("Coding", "Work", LocalDateTime.of(2026, 3, 13, 9, 0), 9 * 3600L),
@@ -88,5 +106,9 @@ class AnalyticsServiceTest {
 
     private TimeRecordDTO workRecord(String activity, String category, LocalDateTime startTime, long durationSeconds) {
         return new TimeRecordDTO(2L, activity, category, startTime, startTime.plusSeconds(durationSeconds), durationSeconds);
+    }
+
+    private WellnessLogDTO sleepLog(double hours, LocalDate day) {
+        return new WellnessLogDTO("SLEEP", hours, day);
     }
 }

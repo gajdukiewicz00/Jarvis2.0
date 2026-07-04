@@ -3,8 +3,10 @@ package org.jarvis.analytics.client;
 import org.jarvis.analytics.dto.CalendarEventDTO;
 import org.jarvis.analytics.dto.ExpenseDTO;
 import org.jarvis.analytics.dto.TimeRecordDTO;
+import org.jarvis.analytics.dto.WellnessLogDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 import java.util.Map;
@@ -23,4 +25,8 @@ public interface LifeTrackerClient {
 
     @GetMapping("/api/v1/life/calendar/events")
     List<CalendarEventDTO> getCalendarEvents();
+
+    /** Authoritative wellness series (e.g. SLEEP) — the source health-entry / phone sync writes to. */
+    @GetMapping("/api/v1/life/wellness/trend")
+    List<WellnessLogDTO> getWellnessTrend(@RequestParam("type") String type);
 }

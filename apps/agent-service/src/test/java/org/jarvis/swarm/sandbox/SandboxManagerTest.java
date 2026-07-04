@@ -55,4 +55,46 @@ class SandboxManagerTest {
         Sandbox fakeRoot = new Sandbox("root", m.root());
         assertThatThrownBy(() -> m.cleanup(fakeRoot)).isInstanceOf(SandboxException.class);
     }
+
+    @Test
+    void cleanupOfAlreadyMissingSandboxIsANoOp() {
+        SandboxManager m = manager();
+        Sandbox sb = m.create("task-missing");
+        m.cleanup(sb); // removes the (empty) dir
+        assertThat(Files.exists(sb.dir())).isFalse();
+
+        m.cleanup(sb); // second call: dir no longer exists -> early-return branch
+        assertThat(Files.exists(sb.dir())).isFalse();
+    }
+
+    @Test
+    void rejectsBlankOrNullTaskId() {
+        SandboxManager m = manager();
+        assertThatThrownBy(() -> m.create("")).isInstanceOf(SandboxException.class);
+        assertThatThrownBy(() -> m.create(null)).isInstanceOf(SandboxException.class);
+    }
+
+    @Test
+    void rejectsBlankArtifactName() {
+        SandboxManager m = manager();
+        Sandbox sb = m.create("task-blank-name");
+        assertThatThrownBy(() -> m.resolve(sb, "")).isInstanceOf(SandboxException.class);
+        assertThatThrownBy(() -> m.resolve(sb, null)).isInstanceOf(SandboxException.class);
+    }
+
+    @Test
+    void rejectsArtifactNameWithNullByte() {
+        SandboxManager m = manager();
+        Sandbox sb = m.create("task-null-byte");
+        assertThatThrownBy(() -> m.resolve(sb, "evil\0name.txt")).isInstanceOf(SandboxException.class);
+    }
+
+    @Test
+    void sizeOrZeroReportsRealSizeAndZeroForMissingFile() throws Exception {
+        SandboxManager m = manager();
+        Sandbox sb = m.create("task-size");
+        Path file = m.writeFile(sb, "data.txt", "hello world");
+        assertThat(m.sizeOrZero(file)).isEqualTo(Files.size(file));
+        assertThat(m.sizeOrZero(sb.dir().resolve("missing.txt"))).isEqualTo(0L);
+    }
 }

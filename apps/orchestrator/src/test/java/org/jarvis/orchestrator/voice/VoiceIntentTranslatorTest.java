@@ -83,4 +83,86 @@ class VoiceIntentTranslatorTest {
         var result = translator.translate("Open_Browser", new HashMap<>());
         assertThat(result.agentIntent()).isEqualTo("OPEN_URL");
     }
+
+    @Test
+    void nullIntentReturnedAsIsNoNlpIntentTag() {
+        var result = translator.translate(null, new HashMap<>());
+        assertThat(result.agentIntent()).isNull();
+        assertThat(result.payload()).doesNotContainKey("nlp_intent");
+    }
+
+    @Test
+    void translatesOpenUrlPassThroughWithoutDefaultingUrl() {
+        Map<String, Object> in = new HashMap<>();
+        in.put("url", "https://example.org");
+        var result = translator.translate("open_url", in);
+        assertThat(result.agentIntent()).isEqualTo("OPEN_URL");
+        assertThat(result.payload()).containsEntry("url", "https://example.org");
+    }
+
+    @Test
+    void translatesOpenTerminalWithDefaultApp() {
+        var result = translator.translate("open_terminal", new HashMap<>());
+        assertThat(result.agentIntent()).isEqualTo("OPEN_APP");
+        assertThat(result.payload()).containsEntry("app", "gnome-terminal");
+    }
+
+    @Test
+    void translatesOpenAppPassThrough() {
+        Map<String, Object> in = new HashMap<>();
+        in.put("app", "spotify");
+        var result = translator.translate("open_app", in);
+        assertThat(result.agentIntent()).isEqualTo("OPEN_APP");
+        assertThat(result.payload()).containsEntry("app", "spotify");
+    }
+
+    @Test
+    void translatesCreateLocalNoteAliasSameAsCreateNote() {
+        var result = translator.translate("create_local_note", new HashMap<>());
+        assertThat(result.agentIntent()).isEqualTo("CREATE_LOCAL_NOTE");
+        assertThat(result.payload()).containsEntry("body", "");
+    }
+
+    @Test
+    void translatesMinimizeWindowUsingWindowKeyForTitle() {
+        Map<String, Object> in = new HashMap<>();
+        in.put("window", "Terminal");
+        var result = translator.translate("minimize_window", in);
+        assertThat(result.agentIntent()).isEqualTo("FOCUS_WINDOW");
+        assertThat(result.payload()).containsEntry("title", "Terminal");
+    }
+
+    @Test
+    void translatesMinimizeWindowFallsBackToTitleKeyWhenWindowAbsent() {
+        Map<String, Object> in = new HashMap<>();
+        in.put("title", "Editor");
+        var result = translator.translate("minimize_window", in);
+        assertThat(result.payload()).containsEntry("title", "Editor");
+    }
+
+    @Test
+    void translatesMinimizeWindowDefaultsToEmptyTitleWhenNeitherKeyPresent() {
+        var result = translator.translate("minimize_window", new HashMap<>());
+        assertThat(result.payload()).containsEntry("title", "");
+    }
+
+    @Test
+    void translatesShowNotificationWithDefaultSummary() {
+        var result = translator.translate("show_notification", new HashMap<>());
+        assertThat(result.agentIntent()).isEqualTo("SHOW_NOTIFICATION");
+        assertThat(result.payload()).containsEntry("summary", "Jarvis");
+    }
+
+    @Test
+    void translatesGetActiveWindow() {
+        var result = translator.translate("get_active_window", new HashMap<>());
+        assertThat(result.agentIntent()).isEqualTo("GET_ACTIVE_WINDOW");
+    }
+
+    @Test
+    void nullSlotsProduceEmptyPayloadForKnownIntent() {
+        var result = translator.translate("open_app", null);
+        assertThat(result.agentIntent()).isEqualTo("OPEN_APP");
+        assertThat(result.payload()).containsEntry("nlp_intent", "open_app");
+    }
 }

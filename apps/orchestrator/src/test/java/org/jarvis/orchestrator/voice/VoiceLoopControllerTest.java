@@ -185,4 +185,64 @@ class VoiceLoopControllerTest {
         verify(orchestratorService, never()).executeIntentDetailed(any(), any(), any(), any(), any(), any());
         verify(publisher, never()).dispatch(anyString(), any(), anyString(), any(Map.class), anyString());
     }
+
+    @Test
+    void cancelCommandReturnsAcceptedWhenPublisherCancelsIt() {
+        when(publisher.cancelPending("cmd-1")).thenReturn(true);
+
+        var resp = controller.cancelCommand("cmd-1");
+
+        assertThat(resp.getStatusCode().value()).isEqualTo(202);
+        verify(publisher).cancelPending("cmd-1");
+    }
+
+    @Test
+    void cancelCommandReturnsNotFoundWhenUnknown() {
+        when(publisher.cancelPending("cmd-unknown")).thenReturn(false);
+
+        var resp = controller.cancelCommand("cmd-unknown");
+
+        assertThat(resp.getStatusCode().value()).isEqualTo(404);
+    }
+
+    @Test
+    void fastPathRuntimeExceptionMapsToFailedFeedback() {
+        when(orchestratorService.executeIntentDetailed(
+                eq("volume_down"), anyMap(), isNull(), eq("corr-1"), eq("включи свет"), eq("owner")))
+                .thenThrow(new RuntimeException("pc-control unreachable"));
+
+        var resp = controller.dispatch(req("volume_down")).getBody();
+
+        assertThat(resp.sessionStatus()).isEqualTo(VoiceSessionStatus.FAILED);
+        assertThat(resp.feedback().getCode()).isEqualTo("FAILED");
+    }
+
+    @Test
+    void awaitingConfirmationResultMapsToAwaitingConfirmSessionStatus() {
+        // fs.delete-file = HIGH -> requires confirmation -> async queue path.
+        when(publisher.dispatch(anyString(), any(), anyString(), any(Map.class), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(
+                        CommandResult.builder()
+                                .commandId("cmd-3").correlationId("corr-1")
+                                .status(CommandStatus.AWAITING_CONFIRMATION)
+                                .build()));
+
+        var resp = controller.dispatch(req("fs.delete-file")).getBody();
+
+        assertThat(resp.sessionStatus()).isEqualTo(VoiceSessionStatus.AWAITING_CONFIRM);
+    }
+
+    @Test
+    void queuedResultMapsToDispatchedSessionStatus() {
+        when(publisher.dispatch(anyString(), any(), anyString(), any(Map.class), anyString()))
+                .thenReturn(CompletableFuture.completedFuture(
+                        CommandResult.builder()
+                                .commandId("cmd-4").correlationId("corr-1")
+                                .status(CommandStatus.QUEUED)
+                                .build()));
+
+        var resp = controller.dispatch(req("fs.delete-file")).getBody();
+
+        assertThat(resp.sessionStatus()).isEqualTo(VoiceSessionStatus.DISPATCHED);
+    }
 }

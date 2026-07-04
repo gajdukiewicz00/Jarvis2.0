@@ -179,6 +179,158 @@ class ConfirmationCoordinatorTest {
     }
 
     @Test
+    void handleDecisionIgnoresNullResult() {
+        // Must not throw — this is called from a message listener that cannot
+        // guarantee a well-formed payload.
+        coordinator.handleDecision(null);
+        verify(publisher, never()).publish(any(CommandEnvelope.class));
+    }
+
+    @Test
+    void handleDecisionIgnoresNullCommandId() {
+        ConfirmationResult decision = ConfirmationResult.builder()
+                .commandId(null)
+                .decision(ConfirmationDecision.APPROVED)
+                .build();
+
+        coordinator.handleDecision(decision);
+
+        verify(publisher, never()).publish(any(CommandEnvelope.class));
+    }
+
+    @Test
+    void handleDecisionIgnoresUnknownOrLateCommandId() throws Exception {
+        // No stageConfirmation call ever happened for this commandId.
+        ConfirmationResult decision = ConfirmationResult.builder()
+                .commandId("never-registered")
+                .correlationId("trace-x")
+                .decision(ConfirmationDecision.APPROVED)
+                .decidedBy("owner")
+                .decidedAt(Instant.now())
+                .channel("desktop")
+                .build();
+
+        coordinator.handleDecision(decision);
+
+        verify(publisher, never()).publish(any(CommandEnvelope.class));
+    }
+
+    @Test
+    void blockedDemoModeDecisionFromListenerRejectsCommand() throws Exception {
+        CommandEnvelope env = dangerousEnvelope("owner", "fs.delete-file");
+        CompletableFuture<CommandResult> caller = coordinator.stageConfirmation(env);
+
+        coordinator.handleDecision(ConfirmationResult.builder()
+                .commandId(env.getCommandId())
+                .correlationId(env.getCorrelationId())
+                .decision(ConfirmationDecision.BLOCKED_DEMO_MODE)
+                .reason("demo mode active")
+                .channel("desktop")
+                .build());
+
+        CommandResult result = caller.get(1, TimeUnit.SECONDS);
+        assertThat(result.getStatus()).isEqualTo(CommandStatus.REJECTED);
+        assertThat(result.getErrorReason()).contains("BLOCKED_DEMO_MODE").contains("demo mode active");
+        verify(publisher, never()).publish(any(CommandEnvelope.class));
+    }
+
+    @Test
+    void blockedDemoModeDecisionWithoutReasonUsesDefaultReason() throws Exception {
+        demoMode.setReason("global demo lockdown");
+        CommandEnvelope env = dangerousEnvelope("owner", "fs.delete-file");
+        CompletableFuture<CommandResult> caller = coordinator.stageConfirmation(env);
+
+        coordinator.handleDecision(ConfirmationResult.builder()
+                .commandId(env.getCommandId())
+                .correlationId(env.getCorrelationId())
+                .decision(ConfirmationDecision.BLOCKED_DEMO_MODE)
+                .channel("desktop")
+                .build());
+
+        CommandResult result = caller.get(1, TimeUnit.SECONDS);
+        assertThat(result.getErrorReason()).contains("global demo lockdown");
+    }
+
+    @Test
+    void blockedNonOwnerDecisionFromListenerRejectsCommand() throws Exception {
+        CommandEnvelope env = dangerousEnvelope("owner", "fs.delete-file");
+        CompletableFuture<CommandResult> caller = coordinator.stageConfirmation(env);
+
+        coordinator.handleDecision(ConfirmationResult.builder()
+                .commandId(env.getCommandId())
+                .correlationId(env.getCorrelationId())
+                .decision(ConfirmationDecision.BLOCKED_NON_OWNER)
+                .reason("guest cannot approve")
+                .channel("voice")
+                .build());
+
+        CommandResult result = caller.get(1, TimeUnit.SECONDS);
+        assertThat(result.getStatus()).isEqualTo(CommandStatus.REJECTED);
+        assertThat(result.getErrorReason()).contains("BLOCKED_NON_OWNER").contains("guest cannot approve");
+        verify(publisher, never()).publish(any(CommandEnvelope.class));
+    }
+
+    @Test
+    void blockedNonOwnerDecisionWithoutReasonUsesDefaultMessage() throws Exception {
+        CommandEnvelope env = dangerousEnvelope("owner", "fs.delete-file");
+        CompletableFuture<CommandResult> caller = coordinator.stageConfirmation(env);
+
+        coordinator.handleDecision(ConfirmationResult.builder()
+                .commandId(env.getCommandId())
+                .correlationId(env.getCorrelationId())
+                .decision(ConfirmationDecision.BLOCKED_NON_OWNER)
+                .channel("voice")
+                .build());
+
+        CommandResult result = caller.get(1, TimeUnit.SECONDS);
+        assertThat(result.getErrorReason()).contains("non-owner cannot confirm");
+    }
+
+    @Test
+    void approvedByOwnerButPublisherThrowsCompletesCallerWithFailure() throws Exception {
+        CommandEnvelope env = dangerousEnvelope("owner", "fs.delete-file");
+        when(publisher.publish(any(CommandEnvelope.class)))
+                .thenThrow(new RuntimeException("queue unavailable"));
+
+        CompletableFuture<CommandResult> caller = coordinator.stageConfirmation(env);
+        coordinator.handleDecision(ConfirmationResult.builder()
+                .commandId(env.getCommandId())
+                .correlationId(env.getCorrelationId())
+                .decision(ConfirmationDecision.APPROVED)
+                .decidedBy("owner")
+                .decidedAt(Instant.now())
+                .channel("desktop")
+                .build());
+
+        CommandResult result = caller.get(1, TimeUnit.SECONDS);
+        assertThat(result.getStatus()).isEqualTo(CommandStatus.FAILED);
+        assertThat(result.getErrorReason()).contains("post-approval publish failed").contains("queue unavailable");
+    }
+
+    @Test
+    void publishesConfirmationRequestWithNonEmptyPayloadInPrompt() {
+        CommandEnvelope env = CommandEnvelope.builder()
+                .commandId("cmd-payload")
+                .correlationId("trace-payload")
+                .userId("owner")
+                .source(CommandSource.VOICE)
+                .intent("shell.exec")
+                .riskLevel(RiskLevel.CRITICAL)
+                .requiresConfirmation(true)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(30))
+                .status(CommandStatus.CREATED)
+                .payload(Map.of("command", "rm -rf /tmp/x"))
+                .build();
+
+        coordinator.stageConfirmation(env);
+
+        verify(rabbitTemplate).convertAndSend(
+                anyString(), eq(CommandTopology.QUEUE_CONFIRMATION_REQUEST), any(Object.class),
+                any(MessagePostProcessor.class));
+    }
+
+    @Test
     void registryTimeoutSweepsExpiredConfirmation() throws Exception {
         // Build an envelope whose deadline is already in the past so the sweeper picks it up.
         CommandEnvelope env = CommandEnvelope.builder()

@@ -106,4 +106,142 @@ class TaskServiceTest {
         assertThrows(TaskNotFoundException.class, () -> taskService.completeTask(1L, "otherUser"));
         verify(taskRepository, never()).save(any(Task.class));
     }
+
+    @Test
+    void testGetTasks_WithoutStatusUsesPriorityOrdering() {
+        // Given
+        when(taskRepository.findByUserIdOrderByPriorityDescDueDateAsc("testUser"))
+                .thenReturn(List.of(testTask));
+
+        // When
+        List<TaskDto> result = taskService.getTasks("testUser", null);
+
+        // Then
+        assertEquals(1, result.size());
+        verify(taskRepository).findByUserIdOrderByPriorityDescDueDateAsc("testUser");
+        verify(taskRepository, never()).findByUserIdAndStatus(any(), any());
+    }
+
+    @Test
+    void testUpdateTask_AppliesAllProvidedFieldsAndDefaultsUpdatedByToDtoValue() {
+        // Given
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskDto dto = new TaskDto();
+        dto.setTitle("Updated title");
+        dto.setDescription("Updated description");
+        dto.setCategory(TaskCategory.WORK);
+        dto.setPriority(TaskPriority.URGENT);
+        dto.setStatus(TaskStatus.IN_PROGRESS);
+        dto.setDueDate(Instant.parse("2026-08-01T00:00:00Z"));
+        dto.setEstimatedDuration(45);
+        dto.setTags(List.of("urgent"));
+        dto.setUpdatedBy("editor-1");
+
+        // When
+        TaskDto result = taskService.updateTask(1L, "testUser", dto);
+
+        // Then
+        assertEquals("Updated title", result.getTitle());
+        assertEquals("Updated description", result.getDescription());
+        assertEquals(TaskCategory.WORK, result.getCategory());
+        assertEquals(TaskPriority.URGENT, result.getPriority());
+        assertEquals(TaskStatus.IN_PROGRESS, result.getStatus());
+        assertEquals(Instant.parse("2026-08-01T00:00:00Z"), result.getDueDate());
+        assertEquals(45, result.getEstimatedDuration());
+        assertEquals(List.of("urgent"), result.getTags());
+        assertEquals("editor-1", result.getUpdatedBy());
+        assertNull(result.getCompletedAt());
+    }
+
+    @Test
+    void testUpdateTask_WithoutUpdatedByFallsBackToUserId() {
+        // Given
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskDto dto = new TaskDto();
+        dto.setTitle("Only title changes");
+
+        // When
+        TaskDto result = taskService.updateTask(1L, "testUser", dto);
+
+        // Then
+        assertEquals("Only title changes", result.getTitle());
+        assertEquals("testUser", result.getUpdatedBy());
+        // Untouched fields keep their original values
+        assertEquals("Test Description", result.getDescription());
+        assertEquals(TaskCategory.WORK, result.getCategory());
+    }
+
+    @Test
+    void testUpdateTask_SettingStatusToDoneStampsCompletedAtWhenNotAlreadySet() {
+        // Given
+        testTask.setCompletedAt(null);
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskDto dto = new TaskDto();
+        dto.setStatus(TaskStatus.DONE);
+
+        // When
+        TaskDto result = taskService.updateTask(1L, "testUser", dto);
+
+        // Then
+        assertEquals(TaskStatus.DONE, result.getStatus());
+        assertNotNull(result.getCompletedAt());
+    }
+
+    @Test
+    void testUpdateTask_SettingStatusToDoneKeepsExistingCompletedAt() {
+        // Given
+        Instant originalCompletion = Instant.parse("2026-01-01T00:00:00Z");
+        testTask.setCompletedAt(originalCompletion);
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskDto dto = new TaskDto();
+        dto.setStatus(TaskStatus.DONE);
+
+        // When
+        TaskDto result = taskService.updateTask(1L, "testUser", dto);
+
+        // Then
+        assertEquals(originalCompletion, result.getCompletedAt());
+    }
+
+    @Test
+    void testUpdateTask_ThrowsWhenTaskNotFoundForUser() {
+        // Given
+        when(taskRepository.findByIdAndUserId(1L, "otherUser")).thenReturn(Optional.empty());
+
+        TaskDto dto = new TaskDto();
+        dto.setTitle("Irrelevant");
+
+        // When / Then
+        assertThrows(TaskNotFoundException.class, () -> taskService.updateTask(1L, "otherUser", dto));
+        verify(taskRepository, never()).save(any(Task.class));
+    }
+
+    @Test
+    void testDeleteTask_DeletesWhenOwnedByUser() {
+        // Given
+        when(taskRepository.deleteByIdAndUserId(1L, "testUser")).thenReturn(1L);
+
+        // When
+        taskService.deleteTask(1L, "testUser");
+
+        // Then
+        verify(taskRepository).deleteByIdAndUserId(1L, "testUser");
+    }
+
+    @Test
+    void testDeleteTask_ThrowsWhenNothingDeleted() {
+        // Given
+        when(taskRepository.deleteByIdAndUserId(1L, "otherUser")).thenReturn(0L);
+
+        // When / Then
+        assertThrows(TaskNotFoundException.class, () -> taskService.deleteTask(1L, "otherUser"));
+    }
 }

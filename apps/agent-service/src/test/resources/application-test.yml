@@ -1,0 +1,15 @@
+# Test profile for agent-service. Disables the hard service-JWT-secret requirement so
+# the context starts without cluster secrets; the security filter chain stays ACTIVE
+# (SecurityConfig is @Profile("!dev")), so auth is still enforced in tests.
+service:
+  jwt:
+    required: false
+
+swarm:
+  enabled: true
+  workspace:
+    dir: ${java.io.tmpdir}/jarvis-agents-test
+
+logging:
+  level:
+    org.jarvis.swarm: INFO

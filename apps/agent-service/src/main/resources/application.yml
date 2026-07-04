@@ -1,0 +1,62 @@
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: agent-service
+
+server:
+  port: ${JARVIS_AGENT_PORT:8090}
+  shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_AGENT_SSL_ENABLED:false}
+    key-store: ${JARVIS_AGENT_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_AGENT_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_AGENT_KEYSTORE_TYPE:PKCS12}
+
+# Role-based agent swarm (House Party Protocol) — feature-flagged, safe-by-default.
+swarm:
+  enabled: ${SWARM_ENABLED:true}
+  workspace:
+    # Per-task sandbox root. Pod runs readOnlyRootFilesystem=true, only /tmp is writable.
+    dir: ${SWARM_SANDBOX_DIR:/tmp/jarvis-agents}
+  queue:
+    capacity: ${SWARM_QUEUE_CAPACITY:64}
+    worker-pool-size: ${SWARM_WORKER_POOL_SIZE:3}
+  task:
+    default-timeout-seconds: ${SWARM_TASK_TIMEOUT:120}
+    default-max-retries: ${SWARM_TASK_MAX_RETRIES:1}
+  swarm-run:
+    # Max seconds the coordinator waits for all child tasks before reporting partial results.
+    wait-timeout-seconds: ${SWARM_RUN_WAIT_TIMEOUT:60}
+    max-roles: ${SWARM_MAX_ROLES:7}
+
+# Reuse the shared safety policy. Conservative defaults: dangerous perms NOT granted.
+jarvis:
+  tools:
+    granted-permissions: ${JARVIS_TOOLS_GRANTED_PERMISSIONS:PLANNER_ACCESS,CALENDAR_ACCESS,MEMORY_ACCESS,SMART_HOME_ACCESS,PC_CONTROL,NOTIFICATION_ACCESS,READ_FILES,NETWORK_ACCESS}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+
+logging:
+  level:
+    org.jarvis.swarm: DEBUG
+    org.springframework.web: INFO

@@ -3,11 +3,13 @@ package org.jarvis.smarthome.service;
 import org.jarvis.smarthome.model.SmartHomeActionRequest;
 import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
+import org.jarvis.smarthome.model.SmartHomeDeviceView;
 import org.jarvis.smarthome.security.ActionValidator;
 import org.jarvis.smarthome.service.impl.StatefulSmartHomeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -16,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -23,6 +26,7 @@ class StatefulSmartHomeServiceTest {
 
     private StatefulSmartHomeService service;
     private RecordingTransport transport;
+    private SmartHomeDeviceCatalog catalog;
 
     @BeforeEach
     void setUp() {
@@ -31,9 +35,10 @@ class StatefulSmartHomeServiceTest {
                 "TURN_ON", "TURN_OFF", "TOGGLE", "DIM", "BRIGHTEN", "SET_COLOR",
                 "SET_TEMPERATURE", "SET_BRIGHTNESS", "LOCK", "UNLOCK"));
         transport = new RecordingTransport();
+        catalog = new SmartHomeDeviceCatalog();
         service = new StatefulSmartHomeService(
                 validator,
-                new SmartHomeDeviceCatalog(),
+                catalog,
                 transport,
                 Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC));
     }
@@ -74,9 +79,262 @@ class StatefulSmartHomeServiceTest {
         assertTrue(exception.getMessage().contains("not supported"));
     }
 
+    @Test
+    void listDevicesReturnsAllCatalogDevicesForUser() {
+        List<SmartHomeDeviceView> views = service.listDevices("user-a");
+
+        assertEquals(catalog.all().size(), views.size());
+        assertTrue(views.stream().anyMatch(v -> v.id().equals("kitchen_light")));
+        assertTrue(views.stream().anyMatch(v -> v.id().equals("front_door_lock")));
+    }
+
+    @Test
+    void listDevicesRejectsBlankUserId() {
+        assertThrows(SmartHomeValidationException.class, () -> service.listDevices(" "));
+    }
+
+    @Test
+    void listDevicesRejectsNullUserId() {
+        assertThrows(SmartHomeValidationException.class, () -> service.listDevices(null));
+    }
+
+    @Test
+    void getDeviceThrowsNotFoundForUnknownDevice() {
+        assertThrows(SmartHomeDeviceNotFoundException.class,
+                () -> service.getDevice("user-a", "missing_device"));
+    }
+
+    @Test
+    void getDeviceRejectsBlankUserId() {
+        assertThrows(SmartHomeValidationException.class, () -> service.getDevice(" ", "kitchen_light"));
+    }
+
+    @Test
+    void getDeviceTrimsUserId() {
+        SmartHomeDeviceView view = service.getDevice(" user-a ", "kitchen_light");
+        assertNotNull(view);
+        assertEquals("kitchen_light", view.id());
+    }
+
+    @Test
+    void executeActionRejectsNullRequest() {
+        SmartHomeValidationException exception = assertThrows(
+                SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "kitchen_light", null));
+        assertEquals("Action is required", exception.getMessage());
+    }
+
+    @Test
+    void executeActionRejectsBlankAction() {
+        assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest(" ", null)));
+    }
+
+    @Test
+    void executeActionRejectsBlankUserId() {
+        assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction(" ", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null)));
+    }
+
+    @Test
+    void executeActionThrowsNotFoundForUnknownDevice() {
+        assertThrows(SmartHomeDeviceNotFoundException.class,
+                () -> service.executeAction("user-a", "missing_device", new SmartHomeActionRequest("TOGGLE", null)));
+    }
+
+    @Test
+    void executeActionRejectsActionNotOnAllowList() {
+        assertThrows(ResponseStatusException.class,
+                () -> service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest("DELETE_DEVICE", null)));
+    }
+
+    @Test
+    void executeActionNormalizesHyphenatedLowercaseAction() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("set-brightness", "80"));
+
+        assertEquals("SET_BRIGHTNESS", result.action());
+        assertEquals(80, result.device().state().get("brightness"));
+    }
+
+    @Test
+    void executeActionTurnsLightOnAndOff() {
+        SmartHomeActionResult on = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null));
+        assertTrue((Boolean) on.device().state().get("power"));
+
+        SmartHomeActionResult off = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null));
+        assertFalse((Boolean) off.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionDimsLightDecreasingBrightness() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("DIM", null));
+
+        assertEquals(55, result.device().state().get("brightness"));
+        assertTrue((Boolean) result.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionDimBrightnessNeverGoesBelowZeroAndTurnsOff() {
+        for (int i = 0; i < 10; i++) {
+            service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest("DIM", null));
+        }
+
+        SmartHomeDeviceView view = service.getDevice("user-a", "kitchen_light");
+        assertEquals(0, view.state().get("brightness"));
+        assertFalse((Boolean) view.state().get("power"));
+    }
+
+    @Test
+    void executeActionBrightensLightIncreasingBrightnessCappedAt100() {
+        for (int i = 0; i < 5; i++) {
+            service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest("BRIGHTEN", null));
+        }
+
+        SmartHomeDeviceView view = service.getDevice("user-a", "kitchen_light");
+        assertEquals(100, view.state().get("brightness"));
+        assertTrue((Boolean) view.state().get("power"));
+    }
+
+    @Test
+    void executeActionSetBrightnessValidValue() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "80"));
+
+        assertEquals(80, result.device().state().get("brightness"));
+        assertTrue((Boolean) result.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionSetBrightnessZeroTurnsPowerOff() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "0"));
+
+        assertEquals(0, result.device().state().get("brightness"));
+        assertFalse((Boolean) result.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionSetBrightnessRejectsOutOfRangeValue() {
+        SmartHomeValidationException exception = assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "150")));
+
+        assertTrue(exception.getMessage().contains("must be between"));
+    }
+
+    @Test
+    void executeActionSetBrightnessRejectsNonNumericPayload() {
+        SmartHomeValidationException exception = assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "abc")));
+
+        assertTrue(exception.getMessage().contains("must be numeric"));
+    }
+
+    @Test
+    void executeActionSetColorUpdatesColorAndTurnsOn() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("SET_COLOR", "blue"));
+
+        assertEquals("blue", result.device().state().get("color"));
+        assertTrue((Boolean) result.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionSetColorRejectsBlankPayload() {
+        SmartHomeValidationException exception = assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "kitchen_light", new SmartHomeActionRequest("SET_COLOR", " ")));
+
+        assertEquals("Color payload is required", exception.getMessage());
+    }
+
+    @Test
+    void executeActionSetsThermostatPowerOnAndOff() {
+        SmartHomeActionResult on = service.executeAction(
+                "user-a", "hall_thermostat", new SmartHomeActionRequest("TURN_ON", null));
+        assertTrue((Boolean) on.device().state().get("power"));
+
+        SmartHomeActionResult off = service.executeAction(
+                "user-a", "hall_thermostat", new SmartHomeActionRequest("TURN_OFF", null));
+        assertFalse((Boolean) off.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionSetTemperatureRejectsOutOfRangeValue() {
+        SmartHomeValidationException exception = assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "hall_thermostat", new SmartHomeActionRequest("SET_TEMPERATURE", "40")));
+
+        assertTrue(exception.getMessage().contains("must be between"));
+    }
+
+    @Test
+    void executeActionSetTemperatureRejectsNonNumericPayload() {
+        SmartHomeValidationException exception = assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "hall_thermostat", new SmartHomeActionRequest("SET_TEMPERATURE", "warm")));
+
+        assertTrue(exception.getMessage().contains("must be numeric"));
+    }
+
+    @Test
+    void executeActionLocksAndUnlocksDoor() {
+        SmartHomeActionResult locked = service.executeAction(
+                "user-a", "front_door_lock", new SmartHomeActionRequest("LOCK", null));
+        assertTrue((Boolean) locked.device().state().get("locked"));
+
+        SmartHomeActionResult unlocked = service.executeAction(
+                "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null));
+        assertFalse((Boolean) unlocked.device().state().get("locked"));
+    }
+
+    @Test
+    void executeActionReturnsLocalMessageWhenProviderIsMock() {
+        StatefulSmartHomeService mockProviderService = new StatefulSmartHomeService(
+                validatorWithDefaults(),
+                new SmartHomeDeviceCatalog(),
+                new RecordingTransport("mock"),
+                Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC));
+
+        SmartHomeActionResult result = mockProviderService.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null));
+
+        assertEquals("Action executed locally", result.message());
+    }
+
+    @Test
+    void executeActionReturnsMqttMessageWhenProviderIsNotMock() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null));
+
+        assertEquals("Action dispatched via MQTT and local state updated", result.message());
+    }
+
+    @Test
+    void supportedActionsDelegatesToCatalog() {
+        assertEquals(catalog.supportedActions(), service.supportedActions());
+    }
+
+    private static ActionValidator validatorWithDefaults() {
+        ActionValidator validator = new ActionValidator();
+        ReflectionTestUtils.setField(validator, "allowedActions", List.of(
+                "TURN_ON", "TURN_OFF", "TOGGLE", "DIM", "BRIGHTEN", "SET_COLOR",
+                "SET_TEMPERATURE", "SET_BRIGHTNESS", "LOCK", "UNLOCK"));
+        return validator;
+    }
+
     private static final class RecordingTransport implements SmartHomeCommandTransport {
+        private final String providerName;
         private String lastUserId;
         private SmartHomeActionRequest lastAction;
+
+        private RecordingTransport() {
+            this("mock-test");
+        }
+
+        private RecordingTransport(String providerName) {
+            this.providerName = providerName;
+        }
 
         @Override
         public void dispatch(String userId, SmartHomeDeviceDefinition device, SmartHomeActionRequest request) {
@@ -86,7 +344,7 @@ class StatefulSmartHomeServiceTest {
 
         @Override
         public String providerName() {
-            return "mock-test";
+            return providerName;
         }
     }
 }

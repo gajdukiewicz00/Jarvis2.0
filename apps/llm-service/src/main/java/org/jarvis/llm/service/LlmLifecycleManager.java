@@ -84,7 +84,7 @@ public class LlmLifecycleManager {
             LlmClient.LlmServerHealth health = llmClient.getHealth();
 
             if (!health.available()) {
-                String reason = health.error() != null ? health.error() : "llm-server unavailable";
+                String reason = health.error() != null ? health.error() : "host-model-daemon unavailable";
                 transition(State.ERROR, reason);
                 warmupComplete = false;
                 return;

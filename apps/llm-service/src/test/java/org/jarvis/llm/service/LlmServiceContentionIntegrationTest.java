@@ -10,6 +10,7 @@ import org.jarvis.llm.dto.ChatResponseDto;
 import org.jarvis.llm.dto.UserPreferencesDto;
 import org.jarvis.llm.model.CommunicationStyle;
 import org.jarvis.llm.model.Emotion;
+import org.jarvis.llm.safety.UntrustedTextGuard;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,7 +69,8 @@ class LlmServiceContentionIntegrationTest {
                 llmClient, conversationMemory, userProfileClient, promptBuilder,
                 emotionSelector, languageEnforcer, backgroundExecutor,
                 admissionController, profileProperties, llmMetrics,
-                memoryClient, tokenBudgetManager);
+                memoryClient, tokenBudgetManager,
+                new UntrustedTextGuard());
         ReflectionTestUtils.setField(llmService, "memoryEnabled", false);
 
         testExecutor = Executors.newFixedThreadPool(3);

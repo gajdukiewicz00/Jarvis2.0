@@ -17,4 +17,7 @@ public class ModelToolPlan {
     private String explanation;
 
     private List<String> warnings;
+
+    /** Model self-reported plan confidence in [0.0, 1.0]; null if the model omitted it. */
+    private Double confidence;
 }

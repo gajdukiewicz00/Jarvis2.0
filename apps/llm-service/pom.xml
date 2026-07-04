@@ -6,11 +6,16 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>llm-service</artifactId>
+
+    <properties>
+        <jib.container.port>8091</jib.container.port>
+        <jib.skip>false</jib.skip>
+    </properties>
 
     <dependencies>
         <dependency>
@@ -76,6 +81,10 @@
                         </exclude>
                     </excludes>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

@@ -52,7 +52,8 @@ public class MemoryClient {
      * @param correlationId Correlation ID for tracing
      * @return Memory context or empty string if not available
      */
-    public SearchContextResult searchContext(String userId, String query, int topK, int maxTokens, String correlationId) {
+    public SearchContextResult searchContext(String userId, String query, int topK, int maxTokens,
+            boolean includeLocalOnly, boolean includeSensitive, String correlationId) {
         if (!enabled) {
             log.debug("[{}] Memory service disabled, skipping search", correlationId);
             return new SearchContextResult("", "disabled", 0, 0, "memory.service.enabled=false");
@@ -61,11 +62,15 @@ public class MemoryClient {
         String url = memoryServiceUrl + "/memory/search";
 
         try {
+            // B2 — privacy flags tell memory-service which classes of memory the
+            // active LLM provider may receive (local_only / sensitive).
             Map<String, Object> requestBody = Map.of(
                     "query", query,
                     "topK", topK,
                     "maxTokens", maxTokens,
-                    "minSimilarity", 0.5
+                    "minSimilarity", 0.5,
+                    "includeLocalOnly", includeLocalOnly,
+                    "includeSensitive", includeSensitive
             );
 
             HttpHeaders headers = new HttpHeaders();

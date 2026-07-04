@@ -16,4 +16,7 @@ public class ModelToolCall {
 
     @JsonProperty("requires_confirmation")
     private Boolean requiresConfirmation;
+
+    /** Optional per-call confidence in [0.0, 1.0]; null if omitted by the model. */
+    private Double confidence;
 }

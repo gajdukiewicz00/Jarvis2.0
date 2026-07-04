@@ -70,7 +70,12 @@ class AiRuntimeStatusServiceTest {
         LlmAdmissionController admissionController = new LlmAdmissionController(1, 8);
         AiRuntimeStatusService service = new AiRuntimeStatusService(llmClient, memoryClient, lifecycleManager, admissionController);
         ReflectionTestUtils.setField(service, "llmEnabled", true);
-        ReflectionTestUtils.setField(service, "llmBaseUrl", "http://127.0.0.1:15000");
+        ReflectionTestUtils.setField(service, "llmBaseUrl", "http://host-model-daemon.jarvis-prod.svc.cluster.local:18080");
+        ReflectionTestUtils.setField(service, "hostDaemonEnabled", true);
+        ReflectionTestUtils.setField(service, "hostDaemonHost", "host-model-daemon.jarvis-prod.svc.cluster.local");
+        ReflectionTestUtils.setField(service, "hostDaemonMainPort", 18080);
+        ReflectionTestUtils.setField(service, "hostDaemonCodingPort", 18081);
+        ReflectionTestUtils.setField(service, "hostDaemonRouterPort", 18082);
         ReflectionTestUtils.setField(service, "memoryEnabled", true);
         ReflectionTestUtils.setField(service, "memoryServiceEnabled", true);
         ReflectionTestUtils.setField(service, "memoryServiceUrl", "http://127.0.0.1:8093");
@@ -90,7 +95,9 @@ class AiRuntimeStatusServiceTest {
 
         assertThat(payload).containsEntry("status", "ready");
         assertThat(payload).containsEntry("fullLocalAiReadiness", true);
+        Map<String, Object> routing = castMap(payload.get("routing"));
         Map<String, Object> localDefaultStack = castMap(payload.get("localDefaultStack"));
+        Map<String, Object> localModelProfile = castMap(payload.get("localModelProfile"));
         Map<String, Object> llm = castMap(payload.get("llm"));
         Map<String, Object> gpu = castMap(payload.get("gpu"));
         Map<String, Object> memory = castMap(payload.get("memory"));
@@ -100,7 +107,20 @@ class AiRuntimeStatusServiceTest {
         assertThat(localDefaultStack.get("id"))
                 .isEqualTo("qwen2.5-3b-instruct-q4_k_m+multilingual-e5-small+llamacpp+pgvector");
         assertThat(localDefaultStack.get("fullLocalAiReadiness")).isEqualTo(true);
+        assertThat(routing.get("llamaCppChatCompletionsPath")).isEqualTo("/v1/chat/completions");
+        assertThat(routing.get("llamaCppChatCompletionsUrl"))
+                .isEqualTo("http://host-model-daemon.jarvis-prod.svc.cluster.local:18080/v1/chat/completions");
+        assertThat(routing.get("hostDaemonHealthUrl"))
+                .isEqualTo("http://host-model-daemon.jarvis-prod.svc.cluster.local:18080/health");
+        assertThat(localModelProfile.get("service")).isEqualTo("host-model-daemon");
+        assertThat(localModelProfile.get("endpointMode")).isEqualTo("manual Endpoints -> Linux host IP");
+        assertThat(localModelProfile.get("chatCompletionsPath")).isEqualTo("/v1/chat/completions");
+        assertThat(localModelProfile.get("mainUrl"))
+                .isEqualTo("http://host-model-daemon.jarvis-prod.svc.cluster.local:18080");
         assertThat(llm.get("configuredProvider")).isEqualTo("llamacpp");
+        assertThat(llm.get("runtimeTarget")).isEqualTo("host-model-daemon");
+        assertThat(llm.get("chatCompletionsUrl"))
+                .isEqualTo("http://host-model-daemon.jarvis-prod.svc.cluster.local:18080/v1/chat/completions");
         assertThat(llm.get("configuredDevicePath")).isEqualTo("cuda");
         assertThat(llm.get("effectiveDevicePath")).isEqualTo("cuda");
         assertThat(llm.get("configuredGpuLayers")).isEqualTo(-1);

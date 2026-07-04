@@ -25,7 +25,7 @@ import java.util.LinkedHashMap;
  * 
  * <h2>Manual Testing (curl)</h2>
  * <pre>
- * # 1. Health check (should return "healthy" when llm-server is up)
+ * # 1. Health check (should return "healthy" when host-model-daemon is reachable)
  * curl -s http://localhost:8091/api/v1/llm/health | jq
  * 
  * # 2. Dialog request (user-profile optional - works even if unavailable)
@@ -188,6 +188,8 @@ public class LlmRestController {
         Map<String, Object> llm = (Map<String, Object>) runtime.get("llm");
         @SuppressWarnings("unchecked")
         Map<String, Object> memory = (Map<String, Object>) runtime.get("memory");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> routing = (Map<String, Object>) runtime.get("routing");
 
         boolean llmAvailable = Boolean.TRUE.equals(llm.get("available"));
         boolean memoryEnabled = Boolean.TRUE.equals(memory.get("enabled")) && Boolean.TRUE.equals(memory.get("serviceEnabled"));
@@ -202,7 +204,10 @@ public class LlmRestController {
         response.put("lifecycle_state", state.name());
         response.put("lifecycle_reason", lifecycleManager.getStateReason());
         response.put("warmup_complete", lifecycleManager.isWarmupComplete());
-        response.put("llm_server_available", llmAvailable);
+        response.put("host_daemon_available", llmAvailable);
+        response.put("host_daemon_base_url", llm.get("baseUrl"));
+        response.put("host_daemon_health_url", routing.get("hostDaemonHealthUrl"));
+        response.put("llama_cpp_chat_completions_url", routing.get("llamaCppChatCompletionsUrl"));
         response.put("memory_available", memoryAvailable);
         response.put("memory_enabled", memoryEnabled);
         response.put("active_inferences", admissionController.getActiveInferences());
@@ -212,6 +217,7 @@ public class LlmRestController {
         response.put("effective_provider", llm.get("effectiveProvider"));
         response.put("configured_model", llm.get("configuredModel"));
         response.put("effective_model", llm.get("effectiveModel"));
+        response.put("local_model_profile", runtime.get("localModelProfile"));
 
         HttpStatus httpStatus = healthy ? HttpStatus.OK
                 : usable ? HttpStatus.OK

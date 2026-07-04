@@ -18,9 +18,64 @@ jarvis:
   llm:
     # IMPORTANT: Must be true for LLM to work!
     enabled: ${JARVIS_LLM_ENABLED:false}
+    # Phase 3: hard guard against cloud AI URLs at startup. Production must
+    # keep this true. Tests run in the `test` Spring profile which bypasses
+    # the enforcer.
+    local-only: ${JARVIS_LLM_LOCAL_ONLY:true}
+    # Host model daemon — three llama.cpp processes on the Linux host fronted
+    # by the `host-model-daemon` k8s Service in jarvis-prod.
+    host-daemon:
+      enabled: ${JARVIS_HOST_DAEMON_ENABLED:true}
+      host: ${JARVIS_HOST_DAEMON_HOST:host-model-daemon.jarvis-prod.svc.cluster.local}
+      main:
+        port: ${JARVIS_HOST_DAEMON_MAIN_PORT:18080}
+        health-path: /health
+      coding:
+        port: ${JARVIS_HOST_DAEMON_CODING_PORT:18081}
+        health-path: /health
+      router:
+        port: ${JARVIS_HOST_DAEMON_ROUTER_PORT:18082}
+        health-path: /health
+
+  # AI model stack (see docs/architecture/local-ai-memory-stack.md).
+  # Wiring-only: defaults describe the CURRENTLY deployed stack (Qwen) so a
+  # fresh checkout reads truthfully. Override via env to flip to the planned
+  # Gemma + Devstral stack when the swap lands.
+  ai:
+    network:
+      external-network-allowed: ${JARVIS_AI_EXTERNAL_NETWORK_ALLOWED:false}
+    models:
+      main:
+        id: ${JARVIS_AI_MODEL_MAIN_ID:qwen2.5-3b-instruct-q4_k_m}
+        runtime: ${JARVIS_AI_MODEL_MAIN_RUNTIME:llamacpp}
+        endpoint: ${JARVIS_AI_MODEL_MAIN_ENDPOINT:http://127.0.0.1:18080}
+        context-length: ${JARVIS_AI_MODEL_MAIN_CTX:8192}
+      coding:
+        id: ${JARVIS_AI_MODEL_CODING_ID:qwen2.5-3b-instruct-q4_k_m}
+        runtime: ${JARVIS_AI_MODEL_CODING_RUNTIME:llamacpp}
+        endpoint: ${JARVIS_AI_MODEL_CODING_ENDPOINT:http://127.0.0.1:18081}
+        context-length: ${JARVIS_AI_MODEL_CODING_CTX:8192}
+      router:
+        id: ${JARVIS_AI_MODEL_ROUTER_ID:qwen2.5-3b-instruct-q4_k_m}
+        runtime: ${JARVIS_AI_MODEL_ROUTER_RUNTIME:llamacpp}
+        endpoint: ${JARVIS_AI_MODEL_ROUTER_ENDPOINT:http://127.0.0.1:18082}
+        context-length: ${JARVIS_AI_MODEL_ROUTER_CTX:4096}
+    embeddings:
+      id: ${JARVIS_AI_EMBEDDINGS_ID:multilingual-e5-small}
+      runtime: ${JARVIS_AI_EMBEDDINGS_RUNTIME:python-sentence-transformers}
+      endpoint: ${JARVIS_AI_EMBEDDINGS_ENDPOINT:http://127.0.0.1:5001}
+      dimensions: ${JARVIS_AI_EMBEDDINGS_DIMENSIONS:384}
+    reranker:
+      enabled: ${JARVIS_AI_RERANKER_ENABLED:false}
+      id: ${JARVIS_AI_RERANKER_ID:}
+      runtime: ${JARVIS_AI_RERANKER_RUNTIME:}
+      endpoint: ${JARVIS_AI_RERANKER_ENDPOINT:}
 
 llm:
-  base-url: ${LLM_SERVER_URL:http://llm-server:5000}
+  # Phase 3: defaults route to the host model daemon (main channel) instead of
+  # the deprecated `llm-server` Python pod. Keep override variable name for
+  # backward compatibility with existing scripts.
+  base-url: ${LLM_SERVER_URL:http://host-model-daemon.jarvis-prod.svc.cluster.local:18080}
   # Timeouts for chat requests (CPU inference can take 60-120+ seconds)
   timeouts:
     connect-ms: ${LLM_CONNECT_TIMEOUT_MS:5000}

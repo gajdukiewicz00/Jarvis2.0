@@ -4,8 +4,9 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jarvis.llm.client.LlmClient;
+import org.jarvis.llm.client.LlmProvider;
 import org.jarvis.llm.client.MemoryClient;
+import org.jarvis.llm.safety.UntrustedTextGuard;
 import org.jarvis.llm.client.UserProfileClient;
 import org.jarvis.llm.config.LlmBackgroundExecutor;
 import org.jarvis.llm.config.ModelProfileProperties;
@@ -36,7 +37,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class LlmService {
 
-    private final LlmClient llmClient;
+    private final LlmProvider llmClient;
     private final LlmConversationMemory conversationMemory;
     private final UserProfileClient userProfileClient;
     private final PersonalizedPromptBuilder promptBuilder;
@@ -49,6 +50,7 @@ public class LlmService {
 
     private final MemoryClient memoryClient;
     private final TokenBudgetManager tokenBudgetManager;
+    private final UntrustedTextGuard untrustedTextGuard;
 
     @Value("${memory.search.top-k:5}")
     private int memoryTopK;
@@ -58,6 +60,10 @@ public class LlmService {
 
     @Value("${memory.enabled:true}")
     private boolean memoryEnabled;
+
+    /** B2 — allow sensitive-classified memory to be sent to a REMOTE provider. Off by default. */
+    @Value("${memory.privacy.allow-external-sensitive:false}")
+    private boolean allowExternalSensitiveMemory;
 
     private static final long RATE_LIMIT_MS = 2000;
     private static final int MAX_INPUT_LENGTH = 2000;
@@ -159,9 +165,20 @@ public class LlmService {
         // === RAG: Search long-term memory for relevant context ===
         String memoryContext = "";
         if (memoryEnabled) {
+            // B2 — privacy enforcement: local provider may receive everything;
+            // a remote provider excludes local_only, and sensitive unless opted in.
+            boolean includeLocalOnly = llmClient.isLocal();
+            boolean includeSensitive = llmClient.allowsSensitiveData() || allowExternalSensitiveMemory;
+            log.info("[{}] Memory privacy: provider={} local={} includeLocalOnly={} includeSensitive={}",
+                    correlationId, llmClient.providerName(), llmClient.isLocal(),
+                    includeLocalOnly, includeSensitive);
             MemoryClient.SearchContextResult memoryResult = memoryClient.searchContext(
-                    effectiveUserId, userMessage, memoryTopK, memoryMaxTokens, correlationId);
-            memoryContext = memoryResult.contextText();
+                    effectiveUserId, userMessage, memoryTopK, memoryMaxTokens,
+                    includeLocalOnly, includeSensitive, correlationId);
+            // Retrieved long-term memory (search results + notes) is external/untrusted:
+            // wrap it as DATA so a malicious memory ("ignore previous instructions ...")
+            // cannot hijack the prompt (prompt-injection guard).
+            memoryContext = untrustedTextGuard.wrap("memory", memoryResult.contextText());
             if (!memoryContext.isBlank()) {
                 log.info("[{}] Memory context found: {} chars (mode={})",
                         correlationId,
@@ -252,13 +269,13 @@ public class LlmService {
     private static final String DIALOG_SYSTEM_PROMPT = """
         Ты — JARVIS, интеллигентный персональный ИИ-ассистент.
         
-        **ВАЖНО: Отвечай ТОЛЬКО на русском языке.**
+        **ВАЖНО: отвечай на том же языке, на котором написано последнее сообщение пользователя (RU → по-русски, EN → in English).**
         
         **Твой характер:**
-        - Спокойный, собранный, интеллигентный.
-        - Британский акцент с лёгкой иронией.
-        - Всегда вежлив и полезен.
-        - Краток, но информативен.
+        - Изысканный британский ИИ-мажордом: невозмутимо спокоен, точен, с тихой иронией.
+        - Сухое преуменьшение вместо восклицаний; обращение «сэр» уместно.
+        - Предугадываешь нужды; честен о пределах — не выдумываешь того, чего не знаешь.
+        - Краток: одна-две выверенные фразы лучше абзаца.
         
         **Правила диалога:**
         - Помни контекст разговора.

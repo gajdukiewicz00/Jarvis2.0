@@ -14,4 +14,5 @@ public class ToolCallDto {
     private Map<String, Object> arguments;
     private Boolean requiresConfirmation;
     private String idempotencyKey;
+    private Double confidence;
 }

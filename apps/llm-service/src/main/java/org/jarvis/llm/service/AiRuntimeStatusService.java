@@ -19,6 +19,9 @@ import java.util.Map;
 public class AiRuntimeStatusService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final String PUBLIC_CHAT_PATH = "/api/v1/llm/chat";
+    private static final String UPSTREAM_CHAT_COMPLETIONS_PATH = "/v1/chat/completions";
+    private static final String UPSTREAM_HEALTH_PATH = "/health";
 
     private final LlmClient llmClient;
     private final MemoryClient memoryClient;
@@ -30,6 +33,21 @@ public class AiRuntimeStatusService {
 
     @Value("${llm.base-url:http://127.0.0.1:15000}")
     private String llmBaseUrl;
+
+    @Value("${jarvis.llm.host-daemon.enabled:true}")
+    private boolean hostDaemonEnabled = true;
+
+    @Value("${jarvis.llm.host-daemon.host:host-model-daemon.jarvis-prod.svc.cluster.local}")
+    private String hostDaemonHost = "host-model-daemon.jarvis-prod.svc.cluster.local";
+
+    @Value("${jarvis.llm.host-daemon.main.port:18080}")
+    private Integer hostDaemonMainPort = 18080;
+
+    @Value("${jarvis.llm.host-daemon.coding.port:18081}")
+    private Integer hostDaemonCodingPort = 18081;
+
+    @Value("${jarvis.llm.host-daemon.router.port:18082}")
+    private Integer hostDaemonRouterPort = 18082;
 
     @Value("${memory.enabled:false}")
     private boolean memoryEnabled;
@@ -91,10 +109,13 @@ public class AiRuntimeStatusService {
         Map<String, Object> routing = new LinkedHashMap<>();
         routing.put("llmServiceBasePath", "/api/v1/llm");
         routing.put("runtimePath", "/api/v1/llm/runtime");
-        routing.put("chatPath", "/api/v1/llm/chat");
+        routing.put("jarvisChatPath", PUBLIC_CHAT_PATH);
+        routing.put("llamaCppChatCompletionsPath", UPSTREAM_CHAT_COMPLETIONS_PATH);
+        routing.put("llamaCppChatCompletionsUrl", llmBaseUrl + UPSTREAM_CHAT_COMPLETIONS_PATH);
         routing.put("dialogPath", "/api/v1/llm/dialog");
         routing.put("orchestratorPath", "/api/v1/llm/orchestrate");
-        routing.put("llmServerHealthUrl", llmBaseUrl + "/health");
+        routing.put("hostDaemonService", "host-model-daemon");
+        routing.put("hostDaemonHealthUrl", llmBaseUrl + UPSTREAM_HEALTH_PATH);
         routing.put("memoryServiceHealthUrl", memoryServiceUrl + "/memory/health");
 
         Map<String, Object> maturity = new LinkedHashMap<>();
@@ -113,6 +134,9 @@ public class AiRuntimeStatusService {
         llm.put("effectiveModel", llmHealth.modelName());
         llm.put("effectiveModelPath", llmHealth.modelPath());
         llm.put("baseUrl", llmBaseUrl);
+        llm.put("runtimeTarget", "host-model-daemon");
+        llm.put("upstreamProtocol", "llama.cpp OpenAI-compatible");
+        llm.put("chatCompletionsUrl", llmBaseUrl + UPSTREAM_CHAT_COMPLETIONS_PATH);
         llm.put("configuredDevicePath", configuredDevicePath);
         llm.put("configuredDeviceSetting", configuredDeviceSetting);
         llm.put("effectiveDevicePath", effectiveDevicePath);
@@ -157,7 +181,7 @@ public class AiRuntimeStatusService {
 
         Map<String, Object> localDefaultStack = new LinkedHashMap<>();
         localDefaultStack.put("id", canonicalLocalAiStack);
-        localDefaultStack.put("llmProvider", "llamacpp");
+        localDefaultStack.put("llmProvider", "llamacpp-openai");
         localDefaultStack.put("llmModel", configuredLlmModelId);
         localDefaultStack.put("llmModelPath", configuredLlmModelPath);
         localDefaultStack.put("embeddingProvider", "sentence-transformers");
@@ -166,6 +190,24 @@ public class AiRuntimeStatusService {
         localDefaultStack.put("vectorStore", "postgresql+pgvector");
         localDefaultStack.put("fullLocalAiReadiness", fullLocalAiReadiness);
         localDefaultStack.put("status", localStackStatus(llmEnabled, llmAvailable, memoryRequired, memoryAvailable));
+
+        Map<String, Object> localModelProfile = new LinkedHashMap<>();
+        localModelProfile.put("enabled", hostDaemonEnabled);
+        localModelProfile.put("runtime", "llama.cpp");
+        localModelProfile.put("protocol", "OpenAI-compatible");
+        localModelProfile.put("service", "host-model-daemon");
+        localModelProfile.put("serviceDns", hostDaemonHost);
+        localModelProfile.put("endpointMode", "manual Endpoints -> Linux host IP");
+        localModelProfile.put("mainUrl", hostDaemonUrl(hostDaemonMainPort));
+        localModelProfile.put("codingUrl", hostDaemonUrl(hostDaemonCodingPort));
+        localModelProfile.put("routerUrl", hostDaemonUrl(hostDaemonRouterPort));
+        localModelProfile.put("healthPath", UPSTREAM_HEALTH_PATH);
+        localModelProfile.put("chatCompletionsPath", UPSTREAM_CHAT_COMPLETIONS_PATH);
+        localModelProfile.put("configuredModel", configuredLlmModelId);
+        localModelProfile.put("configuredModelPath", configuredLlmModelPath);
+        localModelProfile.put("effectiveModel", llmHealth.modelName());
+        localModelProfile.put("effectiveModelPath", llmHealth.modelPath());
+        localModelProfile.put("available", llmAvailable);
 
         Map<String, Object> canonicalCpuBaseline = new LinkedHashMap<>();
         canonicalCpuBaseline.put("status", "verified");
@@ -210,6 +252,7 @@ public class AiRuntimeStatusService {
         summary.put("routing", routing);
         summary.put("maturity", maturity);
         summary.put("localDefaultStack", localDefaultStack);
+        summary.put("localModelProfile", localModelProfile);
         summary.put("llm", llm);
         summary.put("gpu", gpu);
         summary.put("embedding", embedding);
@@ -272,6 +315,10 @@ public class AiRuntimeStatusService {
         return "";
     }
 
+    private String hostDaemonUrl(Integer port) {
+        return "http://" + hostDaemonHost + ":" + port;
+    }
+
     private String blankToEmpty(String value) {
         return value == null ? "" : value;
     }
@@ -305,7 +352,7 @@ public class AiRuntimeStatusService {
         payload.put("readinessStatus", gpuAvailable != null && gpuAvailable ? "unknown" : "unavailable");
         payload.put("readinessReason", gpuAvailable != null && gpuAvailable
                 ? "ai-gpu-smoke has not been run for the current llama.cpp runtime"
-                : "GPU not detected by llm-server");
+                : "GPU not detected by host-model-daemon");
         payload.put("lastVerifiedAt", "");
         payload.put("profile", "");
         payload.put("llamaCppPythonVersion", "");
@@ -345,7 +392,7 @@ public class AiRuntimeStatusService {
                 reason = "gpu verification was recorded for a different GGUF model path";
             } else if (gpuAvailable != null && !gpuAvailable) {
                 status = "unavailable";
-                reason = "GPU not detected by llm-server";
+                reason = "GPU not detected by host-model-daemon";
             }
 
             payload.put("readinessStatus", status != null ? status : payload.get("readinessStatus"));

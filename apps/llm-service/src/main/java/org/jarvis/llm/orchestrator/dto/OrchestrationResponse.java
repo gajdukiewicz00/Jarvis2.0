@@ -14,4 +14,6 @@ public class OrchestrationResponse {
     private List<ToolCallDto> toolCalls;
     private List<String> warnings;
     private String rawModelOutput;
+    /** Aggregate plan confidence in [0.0, 1.0] as reported by the model; null if absent. */
+    private Double confidence;
 }

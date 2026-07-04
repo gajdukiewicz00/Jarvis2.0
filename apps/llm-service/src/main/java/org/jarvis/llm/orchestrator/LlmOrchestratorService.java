@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.logging.LogSanitizer;
-import org.jarvis.llm.client.LlmClient;
+import org.jarvis.llm.client.LlmProvider;
 import org.jarvis.llm.config.ModelProfileProperties;
 import org.jarvis.llm.dto.ChatMessageDto;
 import org.jarvis.llm.dto.ChatResponseDto;
@@ -14,6 +14,7 @@ import org.jarvis.llm.orchestrator.dto.ModelToolPlan;
 import org.jarvis.llm.orchestrator.dto.OrchestrationRequest;
 import org.jarvis.llm.orchestrator.dto.OrchestrationResponse;
 import org.jarvis.llm.orchestrator.dto.ToolCallDto;
+import org.jarvis.llm.safety.UntrustedTextGuard;
 import org.jarvis.llm.service.TokenBudgetManager;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -32,13 +33,14 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class LlmOrchestratorService {
 
-    private final LlmClient llmClient;
+    private final LlmProvider llmClient;
     private final TokenBudgetManager tokenBudgetManager;
     private final SystemPromptProvider systemPromptProvider;
     private final ToolSchemaRegistry toolSchemaRegistry;
     private final ToolCallValidator toolCallValidator;
     private final ObjectMapper objectMapper;
     private final ModelProfileProperties profileProperties;
+    private final UntrustedTextGuard untrustedTextGuard;
 
     @Value("${logging.pii.enabled:true}")
     private boolean piiLoggingEnabled = true;
@@ -100,6 +102,7 @@ public class LlmOrchestratorService {
                         ? call.getRequiresConfirmation()
                         : Boolean.FALSE);
                 toolCall.setIdempotencyKey(buildIdempotencyKey(request.getUserId(), call.getName(), call.getArguments()));
+                toolCall.setConfidence(call.getConfidence());
                 toolCalls.add(toolCall);
                 accepted++;
                 log.info("[{}] AI_TOOL_PLANNED userId={} tool={} idempotencyKey={} outcome=planned",
@@ -125,7 +128,8 @@ public class LlmOrchestratorService {
                 plan.getExplanation(),
                 toolCalls,
                 warnings.isEmpty() ? null : warnings,
-                raw
+                raw,
+                plan.getConfidence()
         );
     }
 
@@ -162,27 +166,31 @@ public class LlmOrchestratorService {
         if (memory == null) {
             return "";
         }
+        String raw;
         if (memory instanceof String value) {
-            return value;
+            raw = value;
+        } else {
+            try {
+                raw = objectMapper.writeValueAsString(memory);
+            } catch (JsonProcessingException e) {
+                log.warn("Failed to serialize memory context: {}", e.getMessage());
+                return "";
+            }
         }
-        try {
-            return objectMapper.writeValueAsString(memory);
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to serialize memory context: {}", e.getMessage());
-            return "";
-        }
+        // Treat external memory as untrusted DATA, not instructions (prompt-injection guard).
+        return untrustedTextGuard.wrap("memory", raw);
     }
 
     private ModelToolPlan parsePlan(String raw) {
         if (raw == null || raw.isBlank()) {
-            return new ModelToolPlan(List.of(), "", List.of("Empty LLM response"));
+            return new ModelToolPlan(List.of(), "", List.of("Empty LLM response"), null);
         }
         String json = extractJson(raw);
         try {
             return objectMapper.readValue(json, ModelToolPlan.class);
         } catch (JsonProcessingException e) {
             log.warn("Failed to parse tool plan JSON: {}", e.getMessage());
-            return new ModelToolPlan(List.of(), "", List.of("Invalid tool plan JSON"));
+            return new ModelToolPlan(List.of(), "", List.of("Invalid tool plan JSON"), null);
         }
     }
 

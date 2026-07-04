@@ -5,14 +5,19 @@ import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Node
 import javafx.scene.control.Button
+import javafx.scene.control.ButtonBar
+import javafx.scene.control.ButtonType
+import javafx.scene.control.Dialog
 import javafx.scene.control.Label
 import javafx.scene.control.ScrollPane
+import javafx.scene.control.TextArea
 import javafx.scene.control.TextField
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
+import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.features.common.ShellPanelSupport
 import org.jarvis.desktop.shell.ShellRouteContent
 import java.util.concurrent.Executors
@@ -21,7 +26,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Memory panel — unified semantic search over the RAG/Obsidian store plus a
  * recent-notes feed. Search hits `POST /api/v1/memory/search/unified`; the
- * notes feed hits `GET /api/v1/memory/notes`.
+ * notes feed hits `GET /api/v1/memory/notes`. Notes can also be edited
+ * (`PUT /api/v1/memory/notes/{memoryId}`) or forgotten
+ * (`DELETE /api/v1/memory/notes/{memoryId}`) in place.
  */
 class MemoryView(
     apiClient: ApiClient
@@ -31,6 +38,9 @@ class MemoryView(
         Thread(runnable, "jarvis-desktop-app-memory").apply { isDaemon = true }
     }
     private val inFlight = AtomicBoolean(false)
+
+    /** Last fetch used to populate [resultsContainer] — reused to refresh after edit/forget. */
+    private var lastFetch: () -> List<MemoryReadModel.MemoryItem> = { readModel.recentNotes() }
 
     private val statusPill = ShellPanelSupport.statusPill("Memory")
     private val statusLabel = ShellPanelSupport.sectionSubtitle(
@@ -131,6 +141,7 @@ class MemoryView(
         if (!inFlight.compareAndSet(false, true)) {
             return
         }
+        lastFetch = fetch
         searchButton.isDisable = true
         recentButton.isDisable = true
         statusPill.text = "Loading"
@@ -195,7 +206,163 @@ class MemoryView(
                     styleClass += "shell-section-subtitle"
                 }
             }
+            if (item.isManageable) {
+                children += HBox(8.0).apply {
+                    alignment = Pos.CENTER_RIGHT
+                    children += Button("Edit").apply {
+                        styleClass += "shell-action-button"
+                        setOnAction { beginEdit(item) }
+                    }
+                    children += Button("Forget").apply {
+                        styleClass += "shell-action-button"
+                        setOnAction { beginForget(item) }
+                    }
+                }
+            }
         }
+    }
+
+    private fun beginEdit(item: MemoryReadModel.MemoryItem) {
+        val memoryId = item.memoryId ?: return
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        statusPill.text = "Loading"
+        ShellPanelSupport.applyTone(statusPill, "shell-status-tone-info")
+        statusLabel.text = "Loading note for edit…"
+
+        worker.execute {
+            try {
+                val detail = readModel.getNote(memoryId)
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Ready"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-success")
+                    showEditDialog(detail)
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Unavailable"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
+                    statusLabel.text = e.message ?: "Failed to load note."
+                }
+            }
+        }
+    }
+
+    private fun showEditDialog(detail: MemoryReadModel.NoteDetail) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Edit memory note"
+        dialog.headerText = "Editing \"${detail.title}\""
+
+        val titleField = TextField(detail.title)
+        val bodyArea = TextArea(detail.body).apply {
+            isWrapText = true
+            prefRowCount = 10
+            prefColumnCount = 40
+        }
+        dialog.dialogPane.content = VBox(10.0).apply {
+            padding = Insets(12.0)
+            children += Label("Title")
+            children += titleField
+            children += Label("Content")
+            children += bodyArea
+        }
+        val saveButton = ButtonType("Save", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(saveButton, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == saveButton) {
+                submitEdit(detail.memoryId, titleField.text, bodyArea.text)
+            }
+        }
+    }
+
+    private fun submitEdit(memoryId: String, title: String, body: String) {
+        if (title.isBlank()) {
+            statusPill.text = "Input needed"
+            ShellPanelSupport.applyTone(statusPill, "shell-status-tone-warning")
+            statusLabel.text = "Title cannot be empty."
+            return
+        }
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        statusPill.text = "Saving"
+        ShellPanelSupport.applyTone(statusPill, "shell-status-tone-info")
+        statusLabel.text = "Saving changes…"
+
+        worker.execute {
+            try {
+                readModel.updateNote(memoryId, title, body)
+                Platform.runLater {
+                    inFlight.set(false)
+                    run("Refreshing…", lastFetch)
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Unavailable"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
+                    statusLabel.text = e.message ?: "Failed to save note."
+                }
+            }
+        }
+    }
+
+    private fun beginForget(item: MemoryReadModel.MemoryItem) {
+        val memoryId = item.memoryId ?: return
+        val reason = promptForgetReason(item.title) ?: return
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        statusPill.text = "Forgetting"
+        ShellPanelSupport.applyTone(statusPill, "shell-status-tone-warning")
+        statusLabel.text = "Forgetting \"${item.title}\"…"
+
+        worker.execute {
+            try {
+                readModel.forgetNote(memoryId, TokenManager.getUsername(), reason)
+                Platform.runLater {
+                    inFlight.set(false)
+                    run("Refreshing…", lastFetch)
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Unavailable"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
+                    statusLabel.text = e.message ?: "Failed to forget note."
+                }
+            }
+        }
+    }
+
+    /**
+     * HIGH-risk confirmation for "Jarvis, forget this". Returns the reason the
+     * user entered (may be blank) if they confirmed, or `null` if cancelled.
+     */
+    private fun promptForgetReason(title: String): String? {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Forget memory note"
+        dialog.headerText = "Forget \"$title\"?"
+
+        val reasonField = TextField().apply { promptText = "Reason (optional)" }
+        dialog.dialogPane.content = VBox(10.0).apply {
+            padding = Insets(12.0)
+            children += Label(
+                "This soft-deletes the note (content wiped, tombstoned in Obsidian) " +
+                    "and cannot be undone from this UI."
+            ).apply { isWrapText = true }
+            children += Label("Reason")
+            children += reasonField
+        }
+        val forgetButton = ButtonType("Forget", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(forgetButton, ButtonType.CANCEL)
+
+        val confirmed = dialog.showAndWait().orElse(ButtonType.CANCEL) == forgetButton
+        return if (confirmed) reasonField.text else null
     }
 
     private fun renderPlaceholder(message: String) {

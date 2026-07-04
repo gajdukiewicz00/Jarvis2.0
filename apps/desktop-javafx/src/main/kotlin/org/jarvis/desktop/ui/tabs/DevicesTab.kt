@@ -18,6 +18,10 @@ import org.jarvis.desktop.service.SmartHomeStateFormatter
 import org.slf4j.LoggerFactory
 
 class DevicesTab(private val apiClient: ApiClient) {
+    companion object {
+        private const val UNASSIGNED_ROOM = "Unassigned"
+    }
+
     private val logger = LoggerFactory.getLogger(DevicesTab::class.java)
     val tab = Tab("Devices")
     private val statusLabel = Label("")
@@ -87,18 +91,29 @@ class DevicesTab(private val apiClient: ApiClient) {
             return
         }
 
-        devices.forEach { device ->
-            val card = VBox(6.0).apply {
-                style = "-fx-background-color: #f6f8fb; -fx-background-radius: 8; -fx-padding: 12;"
-            }
-            card.children.add(Label("${device.displayName} • ${device.room}").apply {
-                style = "-fx-font-size: 14px; -fx-font-weight: bold;"
+        val devicesByRoom = devices.groupBy { it.room.ifBlank { UNASSIGNED_ROOM } }
+        val roomOrder = devicesByRoom.keys.sortedWith(
+            compareBy({ it == UNASSIGNED_ROOM }, { it.lowercase() })
+        )
+
+        roomOrder.forEach { room ->
+            deviceContainer.children.add(Label(room).apply {
+                style = "-fx-font-size: 16px; -fx-font-weight: bold; -fx-padding: 8 0 0 0;"
             })
-            card.children.add(Label("State: ${SmartHomeStateFormatter.summarize(device)}"))
-            card.children.add(Label("Provider: ${device.provider.ifBlank { "unknown" }}"))
-            card.children.add(actionButtons(device))
-            deviceContainer.children.add(card)
+            devicesByRoom.getValue(room).forEach { device ->
+                deviceContainer.children.add(deviceCard(device))
+            }
         }
+    }
+
+    private fun deviceCard(device: SmartHomeDeviceDto): VBox = VBox(6.0).apply {
+        style = "-fx-background-color: #f6f8fb; -fx-background-radius: 8; -fx-padding: 12;"
+        children.add(Label("${device.displayName} • ${device.room}").apply {
+            style = "-fx-font-size: 14px; -fx-font-weight: bold;"
+        })
+        children.add(Label("State: ${SmartHomeStateFormatter.summarize(device)}"))
+        children.add(Label("Provider: ${device.provider.ifBlank { "unknown" }}"))
+        children.add(actionButtons(device))
     }
 
     private fun actionButtons(device: SmartHomeDeviceDto): FlowPane {

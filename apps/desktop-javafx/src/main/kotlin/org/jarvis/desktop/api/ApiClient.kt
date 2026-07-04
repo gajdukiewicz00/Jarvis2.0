@@ -53,6 +53,14 @@ class ApiClient(
         executeMultipart(endpoint, filename, fileBytes)
     }
 
+    fun put(endpoint: String, body: String): String = executeWithAuthRetry {
+        executePut(endpoint, body, emptyMap())
+    }
+
+    fun delete(endpoint: String): String = executeWithAuthRetry {
+        executeDelete(endpoint, emptyMap())
+    }
+
     private fun executeGet(endpoint: String, extraHeaders: Map<String, String>): String {
         val baseUrl = configProvider().apiBaseUrl
         val url = URL("$baseUrl$endpoint")
@@ -164,6 +172,127 @@ class ApiClient(
                 throw Exception("Connection refused: Server is not available. Please check if the API gateway is running at $baseUrl")
             }
             throw e
+        } catch (e: Exception) {
+            if (isConnectionError(e)) {
+                logger.error("Network error: ${e.message}", e)
+                throw Exception("Connection error: Server is not available. Please check if the API gateway is running at $baseUrl")
+            }
+            throw e
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun executePut(
+        endpoint: String,
+        body: String,
+        extraHeaders: Map<String, String>
+    ): String {
+        val baseUrl = configProvider().apiBaseUrl
+        val url = URL("$baseUrl$endpoint")
+        val connection = url.openConnection() as HttpURLConnection
+
+        try {
+            connection.requestMethod = "PUT"
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("X-Model-Profile", DESKTOP_MODEL_PROFILE)
+            extraHeaders.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+            addAuthorization(connection)
+            connection.doOutput = true
+            configureTimeouts(connection)
+
+            connection.outputStream.use { os ->
+                os.write(body.toByteArray())
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                val error = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unauthorized"
+                throw UnauthorizedRequestException(error)
+            }
+
+            return if (responseCode in 200..299) {
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                logger.info("✅ PUT request successful: $endpoint (HTTP $responseCode)")
+                response
+            } else {
+                val error = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: "Unknown error"
+                throw httpError(responseCode, error)
+            }
+        } catch (e: UnauthorizedRequestException) {
+            throw e
+        } catch (e: ConnectException) {
+            logger.error("Connection refused: Server at $baseUrl is not available", e)
+            throw Exception("Connection refused: Server is not available. Please check if the API gateway is running at $baseUrl")
+        } catch (e: SocketTimeoutException) {
+            logger.error("Connection timeout: Server at $baseUrl did not respond in time", e)
+            throw Exception("Connection timeout: Server did not respond in time. Please check if the API gateway is running at $baseUrl")
+        } catch (e: UnknownHostException) {
+            logger.error("Unknown host: Cannot resolve host for $baseUrl", e)
+            throw Exception("Unknown host: Cannot connect to server. Please check the server URL: $baseUrl")
+        } catch (e: IOException) {
+            val message = e.message ?: ""
+            if (message.contains("Connection refused", ignoreCase = true) ||
+                e.cause is ConnectException ||
+                e.cause?.message?.contains("Connection refused", ignoreCase = true) == true) {
+                logger.error("Connection refused: Server at $baseUrl is not available", e)
+                throw Exception("Connection refused: Server is not available. Please check if the API gateway is running at $baseUrl")
+            }
+            throw e
+        } catch (e: Exception) {
+            if (isConnectionError(e)) {
+                logger.error("Network error: ${e.message}", e)
+                throw Exception("Connection error: Server is not available. Please check if the API gateway is running at $baseUrl")
+            }
+            throw e
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun executeDelete(endpoint: String, extraHeaders: Map<String, String>): String {
+        val baseUrl = configProvider().apiBaseUrl
+        val url = URL("$baseUrl$endpoint")
+        val connection = url.openConnection() as HttpURLConnection
+
+        try {
+            connection.requestMethod = "DELETE"
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("X-Model-Profile", DESKTOP_MODEL_PROFILE)
+            extraHeaders.forEach { (name, value) -> connection.setRequestProperty(name, value) }
+            addAuthorization(connection)
+            configureTimeouts(connection)
+
+            val responseCode = connection.responseCode
+            logger.debug("DELETE $endpoint: $responseCode")
+
+            if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                throw UnauthorizedRequestException("Unauthorized: $errorBody")
+            }
+
+            return if (responseCode in 200..299) {
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } else {
+                val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                if (isExpectedDegradedResponse(responseCode, errorBody)) {
+                    logger.debug("DELETE $endpoint degraded: $responseCode - $errorBody")
+                } else {
+                    logger.warn("DELETE $endpoint failed: $responseCode - $errorBody")
+                }
+                throw httpError(responseCode, errorBody)
+            }
+        } catch (e: UnauthorizedRequestException) {
+            throw e
+        } catch (e: ConnectException) {
+            logger.error("Connection refused: Server at $baseUrl is not available", e)
+            throw Exception("Connection refused: Server is not available. Please check if the API gateway is running at $baseUrl")
+        } catch (e: SocketTimeoutException) {
+            logger.error("Connection timeout: Server at $baseUrl did not respond in time", e)
+            throw Exception("Connection timeout: Server did not respond in time. Please check if the API gateway is running at $baseUrl")
+        } catch (e: UnknownHostException) {
+            logger.error("Unknown host: Cannot resolve host for $baseUrl", e)
+            throw Exception("Unknown host: Cannot connect to server. Please check the server URL: $baseUrl")
         } catch (e: Exception) {
             if (isConnectionError(e)) {
                 logger.error("Network error: ${e.message}", e)

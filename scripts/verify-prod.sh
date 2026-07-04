@@ -17,10 +17,14 @@ require_cmd() {
 
 require_cmd rg
 require_cmd grep
+require_cmd git
 
 RUNTIME_TARGETS=(
     "${PROJECT_ROOT}/apps"
+    "${PROJECT_ROOT}/infra/k8s"
     "${PROJECT_ROOT}/k8s"
+    "${PROJECT_ROOT}/scripts/k8s-smoke.sh"
+    "${PROJECT_ROOT}/scripts/lib/k8s-common.sh"
     "${PROJECT_ROOT}/scripts/product"
     "${PROJECT_ROOT}/jarvis"
     "${PROJECT_ROOT}/jarvis-launch.sh"
@@ -31,6 +35,7 @@ RUNTIME_TARGETS=(
 
 RUNTIME_DIRS=(
     "${PROJECT_ROOT}/apps"
+    "${PROJECT_ROOT}/infra/k8s"
     "${PROJECT_ROOT}/k8s"
     "${PROJECT_ROOT}/scripts/product"
 )
@@ -58,17 +63,24 @@ fail_if_found() {
     fi
 }
 
+if [[ -x "${PROJECT_ROOT}/scripts/guards/reject-new-docker-runtime-files.sh" ]]; then
+    "${PROJECT_ROOT}/scripts/guards/reject-new-docker-runtime-files.sh" --all
+fi
+if [[ -x "${PROJECT_ROOT}/infra/scripts/microk8s/verify-no-docker-runtime.sh" ]]; then
+    "${PROJECT_ROOT}/infra/scripts/microk8s/verify-no-docker-runtime.sh" --strict
+fi
+
 # Banned patterns in active repo
-fail_if_found "docker-compose references" "docker-compose"
+fail_if_found "compose references" "docker-compose"
 fail_if_found "minikube references" "minikube"
 fail_if_found "NodePort references" "NodePort"
 fail_if_found "dev profile references" "application-dev|application-docker"
 
 # Banned files/dirs
-docker_compose_files="$(find "${RUNTIME_DIRS[@]}" -type f \( -name 'docker-compose*.yml' -o -name 'docker-compose*.yaml' \) 2>/dev/null || true)"
-if [[ -n "${docker_compose_files}" ]]; then
-    echo "❌ docker-compose file present"
-    echo "${docker_compose_files}"
+compose_files="$(find "${RUNTIME_DIRS[@]}" -type f \( -name 'docker-compose*.yml' -o -name 'docker-compose*.yaml' \) 2>/dev/null || true)"
+if [[ -n "${compose_files}" ]]; then
+    echo "❌ compose file present"
+    echo "${compose_files}"
     exit 1
 fi
 
@@ -80,14 +92,14 @@ for d in "${PROJECT_ROOT}/k8s/legacy" "${PROJECT_ROOT}/k8s/overlays/local" "${PR
 done
 
 k8s_forbidden_images="$(rg -n \
-    "^[[:space:]]*image:[[:space:]]*[^[:space:]]*(:latest|:0\\.1\\.0-SNAPSHOT)(@|[[:space:]]|$)" \
+    "^[[:space:]]*image:[[:space:]]*[^[:space:]]*(:latest|:[^[:space:]]+-SNAPSHOT)(@|[[:space:]]|$)" \
     "${PROJECT_ROOT}/k8s" \
     --glob "**/*.yml" \
     --glob "**/*.yaml" 2>/dev/null || true)"
-launcher_forbidden_tags="$(rg -n ":latest|:0\\.1\\.0-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" 2>/dev/null || true)"
+launcher_forbidden_tags="$(rg -n ":latest|:[^[:space:]]+-SNAPSHOT" "${PROJECT_ROOT}/jarvis-launch.sh" 2>/dev/null || true)"
 
 if [[ -n "${k8s_forbidden_images}" || -n "${launcher_forbidden_tags}" ]]; then
-    echo "❌ Found forbidden image tags (:latest or :0.1.0-SNAPSHOT) in runtime paths"
+    echo "❌ Found forbidden image tags (:latest or *-SNAPSHOT) in runtime paths"
     if [[ -n "${launcher_forbidden_tags}" ]]; then
         echo "${launcher_forbidden_tags}" | head -20
     fi

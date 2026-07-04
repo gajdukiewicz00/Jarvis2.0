@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 JARVIS_HOME="${HOME}/.jarvis"
+VERSION=$(grep -A1 "<artifactId>jarvis-root</artifactId>" "${PROJECT_ROOT}/pom.xml" | grep "<version>" | head -1 | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/' | tr -d ' ' || echo "1.0.0")
 
 DIAGNOSTICS=$(cat <<EOF
 === Jarvis 2.0 Diagnostics ===
@@ -27,8 +28,8 @@ Stop script: ${PROJECT_ROOT}/jarvis-stop.sh
   Executable: $([ -x "${PROJECT_ROOT}/jarvis-stop.sh" ] && echo "YES" || echo "NO")
 
 === Desktop JavaFX ===
-Unified desktop JAR: ${PROJECT_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar
-  Exists: $([ -f "${PROJECT_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar" ] && echo "YES" || echo "NO")
+Unified desktop JAR: ${PROJECT_ROOT}/apps/desktop-javafx/target/desktop-javafx-${VERSION}.jar
+  Exists: $([ -f "${PROJECT_ROOT}/apps/desktop-javafx/target/desktop-javafx-${VERSION}.jar" ] && echo "YES" || echo "NO")
 
 === Java ===
 Java: $(which java 2>/dev/null || echo "NOT FOUND")

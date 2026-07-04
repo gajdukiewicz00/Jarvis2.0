@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-NAMESPACE="${JARVIS_OBS_NAMESPACE:-jarvis}"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 JARVIS_HOME="${JARVIS_HOME:-${HOME}/.jarvis}"
 SECRETS_FILE="${JARVIS_OBS_SECRETS_FILE:-${JARVIS_HOME}/secrets/secrets.env}"
 CA_CERT="${JARVIS_TLS_CA_CERT:-${JARVIS_HOME}/tls/jarvis-ca.crt}"

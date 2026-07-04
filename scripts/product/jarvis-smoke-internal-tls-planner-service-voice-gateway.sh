@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 PLANNER_SERVICE_PORT="${JARVIS_TLS_SLICE_PLANNER_PORT:-18092}"
 VOICE_GATEWAY_SERVICE_PORT="${JARVIS_TLS_SLICE_VOICE_GATEWAY_PORT:-18081}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-planner
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-planner-service-voice-gateway.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-planner-service-voice-gateway.sh [--namespace=jarvis-prod]
 
 Validates the next internal TLS slice:
   1. voice-gateway responds over HTTPS on 8081
@@ -216,5 +216,5 @@ if ! printf '%s\n' "${voice_logs}" | rg -q "${smoke_user}"; then
   exit 1
 fi
 
-echo "✅ planner-service routed the migrated call to https://voice-gateway.jarvis.svc.cluster.local:8081"
+echo "✅ planner-service routed the migrated call to https://voice-gateway.jarvis-prod.svc.cluster.local:8081"
 echo "✅ voice-gateway handled the traced planner notification request for user ${smoke_user}"

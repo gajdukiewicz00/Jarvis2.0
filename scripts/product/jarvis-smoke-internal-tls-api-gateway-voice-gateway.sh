@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 VOICE_GATEWAY_PORT="${JARVIS_TLS_SLICE_VOICE_GATEWAY_PORT:-18081}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-voice-gateway}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-voice-gateway.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-voice-gateway.sh [--namespace=jarvis-prod]
 
 Validates the twelfth internal TLS hop:
   1. voice-gateway only answers on HTTPS
@@ -191,4 +191,4 @@ if ! printf '%s\n' "${voice_gateway_logs}" | rg -q "${smoke_text}"; then
   echo "❌ voice-gateway logs did not include the unique smoke text ${smoke_text}" >&2
   exit 1
 fi
-echo "✅ api-gateway routed the migrated voice call to https://voice-gateway.jarvis.svc.cluster.local:8081"
+echo "✅ api-gateway routed the migrated voice call to https://voice-gateway.jarvis-prod.svc.cluster.local:8081"

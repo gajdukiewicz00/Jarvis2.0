@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 PLANNER_SERVICE_PORT="${JARVIS_TLS_SLICE_PLANNER_PORT:-18092}"
 ANALYTICS_SERVICE_PORT="${JARVIS_TLS_SLICE_ANALYTICS_PORT:-18087}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -11,7 +11,7 @@ VERIFIED_USER_ID="${JARVIS_TLS_SLICE_VERIFIED_USER_ID:-denis}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-planner-service-analytics-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-planner-service-analytics-service.sh [--namespace=jarvis-prod]
 
 Validates the next internal TLS slice:
   1. analytics-service responds over HTTPS on 8087
@@ -232,5 +232,5 @@ if ! printf '%s\n' "${analytics_logs}" | rg -q 'Getting overtime summary'; then
   exit 1
 fi
 
-echo "✅ planner-service routed the migrated call to https://analytics-service.jarvis.svc.cluster.local:8087"
+echo "✅ planner-service routed the migrated call to https://analytics-service.jarvis-prod.svc.cluster.local:8087"
 echo "✅ analytics-service handled the traced planner analytics request for smokeRunId ${smoke_run_id}"

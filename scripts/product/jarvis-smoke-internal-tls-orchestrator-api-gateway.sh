@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_HTTPS_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_HTTPS_PORT:-18443}"
 ORCHESTRATOR_SERVICE_PORT="${JARVIS_TLS_SLICE_ORCHESTRATOR_PORT:-18083}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-orchest
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-orchestrator-api-gateway.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-orchestrator-api-gateway.sh [--namespace=jarvis-prod]
 
 Validates the third internal TLS slice:
   1. api-gateway internal HTTPS listener on 8443 is reachable
@@ -200,4 +200,4 @@ if ! printf '%s\n' "${orchestrator_logs}" | rg -q 'API Gateway PC action routed'
   exit 1
 fi
 
-echo "✅ orchestrator routed the migrated call to https://api-gateway.jarvis.svc.cluster.local:8443"
+echo "✅ orchestrator routed the migrated call to https://api-gateway.jarvis-prod.svc.cluster.local:8443"

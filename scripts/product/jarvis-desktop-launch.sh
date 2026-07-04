@@ -103,8 +103,8 @@ else
   export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
   export JARVIS_USE_TLS="${JARVIS_USE_TLS:-true}"
   if command -v kubectl >/dev/null 2>&1; then
-    if kubectl get namespace jarvis >/dev/null 2>&1; then
-      ready_replicas="$(kubectl get deployment api-gateway -n jarvis -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
+    if kubectl get namespace jarvis-prod >/dev/null 2>&1; then
+      ready_replicas="$(kubectl get deployment api-gateway -n jarvis-prod -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"
       if [[ "$ready_replicas" =~ ^[1-9][0-9]*$ ]]; then
         backend_running=true
       fi

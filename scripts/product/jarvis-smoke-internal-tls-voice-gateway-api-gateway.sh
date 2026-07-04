@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_HTTPS_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_HTTPS_PORT:-18443}"
 VOICE_GATEWAY_SERVICE_PORT="${JARVIS_TLS_SLICE_VOICE_GATEWAY_PORT:-18081}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-voice-g
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-voice-gateway-api-gateway.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-voice-gateway-api-gateway.sh [--namespace=jarvis-prod]
 
 Validates the fourth internal TLS slice:
   1. api-gateway internal HTTPS listener on 8443 is reachable
@@ -215,4 +215,4 @@ if ! printf '%s\n' "${voice_logs}" | rg -q 'Voice gateway PC action routed'; the
   exit 1
 fi
 
-echo "✅ voice-gateway routed the migrated call to https://api-gateway.jarvis.svc.cluster.local:8443"
+echo "✅ voice-gateway routed the migrated call to https://api-gateway.jarvis-prod.svc.cluster.local:8443"

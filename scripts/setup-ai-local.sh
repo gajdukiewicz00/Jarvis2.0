@@ -109,37 +109,34 @@ PY
 }
 
 download_embedding_model() {
+    # Phase 3 / SPEC-1: automatic model downloads are FORBIDDEN.
+    # This function used to call huggingface_hub for snapshot fetching. It
+    # now only verifies the embedding model is present and prints explicit
+    # manual-placement instructions if it isn't.
     if [[ -f "${JARVIS_EMBEDDING_MODEL_PATH}/config.json" && -f "${JARVIS_EMBEDDING_MODEL_PATH}/model.safetensors" ]]; then
-        log "Canonical embedding model already present at ${JARVIS_EMBEDDING_MODEL_PATH}"
+        log "Embedding model already present at ${JARVIS_EMBEDDING_MODEL_PATH}"
         return 0
     fi
 
-    ensure_python_service_env "embedding-service"
-    local venv_dir
-    venv_dir="$(python_service_venv_dir "embedding-service")"
-    log "Downloading canonical embedding model ${JARVIS_EMBEDDING_MODEL_ID} -> ${JARVIS_EMBEDDING_MODEL_PATH}"
-    "${venv_dir}/bin/python" - "${JARVIS_EMBEDDING_MODEL_ID}" "${JARVIS_EMBEDDING_MODEL_PATH}" <<'PY'
-import sys
-from huggingface_hub import snapshot_download
+    cat <<EOF >&2
 
-repo_id, target_dir = sys.argv[1], sys.argv[2]
-snapshot_download(
-    repo_id=repo_id,
-    local_dir=target_dir,
-    allow_patterns=[
-        "1_Pooling/config.json",
-        "README.md",
-        "config.json",
-        "model.safetensors",
-        "modules.json",
-        "sentence_bert_config.json",
-        "sentencepiece.bpe.model",
-        "special_tokens_map.json",
-        "tokenizer.json",
-        "tokenizer_config.json",
-    ],
-)
-PY
+❌ Embedding model not found at ${JARVIS_EMBEDDING_MODEL_PATH}
+
+SPEC-1 forbids automatic model downloads. Place the model manually:
+
+  1. From a machine with internet, download the files for
+     ${JARVIS_EMBEDDING_MODEL_ID}
+     (config.json, model.safetensors, tokenizer.json, sentencepiece.bpe.model,
+      modules.json, sentence_bert_config.json, special_tokens_map.json,
+      tokenizer_config.json, 1_Pooling/config.json, README.md).
+
+  2. Copy the directory to:
+     ${JARVIS_EMBEDDING_MODEL_PATH}
+
+  3. Re-run this script.
+
+EOF
+    return 1
 }
 
 verify_embedding_model() {
@@ -156,14 +153,14 @@ PY
 }
 
 ensure_postgres_image() {
-    command -v docker >/dev/null 2>&1 || fail "Docker is required for the canonical local AI stack because memory-service depends on local PostgreSQL + pgvector"
-    if docker image inspect "${JARVIS_LOCAL_POSTGRES_IMAGE}" >/dev/null 2>&1; then
+    require_local_container_engine
+    if "${JARVIS_LOCAL_CONTAINER_ENGINE}" image exists "${JARVIS_LOCAL_POSTGRES_IMAGE}" >/dev/null 2>&1; then
         log "PostgreSQL image already present: ${JARVIS_LOCAL_POSTGRES_IMAGE}"
         return 0
     fi
 
-    log "Pulling PostgreSQL image ${JARVIS_LOCAL_POSTGRES_IMAGE}"
-    docker pull "${JARVIS_LOCAL_POSTGRES_IMAGE}" >/dev/null
+    log "Pulling PostgreSQL image ${JARVIS_LOCAL_POSTGRES_IMAGE} with ${JARVIS_LOCAL_CONTAINER_ENGINE}"
+    "${JARVIS_LOCAL_CONTAINER_ENGINE}" pull "${JARVIS_LOCAL_POSTGRES_IMAGE}" >/dev/null
 }
 
 require_command curl

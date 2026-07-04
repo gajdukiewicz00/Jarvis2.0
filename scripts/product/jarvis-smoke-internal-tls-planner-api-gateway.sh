@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_HTTP_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_HTTP_PORT:-18080}"
 API_GATEWAY_HTTPS_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_HTTPS_PORT:-18443}"
 PLANNER_SERVICE_PORT="${JARVIS_TLS_SLICE_PLANNER_PORT:-18092}"
@@ -11,7 +11,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-planner
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-planner-api-gateway.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-planner-api-gateway.sh [--namespace=jarvis-prod]
 
 Validates the second internal TLS slice:
   1. api-gateway keeps HTTP on 8080 for non-migrated callers
@@ -203,4 +203,4 @@ if ! printf '%s\n' "${planner_logs}" | rg -q 'https://api-gateway\.jarvis\.svc\.
   exit 1
 fi
 
-echo "✅ planner-service routed the migrated call to https://api-gateway.jarvis.svc.cluster.local:8443"
+echo "✅ planner-service routed the migrated call to https://api-gateway.jarvis-prod.svc.cluster.local:8443"

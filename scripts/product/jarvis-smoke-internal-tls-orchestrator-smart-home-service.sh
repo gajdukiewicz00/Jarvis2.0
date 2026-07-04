@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 ORCHESTRATOR_SERVICE_PORT="${JARVIS_TLS_SLICE_ORCHESTRATOR_PORT:-18083}"
 SMART_HOME_SERVICE_PORT="${JARVIS_TLS_SLICE_SMART_HOME_PORT:-18086}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-orchest
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-orchestrator-smart-home-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-orchestrator-smart-home-service.sh [--namespace=jarvis-prod]
 
 Validates the narrow internal TLS slice:
   1. smart-home-service responds over HTTPS on 8086
@@ -221,5 +221,5 @@ if ! printf '%s\n' "${smart_home_logs}" | rg -q 'kitchen_light'; then
   exit 1
 fi
 
-echo "✅ orchestrator routed the migrated call to https://smart-home-service.jarvis.svc.cluster.local:8086"
+echo "✅ orchestrator routed the migrated call to https://smart-home-service.jarvis-prod.svc.cluster.local:8086"
 echo "✅ smart-home-service handled the traced orchestrator action for user ${smoke_user}"

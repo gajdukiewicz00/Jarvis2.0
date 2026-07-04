@@ -4,12 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 SECRET_NAME="jarvis-internal-tls-analytics-service-life-tracker"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-apply-internal-tls-analytics-service-life-tracker.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-apply-internal-tls-analytics-service-life-tracker.sh [--namespace=jarvis-prod]
 
 Creates or updates the Kubernetes secret for the next internal TLS slice:
   analytics-service (HTTPS client) -> life-tracker (existing HTTPS server on 8085)

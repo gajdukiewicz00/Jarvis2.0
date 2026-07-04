@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 ORCHESTRATOR_PORT="${JARVIS_TLS_SLICE_ORCHESTRATOR_PORT:-18083}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-orchestrator}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-orchestrator.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-orchestrator.sh [--namespace=jarvis-prod]
 
 Validates the eleventh internal TLS hop:
   1. orchestrator only answers on HTTPS
@@ -188,4 +188,4 @@ if ! printf '%s\n' "${orchestrator_logs}" | rg -q "${smoke_run_id}"; then
   echo "❌ orchestrator logs did not include the unique smoke correlation id ${smoke_run_id}" >&2
   exit 1
 fi
-echo "✅ api-gateway routed the migrated orchestrator call to https://orchestrator.jarvis.svc.cluster.local:8083"
+echo "✅ api-gateway routed the migrated orchestrator call to https://orchestrator.jarvis-prod.svc.cluster.local:8083"

@@ -74,10 +74,10 @@ fi
 # Try graceful shutdown via kubectl scale (if available)
 if command -v kubectl >/dev/null 2>&1; then
     log "Attempting graceful shutdown via kubectl scale..."
-    # Scale down deployments in jarvis namespace
-    if kubectl get namespace jarvis >/dev/null 2>&1; then
-        kubectl scale deployment --all --replicas=0 -n jarvis >> "${LOG}" 2>&1 || true
-        kubectl scale statefulset --all --replicas=0 -n jarvis >> "${LOG}" 2>&1 || true
+    # Scale down deployments in the production namespace.
+    if kubectl get namespace jarvis-prod >/dev/null 2>&1; then
+        kubectl scale deployment --all --replicas=0 -n jarvis-prod >> "${LOG}" 2>&1 || true
+        kubectl scale statefulset --all --replicas=0 -n jarvis-prod >> "${LOG}" 2>&1 || true
         log "Kubernetes resources scaled down"
         STOPPED_SOMETHING=true
         sleep 2  # Give pods time to terminate gracefully

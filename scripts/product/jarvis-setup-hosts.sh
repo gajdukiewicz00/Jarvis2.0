@@ -7,6 +7,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091
+source "${PROJECT_ROOT}/scripts/lib/k8s-common.sh"
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -16,14 +21,14 @@ NC='\033[0m'
 # Resolve host IP for ingress (override with JARVIS_HOST_IP)
 HOST_IP="${JARVIS_HOST_IP:-}"
 
-if [[ -z "${KUBECONFIG:-}" && -r /etc/rancher/k3s/k3s.yaml ]]; then
-    export KUBECONFIG="/etc/rancher/k3s/k3s.yaml"
-fi
-
-if [ -z "$HOST_IP" ] && command -v kubectl >/dev/null 2>&1; then
-    # Try ingress-nginx LoadBalancer IP
+if [ -z "$HOST_IP" ] && jarvis_require_kubectl >/dev/null 2>&1; then
+    # Try the common ingress controller Services first.
     HOST_IP=$(kubectl get svc -n ingress-nginx ingress-nginx-controller \
         -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    if [ -z "$HOST_IP" ]; then
+        HOST_IP=$(kubectl get svc -n ingress nginx-ingress-microk8s-controller \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+    fi
     if [ -z "$HOST_IP" ]; then
         # Fallback: node internal IP
         HOST_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "")
@@ -83,5 +88,4 @@ echo ""
 echo "Verification:"
 echo "  grep jarvis.local /etc/hosts"
 echo ""
-
 

@@ -270,8 +270,8 @@ else
     echo -e "${RED}✗ $FAILED test(s) failed${NC}"
     echo ""
     echo "Troubleshooting:"
-    echo "  - Check embedding-service logs: kubectl logs -n jarvis deploy/embedding-service"
-    echo "  - Check memory-service logs: kubectl logs -n jarvis deploy/memory-service"
-    echo "  - Check postgres-pgvector: kubectl logs -n jarvis sts/postgres-pgvector"
+    echo "  - Check embedding-service logs: kubectl logs -n jarvis-prod deploy/embedding-service"
+    echo "  - Check memory-service logs: kubectl logs -n jarvis-prod deploy/memory-service"
+    echo "  - Check postgres-pgvector: kubectl logs -n jarvis-prod sts/postgres-pgvector"
     exit 1
 fi

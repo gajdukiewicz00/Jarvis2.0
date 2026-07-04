@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-NAMESPACE="${JARVIS_OBS_NAMESPACE:-jarvis}"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 JARVIS_HOME="${JARVIS_HOME:-${HOME}/.jarvis}"
 RUN_DIR="${JARVIS_HOME}/run"
 SUMMARY_FILE="${RUN_DIR}/observability-status.json"

@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_PATH="${PROJECT_ROOT}/k8s/overlays/prod-release-internal-tls-verified"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 
 SMOKE_SCRIPTS=(
   jarvis-smoke-internal-tls-ingress-api-gateway.sh
@@ -33,7 +33,7 @@ SMOKE_SCRIPTS=(
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-prod-internal-tls-verified.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-prod-internal-tls-verified.sh [--namespace=jarvis-prod]
 
 Validates the promoted internal-TLS release path by:
   1. running rollout validation against the promoted overlay

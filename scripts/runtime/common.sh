@@ -22,6 +22,7 @@ LOCAL_ENV_FILE="${RUNTIME_DIR}/local.env"
 RUN_SUMMARY="${JARVIS_HOME}/run/last-run.json"
 POSTGRES_CONTAINER="${JARVIS_LOCAL_POSTGRES_CONTAINER:-jarvis-local-postgres}"
 JARVIS_LOCAL_POSTGRES_IMAGE="${JARVIS_LOCAL_POSTGRES_IMAGE:-pgvector/pgvector:pg16}"
+JARVIS_LOCAL_CONTAINER_ENGINE="${JARVIS_LOCAL_CONTAINER_ENGINE:-podman}"
 
 CORE_SERVICES=(
     "security-service"
@@ -340,14 +341,80 @@ print(secrets.token_urlsafe(48))
 PY
 }
 
+local_container_engine_blocked() {
+    local engine_name
+    engine_name="$(basename "${JARVIS_LOCAL_CONTAINER_ENGINE}")"
+    case "${engine_name}" in
+        docker|docker.exe|com.docker.cli)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+local_container_engine_available() {
+    local_container_engine_blocked && return 1
+    command -v "${JARVIS_LOCAL_CONTAINER_ENGINE}" >/dev/null 2>&1
+}
+
+require_local_container_engine() {
+    if local_container_engine_blocked; then
+        fail "JARVIS_LOCAL_CONTAINER_ENGINE=${JARVIS_LOCAL_CONTAINER_ENGINE} is intentionally blocked; use podman for local managed PostgreSQL."
+    fi
+    command -v "${JARVIS_LOCAL_CONTAINER_ENGINE}" >/dev/null 2>&1 || \
+        fail "${JARVIS_LOCAL_CONTAINER_ENGINE} is required to auto-start local PostgreSQL. Install podman or point SPRING_DATASOURCE_URL at an external PostgreSQL."
+}
+
+local_container_exists() {
+    local name="$1"
+    local_container_engine_available || return 1
+    "${JARVIS_LOCAL_CONTAINER_ENGINE}" inspect "${name}" >/dev/null 2>&1
+}
+
+local_container_inspect_format() {
+    local format="$1"
+    local name="$2"
+    local_container_engine_available || return 1
+    "${JARVIS_LOCAL_CONTAINER_ENGINE}" inspect -f "${format}" "${name}" 2>/dev/null
+}
+
+local_container_image() {
+    local name="$1"
+    local image
+    image="$(local_container_inspect_format '{{.Config.Image}}' "${name}" || true)"
+    if [[ -z "${image}" || "${image}" == "<no value>" ]]; then
+        image="$(local_container_inspect_format '{{.ImageName}}' "${name}" || true)"
+    fi
+    [[ -n "${image}" && "${image}" != "<no value>" ]] || return 1
+    printf '%s' "${image}"
+}
+
+local_container_state() {
+    local name="$1"
+    local state
+    state="$(local_container_inspect_format '{{.State.Status}}' "${name}" || true)"
+    [[ -n "${state}" && "${state}" != "<no value>" ]] || return 1
+    printf '%s' "${state}"
+}
+
+local_container_mapped_port() {
+    local name="$1"
+    local container_port="${2:-5432/tcp}"
+    local_container_engine_available || return 1
+    "${JARVIS_LOCAL_CONTAINER_ENGINE}" port "${name}" "${container_port}" 2>/dev/null \
+        | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p' \
+        | head -n1
+}
+
 recover_postgres_password_from_container() {
-    command -v docker >/dev/null 2>&1 || return 1
-    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 1
+    local_container_exists "${POSTGRES_CONTAINER}" || return 1
 
     local pw
     pw="$(
-        docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' \
-            "${POSTGRES_CONTAINER}" 2>/dev/null \
+        local_container_inspect_format '{{range .Config.Env}}{{println .}}{{end}}' \
+            "${POSTGRES_CONTAINER}" \
         | sed -n 's/^POSTGRES_PASSWORD=//p'
     )"
     [[ -n "${pw}" ]] || return 1
@@ -355,8 +422,7 @@ recover_postgres_password_from_container() {
 }
 
 validate_postgres_credentials() {
-    command -v docker >/dev/null 2>&1 || return 0
-    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 0
+    local_container_exists "${POSTGRES_CONTAINER}" || return 0
 
     local container_pw
     container_pw="$(recover_postgres_password_from_container)" || return 0
@@ -659,8 +725,14 @@ ensure_local_env() {
         JARVIS_USE_TLS="${JARVIS_GATEWAY_SSL_ENABLED}"
     fi
 
+    # Local-runtime default: keep SERVICE_JWT_SECRET equal to JWT_SECRET for ergonomic dev.
+    # Production must set both distinctly via the K8s Secret jarvis-secrets; the api-gateway
+    # ServiceJwtProvider rejects the shared-secret fallback unless allow-shared-secret=true.
     if ! is_truthy "${JARVIS_ALLOW_DISTINCT_LOCAL_SERVICE_JWT_SECRET:-false}"; then
         SERVICE_JWT_SECRET="${JWT_SECRET}"
+        export SERVICE_JWT_ALLOW_SHARED_SECRET="true"
+    else
+        export SERVICE_JWT_ALLOW_SHARED_SECRET="false"
     fi
 
     ensure_local_tls_material
@@ -673,6 +745,7 @@ ensure_local_env() {
     write_env_assignment "${LOCAL_ENV_FILE}" "POSTGRES_PASSWORD" "${POSTGRES_PASSWORD}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JWT_SECRET" "${JWT_SECRET}"
     write_env_assignment "${LOCAL_ENV_FILE}" "SERVICE_JWT_SECRET" "${SERVICE_JWT_SECRET}"
+    write_env_assignment "${LOCAL_ENV_FILE}" "SERVICE_JWT_ALLOW_SHARED_SECRET" "${SERVICE_JWT_ALLOW_SHARED_SECRET}"
     write_env_assignment "${LOCAL_ENV_FILE}" "ENABLE_LLM" "${ENABLE_LLM}"
     write_env_assignment "${LOCAL_ENV_FILE}" "JARVIS_LLM_ENABLED" "${JARVIS_LLM_ENABLED}"
     write_env_assignment "${LOCAL_ENV_FILE}" "ENABLE_MEMORY" "${ENABLE_MEMORY}"
@@ -869,8 +942,16 @@ service_log_file() {
     printf '%s/%s.log' "${LOG_DIR}" "$1"
 }
 
+project_version() {
+    local version
+    version="$(grep -A1 "<artifactId>jarvis-root</artifactId>" "${ROOT_DIR}/pom.xml" | grep "<version>" | head -1 | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/' | tr -d ' ' || true)"
+    printf '%s' "${version:-1.0.0}"
+}
+
 service_jar() {
-    printf '%s/apps/%s/target/%s-0.1.0-SNAPSHOT.jar' "${ROOT_DIR}" "$1" "$1"
+    local version
+    version="$(project_version)"
+    printf '%s/apps/%s/target/%s-%s.jar' "${ROOT_DIR}" "$1" "$1" "${version}"
 }
 
 service_health_url() {
@@ -989,22 +1070,25 @@ managed_postgres_matches_target() {
 
     [[ "${host}" == "127.0.0.1" || "${host}" == "localhost" ]] || return 1
 
-    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 1
+    local_container_exists "${POSTGRES_CONTAINER}" || return 1
 
     local mapped_port
-    mapped_port="$(
-        docker inspect -f '{{with (index .NetworkSettings.Ports "5432/tcp")}}{{(index . 0).HostPort}}{{end}}' \
-            "${POSTGRES_CONTAINER}" 2>/dev/null || true
-    )"
+    mapped_port="$(local_container_mapped_port "${POSTGRES_CONTAINER}" "5432/tcp" || true)"
 
     [[ -n "${mapped_port}" && "${mapped_port}" == "${port}" ]]
 }
 
 managed_postgres_image_matches_target() {
-    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 1
-    local current_image
-    current_image="$(docker inspect -f '{{.Config.Image}}' "${POSTGRES_CONTAINER}" 2>/dev/null || true)"
-    [[ "${current_image}" == "${JARVIS_LOCAL_POSTGRES_IMAGE}" ]]
+    local current_image expected_image
+    current_image="$(local_container_image "${POSTGRES_CONTAINER}" || true)"
+    expected_image="${JARVIS_LOCAL_POSTGRES_IMAGE}"
+    # Normalize Docker Hub's implicit `docker.io/` (and `library/`) prefix so
+    # `docker.io/pgvector/pgvector:pg16` and `pgvector/pgvector:pg16` compare equal.
+    current_image="${current_image#docker.io/}"
+    current_image="${current_image#library/}"
+    expected_image="${expected_image#docker.io/}"
+    expected_image="${expected_image#library/}"
+    [[ "${current_image}" == "${expected_image}" ]]
 }
 
 ensure_local_postgres_extensions() {
@@ -1014,8 +1098,8 @@ ensure_local_postgres_extensions() {
         return 0
     fi
 
-    docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || return 0
-    docker exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${db}" \
+    local_container_exists "${POSTGRES_CONTAINER}" || return 0
+    "${JARVIS_LOCAL_CONTAINER_ENGINE}" exec "${POSTGRES_CONTAINER}" psql -U "${POSTGRES_USER}" -d "${db}" \
         -c "CREATE EXTENSION IF NOT EXISTS vector;" \
         -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" >/dev/null 2>&1 \
         || fail "Failed to enable pgvector/pgcrypto in managed PostgreSQL container ${POSTGRES_CONTAINER}"
@@ -1030,10 +1114,10 @@ ensure_local_postgres() {
         return 0
     fi
 
-    if docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1 && \
+    if local_container_exists "${POSTGRES_CONTAINER}" && \
         ! managed_postgres_image_matches_target && \
         is_truthy "${JARVIS_KEEP_LOCAL_POSTGRES_DATA:-false}"; then
-        fail "Managed PostgreSQL container ${POSTGRES_CONTAINER} uses image $(docker inspect -f '{{.Config.Image}}' "${POSTGRES_CONTAINER}" 2>/dev/null || echo unknown), but local runtime expects ${JARVIS_LOCAL_POSTGRES_IMAGE}. Re-run with JARVIS_KEEP_LOCAL_POSTGRES_DATA=false or recreate the container."
+        fail "Managed PostgreSQL container ${POSTGRES_CONTAINER} uses image $(local_container_image "${POSTGRES_CONTAINER}" || echo unknown), but local runtime expects ${JARVIS_LOCAL_POSTGRES_IMAGE}. Re-run with JARVIS_KEEP_LOCAL_POSTGRES_DATA=false or recreate the container."
     fi
 
     if managed_postgres_matches_target "${host}" "${port}" && ! is_truthy "${JARVIS_KEEP_LOCAL_POSTGRES_DATA:-false}"; then
@@ -1041,7 +1125,7 @@ ensure_local_postgres() {
             log "Managed PostgreSQL container ${POSTGRES_CONTAINER} already matches target and Jarvis services are running; preserving the existing local database."
         else
             log "Refreshing managed PostgreSQL container ${POSTGRES_CONTAINER} for a clean local schema..."
-            docker rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+            "${JARVIS_LOCAL_CONTAINER_ENGINE}" rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
         fi
     fi
 
@@ -1069,17 +1153,17 @@ PY
         return 0
     fi
 
-    command -v docker >/dev/null 2>&1 || fail "Docker is required to auto-start local PostgreSQL"
+    require_local_container_engine
 
-    if docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1; then
+    if local_container_exists "${POSTGRES_CONTAINER}"; then
         if is_truthy "${JARVIS_KEEP_LOCAL_POSTGRES_DATA:-false}"; then
             validate_postgres_credentials
             log "Starting existing PostgreSQL container ${POSTGRES_CONTAINER}..."
-            docker start "${POSTGRES_CONTAINER}" >/dev/null
+            "${JARVIS_LOCAL_CONTAINER_ENGINE}" start "${POSTGRES_CONTAINER}" >/dev/null
         else
             log "Recreating managed PostgreSQL container ${POSTGRES_CONTAINER} for a clean local schema..."
-            docker rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
-            docker run -d \
+            "${JARVIS_LOCAL_CONTAINER_ENGINE}" rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+            "${JARVIS_LOCAL_CONTAINER_ENGINE}" run -d \
                 --name "${POSTGRES_CONTAINER}" \
                 -e POSTGRES_DB="${db}" \
                 -e POSTGRES_USER="${POSTGRES_USER}" \
@@ -1089,7 +1173,7 @@ PY
         fi
     else
         log "Starting local PostgreSQL container ${POSTGRES_CONTAINER}..."
-        docker run -d \
+        "${JARVIS_LOCAL_CONTAINER_ENGINE}" run -d \
             --name "${POSTGRES_CONTAINER}" \
             -e POSTGRES_DB="${db}" \
             -e POSTGRES_USER="${POSTGRES_USER}" \
@@ -1100,7 +1184,7 @@ PY
 
     local deadline=$((SECONDS + 60))
     while (( SECONDS < deadline )); do
-        if docker exec "${POSTGRES_CONTAINER}" pg_isready -U "${POSTGRES_USER}" -d "${db}" >/dev/null 2>&1; then
+        if "${JARVIS_LOCAL_CONTAINER_ENGINE}" exec "${POSTGRES_CONTAINER}" pg_isready -U "${POSTGRES_USER}" -d "${db}" >/dev/null 2>&1; then
             ensure_local_postgres_extensions "${db}"
             log "Local PostgreSQL is ready."
             return 0
@@ -1422,13 +1506,13 @@ stop_managed_postgres() {
         return 0
     fi
 
-    if docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1; then
+    if local_container_exists "${POSTGRES_CONTAINER}"; then
         if is_truthy "${JARVIS_KEEP_LOCAL_POSTGRES_DATA:-false}"; then
             log "Stopping managed PostgreSQL container ${POSTGRES_CONTAINER}..."
-            docker stop "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+            "${JARVIS_LOCAL_CONTAINER_ENGINE}" stop "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
         else
             log "Removing managed PostgreSQL container ${POSTGRES_CONTAINER}..."
-            docker rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
+            "${JARVIS_LOCAL_CONTAINER_ENGINE}" rm -f "${POSTGRES_CONTAINER}" >/dev/null 2>&1 || true
         fi
     fi
 }

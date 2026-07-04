@@ -2,7 +2,7 @@
 set -euo pipefail
 
 KUBECONFIG="${KUBECONFIG:-$HOME/.jarvis/kubeconfig}"
-NAMESPACE="${JARVIS_K8S_NAMESPACE:-jarvis}"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 MODEL_SOURCE="${1:-${JARVIS_LLM_MODEL_PATH:-$HOME/.jarvis/models/llm/qwen2.5-3b-instruct-q4_k_m.gguf}}"
 PVC_NAME="${JARVIS_LLM_MODEL_PVC:-llm-models-pvc}"
 LOADER_POD="${JARVIS_LLM_MODEL_LOADER_POD:-llm-model-loader}"

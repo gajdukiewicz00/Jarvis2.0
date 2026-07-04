@@ -96,7 +96,7 @@ distinguished_name = dn
 req_extensions     = req_ext
 
 [ dn ]
-CN = api-gateway.jarvis.svc.cluster.local
+CN = api-gateway.jarvis-prod.svc.cluster.local
 O  = Jarvis
 
 [ req_ext ]
@@ -107,7 +107,7 @@ extendedKeyUsage = serverAuth
 
 [ alt_names ]
 DNS.1 = api-gateway
-DNS.2 = api-gateway.jarvis.svc.cluster.local
+DNS.2 = api-gateway.jarvis-prod.svc.cluster.local
 DNS.3 = localhost
 IP.1 = 127.0.0.1
 EOF

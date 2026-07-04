@@ -4,13 +4,15 @@
 # Jarvis 2.0 - Apply Local Secrets to Kubernetes
 # =============================================================================
 # Reads secrets from ~/.jarvis/secrets/secrets.env (or ./secrets/secrets.env)
-# and creates/updates Kubernetes secret jarvis-secrets in namespace jarvis
+# and creates/updates Kubernetes secret jarvis-secrets in namespace jarvis-prod
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/scripts/lib/k8s-common.sh"
 
 # Colors
 GREEN='\033[0;32m'
@@ -20,7 +22,7 @@ CYAN='\033[0;36m'
 GRAY='\033[0;90m'
 NC='\033[0m'
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 SECRET_NAME="jarvis-secrets"
 GRAFANA_ADMIN_USER_KEY="GRAFANA_ADMIN_USER"
 GRAFANA_ADMIN_PASSWORD_KEY="GRAFANA_ADMIN_PASSWORD"
@@ -71,14 +73,6 @@ echo "Namespace: ${NAMESPACE}"
 echo "Secret name: ${SECRET_NAME}"
 echo ""
 
-if [[ -z "${KUBECONFIG:-}" ]]; then
-    if [[ -r "${HOME}/.jarvis/kubeconfig" ]]; then
-        export KUBECONFIG="${HOME}/.jarvis/kubeconfig"
-    elif [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
-        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-    fi
-fi
-
 generate_secrets_file() {
     if ! command -v openssl >/dev/null 2>&1; then
         echo -e "${RED}❌ openssl not found; cannot auto-generate secrets${NC}"
@@ -104,7 +98,7 @@ POSTGRES_USER=jarvis
 POSTGRES_PASSWORD=${db_password}
 SPRING_DATASOURCE_USERNAME=jarvis
 SPRING_DATASOURCE_PASSWORD=${db_password}
-SPRING_DATASOURCE_URL=jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis
+SPRING_DATASOURCE_URL=jdbc:postgresql://postgres.jarvis-prod.svc.cluster.local:5432/jarvis
 
 RABBITMQ_DEFAULT_USER=jarvis
 RABBITMQ_DEFAULT_PASS=${rabbit_password}
@@ -168,12 +162,13 @@ if [[ "$NO_APPLY" == "true" ]]; then
     exit 0
 fi
 
-# Check if kubectl is available
-if ! command -v kubectl &> /dev/null; then
-    echo -e "${RED}❌ kubectl not found${NC}"
-    echo "   Please install kubectl first"
+# Check if kubectl or microk8s is available
+if ! jarvis_require_kubectl >/dev/null 2>&1; then
+    echo -e "${RED}❌ Neither kubectl nor microk8s is available${NC}"
     exit 1
 fi
+
+echo "Using Kubernetes CLI: $(jarvis_kubectl_description)"
 
 # Check if namespace exists
 if ! kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
@@ -225,6 +220,12 @@ while IFS= read -r line || [[ -n "$line" ]]; do
         SECRET_VALUES["$key"]="$value"
     fi
 done < "$SECRETS_FILE"
+
+EXPECTED_SPRING_DATASOURCE_URL="jdbc:postgresql://postgres.${NAMESPACE}.svc.cluster.local:5432/jarvis"
+if [[ "${SECRET_VALUES[SPRING_DATASOURCE_URL]:-}" != "${EXPECTED_SPRING_DATASOURCE_URL}" ]]; then
+    SECRET_VALUES["SPRING_DATASOURCE_URL"]="${EXPECTED_SPRING_DATASOURCE_URL}"
+    echo -e "${CYAN}Normalizing SPRING_DATASOURCE_URL for namespace ${NAMESPACE}${NC}"
+fi
 
 ensure_grafana_admin_secrets() {
     local updated="false"
@@ -290,7 +291,6 @@ fi
 echo -e "${GREEN}✅ All required keys present${NC}"
 echo ""
 
-# Build kubectl command
 echo "Applying secrets to Kubernetes..."
 KUBECTL_ARGS=()
 

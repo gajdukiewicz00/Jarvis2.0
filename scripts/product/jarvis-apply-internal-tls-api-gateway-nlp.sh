@@ -4,12 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 SECRET_NAME="jarvis-internal-tls-api-gateway-nlp"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-apply-internal-tls-api-gateway-nlp.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-apply-internal-tls-api-gateway-nlp.sh [--namespace=jarvis-prod]
 
 Creates or updates the Kubernetes secret that backs the first internal TLS slice:
   api-gateway (HTTPS client) -> nlp-service (HTTPS server)

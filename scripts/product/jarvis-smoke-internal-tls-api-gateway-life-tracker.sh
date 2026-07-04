@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 LIFE_TRACKER_PORT="${JARVIS_TLS_SLICE_LIFE_TRACKER_PORT:-18085}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-life-tracker}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-life-tracker.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-life-tracker.sh [--namespace=jarvis-prod]
 
 Validates the ninth internal TLS hop:
   1. life-tracker only answers on HTTPS
@@ -169,4 +169,4 @@ if ! printf '%s\n' "${api_gateway_logs}" | rg -q 'https://life-tracker\.jarvis\.
   echo "❌ api-gateway logs did not show HTTPS life-tracker routing on port 8085" >&2
   exit 1
 fi
-echo "✅ api-gateway routed the migrated life-tracker call to https://life-tracker.jarvis.svc.cluster.local:8085"
+echo "✅ api-gateway routed the migrated life-tracker call to https://life-tracker.jarvis-prod.svc.cluster.local:8085"

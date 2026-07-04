@@ -1,0 +1,14 @@
+[Unit]
+Description=Jarvis host pc-control (non-stub, real desktop actions)
+After=graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+# Reads SERVICE_JWT_SECRET from ~/.jarvis/wake.env, sets DISPLAY/DBUS, runs the jar non-stub on :8084.
+ExecStart=%h/Jarvis/Jarvis2.0/scripts/jarvis-pc-control-up.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

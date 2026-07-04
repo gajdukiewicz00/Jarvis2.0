@@ -4,12 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 SECRET_NAME="jarvis-internal-tls-api-gateway-planner-service"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-apply-internal-tls-api-gateway-planner-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-apply-internal-tls-api-gateway-planner-service.sh [--namespace=jarvis-prod]
 
 Creates or updates the Kubernetes secret that backs the seventeenth internal TLS hop:
   api-gateway (HTTPS client) -> planner-service (HTTPS server)

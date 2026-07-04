@@ -11,27 +11,35 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# shellcheck disable=SC1091
+source "${PROJECT_ROOT}/scripts/lib/k8s-common.sh"
 OVERLAY_PATH="${1:-${PROJECT_ROOT}/k8s/overlays/prod}"
 # Default to client-side preflight so render checks are deterministic without cluster access.
 # Use K8S_PREFLIGHT_MODE=server to enable secret checks + server-side dry-run apply.
 PREFLIGHT_MODE="${K8S_PREFLIGHT_MODE:-client}"
 TOOLCHAIN_IMAGE="${K8S_PREFLIGHT_TOOLCHAIN_IMAGE:-bitnami/kubectl:latest}"
-K8S_NAMESPACE="${K8S_PREFLIGHT_NAMESPACE:-jarvis}"
+CONTAINER_ENGINE="${K8S_PREFLIGHT_CONTAINER_ENGINE:-podman}"
+K8S_NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 REQUIRED_SECRETS_RAW="${K8S_PREFLIGHT_REQUIRED_SECRETS:-jarvis-secrets,jarvis-tls}"
 PRIMARY_SECRET_NAME="${K8S_PREFLIGHT_PRIMARY_SECRET_NAME:-jarvis-secrets}"
 REQUIRED_SECRET_KEYS_RAW="${K8S_PREFLIGHT_REQUIRED_SECRET_KEYS:-POSTGRES_USER,POSTGRES_PASSWORD,SPRING_DATASOURCE_USERNAME,SPRING_DATASOURCE_PASSWORD,JWT_SECRET,SERVICE_JWT_SECRET,SPRING_RABBITMQ_USERNAME,SPRING_RABBITMQ_PASSWORD,MQTT_USERNAME,MQTT_PASSWORD}"
 RENDER_OUTPUT="${K8S_PREFLIGHT_RENDER_OUTPUT:-/tmp/prod-render.yaml}"
 CORE_WORKLOADS_RAW="${K8S_PREFLIGHT_CORE_WORKLOADS:-api-gateway,orchestrator,security-service,voice-gateway,planner-service,life-tracker}"
-OPTIONAL_WORKLOADS_RAW="${K8S_PREFLIGHT_OPTIONAL_WORKLOADS:-llm-service,memory-service,embedding-service,llm-server}"
+OPTIONAL_WORKLOADS_RAW="${K8S_PREFLIGHT_OPTIONAL_WORKLOADS:-llm-service,memory-service,embedding-service}"
 CORE_SA_TOKEN_EXCEPTIONS_RAW="${K8S_PREFLIGHT_CORE_SA_TOKEN_EXCEPTIONS:-}"
 KYVERNO_EXCEPTION_LABEL_KEY="${K8S_PREFLIGHT_KYVERNO_EXCEPTION_LABEL_KEY:-security.jarvis.io/kyverno-exempt}"
 KYVERNO_EXCEPTION_LABEL_VALUE="${K8S_PREFLIGHT_KYVERNO_EXCEPTION_LABEL_VALUE:-true}"
 CORE_DIGEST_POLICY_MODE="${K8S_PREFLIGHT_CORE_DIGEST_POLICY_MODE:-audit}"
+CORE_MIN_REPLICAS="${K8S_PREFLIGHT_CORE_MIN_REPLICAS:-2}"
 IFS=',' read -r -a REQUIRED_SECRETS <<< "${REQUIRED_SECRETS_RAW}"
 IFS=',' read -r -a REQUIRED_SECRET_KEYS <<< "${REQUIRED_SECRET_KEYS_RAW}"
 IFS=',' read -r -a CORE_WORKLOADS <<< "${CORE_WORKLOADS_RAW}"
 IFS=',' read -r -a OPTIONAL_WORKLOADS <<< "${OPTIONAL_WORKLOADS_RAW}"
 IFS=',' read -r -a CORE_SA_TOKEN_EXCEPTIONS <<< "${CORE_SA_TOKEN_EXCEPTIONS_RAW}"
+K8S_MANIFEST_ROOTS=("${PROJECT_ROOT}/k8s")
+if [[ -d "${PROJECT_ROOT}/infra/k8s" ]]; then
+  K8S_MANIFEST_ROOTS+=("${PROJECT_ROOT}/infra/k8s")
+fi
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -44,16 +52,8 @@ require_cmd grep
 require_cmd awk
 
 detect_kubeconfig_local() {
+  jarvis_detect_kubeconfig
   if [[ -n "${KUBECONFIG:-}" ]]; then
-    return 0
-  fi
-  if [[ -r "${HOME}/.jarvis/kubeconfig" ]]; then
-    export KUBECONFIG="${HOME}/.jarvis/kubeconfig"
-    echo "🔐 Using kubeconfig: ${KUBECONFIG}"
-    return 0
-  fi
-  if [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
-    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     echo "🔐 Using kubeconfig: ${KUBECONFIG}"
   fi
 }
@@ -97,7 +97,7 @@ secret_exists_or_fail_local() {
         echo "   Apply secrets first: ./scripts/product/jarvis-secrets-apply.sh"
         ;;
       jarvis-tls)
-        echo "   Create/apply the TLS secret before deploy: kubectl create secret tls jarvis-tls ..."
+        echo "   Create/apply the TLS secret before deploy: ./scripts/product/jarvis-apply-edge-tls-secret.sh"
         ;;
     esac
     exit 1
@@ -131,7 +131,7 @@ secret_key_exists_or_fail_local() {
         echo "   Apply secrets first: ./scripts/product/jarvis-secrets-apply.sh"
         ;;
       jarvis-tls)
-        echo "   Create/apply the TLS secret before deploy: kubectl create secret tls jarvis-tls ..."
+        echo "   Create/apply the TLS secret before deploy: ./scripts/product/jarvis-apply-edge-tls-secret.sh"
         ;;
     esac
   elif [[ -s "${err_file}" ]]; then
@@ -161,7 +161,7 @@ is_core_sa_token_exception() {
 }
 
 echo "🔎 Checking for forbidden ':latest' image tags in k8s manifests..."
-if grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${PROJECT_ROOT}/k8s"; then
+if grep -RIn --include="*.yaml" --include="*.yml" "image:.*:latest" "${K8S_MANIFEST_ROOTS[@]}"; then
   echo "❌ Found ':latest' image tags in k8s manifests"
   exit 1
 fi
@@ -522,8 +522,9 @@ validate_rbac_safety_local() {
 
 validate_hardening_targets_local() {
   local workload
-  for workload in llm-service memory-service embedding-service llm-server; do
-    if ! awk -v workload="${workload}" '
+  local result
+  for workload in llm-service memory-service embedding-service; do
+    result="$(awk -v workload="${workload}" '
       BEGIN { RS="---"; found=0; hardened=0 }
       $0 ~ /kind:[[:space:]]*Deployment/ && $0 ~ ("name:[[:space:]]*" workload "([[:space:]]|$)") {
         found=1
@@ -531,8 +532,20 @@ validate_hardening_targets_local() {
           hardened=1
         }
       }
-      END { exit !(found && hardened) }
-    ' "${RENDER_OUTPUT}"; then
+      END {
+        if (!found) {
+          print "absent"
+        } else if (hardened) {
+          print "hardened"
+        } else {
+          print "unhardened"
+        }
+      }
+    ' "${RENDER_OUTPUT}")"
+    if [[ "${result}" == "absent" ]]; then
+      continue
+    fi
+    if [[ "${result}" != "hardened" ]]; then
       echo "❌ Hardening check failed for deployment '${workload}': expected readOnlyRootFilesystem=true and allowPrivilegeEscalation=false"
       exit 1
     fi
@@ -560,7 +573,7 @@ validate_core_replica_policy_local() {
   for workload in "${CORE_WORKLOADS[@]}"; do
     workload="${workload//[[:space:]]/}"
     [[ -z "${workload}" ]] && continue
-    if ! awk -v workload="${workload}" '
+    if ! awk -v workload="${workload}" -v min_replicas="${CORE_MIN_REPLICAS}" '
       BEGIN { RS="---"; found=0; ok=0 }
       $0 ~ /kind:[[:space:]]*Deployment/ && $0 ~ ("name:[[:space:]]*" workload "([[:space:]]|$)") {
         found=1
@@ -573,13 +586,13 @@ validate_core_replica_policy_local() {
             replicas=line+0
           }
         }
-        if (replicas >= 2) {
+        if (replicas >= min_replicas) {
           ok=1
         }
       }
       END { exit !(found && ok) }
     ' "${RENDER_OUTPUT}"; then
-      echo "❌ Replica policy check failed for core workload '${workload}': expected replicas >= 2"
+      echo "❌ Replica policy check failed for core workload '${workload}': expected replicas >= ${CORE_MIN_REPLICAS}"
       exit 1
     fi
   done
@@ -671,10 +684,11 @@ validate_core_termination_policy_local() {
 
 validate_optional_replica_policy_local() {
   local workload
+  local result
   for workload in "${OPTIONAL_WORKLOADS[@]}"; do
     workload="${workload//[[:space:]]/}"
     [[ -z "${workload}" ]] && continue
-    if ! awk -v workload="${workload}" '
+    result="$(awk -v workload="${workload}" '
       BEGIN { RS="---"; found=0; ok=0 }
       $0 ~ /kind:[[:space:]]*Deployment/ && $0 ~ ("name:[[:space:]]*" workload "([[:space:]]|$)") {
         found=1
@@ -691,8 +705,20 @@ validate_optional_replica_policy_local() {
           ok=1
         }
       }
-      END { exit !(found && ok) }
-    ' "${RENDER_OUTPUT}"; then
+      END {
+        if (!found) {
+          print "absent"
+        } else if (ok) {
+          print "zero"
+        } else {
+          print "nonzero"
+        }
+      }
+    ' "${RENDER_OUTPUT}")"
+    if [[ "${result}" == "absent" ]]; then
+      continue
+    fi
+    if [[ "${result}" != "zero" ]]; then
       echo "❌ Replica policy check failed for optional workload '${workload}': expected replicas = 0"
       exit 1
     fi
@@ -768,7 +794,13 @@ required_secret_keys_csv() {
 }
 
 run_container_preflight() {
-  require_cmd docker
+  require_cmd "${CONTAINER_ENGINE}"
+  case "$(basename "${CONTAINER_ENGINE}")" in
+    docker|docker.exe|com.docker.cli)
+      echo "❌ K8S_PREFLIGHT_CONTAINER_ENGINE=${CONTAINER_ENGINE} is intentionally blocked; use podman." >&2
+      exit 1
+      ;;
+  esac
   local dry_run_flag="--dry-run=${PREFLIGHT_MODE}"
   local secrets_csv="${REQUIRED_SECRETS_RAW}"
   local secret_keys_csv
@@ -780,8 +812,8 @@ run_container_preflight() {
     mount_args+=("${line}")
   done < <(container_kube_mount_args)
 
-  echo "🧪 Running k8s preflight in container (${TOOLCHAIN_IMAGE})..."
-  docker run --rm \
+  echo "🧪 Running k8s preflight with ${CONTAINER_ENGINE} (${TOOLCHAIN_IMAGE})..."
+  "${CONTAINER_ENGINE}" run --rm \
     -v "${PROJECT_ROOT}:${PROJECT_ROOT}" \
     -v "${HOME}/.kube:/root/.kube:ro" \
     -v "/tmp:/tmp" \

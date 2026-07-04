@@ -54,7 +54,7 @@ require_command java
 require_command mvn
 require_command curl
 require_command python3
-warn_if_missing_command docker "Docker not found. Local runtime will need an external PostgreSQL instead of the managed container."
+warn_if_missing_command podman "podman not found. Local runtime will need an external PostgreSQL instead of the managed container."
 
 if [[ ! -f "${LOCAL_ENV_FILE}" ]]; then
     errors+=("Local env file was not created at ${LOCAL_ENV_FILE}")

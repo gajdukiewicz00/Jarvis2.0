@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="${JARVIS_OBS_NAMESPACE:-jarvis}"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 JARVIS_HOME="${JARVIS_HOME:-${HOME}/.jarvis}"
 SECRETS_FILE="${JARVIS_OBS_SECRETS_FILE:-${JARVIS_HOME}/secrets/secrets.env}"
 GRAFANA_SECRET_NAME="${JARVIS_OBS_SECRET_NAME:-jarvis-secrets}"

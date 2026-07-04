@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 ORCHESTRATOR_SERVICE_PORT="${JARVIS_TLS_SLICE_ORCHESTRATOR_PORT:-18083}"
 VOICE_GATEWAY_SERVICE_PORT="${JARVIS_TLS_SLICE_VOICE_GATEWAY_PORT:-18081}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-voice-g
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-voice-gateway-orchestrator.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-voice-gateway-orchestrator.sh [--namespace=jarvis-prod]
 
 Validates the next internal TLS slice:
   1. orchestrator responds over HTTPS on 8083
@@ -242,4 +242,4 @@ if ! printf '%s\n' "${orchestrator_logs}" | rg -q 'Received intent execution: in
   exit 1
 fi
 
-echo "✅ voice-gateway routed the migrated call to https://orchestrator.jarvis.svc.cluster.local:8083"
+echo "✅ voice-gateway routed the migrated call to https://orchestrator.jarvis-prod.svc.cluster.local:8083"

@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 ANALYTICS_SERVICE_PORT="${JARVIS_TLS_SLICE_ANALYTICS_PORT:-18087}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-analytics-service}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-analytics-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-analytics-service.sh [--namespace=jarvis-prod]
 
 Validates the seventh internal TLS hop:
   1. analytics-service only answers on HTTPS
@@ -169,4 +169,4 @@ if ! printf '%s\n' "${api_gateway_logs}" | rg -q 'https://analytics-service\.jar
   echo "❌ api-gateway logs did not show HTTPS analytics-service routing on port 8087" >&2
   exit 1
 fi
-echo "✅ api-gateway routed the migrated analytics call to https://analytics-service.jarvis.svc.cluster.local:8087"
+echo "✅ api-gateway routed the migrated analytics call to https://analytics-service.jarvis-prod.svc.cluster.local:8087"

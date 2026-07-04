@@ -30,10 +30,10 @@ PY
     fi
 
     local managed="external"
-    if docker inspect "${POSTGRES_CONTAINER}" >/dev/null 2>&1; then
+    if local_container_exists "${POSTGRES_CONTAINER}"; then
         local state
-        state="$(docker inspect -f '{{.State.Status}}' "${POSTGRES_CONTAINER}" 2>/dev/null || echo unknown)"
-        managed="${POSTGRES_CONTAINER}:${state}"
+        state="$(local_container_state "${POSTGRES_CONTAINER}" 2>/dev/null || echo unknown)"
+        managed="${JARVIS_LOCAL_CONTAINER_ENGINE}:${POSTGRES_CONTAINER}:${state}"
     fi
 
     printf '%-18s host=%s:%s db=%s reachable=%s managed=%s\n' "postgres" "${host}" "${port}" "${db}" "${reachable}" "${managed}"

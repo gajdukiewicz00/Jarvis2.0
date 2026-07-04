@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_PATH="${PROJECT_ROOT}/k8s/overlays/prod-release-internal-tls-api-gateway-smart-home-service"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 SECRET_NAME="jarvis-internal-tls-api-gateway-smart-home-service"
 REQUIRED_SECRET_KEYS=(
   smart-home-service-keystore.p12

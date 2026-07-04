@@ -4,7 +4,7 @@
 # Jarvis 2.0 - Promote Backend Images and Generate Digest-Pinned Release Overlay
 # =============================================================================
 # Supported paths:
-#   1. Promote locally built images to a registry and resolve repo digests
+#   1. Promote locally built OCI images with podman and resolve repo digests
 #   2. Consume a refs file with image@sha256 entries produced elsewhere (CI)
 #
 # Output:
@@ -16,16 +16,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OUTPUT_DIR="${JARVIS_RELEASE_OUTPUT_DIR:-${PROJECT_ROOT}/k8s/overlays/prod-release}"
+PROD_OVERLAY_IMAGE_BASE="${PROD_OVERLAY_IMAGE_BASE:-localhost:5000/jarvis}"
 
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-}"
 IMAGE_REPO="${IMAGE_REPO:-jarvis}"
-IMAGE_TAG="${IMAGE_TAG:-prod}"
+IMAGE_TAG="${IMAGE_TAG:-1.0.0}"
 SOURCE_IMAGE_REPO="${SOURCE_IMAGE_REPO:-jarvis}"
 SOURCE_IMAGE_TAG="${SOURCE_IMAGE_TAG:-local}"
+PODMAN_BIN="${PODMAN_BIN:-podman}"
 REFS_FILE=""
 WRITE_REFS_FILE=""
 PUSH_IMAGES=false
-INCLUDE_DATA=false
+INCLUDE_DATA=true
 INCLUDE_LLM=false
 
 CORE_BACKEND_SERVICES=(
@@ -49,7 +51,6 @@ OPTIONAL_DATA_SERVICES=(
 
 LLM_SERVICES=(
   llm-service
-  llm-server
 )
 
 declare -A IMAGE_DIGEST_REFS=()
@@ -59,19 +60,20 @@ usage() {
 Usage: ./scripts/product/jarvis-promote-images.sh [options]
 
 Options:
-  --push                    Tag and push promoted images before resolving digests
+  --push                    Tag and push promoted images with podman before resolving digests
   --refs-file=PATH          Read service=image@sha256:... refs from an existing file
   --write-refs-file=PATH    Write resolved refs to PATH for audit/CI handoff
-  --include-data            Also include optional memory-service and embedding-service
-  --include-llm             Also include optional llm-service and llm-server in the release overlay
+  --include-data            Include optional memory-service and embedding-service (default: enabled)
+  --include-llm             Also include optional llm-service in the release overlay
   --help, -h                Show this help
 
 Environment when not using --refs-file:
   IMAGE_REGISTRY            Registry host, for example ghcr.io (required)
   IMAGE_REPO                Registry repo prefix, default: jarvis
-  IMAGE_TAG                 Target tag to push and resolve, default: prod
+  IMAGE_TAG                 Target tag to push and resolve, default: 1.0.0
   SOURCE_IMAGE_REPO         Local source repo prefix, default: jarvis
   SOURCE_IMAGE_TAG          Local source tag, default: local
+  PODMAN_BIN                Podman-compatible CLI, default: podman
   JARVIS_RELEASE_OUTPUT_DIR Optional output directory for the generated release overlay
 
 Examples:
@@ -83,7 +85,7 @@ Examples:
       --refs-file=/tmp/backend-image-refs.env
 
   ./scripts/product/jarvis-promote-images.sh \
-    --include-data --include-llm \
+    --include-llm \
     --refs-file=/tmp/backend-image-refs.env
 
   ./scripts/product/jarvis-promote-images.sh \
@@ -200,24 +202,25 @@ resolve_digest_ref_from_local_image() {
   local target_ref
   local repo_digests
   local digest_ref
-  local push_output
+  local digest_file
   local pushed_digest
 
   source_ref="$(source_image_ref "${service}")"
   target_ref="$(target_tagged_ref "${service}")"
 
-  if ! docker image inspect "${source_ref}" >/dev/null 2>&1; then
+  if ! "${PODMAN_BIN}" image exists "${source_ref}" >/dev/null 2>&1; then
     echo "❌ Missing local source image: ${source_ref}" >&2
     echo "   Build backend images first, or use --refs-file with pre-resolved digests." >&2
     exit 1
   fi
 
-  docker tag "${source_ref}" "${target_ref}"
+  "${PODMAN_BIN}" tag "${source_ref}" "${target_ref}"
   if [[ "${PUSH_IMAGES}" == "true" ]]; then
     echo "📦 Pushing ${target_ref}"
-    push_output="$(docker push "${target_ref}" 2>&1)"
-    printf '%s\n' "${push_output}" >/dev/null
-    pushed_digest="$(printf '%s\n' "${push_output}" | sed -n 's/^.*digest: \(sha256:[0-9a-fA-F]\{64\}\).*$/\1/p' | tail -n1)"
+    digest_file="$(mktemp -t jarvis-image-digest-XXXXXX)"
+    "${PODMAN_BIN}" push --digestfile "${digest_file}" "${target_ref}" >/dev/null
+    pushed_digest="$(tr -d '[:space:]' < "${digest_file}")"
+    rm -f "${digest_file}"
     if [[ -n "${pushed_digest}" ]]; then
       digest_ref="$(target_image_base)/${service}@${pushed_digest}"
       IMAGE_DIGEST_REFS["${service}"]="${digest_ref}"
@@ -225,7 +228,7 @@ resolve_digest_ref_from_local_image() {
     fi
   fi
 
-  repo_digests="$(docker image inspect "${target_ref}" --format '{{range .RepoDigests}}{{println .}}{{end}}' 2>/dev/null || true)"
+  repo_digests="$("${PODMAN_BIN}" image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${target_ref}" 2>/dev/null || true)"
   digest_ref="$(printf '%s\n' "${repo_digests}" | grep -E "^$(target_image_base)/${service}@sha256:[0-9a-fA-F]{64}$" | head -n1 || true)"
   if [[ -z "${digest_ref}" ]]; then
     echo "❌ No registry digest found for ${target_ref}" >&2
@@ -299,6 +302,7 @@ write_release_overlay() {
   local ref
   local new_name
   local digest
+  local match_name
 
   mkdir -p "${OUTPUT_DIR}"
 
@@ -310,6 +314,17 @@ kind: Kustomization
 
 resources:
   - ../prod
+EOF
+
+  if [[ "${INCLUDE_LLM}" != "true" ]]; then
+    cat >> "${overlay_file}" <<'EOF'
+
+patches:
+  - path: exclude-llm-stack.patch.yaml
+EOF
+  fi
+
+  cat >> "${overlay_file}" <<'EOF'
 
 images:
 EOF
@@ -318,19 +333,45 @@ EOF
     ref="${IMAGE_DIGEST_REFS[${service}]}"
     new_name="${ref%@sha256:*}"
     digest="sha256:${ref##*@sha256:}"
+    match_name="${PROD_OVERLAY_IMAGE_BASE}/${service}"
     cat >> "${overlay_file}" <<EOF
-  - name: jarvis/${service}
+  - name: ${match_name}
     newName: ${new_name}
     digest: ${digest}
 EOF
   done < <(release_services)
 }
 
+write_optional_stack_patches() {
+  local llm_patch_file="${OUTPUT_DIR}/exclude-llm-stack.patch.yaml"
+
+  if [[ "${INCLUDE_LLM}" == "true" ]]; then
+    rm -f "${llm_patch_file}"
+    return 0
+  fi
+
+  cat > "${llm_patch_file}" <<'EOF'
+$patch: delete
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-service
+  namespace: jarvis-prod
+---
+$patch: delete
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-service
+  namespace: jarvis-prod
+EOF
+}
+
 main() {
   if [[ -n "${REFS_FILE}" ]]; then
     load_refs_file
   else
-    require_cmd docker
+    require_cmd "${PODMAN_BIN}"
     while IFS= read -r service; do
       resolve_digest_ref_from_local_image "${service}"
     done < <(release_services)
@@ -338,6 +379,7 @@ main() {
 
   ensure_all_required_refs_present
   write_release_overlay
+  write_optional_stack_patches
 
   if [[ -n "${WRITE_REFS_FILE}" ]]; then
     write_refs_file "${WRITE_REFS_FILE}"

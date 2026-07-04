@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 ANALYTICS_SERVICE_PORT="${JARVIS_TLS_SLICE_ANALYTICS_PORT:-18087}"
 LIFE_TRACKER_SERVICE_PORT="${JARVIS_TLS_SLICE_LIFE_TRACKER_PORT:-18085}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-analyti
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-analytics-service-life-tracker.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-analytics-service-life-tracker.sh [--namespace=jarvis-prod]
 
 Validates the next internal TLS slice:
   1. life-tracker responds over HTTPS on 8085
@@ -202,4 +202,4 @@ if ! printf '%s\n' "${analytics_logs}" | rg -q 'https://life-tracker\.jarvis\.sv
   exit 1
 fi
 
-echo "✅ analytics-service routed the migrated call to https://life-tracker.jarvis.svc.cluster.local:8085"
+echo "✅ analytics-service routed the migrated call to https://life-tracker.jarvis-prod.svc.cluster.local:8085"

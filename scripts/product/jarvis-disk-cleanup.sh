@@ -68,9 +68,9 @@ if command -v apt-get >/dev/null 2>&1; then
     apt-get clean >/dev/null 2>&1 || true
 fi
 
-if command -v docker >/dev/null 2>&1; then
-    docker builder prune -af >/dev/null 2>&1 || true
-    docker system prune -af >/dev/null 2>&1 || true
+if command -v podman >/dev/null 2>&1; then
+    podman image prune -af >/dev/null 2>&1 || true
+    podman system prune -af >/dev/null 2>&1 || true
 fi
 
 if command -v k3s >/dev/null 2>&1; then

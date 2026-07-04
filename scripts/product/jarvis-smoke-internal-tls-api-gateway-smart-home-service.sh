@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 SMART_HOME_PORT="${JARVIS_TLS_SLICE_SMART_HOME_PORT:-18086}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-smart-home-service}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-smart-home-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-smart-home-service.sh [--namespace=jarvis-prod]
 
 Validates the tenth internal TLS hop:
   1. smart-home-service only answers on HTTPS
@@ -169,4 +169,4 @@ if ! printf '%s\n' "${api_gateway_logs}" | rg -q 'https://smart-home-service\.ja
   echo "❌ api-gateway logs did not show HTTPS smart-home-service routing on port 8086" >&2
   exit 1
 fi
-echo "✅ api-gateway routed the migrated smart-home call to https://smart-home-service.jarvis.svc.cluster.local:8086"
+echo "✅ api-gateway routed the migrated smart-home call to https://smart-home-service.jarvis-prod.svc.cluster.local:8086"

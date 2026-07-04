@@ -36,7 +36,7 @@ if ! command -v kubectl >/dev/null 2>&1; then
     exit 1
 fi
 
-kubectl -n jarvis port-forward svc/api-gateway "${PORT}:8080" >/dev/null 2>&1 &
+kubectl -n jarvis-prod port-forward svc/api-gateway "${PORT}:8080" >/dev/null 2>&1 &
 pf_pid=$!
 sleep 2
 

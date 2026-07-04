@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 ORCHESTRATOR_SERVICE_PORT="${JARVIS_TLS_SLICE_ORCHESTRATOR_PORT:-18083}"
 NLP_SERVICE_PORT="${JARVIS_TLS_SLICE_NLP_PORT:-18082}"
 SERVICE_SECRET_NAME="${JARVIS_TLS_SLICE_SERVICE_SECRET_NAME:-jarvis-secrets}"
@@ -10,7 +10,7 @@ TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-orchest
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-orchestrator-nlp-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-orchestrator-nlp-service.sh [--namespace=jarvis-prod]
 
 Validates the next internal TLS slice:
   1. nlp-service responds over HTTPS on 8082
@@ -203,4 +203,4 @@ if ! printf '%s\n' "${orchestrator_logs}" | rg -q 'NLP Result:'; then
   exit 1
 fi
 
-echo "✅ orchestrator routed the migrated text path to https://nlp-service.jarvis.svc.cluster.local:8082"
+echo "✅ orchestrator routed the migrated text path to https://nlp-service.jarvis-prod.svc.cluster.local:8082"

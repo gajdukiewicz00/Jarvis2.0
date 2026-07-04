@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 PC_CONTROL_PORT="${JARVIS_TLS_SLICE_PC_CONTROL_PORT:-18084}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-pc-control}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-pc-control.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-pc-control.sh [--namespace=jarvis-prod]
 
 Validates the eighth internal TLS hop:
   1. pc-control only answers on HTTPS
@@ -173,4 +173,4 @@ if ! printf '%s\n' "${api_gateway_logs}" | rg -q 'https://pc-control\.jarvis\.sv
   echo "❌ api-gateway logs did not show HTTPS pc-control routing on port 8084" >&2
   exit 1
 fi
-echo "✅ api-gateway routed the migrated pc-control call to https://pc-control.jarvis.svc.cluster.local:8084"
+echo "✅ api-gateway routed the migrated pc-control call to https://pc-control.jarvis-prod.svc.cluster.local:8084"

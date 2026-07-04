@@ -8,35 +8,45 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-NAMESPACE="jarvis"
+# shellcheck disable=SC1091
+source "${PROJECT_ROOT}/scripts/lib/k8s-common.sh"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 OVERLAY_PATH=""
 ROLLOUT_TIMEOUT="${JARVIS_ROLLOUT_TIMEOUT:-240s}"
 
 REQUIRED_DEPLOYMENTS=(
   api-gateway
-  security-service
-  user-profile
+  alloy
+  embedding-service
+  grafana
+  life-tracker
+  loki
+  memory-service
   nlp-service
   orchestrator
-  voice-gateway
-  smart-home-service
-  life-tracker
-  analytics-service
-  planner-service
   pc-control
+  planner-service
+  prometheus
+  security-service
+  smart-home-service
+  tempo
+  user-profile
+  voice-gateway
+  analytics-service
 )
 
 REQUIRED_STATEFULSETS=(
+  kafka
   postgres
+  postgres-pgvector
+  rabbitmq
 )
 
 OPTIONAL_DEPLOYMENTS=(
-  embedding-service
-  memory-service
+  llm-service
 )
 
 OPTIONAL_STATEFULSETS=(
-  postgres-pgvector
 )
 
 usage() {
@@ -44,7 +54,7 @@ usage() {
 Usage: ./scripts/product/jarvis-rollout-validate.sh [options]
 
 Options:
-  --namespace=NAME   Kubernetes namespace, default: jarvis
+  --namespace=NAME   Kubernetes namespace, default: jarvis-prod
   --overlay=PATH     Render PATH and verify live workload image refs match the overlay
   --help, -h         Show this help
 EOF
@@ -78,16 +88,7 @@ require_cmd() {
 }
 
 detect_kubeconfig() {
-  if [[ -n "${KUBECONFIG:-}" ]]; then
-    return 0
-  fi
-  if [[ -r "${HOME}/.jarvis/kubeconfig" ]]; then
-    export KUBECONFIG="${HOME}/.jarvis/kubeconfig"
-    return 0
-  fi
-  if [[ -r /etc/rancher/k3s/k3s.yaml ]]; then
-    export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-  fi
+  jarvis_detect_kubeconfig
 }
 
 cluster_access_or_fail() {
@@ -278,7 +279,7 @@ verify_images_match_overlay() {
 }
 
 main() {
-  require_cmd kubectl
+  jarvis_require_kubectl >/dev/null || exit 1
   detect_kubeconfig
   cluster_access_or_fail
 

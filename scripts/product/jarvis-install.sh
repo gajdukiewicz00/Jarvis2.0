@@ -16,6 +16,12 @@ JARVIS_APP="${HOME}/.jarvis/app"
 JARVIS_BIN="${JARVIS_APP}/bin"
 JARVIS_DESKTOP="${HOME}/.local/share/applications"
 
+project_version() {
+    local version
+    version="$(grep -A1 "<artifactId>jarvis-root</artifactId>" "${REPO_ROOT}/pom.xml" | grep "<version>" | head -1 | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/' | tr -d ' ' || true)"
+    printf '%s' "${version:-1.0.0}"
+}
+
 # Stage 11: Parse --from-release argument
 FROM_RELEASE=false
 RELEASE_DIR=""
@@ -81,7 +87,8 @@ if [[ "$FROM_RELEASE" == "true" ]]; then
     echo "Installing version: $VERSION"
 else
     # Original repo-based install
-    DESKTOP_JAR="${REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar"
+    VERSION="$(project_version)"
+    DESKTOP_JAR="${REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-${VERSION}.jar"
     if [[ ! -f "$DESKTOP_JAR" ]]; then
         echo "ERROR: Unified desktop JAR not found: $DESKTOP_JAR"
         echo "Please build desktop-javafx first:"
@@ -179,7 +186,7 @@ else
     fi
     
     # Stage 9: Get version from root pom.xml (single source of truth for jarvis-root, not parent)
-    VERSION=$(grep -A1 "<artifactId>jarvis-root</artifactId>" "${REPO_ROOT}/pom.xml" | grep "<version>" | head -1 | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/' | tr -d ' ' || echo "0.1.0-SNAPSHOT")
+    VERSION="$(project_version)"
 fi
 
 # Stage 9: Check if upgrade (existing installation)

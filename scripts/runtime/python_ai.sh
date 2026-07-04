@@ -15,8 +15,8 @@ mkdir -p "${AI_VENV_ROOT}" "${AI_CACHE_ROOT}"
 
 python_service_dir() {
     case "$1" in
-        llm-server) printf '%s/docker/llm-server' "${ROOT_DIR}" ;;
-        embedding-service) printf '%s/docker/embedding-service' "${ROOT_DIR}" ;;
+        llm-server) printf '%s/apps/llm-server-py' "${ROOT_DIR}" ;;
+        embedding-service) printf '%s/apps/embedding-service-py' "${ROOT_DIR}" ;;
         *)
             return 1
             ;;
@@ -29,8 +29,8 @@ python_service_venv_dir() {
 
 python_service_requirements() {
     case "$1" in
-        llm-server) printf '%s/docker/llm-server/requirements-local.txt' "${ROOT_DIR}" ;;
-        embedding-service) printf '%s/docker/embedding-service/requirements-local.txt' "${ROOT_DIR}" ;;
+        llm-server) printf '%s/apps/llm-server-py/requirements-local.txt' "${ROOT_DIR}" ;;
+        embedding-service) printf '%s/apps/embedding-service-py/requirements-local.txt' "${ROOT_DIR}" ;;
         *)
             return 1
             ;;

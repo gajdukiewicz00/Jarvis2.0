@@ -30,6 +30,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+LLM_SMOKE_PORT="${JARVIS_RUNTIME_SMOKE_LLM_PORT:-15000}"
+export LLM_SERVER_PORT="${LLM_SMOKE_PORT}"
+export LLM_SERVER_URL="http://127.0.0.1:${LLM_SMOKE_PORT}"
+
 ensure_local_env
 SMOKE_INCLUDE_LLM="true"
 if is_truthy "${JARVIS_RUNTIME_SMOKE_SKIP_LLM:-false}"; then
@@ -72,17 +76,17 @@ rm -f \
 if [[ "${SMOKE_INCLUDE_LLM}" == "true" ]]; then
     log "Starting local LLM smoke stub..."
     python3 "${ROOT_DIR}/scripts/runtime/llm_server_stub.py" \
-        --port 5000 \
+        --port "${LLM_SMOKE_PORT}" \
         --capture "${LLM_CAPTURE_FILE}" >"${STUB_LOG_FILE}" 2>&1 &
     printf '%s\n' "$!" >"${RUNTIME_DIR}/llm-server-stub.pid"
 
     for _ in $(seq 1 20); do
-        if curl -fsS "http://127.0.0.1:5000/health" >/dev/null 2>&1; then
+        if curl -fsS "${LLM_SERVER_URL}/health" >/dev/null 2>&1; then
             break
         fi
         sleep 1
     done
-    curl -fsS "http://127.0.0.1:5000/health" >/dev/null
+    curl -fsS "${LLM_SERVER_URL}/health" >/dev/null
 else
     log "Skipping LLM smoke stub (JARVIS_RUNTIME_SMOKE_SKIP_LLM=true)."
 fi
@@ -435,7 +439,7 @@ if [[ "${SMOKE_INCLUDE_LLM}" == "true" ]]; then
     log "Checking orchestrator LLM fallback with personalized goals..."
     curl -fsS \
         -X POST \
-        -H "Authorization: Bearer ${SERVICE_TOKEN}" \
+        -H "X-Service-Token: ${SERVICE_TOKEN}" \
         -H "X-User-Id: ${USER_ID}" \
         -H 'Content-Type: application/json' \
         -d '{"title":"Runtime smoke goal","description":"LLM should see this goal"}' \

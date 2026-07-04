@@ -4,12 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 SECRET_NAME="jarvis-internal-tls-orchestrator-nlp-service"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-apply-internal-tls-orchestrator-nlp-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-apply-internal-tls-orchestrator-nlp-service.sh [--namespace=jarvis-prod]
 
 Creates or updates the Kubernetes secret for the next internal TLS slice:
   orchestrator (HTTPS client) -> nlp-service (existing HTTPS server on 8082)

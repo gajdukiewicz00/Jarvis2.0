@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 INGRESS_NAMESPACE="${JARVIS_INGRESS_NAMESPACE:-ingress-nginx}"
 INGRESS_SERVICE="${JARVIS_INGRESS_SERVICE:-ingress-nginx-controller}"
 INGRESS_HTTP_PORT="${JARVIS_TLS_INGRESS_HTTP_PORT:-19080}"
@@ -11,7 +11,7 @@ TLS_CA_FILE="${JARVIS_TLS_CA_FILE:-$HOME/.jarvis/tls/jarvis-ca.crt}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-ingress-api-gateway.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-ingress-api-gateway.sh [--namespace=jarvis-prod]
 
 Validates the ingress -> api-gateway internal TLS slice:
   1. jarvis-ingress uses HTTPS backend protocol to api-gateway:8443

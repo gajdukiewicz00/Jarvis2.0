@@ -1,0 +1,28 @@
+# J.A.R.V.I.S. host Piper neural TTS daemon — systemd --user unit.
+#
+# Durability for the cluster voice: voice-gateway reaches this via the
+# host-tts-daemon Service. Right now the daemon runs under nohup for this
+# session; enable this unit to make it survive logout/reboot.
+#
+# Install (run yourself — persistent services need your authorization):
+#   cp scripts/jarvis-tts-daemon.service ~/.config/systemd/user/jarvis-tts.service
+#   systemctl --user daemon-reload
+#   pkill -f jarvis-tts-daemon.py            # stop the nohup instance
+#   systemctl --user enable --now jarvis-tts.service
+#   loginctl enable-linger "$USER"           # optional: start on boot without login
+#
+[Unit]
+Description=J.A.R.V.I.S. host Piper neural TTS daemon (:18090)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/kwaqa/Jarvis/Jarvis2.0/scripts/jarvis-tts-daemon.py
+Restart=on-failure
+RestartSec=3
+Environment=JARVIS_TTS_PORT=18090
+StandardOutput=append:%h/.jarvis/logs/tts-daemon.log
+StandardError=append:%h/.jarvis/logs/tts-daemon.log
+
+[Install]
+WantedBy=default.target

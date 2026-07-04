@@ -93,7 +93,7 @@ distinguished_name = dn
 req_extensions     = req_ext
 
 [ dn ]
-CN = security-service.jarvis.svc.cluster.local
+CN = security-service.jarvis-prod.svc.cluster.local
 O  = Jarvis
 
 [ req_ext ]
@@ -104,7 +104,7 @@ extendedKeyUsage = serverAuth
 
 [ alt_names ]
 DNS.1 = security-service
-DNS.2 = security-service.jarvis.svc.cluster.local
+DNS.2 = security-service.jarvis-prod.svc.cluster.local
 DNS.3 = localhost
 IP.1 = 127.0.0.1
 EOF

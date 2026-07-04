@@ -126,6 +126,17 @@ resolve_maven_bin() {
     return 1
 }
 
+project_version() {
+    local repo_root="${1:-}"
+    local pom_file version
+    [[ -n "${repo_root}" ]] || return 1
+    pom_file="${repo_root}/pom.xml"
+    [[ -f "${pom_file}" ]] || return 1
+    version="$(grep -A1 "<artifactId>jarvis-root</artifactId>" "${pom_file}" | grep "<version>" | head -1 | sed -E 's/.*<version>([^<]+)<\/version>.*/\1/' | tr -d ' ' || true)"
+    [[ -n "${version}" ]] || version="1.0.0"
+    printf '%s' "${version}"
+}
+
 sync_file_if_needed() {
     local source="$1"
     local target="$2"
@@ -249,7 +260,10 @@ ensure_repo_gui_artifacts() {
     [[ -n "${repo_root}" ]] || return 0
     is_valid_repo_root "${repo_root}" || return 0
 
-    local desktop_target="${repo_root}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar"
+    local project_ver desktop_target
+    project_ver="$(project_version "${repo_root}" || true)"
+    [[ -n "${project_ver}" ]] || project_ver="1.0.0"
+    desktop_target="${repo_root}/apps/desktop-javafx/target/desktop-javafx-${project_ver}.jar"
     local desktop_stale="false"
 
     if jar_is_stale "${desktop_target}" \
@@ -357,7 +371,9 @@ PROJECT_ROOT="${SOURCE_REPO_ROOT:-${INSTALL_ROOT}}"
 
 REPO_LAUNCHER_JAR=""
 if [[ -n "${SOURCE_REPO_ROOT}" ]]; then
-    REPO_LAUNCHER_JAR="${SOURCE_REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-0.1.0-SNAPSHOT.jar"
+    REPO_VERSION="$(project_version "${SOURCE_REPO_ROOT}" || true)"
+    [[ -n "${REPO_VERSION}" ]] || REPO_VERSION="1.0.0"
+    REPO_LAUNCHER_JAR="${SOURCE_REPO_ROOT}/apps/desktop-javafx/target/desktop-javafx-${REPO_VERSION}.jar"
 fi
 
 if [[ -n "${REPO_LAUNCHER_JAR}" && -f "${REPO_LAUNCHER_JAR}" ]]; then

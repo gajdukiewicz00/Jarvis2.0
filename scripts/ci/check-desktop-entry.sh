@@ -7,9 +7,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ALLOWLIST=(
     "${ROOT}/scripts/product/jarvis-install.sh"
     "${ROOT}/scripts/product/jarvis-build-release.sh"
+    "${ROOT}/scripts/product/jarvis-desktop-uninstall.sh"
 )
 
-PATTERN='\\.desktop($|[^A-Za-z0-9_.])'
+PATTERN='\.desktop($|[^A-Za-z0-9_.])'
 
 if command -v rg >/dev/null 2>&1; then
     MATCHES="$(rg -n "${PATTERN}" "${ROOT}/scripts" \

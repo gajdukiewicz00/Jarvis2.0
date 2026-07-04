@@ -64,7 +64,7 @@ is_k8s_available() {
 
 deployment_ready() {
     local deployment="$1"
-    local namespace="${JARVIS_NAMESPACE:-jarvis}"
+    local namespace="-e"
     local ready
 
     ready="$(kubectl -n "${namespace}" get deployment "${deployment}" \
@@ -121,7 +121,7 @@ start_port_forward() {
     local service="$1"
     local local_port="$2"
     local remote_port="$3"
-    local namespace="${JARVIS_NAMESPACE:-jarvis}"
+    local namespace="-e"
 
     kubectl -n "${namespace}" get service "${service}" >/dev/null 2>&1 \
         || fail "Service not found: ${namespace}/${service}"

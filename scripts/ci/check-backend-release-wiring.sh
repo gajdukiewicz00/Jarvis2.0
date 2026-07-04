@@ -20,6 +20,11 @@ CORE_BACKEND_SERVICES=(
   pc-control
 )
 
+OPTIONAL_DATA_SERVICES=(
+  memory-service
+  embedding-service
+)
+
 CORE_SIGNED_SERVICES=(
   api-gateway
   security-service
@@ -141,6 +146,8 @@ main() {
   require_executable "scripts/product/jarvis-rollout-validate.sh"
   require_executable "scripts/ci/k8s-preflight.sh"
   require_executable "scripts/ci/cosign-sign-core-images.sh"
+  require_executable "scripts/guards/reject-new-docker-runtime-files.sh"
+  require_executable "infra/scripts/microk8s/verify-no-docker-runtime.sh"
   require_executable "scripts/runtime-smoke.sh"
   require_executable "scripts/analytics-smoke.sh"
 
@@ -234,8 +241,13 @@ main() {
     "${ROOT_DIR}/scripts/product/jarvis-rollout-validate.sh" \
     "${ROOT_DIR}/scripts/ci/k8s-preflight.sh" \
     "${ROOT_DIR}/scripts/ci/cosign-sign-core-images.sh" \
+    "${ROOT_DIR}/scripts/guards/reject-new-docker-runtime-files.sh" \
+    "${ROOT_DIR}/infra/scripts/microk8s/verify-no-docker-runtime.sh" \
     "${ROOT_DIR}/scripts/runtime-smoke.sh" \
     "${ROOT_DIR}/scripts/analytics-smoke.sh"
+
+  "${ROOT_DIR}/scripts/guards/reject-new-docker-runtime-files.sh" --all
+  "${ROOT_DIR}/infra/scripts/microk8s/verify-no-docker-runtime.sh" --strict
 
   grep -q 'scripts/ci/cosign-sign-core-images.sh' \
     "${ROOT_DIR}/.github/workflows/prod-image-sign.yml" \
@@ -288,7 +300,7 @@ main() {
   [[ -f "${ROOT_DIR}/k8s/overlays/prod-release-internal-tls-verified/kustomization.yaml" ]] \
     || fail "Missing committed internal TLS overlay: k8s/overlays/prod-release-internal-tls-verified/kustomization.yaml"
   : > "${refs_file}"
-  for service in "${CORE_BACKEND_SERVICES[@]}"; do
+  for service in "${CORE_BACKEND_SERVICES[@]}" "${OPTIONAL_DATA_SERVICES[@]}"; do
     printf '%s=%s\n' \
       "${service}" \
       "example.invalid/jarvis/${service}@sha256:$(digest_for_index "${idx}")" \

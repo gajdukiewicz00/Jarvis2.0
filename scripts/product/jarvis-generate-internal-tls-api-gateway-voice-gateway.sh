@@ -93,7 +93,7 @@ distinguished_name = dn
 req_extensions     = req_ext
 
 [ dn ]
-CN = voice-gateway.jarvis.svc.cluster.local
+CN = voice-gateway.jarvis-prod.svc.cluster.local
 O  = Jarvis
 
 [ req_ext ]
@@ -104,7 +104,7 @@ extendedKeyUsage = serverAuth
 
 [ alt_names ]
 DNS.1 = voice-gateway
-DNS.2 = voice-gateway.jarvis.svc.cluster.local
+DNS.2 = voice-gateway.jarvis-prod.svc.cluster.local
 DNS.3 = localhost
 IP.1 = 127.0.0.1
 EOF

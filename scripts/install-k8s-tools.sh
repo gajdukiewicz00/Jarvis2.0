@@ -81,20 +81,20 @@ else
     fi
 fi
 
-# === Проверка Docker ===
-if command -v docker &> /dev/null; then
-    echo -e "${GREEN}✓${NC} docker установлен: $(docker --version)"
-    
-    # Проверяем, можно ли запускать docker без sudo
-    if ! docker ps &> /dev/null; then
-        echo -e "${YELLOW}⚠️${NC} Docker требует sudo. Добавляю пользователя в группу docker..."
-        sudo usermod -aG docker $USER
-        echo -e "${YELLOW}⚠️${NC} Перезайди в систему для применения изменений"
-    fi
+# === podman (daemonless image build / preflight fallback) ===
+if command -v podman &> /dev/null; then
+    echo -e "${GREEN}✓${NC} podman установлен: $(podman --version)"
 else
-    echo -e "${RED}❌${NC} Docker не установлен!"
-    echo "   Установи: https://docs.docker.com/engine/install/"
-    exit 1
+    echo ""
+    read -p "Установить podman для локальной сборки образов? [y/N] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        sudo apt-get update
+        sudo apt-get install -y podman
+        echo -e "${GREEN}✓${NC} podman установлен"
+    else
+        echo -e "${YELLOW}⚠️${NC} podman не установлен; локальная сборка Python образов и containerized preflight будут недоступны"
+    fi
 fi
 
 echo ""

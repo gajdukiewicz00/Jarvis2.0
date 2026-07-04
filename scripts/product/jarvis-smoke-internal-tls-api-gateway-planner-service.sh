@@ -2,14 +2,14 @@
 
 set -euo pipefail
 
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 API_GATEWAY_PORT="${JARVIS_TLS_SLICE_API_GATEWAY_PORT:-18080}"
 PLANNER_SERVICE_PORT="${JARVIS_TLS_SLICE_PLANNER_PORT:-18092}"
 TLS_SECRET_NAME="${JARVIS_TLS_SLICE_TLS_SECRET_NAME:-jarvis-internal-tls-api-gateway-planner-service}"
 
 usage() {
   cat <<'EOF'
-Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-planner-service.sh [--namespace=jarvis]
+Usage: ./scripts/product/jarvis-smoke-internal-tls-api-gateway-planner-service.sh [--namespace=jarvis-prod]
 
 Validates the seventeenth internal TLS hop:
   1. planner-service only answers on HTTPS
@@ -204,5 +204,5 @@ if ! printf '%s\n' "${planner_logs}" | rg -q "userId=${planner_user_id}"; then
   exit 1
 fi
 
-echo "✅ api-gateway routed the migrated planner call to https://planner-service.jarvis.svc.cluster.local:8092"
+echo "✅ api-gateway routed the migrated planner call to https://planner-service.jarvis-prod.svc.cluster.local:8092"
 echo "✅ planner-service handled the traced tool request for delegated userId ${planner_user_id}"

@@ -9,7 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 OVERLAY_PATH="${PROJECT_ROOT}/k8s/overlays/prod-release"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 PREFLIGHT_ONLY=false
 
 usage() {
@@ -18,7 +18,7 @@ Usage: ./scripts/product/jarvis-deploy-prod.sh [options]
 
 Options:
   --overlay=PATH      Release overlay path, default: k8s/overlays/prod-release
-  --namespace=NAME    Kubernetes namespace, default: jarvis
+  --namespace=NAME    Kubernetes namespace, default: jarvis-prod
   --preflight-only    Run server-side preflight but skip apply + rollout validation
   --help, -h          Show this help
 EOF

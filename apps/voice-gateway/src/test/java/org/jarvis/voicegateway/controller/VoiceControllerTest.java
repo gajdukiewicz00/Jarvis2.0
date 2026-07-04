@@ -112,4 +112,34 @@ class VoiceControllerTest {
         assertEquals(200, response.getStatusCode().value());
         verify(orchestratorClient).sendCommand("сделай громче", "user-42");
     }
+
+    @Test
+    void processTextCommandTreatsServiceJwtAuthenticationAsAnonymous() {
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken("internal-service", null,
+                        java.util.List.of(new SimpleGrantedAuthority("ROLE_SERVICE")));
+        authentication.setDetails("service-jwt");
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        when(orchestratorClient.sendCommandWithResponse("текст", null)).thenReturn("ok");
+
+        String response = controller.processTextCommand(new VoiceController.TextCommandRequest("текст"));
+
+        assertEquals("ok", response);
+        verify(orchestratorClient).sendCommandWithResponse("текст", null);
+    }
+
+    @Test
+    void processTextCommandTreatsAnonymousUserNameAsNull() {
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken("anonymousUser", null,
+                        java.util.List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS")));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        when(orchestratorClient.sendCommandWithResponse("текст", null)).thenReturn("ok");
+
+        controller.processTextCommand(new VoiceController.TextCommandRequest("текст"));
+
+        verify(orchestratorClient).sendCommandWithResponse("текст", null);
+    }
 }

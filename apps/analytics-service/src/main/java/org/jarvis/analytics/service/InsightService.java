@@ -11,6 +11,7 @@ import org.jarvis.analytics.dto.SleepSummaryDTO;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ public class InsightService {
 
     private final LifeTrackerClient lifeTrackerClient;
     private final AnalyticsService analyticsService;
+    private final Clock clock;
 
     public List<InsightDTO> autoInsights() {
         List<InsightDTO> out = new ArrayList<>();
@@ -96,7 +98,7 @@ public class InsightService {
     /** Projects month-end spend from the current daily rate. */
     public Map<String, Object> budgetForecast() {
         List<ExpenseDTO> expenses = safe(lifeTrackerClient.getExpenses());
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         YearMonth month = YearMonth.from(today);
         BigDecimal spent = BigDecimal.ZERO;
         for (ExpenseDTO e : expenses) {
@@ -158,6 +160,33 @@ public class InsightService {
         out.put("score", score);
         out.put("insights", insights);
         out.put("report", sb.toString().trim());
+        return out;
+    }
+
+    /** Weekly rollup built from the same trailing-7-day aggregates used by {@link #dailyReport()}. */
+    public Map<String, Object> weeklyDigest() {
+        SleepSummaryDTO sleep = safeSleep();
+        OvertimeSummaryDTO overtime = safeOvertime();
+        List<InsightDTO> insights = autoInsights();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Сводка недели. ");
+        if (sleep != null && sleep.getAverageHours() != null) {
+            sb.append("Средний сон ").append(round(sleep.getAverageHours())).append(" ч/сутки за ")
+                    .append(sleep.getDaysSampled()).append(" дн. ");
+        }
+        if (overtime != null && overtime.getOvertimeHours() != null) {
+            sb.append("Переработка +").append(overtime.getOvertimeHours()).append(" ч сверх нормы за неделю. ");
+        }
+        for (InsightDTO i : insights) {
+            sb.append(i.title()).append(": ").append(i.detail()).append(' ');
+        }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("sleep", sleep);
+        out.put("overtime", overtime);
+        out.put("insights", insights);
+        out.put("digest", sb.toString().trim());
         return out;
     }
 

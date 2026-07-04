@@ -38,4 +38,9 @@ public class InsightController {
     public Map<String, Object> forecast() {
         return insightService.budgetForecast();
     }
+
+    @GetMapping("/weekly")
+    public Map<String, Object> weekly() {
+        return insightService.weeklyDigest();
+    }
 }

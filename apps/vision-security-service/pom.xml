@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -17,6 +17,17 @@
             <groupId>org.jarvis</groupId>
             <artifactId>jarvis-common</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 10: shared event schema for vision events. -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>event-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 10: Kafka producer for jarvis.vision.events. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

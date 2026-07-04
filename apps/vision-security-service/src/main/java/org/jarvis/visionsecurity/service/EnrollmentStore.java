@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 @Service
@@ -24,6 +25,8 @@ public class EnrollmentStore {
 
     private final VisionSecurityProperties properties;
     private final ObjectMapper objectMapper;
+
+    private final ConcurrentHashMap<String, CachedSamples> sampleCache = new ConcurrentHashMap<>();
 
     public boolean isEnrolled(String userId) {
         return Files.isRegularFile(profilePath(userId));
@@ -51,6 +54,12 @@ public class EnrollmentStore {
                     .toList();
         }
 
+        long sourceVersion = computeVersion(samplePaths);
+        CachedSamples cached = sampleCache.get(userId);
+        if (cached != null && cached.version() == sourceVersion) {
+            return cloneCachedSamples(cached.samples());
+        }
+
         List<Mat> samples = new ArrayList<>();
         for (Path samplePath : samplePaths) {
             Mat mat = Imgcodecs.imread(samplePath.toString(), Imgcodecs.IMREAD_GRAYSCALE);
@@ -58,7 +67,33 @@ public class EnrollmentStore {
                 samples.add(mat);
             }
         }
+
+        if (cached != null) {
+            cached.samples().forEach(Mat::release);
+        }
+        sampleCache.put(userId, new CachedSamples(sourceVersion, cloneCachedSamples(samples)));
         return samples;
+    }
+
+    private long computeVersion(List<Path> samplePaths) throws IOException {
+        long version = 1469598103934665603L;
+        for (Path path : samplePaths) {
+            version = 31L * version + path.getFileName().toString().hashCode();
+            version = 31L * version + Files.getLastModifiedTime(path).toMillis();
+            version = 31L * version + Files.size(path);
+        }
+        return version;
+    }
+
+    private List<Mat> cloneCachedSamples(List<Mat> source) {
+        List<Mat> copies = new ArrayList<>(source.size());
+        for (Mat mat : source) {
+            copies.add(mat.clone());
+        }
+        return copies;
+    }
+
+    private record CachedSamples(long version, List<Mat> samples) {
     }
 
     public EnrollmentProfile saveEnrollment(
@@ -69,6 +104,7 @@ public class EnrollmentStore {
     ) throws IOException {
         Path directory = samplesDirectory(userId);
         recreateDirectory(directory);
+        invalidateCache(userId);
 
         int index = 1;
         for (Mat sample : normalizedSamples) {
@@ -91,6 +127,14 @@ public class EnrollmentStore {
 
     public void reset(String userId) throws IOException {
         deleteRecursively(userDirectory(userId));
+        invalidateCache(userId);
+    }
+
+    private void invalidateCache(String userId) {
+        CachedSamples previous = sampleCache.remove(userId);
+        if (previous != null) {
+            previous.samples().forEach(Mat::release);
+        }
     }
 
     public Path userDirectory(String userId) {

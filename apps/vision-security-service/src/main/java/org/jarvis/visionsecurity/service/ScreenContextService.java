@@ -39,7 +39,8 @@ public class ScreenContextService {
         return "headless";
     }
 
-    private String activeWindowTitle() {
+    /** Public probe for the focused-window title via {@code xdotool}. Empty when unavailable. */
+    public String activeWindowTitle() {
         try {
             if (!commandRunner.isAvailable("xdotool")) {
                 return "";
@@ -52,7 +53,8 @@ public class ScreenContextService {
         }
     }
 
-    private String activeProcessName() {
+    /** Public probe for the focused-window process name. Empty when unavailable. */
+    public String activeProcessName() {
         try {
             if (!commandRunner.isAvailable("xdotool")) {
                 return "";

@@ -51,18 +51,34 @@ vision-security:
     uncertain-threshold-margin: ${VISION_SECURITY_UNCERTAIN_THRESHOLD_MARGIN:30.0}
     fallback-owner-threshold: ${VISION_SECURITY_FALLBACK_OWNER_THRESHOLD:70.0}
     fallback-uncertain-threshold: ${VISION_SECURITY_FALLBACK_UNCERTAIN_THRESHOLD:100.0}
-    min-detection-area-ratio: ${VISION_SECURITY_MIN_DETECTION_AREA_RATIO:0.004}
+    min-detection-area-ratio: ${VISION_SECURITY_MIN_DETECTION_AREA_RATIO:0.015}
     face-padding-ratio: ${VISION_SECURITY_FACE_PADDING_RATIO:0.12}
     clahe-clip-limit: ${VISION_SECURITY_CLAHE_CLIP_LIMIT:2.5}
     clahe-grid-size: ${VISION_SECURITY_CLAHE_GRID_SIZE:8}
     enable-eye-alignment: ${VISION_SECURITY_ENABLE_EYE_ALIGNMENT:true}
     detection-scale-factor: ${VISION_SECURITY_DETECTION_SCALE_FACTOR:1.08}
-    detection-min-neighbors: ${VISION_SECURITY_DETECTION_MIN_NEIGHBORS:2}
+    detection-min-neighbors: ${VISION_SECURITY_DETECTION_MIN_NEIGHBORS:6}
+    alert-on-stranger-with-owner: ${VISION_SECURITY_ALERT_ON_STRANGER_WITH_OWNER:true}
+    min-frame-brightness: ${VISION_SECURITY_MIN_FRAME_BRIGHTNESS:8.0}
   storage:
     root: ${VISION_SECURITY_STORAGE_ROOT:${user.home}/.jarvis/data/vision-security}
     max-incidents-per-user: ${VISION_SECURITY_MAX_INCIDENTS_PER_USER:50}
   screen:
     ocr-language: ${VISION_SECURITY_OCR_LANGUAGE:eng}
+  cv:
+    engine: ${VISION_SECURITY_CV_ENGINE:tesseract}
+    publish-screen-context-event: ${VISION_SECURITY_CV_PUBLISH_SCREEN_CONTEXT:true}
+    screen-context-topic: ${VISION_SECURITY_CV_SCREEN_CONTEXT_TOPIC:jarvis.cv.screen_context.created}
+    vlm:
+      enabled: ${VISION_SECURITY_VLM_ENABLED:false}
+      provider: ${VISION_SECURITY_VLM_PROVIDER:disabled}
+      endpoint: ${VISION_SECURITY_VLM_ENDPOINT:}
+      model: ${VISION_SECURITY_VLM_MODEL:}
+      timeout: ${VISION_SECURITY_VLM_TIMEOUT:PT30S}
+      max-tokens: ${VISION_SECURITY_VLM_MAX_TOKENS:512}
+      temperature: ${VISION_SECURITY_VLM_TEMPERATURE:0.2}
+      include-ocr-context: ${VISION_SECURITY_VLM_INCLUDE_OCR_CONTEXT:true}
+      include-screenshot: ${VISION_SECURITY_VLM_INCLUDE_SCREENSHOT:true}
   email:
     recipient: ${VISION_SECURITY_EMAIL_RECIPIENT:}
     from: ${VISION_SECURITY_EMAIL_FROM:${SPRING_MAIL_USERNAME:}}

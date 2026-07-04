@@ -59,7 +59,9 @@ class VisionSecurityPropertiesBindingTest {
                         "vision-security.verification.clahe-grid-size=16",
                         "vision-security.verification.enable-eye-alignment=false",
                         "vision-security.verification.detection-scale-factor=1.1",
-                        "vision-security.verification.detection-min-neighbors=3"
+                        "vision-security.verification.detection-min-neighbors=3",
+                        "vision-security.verification.alert-on-stranger-with-owner=false",
+                        "vision-security.verification.min-frame-brightness=12.5"
                 )
                 .run(context -> {
                     assertThat(context).hasNotFailed();
@@ -77,6 +79,8 @@ class VisionSecurityPropertiesBindingTest {
                     assertThat(v.isEnableEyeAlignment()).isFalse();
                     assertThat(v.getDetectionScaleFactor()).isEqualTo(1.1);
                     assertThat(v.getDetectionMinNeighbors()).isEqualTo(3);
+                    assertThat(v.isAlertOnStrangerWithOwner()).isFalse();
+                    assertThat(v.getMinFrameBrightness()).isEqualTo(12.5);
                 });
     }
 
@@ -117,6 +121,10 @@ class VisionSecurityPropertiesBindingTest {
             assertThat(props.getMonitoring().getOwnerGraceFrames()).isEqualTo(2);
             assertThat(props.getVerification().getFallbackOwnerThreshold())
                     .isLessThan(props.getVerification().getFallbackUncertainThreshold());
+            assertThat(props.getVerification().isAlertOnStrangerWithOwner())
+                    .as("security-first default: stranger next to owner must escalate")
+                    .isTrue();
+            assertThat(props.getVerification().getMinFrameBrightness()).isPositive();
         });
     }
 

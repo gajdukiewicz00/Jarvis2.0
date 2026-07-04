@@ -48,6 +48,22 @@ public class VisionPipelineService {
             throw new IllegalArgumentException("Frame is empty");
         }
 
+        double minBrightness = properties.getVerification().getMinFrameBrightness();
+        if (minBrightness > 0.0 && outputDirectory == null) {
+            double brightness = measureMeanBrightness(frame);
+            if (brightness < minBrightness) {
+                log.debug("Skipping analysis: frame brightness {} below minimum {}", brightness, minBrightness);
+                return new PipelineResult(
+                        DecisionType.NO_FACE,
+                        0,
+                        "Frame too dark for analysis (mean brightness=" + String.format("%.1f", brightness) + ")",
+                        List.of(),
+                        null,
+                        null
+                );
+            }
+        }
+
         Mat enhancedColor = new Mat();
         Mat enhancedGray = new Mat();
         Mat rawGray = new Mat();
@@ -77,8 +93,10 @@ public class VisionPipelineService {
             }
 
             List<FaceMatch> matches = faceVerificationService.classifyFaces(userId, boxes, normalizedFaces);
-            DecisionType decision = aggregateDecision(userId, matches, detectedFaces.isEmpty());
-            String reason = reasonFor(userId, matches, detectedFaces.isEmpty());
+            boolean enrolled = faceVerificationService.isEnrolled(userId);
+            boolean alertOnStrangerWithOwner = properties.getVerification().isAlertOnStrangerWithOwner();
+            DecisionType decision = aggregateDecision(enrolled, matches, detectedFaces.isEmpty(), alertOnStrangerWithOwner);
+            String reason = reasonFor(enrolled, matches, detectedFaces.isEmpty(), alertOnStrangerWithOwner);
 
             frame.copyTo(decisionOverlay);
             drawDecisionOverlay(decisionOverlay, matches, decision);
@@ -150,6 +168,25 @@ public class VisionPipelineService {
             return variance * variance;
         } finally {
             laplacian.release();
+            mean.release();
+            stdDev.release();
+        }
+    }
+
+    public double measureMeanBrightness(Mat frame) {
+        Mat gray = new Mat();
+        org.opencv.core.MatOfDouble mean = new org.opencv.core.MatOfDouble();
+        org.opencv.core.MatOfDouble stdDev = new org.opencv.core.MatOfDouble();
+        try {
+            if (frame.channels() > 1) {
+                Imgproc.cvtColor(frame, gray, Imgproc.COLOR_BGR2GRAY);
+            } else {
+                frame.copyTo(gray);
+            }
+            Core.meanStdDev(gray, mean, stdDev);
+            return mean.get(0, 0)[0];
+        } finally {
+            gray.release();
             mean.release();
             stdDev.release();
         }
@@ -457,14 +494,24 @@ public class VisionPipelineService {
         );
     }
 
-    private DecisionType aggregateDecision(String userId, List<FaceMatch> matches, boolean noFacesDetected) throws IOException {
+    static DecisionType aggregateDecision(
+            boolean enrolled,
+            List<FaceMatch> matches,
+            boolean noFacesDetected,
+            boolean alertOnStrangerWithOwner
+    ) {
         if (noFacesDetected || matches.isEmpty()) {
             return DecisionType.NO_FACE;
         }
-        if (!faceVerificationService.isEnrolled(userId)) {
+        if (!enrolled) {
             return DecisionType.UNCERTAIN;
         }
-        if (matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.OWNER)) {
+        boolean ownerPresent = matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.OWNER);
+        boolean strangerPresent = matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.UNKNOWN);
+        if (ownerPresent && strangerPresent && alertOnStrangerWithOwner) {
+            return DecisionType.UNKNOWN_PERSON;
+        }
+        if (ownerPresent) {
             return DecisionType.OWNER_PRESENT;
         }
         if (matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.UNCERTAIN)) {
@@ -473,14 +520,24 @@ public class VisionPipelineService {
         return DecisionType.UNKNOWN_PERSON;
     }
 
-    private String reasonFor(String userId, List<FaceMatch> matches, boolean noFacesDetected) throws IOException {
+    static String reasonFor(
+            boolean enrolled,
+            List<FaceMatch> matches,
+            boolean noFacesDetected,
+            boolean alertOnStrangerWithOwner
+    ) {
         if (noFacesDetected || matches.isEmpty()) {
             return "No face detected in the current frame";
         }
-        if (!faceVerificationService.isEnrolled(userId)) {
+        if (!enrolled) {
             return "Owner enrollment is missing, so verification stays uncertain";
         }
-        if (matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.OWNER)) {
+        boolean ownerPresent = matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.OWNER);
+        boolean strangerPresent = matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.UNKNOWN);
+        if (ownerPresent && strangerPresent && alertOnStrangerWithOwner) {
+            return "Owner detected together with an unknown person — escalating to alert";
+        }
+        if (ownerPresent) {
             return "At least one detected face matched the enrolled owner profile";
         }
         if (matches.stream().anyMatch(match -> match.verdict() == FaceVerdict.UNCERTAIN)) {

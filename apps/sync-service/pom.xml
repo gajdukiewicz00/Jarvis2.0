@@ -72,6 +72,15 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- spring-kafka is optional in jarvis-common, so KafkaTemplate is not on the
+             runtime classpath here. It is required at TEST scope only so Mockito/ByteBuddy
+             can resolve the AuditPublisher type hierarchy (KafkaTemplate field) when the
+             audit-branch tests mock AuditPublisher. Not shipped in the app image. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

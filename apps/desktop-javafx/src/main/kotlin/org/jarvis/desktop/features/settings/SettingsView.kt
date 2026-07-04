@@ -550,7 +550,7 @@ class SettingsView(
     }
 
     private fun renderBuildInfo() {
-        buildVersionLabel.text = SettingsView::class.java.`package`?.implementationVersion ?: "0.1.0-SNAPSHOT"
+        buildVersionLabel.text = SettingsView::class.java.`package`?.implementationVersion ?: "1.0.0"
         buildStackLabel.text = "Kotlin 1.9.20  |  JavaFX 21"
         buildThemeLabel.text = "Dark-only unified shell"
         buildRuntimeLabel.text = "${System.getProperty("java.version")}  |  ${System.getProperty("os.name")}"

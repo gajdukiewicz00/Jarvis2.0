@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -19,6 +19,36 @@
     </properties>
 
     <dependencies>
+        <!-- Phase 4: shared command schema (POJO library, no Spring deps). -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>command-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 8: shared event schema for the audit forwarder. -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>event-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 4: native RabbitMQ client (no Spring required). -->
+        <dependency>
+            <groupId>com.rabbitmq</groupId>
+            <artifactId>amqp-client</artifactId>
+            <version>5.21.0</version>
+        </dependency>
+        <!-- Phase 4: idempotency cache by command_id (Caffeine, in-memory TTL). -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+        <!-- Phase 4: coroutines for the agent consumer loop. -->
+        <dependency>
+            <groupId>org.jetbrains.kotlinx</groupId>
+            <artifactId>kotlinx-coroutines-core</artifactId>
+            <version>1.7.3</version>
+        </dependency>
+
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
@@ -146,7 +176,7 @@
                 <artifactId>javafx-maven-plugin</artifactId>
                 <version>0.0.8</version>
                 <configuration>
-                    <mainClass>org.jarvis.launcher.LauncherApplicationKt</mainClass>
+                    <mainClass>org.jarvis.desktop.app.DesktopAppApplicationKt</mainClass>
                 </configuration>
             </plugin>
             <plugin>
@@ -156,7 +186,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>org.jarvis.launcher.LauncherApplicationKt</mainClass>
+                            <mainClass>org.jarvis.desktop.app.DesktopAppApplicationKt</mainClass>
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                             <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
                         </manifest>

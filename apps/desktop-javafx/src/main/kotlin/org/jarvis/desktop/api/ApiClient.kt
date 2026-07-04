@@ -78,7 +78,11 @@ class ApiClient(
                 connection.inputStream.bufferedReader().use { it.readText() }
             } else {
                 val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                logger.warn("GET $endpoint failed: $responseCode - $errorBody")
+                if (isExpectedDegradedResponse(responseCode, errorBody)) {
+                    logger.debug("GET $endpoint degraded: $responseCode - $errorBody")
+                } else {
+                    logger.warn("GET $endpoint failed: $responseCode - $errorBody")
+                }
                 throw httpError(responseCode, errorBody)
             }
         } catch (e: UnauthorizedRequestException) {
@@ -259,6 +263,15 @@ class ApiClient(
             Exception("Server error ($code). The backend service may be unhealthy.")
         else ->
             Exception("HTTP $code: $body")
+    }
+
+    private fun isExpectedDegradedResponse(responseCode: Int, errorBody: String): Boolean {
+        if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) return true
+        if (responseCode == HttpURLConnection.HTTP_UNAVAILABLE) {
+            return errorBody.contains("FEATURE_DISABLED") ||
+                    errorBody.contains("UNSUPPORTED_RUNTIME_MODE")
+        }
+        return false
     }
 
     private fun isConnectionError(exception: Exception): Boolean {

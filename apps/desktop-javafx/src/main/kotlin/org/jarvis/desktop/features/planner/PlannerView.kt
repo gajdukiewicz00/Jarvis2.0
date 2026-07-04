@@ -71,6 +71,15 @@ class PlannerView(
         styleClass += "planner-task-list"
     }
 
+    private val focusLabel = Label("Loading today's focus…").apply {
+        styleClass += "shell-section-subtitle"
+        isWrapText = true
+    }
+    private val eveningReviewLabel = Label("Loading evening review…").apply {
+        styleClass += "shell-section-subtitle"
+        isWrapText = true
+    }
+
     init {
         styleClass += "shell-route-scroll"
         isFitToWidth = true
@@ -146,10 +155,25 @@ class PlannerView(
             children += tasksContainer
         }
 
+        val briefSection = VBox(12.0).apply {
+            styleClass += "shell-section-card"
+            children += Label("Daily focus & evening review").apply { styleClass += "shell-section-title" }
+            children += Label(
+                "Live from `/api/v1/planner/focus` and `/api/v1/planner/evening-review`."
+            ).apply {
+                styleClass += "shell-section-subtitle"
+                isWrapText = true
+            }
+            children += Label("Today's focus").apply { styleClass += "shell-section-title" }
+            children += focusLabel
+            children += Label("Evening review").apply { styleClass += "shell-section-title" }
+            children += eveningReviewLabel
+        }
+
         return VBox(18.0).apply {
             styleClass += "shell-planner-view"
             padding = Insets(24.0)
-            children.addAll(header, feedbackRow, summary, quickCapture, tasksSection)
+            children.addAll(header, feedbackRow, summary, briefSection, quickCapture, tasksSection)
         }
     }
 
@@ -167,8 +191,12 @@ class PlannerView(
         worker.execute {
             try {
                 val snapshot = readModel.loadSnapshot()
+                val focus = readModel.loadFocus()
+                val eveningReview = readModel.loadEveningReview()
                 Platform.runLater {
                     renderSnapshot(snapshot)
+                    renderBrief(focusLabel, focus)
+                    renderBrief(eveningReviewLabel, eveningReview)
                     feedbackPill.text = "Ready"
                     applyTone(feedbackPill, "shell-status-tone-success")
                     feedbackLabel.text = "Planner tasks loaded from the gateway-backed todo tool flow."
@@ -271,6 +299,14 @@ class PlannerView(
             } finally {
                 actionInFlight.set(false)
             }
+        }
+    }
+
+    private fun renderBrief(label: Label, result: PlannerReadModel.BriefResult) {
+        when (result) {
+            is PlannerReadModel.BriefResult.Available -> label.text = result.text
+            is PlannerReadModel.BriefResult.Unavailable ->
+                label.text = "Временно недоступно: ${result.reason}"
         }
     }
 

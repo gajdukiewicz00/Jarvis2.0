@@ -35,6 +35,7 @@ class SettingsTab(
     private val reasonLabel = Label()
     private val manualOverrideCheckBox = CheckBox("Pin API Gateway URL manually")
     private val serviceChecker = DesktopServiceHealthChecker(apiClient = apiClient)
+    private val buildVersion = SettingsTab::class.java.`package`?.implementationVersion ?: "1.0.0"
 
     init {
         val content = VBox(10.0)
@@ -151,7 +152,7 @@ class SettingsTab(
         aboutBox.padding = Insets(10.0)
         aboutBox.children.addAll(
             Label("Jarvis 2.0 Desktop Client"),
-            Label("Version: 0.1.0-SNAPSHOT"),
+            Label("Version: $buildVersion"),
             Label("Microservices Architecture"),
             Label(""),
             Label("Services:"),

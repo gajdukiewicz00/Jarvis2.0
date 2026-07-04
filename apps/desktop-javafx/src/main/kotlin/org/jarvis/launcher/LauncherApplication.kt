@@ -265,7 +265,13 @@ class LauncherApplication : Application() {
             existing.copy(
                 enableLlm = enableLlm,
                 enableMemory = enableMemory,
-                enableGpu = enableGpuSetting
+                enableGpu = enableGpuSetting,
+                // Mark the toggles as explicit so a stale launcher.properties
+                // from a pre-2026-05 install does not silently scale LLM/Memory
+                // to zero on the next full launch.
+                enableLlmExplicit = true,
+                enableMemoryExplicit = true,
+                schemaVersion = LauncherSettings.CURRENT_SCHEMA_VERSION
             )
         )
     }
@@ -1224,12 +1230,7 @@ class LauncherApplication : Application() {
     private fun ensureDependencies(): Boolean {
         val requiresDocker = JarvisPaths.isLocalRuntime()
         if (enableLlm && enableGpuSetting && !gpuAvailable) {
-            appendLog("GPU not detected on host; disabling LLM for this run.")
-            enableLlm = false
-            Platform.runLater {
-                enableLlmCheckBox.isSelected = false
-            }
-            persistSettings()
+            appendLog("GPU not detected on host; keeping LLM enabled and using CPU fallback for this run.")
         }
         val missingPackages = mutableListOf<String>()
         if (!commandExists("java")) missingPackages.add("openjdk-21-jre")

@@ -7,6 +7,15 @@ import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.shell.ShellRouteContent
 import org.jarvis.desktop.ui.tabs.LifeTab
 
+/**
+ * Legacy Life view kept for ad-hoc dev use only.
+ *
+ * <p>The shell routes the LIFE entry to {@link LifeMapView} now. This class
+ * is no longer instantiated by {@code ShellRoot} and exists so engineers
+ * can compare the new Life Map against the legacy expense form / time-
+ * tracking buttons during the migration. Delete once the migration sticks.</p>
+ */
+@Deprecated("Replaced by LifeMapView; kept for dev parity only.")
 class LifeView(
     apiClient: ApiClient
 ) : BorderPane(), ShellRouteContent {

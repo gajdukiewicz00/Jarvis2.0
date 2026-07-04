@@ -29,6 +29,40 @@ class PlannerReadModel(
         val doneCount: Int = tasks.count { it.status == "DONE" }
     }
 
+    sealed interface BriefResult {
+        data class Available(val text: String) : BriefResult
+        data class Unavailable(val reason: String) : BriefResult
+    }
+
+    /** Today's focus from `GET /api/v1/planner/focus`; degrades gracefully. */
+    fun loadFocus(): BriefResult = loadBrief("/planner/focus")
+
+    /** Evening review from `GET /api/v1/planner/evening-review`; degrades gracefully. */
+    fun loadEveningReview(): BriefResult = loadBrief("/planner/evening-review")
+
+    private fun loadBrief(endpoint: String): BriefResult =
+        runCatching { apiClient.get(endpoint) }.fold(
+            onSuccess = { body -> BriefResult.Available(summarizeBrief(body)) },
+            onFailure = { error -> BriefResult.Unavailable(error.message ?: "endpoint unavailable") }
+        )
+
+    private fun summarizeBrief(body: String): String {
+        val root = runCatching { objectMapper.readTree(body) }.getOrNull()
+            ?: return body.trim().ifBlank { "(empty)" }
+        val direct = listOf("focus", "summary", "message", "text", "review", "headline")
+            .map { root.path(it) }
+            .firstOrNull { !it.isMissingNode && !it.isNull && it.asText().isNotBlank() }
+            ?.asText()
+        if (direct != null) return direct
+        val items = root.path("items").takeIf { it.isArray }
+            ?: root.path("tasks").takeIf { it.isArray }
+            ?: root.path("highlights").takeIf { it.isArray }
+        if (items != null && items.size() > 0) {
+            return items.joinToString("\n") { "• ${it.path("title").asText(it.asText("item"))}" }
+        }
+        return body.trim().ifBlank { "(empty)" }
+    }
+
     fun loadSnapshot(): Snapshot {
         val payload = objectMapper.createObjectNode()
         val tasks = objectMapper.readTree(apiClient.post("/tools/todo/list", objectMapper.writeValueAsString(payload)))

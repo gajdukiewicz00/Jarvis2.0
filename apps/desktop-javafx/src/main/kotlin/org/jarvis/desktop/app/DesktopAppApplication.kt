@@ -17,3 +17,13 @@ class DesktopAppApplication : Application() {
         desktopShellHost = null
     }
 }
+
+/**
+ * Entry point for the Jarvis desktop SHELL (Control Center + feature screens),
+ * which connects to the already-running cluster gateway. This is the app the
+ * operator wants — NOT the legacy LauncherApplication that tries to bootstrap a
+ * local stack and reports DEGRADED against an existing k3s deployment.
+ */
+fun main() {
+    Application.launch(DesktopAppApplication::class.java)
+}

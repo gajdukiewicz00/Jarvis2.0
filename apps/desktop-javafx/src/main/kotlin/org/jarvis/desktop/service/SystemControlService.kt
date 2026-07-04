@@ -561,28 +561,57 @@ class SystemControlService {
     companion object {
         private val logger = LoggerFactory.getLogger(SystemControlService::class.java)
         
+        // Tracks whether WE paused a genuinely-playing player, so the paired
+        // resume only restarts media that was actually playing before the wake
+        // word. Without this guard, resume (playerctl play) force-starts a player
+        // even when nothing was playing — turning music ON after every voice command.
+        @Volatile
+        private var pausedByUs = false
+
+        private fun playerctlStatus(): String =
+            try {
+                val proc = ProcessBuilder("playerctl", "status")
+                    .redirectErrorStream(true)
+                    .start()
+                val out = proc.inputStream.bufferedReader().use { it.readText() }.trim()
+                proc.waitFor()
+                out
+            } catch (e: Exception) {
+                ""
+            }
+
         /**
          * Pause media playback - static method for quick access.
-         * Used by VoiceSession to pause media on wake word.
+         * Only pauses (and remembers it) when a player is actually Playing, so the
+         * paired [resumeMediaStatic] never force-starts media that was not playing.
          */
         @JvmStatic
         fun pauseMediaStatic() {
+            pausedByUs = false
+            if (!playerctlStatus().equals("Playing", ignoreCase = true)) {
+                return
+            }
             try {
                 ProcessBuilder("playerctl", "pause")
                     .redirectErrorStream(true)
                     .start()
                     .waitFor()
+                pausedByUs = true
             } catch (e: Exception) {
                 // Ignore - media control is optional
             }
         }
-        
+
         /**
          * Resume media playback - static method for quick access.
-         * Used by VoiceSession to resume media after command is processed.
+         * No-op unless [pauseMediaStatic] actually paused a genuinely-playing player.
          */
         @JvmStatic
         fun resumeMediaStatic() {
+            if (!pausedByUs) {
+                return
+            }
+            pausedByUs = false
             try {
                 ProcessBuilder("playerctl", "play")
                     .redirectErrorStream(true)

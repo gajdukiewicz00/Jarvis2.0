@@ -498,7 +498,7 @@ class HealthCheckService(
         if (kubeconfig != null) {
             command += listOf("--kubeconfig", kubeconfig)
         }
-        command += listOf("get", kind, name, "-n", "jarvis", "-o", "jsonpath=$path")
+        command += listOf("get", kind, name, "-n", kubernetesNamespace(), "-o", "jsonpath=$path")
 
         val process = ProcessBuilder(command)
             .redirectErrorStream(true)
@@ -514,6 +514,12 @@ class HealthCheckService(
         }
 
         return output
+    }
+
+    private fun kubernetesNamespace(): String {
+        return System.getenv("JARVIS_NAMESPACE")
+            ?.takeIf { it.isNotBlank() }
+            ?: "jarvis-prod"
     }
     
     private fun checkLlmService(optional: Boolean): ServiceHealthStatus.ServiceCheck {

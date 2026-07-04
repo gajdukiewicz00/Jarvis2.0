@@ -4,17 +4,26 @@ enum class ShellRoute(
     val title: String,
     val navLabel: String
 ) {
+    CONTROL_CENTER("Control Center", "Control Center"),
     HOME("Home", "Home"),
+    BRAIN("Brain / AI Chat", "Brain / Chat"),
+    VOICE_HELP("Voice — Ты можешь сказать", "Voice Commands"),
+    VOICE("Voice", "Voice Control"),
+    MEMORY("Memory", "Memory"),
+    FINANCE("Finance", "Finance"),
     PLANNER("Planner", "Planner"),
     LIFE("Life", "Life"),
     ANALYTICS("Analytics", "Analytics"),
-    PC_CONTROL("PC Control", "PC Control"),
+    INSIGHTS("Analytics Insights", "Insights"),
     SMART_HOME("Smart Home", "Smart Home"),
+    PC_CONTROL("PC Control", "PC Control"),
     VISION_SECURITY("Vision Security / CV", "Vision Security / CV"),
-    VOICE("Voice", "Voice"),
+    PROACTIVE("Proactive", "Proactive"),
+    SECURITY("Security / Privacy", "Security / Privacy"),
+    SYNC("Sync / Pairing", "Sync / Pairing"),
     DIAGNOSTICS("Diagnostics", "Diagnostics"),
-    SETTINGS("Settings", "Settings"),
-    AI("AI Runtime", "AI");
+    AI("AI Runtime", "AI"),
+    SETTINGS("Settings", "Settings");
 
     companion object {
         /**

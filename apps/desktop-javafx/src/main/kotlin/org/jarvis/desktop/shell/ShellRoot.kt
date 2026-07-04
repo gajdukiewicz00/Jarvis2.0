@@ -8,16 +8,27 @@ import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.config.ResolvedDesktopConfig
+import org.jarvis.agent.command.DefaultDesktopActions
+import org.jarvis.agent.feed.AgentLiveFeed
 import org.jarvis.desktop.features.analytics.AnalyticsView
 import org.jarvis.desktop.features.ai.AiView
+import org.jarvis.desktop.features.brain.BrainChatView
+import org.jarvis.desktop.features.controlcenter.ControlCenterView
 import org.jarvis.desktop.features.diagnostics.DiagnosticsView
+import org.jarvis.desktop.features.finance.FinanceView
 import org.jarvis.desktop.features.home.HomeView
-import org.jarvis.desktop.features.life.LifeView
+import org.jarvis.desktop.features.insights.InsightsView
+import org.jarvis.desktop.features.life.LifeMapView
+import org.jarvis.desktop.features.memory.MemoryView
 import org.jarvis.desktop.features.pccontrol.PcControlView
 import org.jarvis.desktop.features.planner.PlannerView
+import org.jarvis.desktop.features.proactive.ProactiveView
+import org.jarvis.desktop.features.security.SecurityView
 import org.jarvis.desktop.features.settings.SettingsView
 import org.jarvis.desktop.features.smarthome.SmartHomeView
+import org.jarvis.desktop.features.sync.SyncPairingView
 import org.jarvis.desktop.features.vision.VisionSecurityView
+import org.jarvis.desktop.features.voice.VoiceHelpView
 import org.jarvis.desktop.features.voice.VoiceView
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
 import org.jarvis.desktop.runtime.LocalRuntimeHealthProbe
@@ -36,7 +47,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class ShellRoot(
     private val onLogoutRequested: () -> Unit
 ) : BorderPane() {
-    private val navigator = ShellNavigator()
+    private val navigator = ShellNavigator(ShellRoute.CONTROL_CENTER)
     private val topBar = ShellTopBar(navigator)
     private val launcherSettings: LauncherSettings = runCatching {
         LauncherConfig(JarvisPaths.launcherConfig).load()
@@ -49,6 +60,8 @@ class ShellRoot(
     private val navPane = ShellNavPane(navigator, visibleRoutes)
     private val authService = AuthService()
     private val apiClient = ApiClient(authService = authService)
+    private val agentLiveFeed = AgentLiveFeed()
+    private val desktopActions = runCatching { DefaultDesktopActions() }.getOrNull()
     private val runtimeMonitor = DesktopRuntimeMonitor()
     private val systemControlService = SystemControlService()
     private var pcWebSocketClient: PcControlWebSocketClient? = null
@@ -169,6 +182,9 @@ class ShellRoot(
     private fun routeView(route: ShellRoute): Node {
         return routeViews.getOrPut(route) {
             when (route) {
+                ShellRoute.CONTROL_CENTER -> ControlCenterView(
+                    onNavigate = { route -> navigator.navigateTo(route) }
+                )
                 ShellRoute.HOME -> HomeView(
                     runtimeMonitor = runtimeMonitor,
                     onRefreshRuntime = ::refreshRuntimeHealthNow,
@@ -186,12 +202,27 @@ class ShellRoot(
                     onOpenDiagnostics = { navigator.navigateTo(ShellRoute.DIAGNOSTICS) },
                     onOpenSettings = { navigator.navigateTo(ShellRoute.SETTINGS) }
                 )
+                ShellRoute.BRAIN -> BrainChatView(apiClient)
+                ShellRoute.VOICE_HELP -> VoiceHelpView(
+                    apiClient = apiClient,
+                    onOpenVoiceControl = { navigator.navigateTo(ShellRoute.VOICE) }
+                )
+                ShellRoute.MEMORY -> MemoryView(apiClient)
+                ShellRoute.FINANCE -> FinanceView(apiClient)
                 ShellRoute.PLANNER -> PlannerView(apiClient)
-                ShellRoute.LIFE -> LifeView(apiClient)
+                ShellRoute.LIFE -> LifeMapView(
+                    apiClient = apiClient,
+                    liveFeed = agentLiveFeed,
+                    desktopActions = desktopActions
+                )
                 ShellRoute.ANALYTICS -> AnalyticsView(apiClient)
+                ShellRoute.INSIGHTS -> InsightsView(apiClient)
                 ShellRoute.PC_CONTROL -> PcControlView(apiClient)
                 ShellRoute.SMART_HOME -> SmartHomeView(apiClient)
                 ShellRoute.VISION_SECURITY -> VisionSecurityView(apiClient)
+                ShellRoute.PROACTIVE -> ProactiveView(apiClient)
+                ShellRoute.SECURITY -> SecurityView(apiClient)
+                ShellRoute.SYNC -> SyncPairingView(apiClient)
                 ShellRoute.VOICE -> VoiceView(apiClient, runtimeMonitor)
                 ShellRoute.DIAGNOSTICS -> DiagnosticsView(apiClient)
                 ShellRoute.SETTINGS -> SettingsView(apiClient, ::handleLogout)

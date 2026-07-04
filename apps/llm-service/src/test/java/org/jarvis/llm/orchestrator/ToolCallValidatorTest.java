@@ -169,4 +169,93 @@ class ToolCallValidatorTest {
         assertTrue(result.errors().size() >= 2,
                 "Expected at least 2 errors (missing title + extra field or bad enum), got: " + result.errors());
     }
+
+    @Test
+    void booleanTypeMismatchRejected() {
+        validator.loadFromParsed(List.of(
+                Map.of("name", "confirm_event", "input_schema", Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "confirmed", Map.of("type", "boolean")
+                        ),
+                        "required", List.of()
+                ))
+        ));
+        ModelToolCall call = new ModelToolCall();
+        call.setName("confirm_event");
+        call.setArguments(Map.of("confirmed", "yes"));
+
+        ToolCallValidator.ValidationResult result = validator.validate(call);
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("expected boolean")));
+    }
+
+    @Test
+    void booleanTypeAccepted() {
+        validator.loadFromParsed(List.of(
+                Map.of("name", "confirm_event", "input_schema", Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "confirmed", Map.of("type", "boolean")
+                        ),
+                        "required", List.of()
+                ))
+        ));
+        ModelToolCall call = new ModelToolCall();
+        call.setName("confirm_event");
+        call.setArguments(Map.of("confirmed", true));
+
+        ToolCallValidator.ValidationResult result = validator.validate(call);
+        assertTrue(result.valid(), "Expected valid, got errors: " + result.errors());
+    }
+
+    @Test
+    void arrayTypeMismatchRejected() {
+        ModelToolCall call = new ModelToolCall();
+        call.setName("create_todo");
+        call.setArguments(Map.of("title", "Test", "tags", "not-a-list"));
+
+        ToolCallValidator.ValidationResult result = validator.validate(call);
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("expected array")));
+    }
+
+    @Test
+    void arrayTypeAccepted() {
+        ModelToolCall call = new ModelToolCall();
+        call.setName("create_todo");
+        call.setArguments(Map.of("title", "Test", "tags", List.of("a", "b")));
+
+        ToolCallValidator.ValidationResult result = validator.validate(call);
+        assertTrue(result.valid(), "Expected valid, got errors: " + result.errors());
+    }
+
+    @Test
+    void aboveMaximumRejected() {
+        validator.loadFromParsed(List.of(
+                Map.of("name", "complete_todo", "input_schema", Map.of(
+                        "type", "object",
+                        "properties", Map.of(
+                                "id", Map.of("type", "integer", "minimum", 1, "maximum", 100)
+                        ),
+                        "required", List.of("id")
+                ))
+        ));
+        ModelToolCall call = new ModelToolCall();
+        call.setName("complete_todo");
+        call.setArguments(Map.of("id", 999));
+
+        ToolCallValidator.ValidationResult result = validator.validate(call);
+        assertFalse(result.valid());
+        assertTrue(result.errors().stream().anyMatch(e -> e.contains("above maximum")));
+    }
+
+    @Test
+    void loadsSchemasFromClasspathRegistry() {
+        ToolCallValidator freshValidator = new ToolCallValidator(new ObjectMapper());
+        freshValidator.loadSchemas();
+
+        assertTrue(freshValidator.knownTools().contains("create_todo"));
+        assertFalse(freshValidator.knownTools().isEmpty());
+    }
 }

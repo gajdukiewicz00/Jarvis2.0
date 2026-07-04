@@ -69,6 +69,8 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
             case "OPEN_URL" -> executeSingleStep(actionType, primitiveStep("open-url", actionType, parameters));
             case "HOTKEY" -> executeSingleStep(actionType, primitiveStep("hotkey", actionType, parameters));
             case "NOTIFY" -> executeSingleStep(actionType, primitiveStep("notify", actionType, parameters));
+            case "SCREENSHOT" -> executeSingleStep(actionType, primitiveStep("screenshot", actionType, parameters));
+            case "LOCK_SCREEN" -> executeSingleStep(actionType, primitiveStep("lock-screen", actionType, parameters));
             case "SYSTEM_COMMAND" -> handleSystemCommand(parameters);
             case "SCENARIO" -> handleScenario(parameters);
             default -> result(false, actionType, PcActionExecutionStatus.REJECTED,
@@ -334,6 +336,13 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
                 yield executeStep(stepId, "NOTIFY", parameters, () -> systemControlService.sendNotification(title, message),
                         "Notification sent", Map.of("title", title, "message", message));
             }
+            case "SCREENSHOT" -> {
+                String path = parameters.getOrDefault("path", "/tmp/jarvis-screenshot.png");
+                yield executeStep(stepId, "SCREENSHOT", parameters, () -> systemControlService.takeScreenshot(path),
+                        "Screenshot saved", Map.of("path", path));
+            }
+            case "LOCK_SCREEN" -> executeStep(stepId, "LOCK_SCREEN", parameters,
+                    systemControlService::lockScreen, "Screen locked", Map.of());
             default -> rejectedStep(stepId, actionType, "Action is not supported inside scenario: " + actionType);
         };
     }

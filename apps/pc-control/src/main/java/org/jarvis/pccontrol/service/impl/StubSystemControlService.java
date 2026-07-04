@@ -166,4 +166,14 @@ public class StubSystemControlService implements SystemControlService {
     public void turnMonitorOff() throws IOException, InterruptedException {
         log.info("🖥️ [STUB] Monitor off requested");
     }
+
+    @Override
+    public void lockScreen() throws IOException, InterruptedException {
+        log.info("🔒 [STUB] Lock screen requested");
+    }
+
+    @Override
+    public void takeScreenshot(String path) throws IOException, InterruptedException {
+        log.info("📸 [STUB] Screenshot requested -> {}", path);
+    }
 }

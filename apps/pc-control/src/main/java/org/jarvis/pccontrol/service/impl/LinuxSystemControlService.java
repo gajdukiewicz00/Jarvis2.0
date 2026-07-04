@@ -241,6 +241,17 @@ public class LinuxSystemControlService implements SystemControlService {
         execWithFallback(List.of("xset", "dpms", "force", "off"), "MonitorOff");
     }
 
+    @Override
+    public void lockScreen() throws IOException, InterruptedException {
+        execWithFallback(List.of("loginctl", "lock-session"), "LockScreen");
+    }
+
+    @Override
+    public void takeScreenshot(String path) throws IOException, InterruptedException {
+        String target = (path == null || path.isBlank()) ? "/tmp/jarvis-screenshot.png" : path;
+        execWithFallback(List.of("gnome-screenshot", "-f", target), "Screenshot");
+    }
+
     /**
      * Execute command with graceful error handling.
      * Logs warning instead of throwing for non-critical failures.

@@ -66,5 +66,11 @@ public interface SystemControlService {
 
     void turnMonitorOff() throws IOException, InterruptedException;
 
+    /** Lock the desktop session. Requires a real desktop (no-op in stub mode). */
+    void lockScreen() throws IOException, InterruptedException;
+
+    /** Capture the screen to a file. Requires a real desktop (no-op in stub mode). */
+    void takeScreenshot(String path) throws IOException, InterruptedException;
+
     void beep();
 }

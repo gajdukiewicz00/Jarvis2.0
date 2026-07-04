@@ -7,6 +7,16 @@ server:
     key-store-password: ${JARVIS_NLP_KEYSTORE_PASSWORD:changeit}
     key-store-type: ${JARVIS_NLP_KEYSTORE_TYPE:PKCS12}
 
+jarvis:
+  nlp:
+    # Phase 3: when true, /api/v1/nlp/intent-fast tries the host router model
+    # via llm-service before falling back to the deterministic regex engine.
+    # Default false until a router GGUF is actually loaded on the host.
+    fast-intent:
+      enabled: ${JARVIS_NLP_FAST_INTENT_ENABLED:false}
+      url: ${JARVIS_NLP_FAST_INTENT_URL:http://llm-service:8091/api/v1/llm/intent}
+      timeout-ms: ${JARVIS_NLP_FAST_INTENT_TIMEOUT_MS:1500}
+
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s

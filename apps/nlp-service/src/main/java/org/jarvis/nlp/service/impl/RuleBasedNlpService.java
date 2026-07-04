@@ -39,11 +39,11 @@ public class RuleBasedNlpService implements NlpService {
 
     // ============ VOLUME ============
     private static final Pattern VOL_UP = Pattern.compile(
-            "(?:^|\\b)(?:(?:сделай(?:-ка)?|прибавь|увеличь|подними|громче)(?:\\s+(?:громкость|звук))?|(?:volume\\s+up)|(?:turn\\s+(?:the\\s+)?(?:volume|sound)\\s+up)|(?:(?:increase|raise|boost)\\s+(?:the\\s+)?(?:volume|sound))|(?:make(?:\\s+it)?\\s+louder))(?:\\s+(?:на|by)\\s+([\\p{L}\\d]+))?(?:\\s*%)?(?:\\b|$)",
+            "(?:^|\\b)(?:(?:прибавь|увеличь|подними|погромче|громче)(?:\\s+(?:громкость|звук))?|(?:volume\\s+up)|(?:turn\\s+(?:the\\s+)?(?:volume|sound)\\s+up)|(?:(?:increase|raise|boost)\\s+(?:the\\s+)?(?:volume|sound))|(?:make(?:\\s+it)?\\s+louder))(?:\\s+(?:на|by)\\s+([\\p{L}\\d]+))?(?:\\s*%)?(?:\\b|$)",
             RXF);
 
     private static final Pattern VOL_DOWN = Pattern.compile(
-            "(?:^|\\b)(?:(?:сделай(?:-ка)?|уменьши|убавь|снизь|понизь|тише)(?:\\s+(?:громкость|звук))?|(?:volume\\s+down)|(?:turn\\s+(?:the\\s+)?(?:volume|sound)\\s+down)|(?:(?:decrease|lower|reduce)\\s+(?:the\\s+)?(?:volume|sound))|(?:make(?:\\s+it)?\\s+quieter)|quieter)(?:\\s+(?:на|by)\\s+([\\p{L}\\d]+))?(?:\\s*%)?(?:\\b|$)",
+            "(?:^|\\b)(?:(?:уменьши|убавь|снизь|понизь|потише|тише)(?:\\s+(?:громкость|звук))?|(?:volume\\s+down)|(?:turn\\s+(?:the\\s+)?(?:volume|sound)\\s+down)|(?:(?:decrease|lower|reduce)\\s+(?:the\\s+)?(?:volume|sound))|(?:make(?:\\s+it)?\\s+quieter)|quieter)(?:\\s+(?:на|by)\\s+([\\p{L}\\d]+))?(?:\\s*%)?(?:\\b|$)",
             RXF);
 
     private static final Pattern VOL_SET = Pattern.compile(
@@ -56,11 +56,34 @@ public class RuleBasedNlpService implements NlpService {
             "(?:^|\\b)(?:включи|верни)\\s+(?:звук|громкость)|unmute\\b", RXF);
 
     // ============ MEDIA CONTROL ============
+    // Require an explicit media object — bare "продолжи"/"play" are dropped because
+    // Vosk noise transcribed as them used to misfire a blind PLAY_PAUSE (media auto-start).
     private static final Pattern PLAY = Pattern.compile(
-            "(?:^|\\b)(?:играй|воспроизводи|продолжи|play|запусти\\s+музыку)\\b", RXF);
+            "(?:^|\\b)(?:играй|воспроизводи|запусти\\s+музыку"
+                    + "|продолжи\\s+(?:воспроизведение|музыку|трек|плеер|подкаст)"
+                    + "|play\\s+(?:music|track|song))\\b",
+            RXF);
 
     private static final Pattern PAUSE = Pattern.compile(
-            "(?:^|\\b)(?:пауза|стоп|останови|pause|stop|поставь\\s+на\\s+паузу)\\b", RXF);
+            "(?:^|\\b)(?:пауза|останови|pause|поставь\\s+на\\s+паузу)\\b", RXF);
+
+    // B1 — barge-in / cancel. Matched FIRST so "стоп"/"stop"/"отмена"/"заткнись"
+    // cancel the active voice session rather than pausing media.
+    private static final Pattern CANCEL = Pattern.compile(
+            "(?:^|\\b)(?:отмена|отмени|прекрати|стоп|стой|заткнись|джарвис\\s+стоп"
+                    + "|cancel|abort|stop|jarvis\\s+stop|hush)\\b", RXF);
+
+    // B3 — energy-aware planning intents.
+    private static final Pattern PLAN_BY_ENERGY = Pattern.compile(
+            "(?:^|\\b)(?:спланируй\\s+день\\s+по\\s+энергии|план(?:ируй)?\\s+по\\s+энергии"
+                    + "|plan\\s+(?:my\\s+)?day\\s+by\\s+energy)\\b", RXF);
+    private static final Pattern WHAT_NOW = Pattern.compile(
+            "(?:^|\\b)(?:что\\s+мне\\s+делать(?:\\s+сейчас)?|что\\s+делать\\s+сейчас"
+                    + "|what\\s+should\\s+i\\s+do(?:\\s+now)?)\\b", RXF);
+    private static final Pattern ENERGY_SET = Pattern.compile(
+            "(?:^|\\b)(?:я\\s+устал|я\\s+выжат|вымотан|нет\\s+сил|полон\\s+сил|я\\s+бодр"
+                    + "|у\\s+меня\\s+норм(?:альн\\w*)?\\s+энерги\\w*|i'?m\\s+tired|i'?m\\s+exhausted|i'?m\\s+energized)\\b",
+            RXF);
 
     private static final Pattern NEXT_TRACK = Pattern.compile(
             "(?:^|\\b)(?:следующий|дальше|next|вперед)(?:\\s+(?:трек|песня|песню))?\\b", RXF);
@@ -87,6 +110,15 @@ public class RuleBasedNlpService implements NlpService {
 
     private static final Pattern OPEN_TERMINAL = Pattern.compile(
             "(?:^|\\b)(?:открой|запусти|включи)\\s+(?:терминал|terminal|консоль|shell)\\b", RXF);
+
+    // ============ NOTES (P2 Jarvis Loop) ============
+    private static final Pattern CREATE_NOTE = Pattern.compile(
+            "(?:^|\\b)(?:(?:создай|сделай|запиши|добавь)\\s+(?:заметку|запись|note)|создай\\s+note|create\\s+(?:a\\s+)?note|make\\s+(?:a\\s+)?note|take\\s+(?:a\\s+)?note)(?:\\s+(?:на|про|о|об|about|on|for)\\s+(.+))?",
+            RXF);
+
+    private static final Pattern CREATE_NOTE_TODAY = Pattern.compile(
+            "(?:^|\\b)(?:(?:создай|сделай|запиши)\\s+(?:заметку|запись)\\s+(?:на|за)\\s+(?:сегодня|сегодняшний\\s+день)|note\\s+for\\s+today|today'?s\\s+note)\\b",
+            RXF);
 
     // ============ SCENARIOS ============
     private static final Pattern WORK_MODE = Pattern.compile(
@@ -129,6 +161,22 @@ public class RuleBasedNlpService implements NlpService {
             text = "";
         String norm = TextNormalizer.normalize(text);
 
+        // B1 — cancel / barge-in takes precedence over every other intent.
+        if (CANCEL.matcher(norm).find()) {
+            return new NlpResult("cancel", Map.of());
+        }
+
+        // B3 — energy-aware planning.
+        if (PLAN_BY_ENERGY.matcher(norm).find()) {
+            return new NlpResult("plan_by_energy", Map.of());
+        }
+        if (ENERGY_SET.matcher(norm).find()) {
+            return new NlpResult("set_energy", Map.of("level", norm));
+        }
+        if (WHAT_NOW.matcher(norm).find()) {
+            return new NlpResult("what_now", Map.of());
+        }
+
         // Greetings
         if (HELLO.matcher(norm).find()) {
             return new NlpResult("hello", Map.of());
@@ -138,6 +186,22 @@ public class RuleBasedNlpService implements NlpService {
         }
         if (THANKS.matcher(norm).find()) {
             return new NlpResult("thanks", Map.of());
+        }
+
+        // Notes — must run before VOL_UP/VOL_DOWN because "сделай заметку" otherwise
+        // hits the volume regex's bare "сделай" alternative.
+        Matcher mntop = CREATE_NOTE_TODAY.matcher(norm);
+        if (mntop.find()) {
+            return new NlpResult("create_note", Map.of("scope", "today"));
+        }
+        Matcher mntoptopic = CREATE_NOTE.matcher(norm);
+        if (mntoptopic.find()) {
+            String topic = mntoptopic.groupCount() >= 1 ? mntoptopic.group(1) : null;
+            Map<String, String> slots = new HashMap<>();
+            if (topic != null && !topic.isBlank()) {
+                slots.put("topic", topic.trim());
+            }
+            return new NlpResult("create_note", slots);
         }
 
         // Timer
@@ -265,6 +329,53 @@ public class RuleBasedNlpService implements NlpService {
         }
         if (LOCK_SCREEN.matcher(norm).find()) {
             return new NlpResult("lock_screen", Map.of());
+        }
+
+        int rxf = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
+
+        // Screenshot
+        if (Pattern.compile("(?:^|\\b)(?:скриншот|снимок\\s+экрана|сделай\\s+скрин|сними\\s+экран|screenshot|screen\\s*shot)\\b", rxf)
+                .matcher(norm).find()) {
+            return new NlpResult("screenshot", Map.of());
+        }
+
+        // Lock screen
+        if (Pattern.compile("(?:^|\\b)(?:заблокируй|заблокировать|залочь|lock)(?:\\s+(?:экран|компьютер|screen))?\\b", rxf)
+                .matcher(norm).find()) {
+            return new NlpResult("lock_screen", Map.of());
+        }
+
+        // Expense logging
+        Matcher mExp = Pattern.compile(
+                "(?:^|\\b)(?:потратил[аи]?|истратил[аи]?|купил[аи]?|расход)\\b.*?(\\d+)\\s*"
+                        + "(?:руб|р|₽|евро|eur|€|долл|usd|\\$)?(?:\\s+(?:на|в|за)\\s+([\\p{L}][\\p{L}\\s]*?))?(?:\\b|$)",
+                rxf).matcher(norm);
+        if (mExp.find()) {
+            Map<String, String> slots = new HashMap<>();
+            Integer amount = parseNumber(mExp.group(1));
+            if (amount != null) {
+                slots.put("amount", String.valueOf(amount));
+            }
+            String category = mExp.group(2);
+            slots.put("category", category != null && !category.isBlank() ? category.trim() : "прочее");
+            return new NlpResult("add_expense", slots);
+        }
+
+        // Time query
+        if (Pattern.compile("(?:^|\\b)(?:сколько\\s+(?:сейчас\\s+)?времени|который\\s+час|время\\s+сейчас|what\\s+time)\\b", rxf)
+                .matcher(norm).find()) {
+            return new NlpResult("get_time", Map.of());
+        }
+
+        // Reminder / calendar event
+        Matcher mRem = Pattern.compile(
+                "(?:^|\\b)(?:напомни(?:\\s+мне)?|создай\\s+напоминание|поставь\\s+напоминание|запланируй|добавь\\s+(?:встречу|событие|напоминание))\\b\\s*(.*)$",
+                rxf).matcher(norm);
+        if (mRem.find()) {
+            Map<String, String> slots = new HashMap<>();
+            String what = mRem.group(1);
+            slots.put("text", what != null ? what.trim() : "");
+            return new NlpResult("add_reminder", slots);
         }
 
         return new NlpResult("fallback", Map.of());

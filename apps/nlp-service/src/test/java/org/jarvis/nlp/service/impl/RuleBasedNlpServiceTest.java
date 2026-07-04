@@ -26,6 +26,25 @@ class RuleBasedNlpServiceTest {
     }
 
     @Test
+    void inferRecognizesCancelBargeInPhrases() {
+        assertEquals("cancel", service.infer("отмена", "ru").intent());
+        assertEquals("cancel", service.infer("стоп", "ru").intent());
+        assertEquals("cancel", service.infer("заткнись", "ru").intent());
+        assertEquals("cancel", service.infer("Jarvis stop", "en").intent());
+        assertEquals("cancel", service.infer("cancel", "en").intent());
+        // "пауза" still means media pause, not cancel
+        assertEquals("pause", service.infer("пауза", "ru").intent());
+    }
+
+    @Test
+    void inferRecognizesEnergyIntents() {
+        assertEquals("set_energy", service.infer("я устал", "ru").intent());
+        assertEquals("set_energy", service.infer("я выжат", "ru").intent());
+        assertEquals("plan_by_energy", service.infer("спланируй день по энергии", "ru").intent());
+        assertEquals("what_now", service.infer("что мне делать сейчас", "ru").intent());
+    }
+
+    @Test
     void inferTreatsShortTimerCommandAsMinutes() {
         NlpResult result = service.infer("таймер 15", "ru");
 
@@ -86,5 +105,27 @@ class RuleBasedNlpServiceTest {
 
         assertEquals("fallback", result.intent());
         assertTrue(result.slots().isEmpty());
+    }
+
+    @Test
+    void inferRecognisesCreateNoteForToday() {
+        NlpResult result = service.infer("сделай заметку на сегодня", "ru");
+
+        assertEquals("create_note", result.intent());
+        assertEquals("today", result.slots().get("scope"));
+    }
+
+    @Test
+    void inferRecognisesCreateNoteEnglish() {
+        NlpResult result = service.infer("create a note about meeting agenda", "en");
+
+        assertEquals("create_note", result.intent());
+        assertEquals("meeting agenda", result.slots().get("topic"));
+    }
+
+    @Test
+    void inferRecognisesGenericCreateNote() {
+        NlpResult result = service.infer("запиши заметку", "ru");
+        assertEquals("create_note", result.intent());
     }
 }

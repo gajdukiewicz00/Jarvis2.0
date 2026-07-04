@@ -29,13 +29,23 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
             RXF);
     private static final Pattern TIMER_SHORT = Pattern.compile(
             "(?:^|\\b)таймер\\s+([\\p{L}\\d]+)(?:\\b|$)", RXF);
+    // Require an explicit direction word — a bare "сделай" must NOT match either
+    // (otherwise "сделай тише" wrongly hits VOL_UP, which is evaluated first).
     private static final Pattern VOL_UP = Pattern.compile(
-            "(?:сделай(?:-ка)?|прибавь|увеличь|подними)\\s+(?:громкость|звук)?(?:\\s+на\\s+([\\p{L}\\d]+))?", RXF);
+            "(?:прибавь|увеличь|подними|погромче|громче)\\s*(?:громкость|звук)?(?:\\s+на\\s+([\\p{L}\\d]+))?", RXF);
     private static final Pattern VOL_DOWN = Pattern.compile(
-            "(?:сделай(?:-ка)?|уменьши|убавь|снизь|понизь|сделай\\s+тише)\\s+(?:громкость|звук)?(?:\\s+на\\s+([\\p{L}\\d]+))?",
+            "(?:уменьши|убавь|снизь|понизь|потише|тише)\\s*(?:громкость|звук)?(?:\\s+на\\s+([\\p{L}\\d]+))?",
             RXF);
     private static final Pattern VOL_ON = Pattern.compile(
             "(?:^|\\b)(?:громкость|звук)\\s+на\\s+([\\p{L}\\d]+)(?:\\b|$)", RXF);
+    private static final Pattern TIME_QUERY = Pattern.compile(
+            "(?:^|\\b)(?:сколько\\s+(?:сейчас\\s+)?времени|который\\s+час|время\\s+сейчас|what\\s+time)\\b", RXF);
+    private static final Pattern EXPENSE = Pattern.compile(
+            "(?:^|\\b)(?:потратил[аи]?|истратил[аи]?|купил[аи]?|расход)\\b.*?(\\d+)\\s*(?:руб|р|₽|евро|eur|€|долл|usd|\\$)?(?:\\s+(?:на|в|за)\\s+([\\p{L}][\\p{L}\\s]*?))?(?:\\b|$)",
+            RXF);
+    private static final Pattern REMINDER = Pattern.compile(
+            "(?:^|\\b)(?:напомни(?:\\s+мне)?|создай\\s+напоминание|поставь\\s+напоминание|запланируй|добавь\\s+(?:встречу|событие|напоминание))\\b\\s*(.*)$",
+            RXF);
     private static final Pattern NUM_TOKEN = Pattern.compile("\\d+");
 
     private static final Map<String, Integer> RUS_NUM = buildRusNumbers();
@@ -110,6 +120,33 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
                 slots.put("direction", "+");
                 return new EnhancedNlpResult("change_volume", slots, 0.8, false, null, text);
             }
+        }
+
+        // Time query
+        if (TIME_QUERY.matcher(norm).find()) {
+            return new EnhancedNlpResult("get_time", Map.of(), 0.9, false, null, text);
+        }
+
+        // Expense logging
+        Matcher me = EXPENSE.matcher(norm);
+        if (me.find()) {
+            Map<String, String> slots = new HashMap<>();
+            Integer amount = parseNumber(me.group(1));
+            if (amount != null) {
+                slots.put("amount", String.valueOf(amount));
+            }
+            String category = me.group(2);
+            slots.put("category", category != null && !category.isBlank() ? category.trim() : "прочее");
+            return new EnhancedNlpResult("add_expense", slots, 0.8, false, null, text);
+        }
+
+        // Reminder / calendar event
+        Matcher mr = REMINDER.matcher(norm);
+        if (mr.find()) {
+            Map<String, String> slots = new HashMap<>();
+            String what = mr.group(1);
+            slots.put("text", what != null ? what.trim() : "");
+            return new EnhancedNlpResult("add_reminder", slots, 0.75, false, null, text);
         }
 
         // Fallback - low confidence, needs clarification

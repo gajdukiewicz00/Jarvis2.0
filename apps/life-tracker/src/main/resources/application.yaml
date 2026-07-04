@@ -109,3 +109,19 @@ logging:
     org.flywaydb: INFO
     com.zaxxer.hikari: INFO
     com.zaxxer.hikari.HikariConfig: DEBUG
+
+# Cross-service URLs (movie-JARVIS proactive voice push)
+services:
+  voice-gateway:
+    url: ${VOICE_GATEWAY_URL:http://voice-gateway:8081}
+
+# Proactive warning speaker — cluster speaks life-map warnings on its own.
+jarvis:
+  proactive:
+    enabled: ${JARVIS_PROACTIVE_ENABLED:true}
+    users: ${JARVIS_PROACTIVE_USERS:owner}
+    interval-ms: ${JARVIS_PROACTIVE_INTERVAL_MS:300000}
+    min-gap-seconds: ${JARVIS_PROACTIVE_MIN_GAP_SECONDS:1800}
+    language: ${JARVIS_PROACTIVE_LANGUAGE:en-US}
+    quiet-start-hour: ${JARVIS_PROACTIVE_QUIET_START:23}
+    quiet-end-hour: ${JARVIS_PROACTIVE_QUIET_END:8}

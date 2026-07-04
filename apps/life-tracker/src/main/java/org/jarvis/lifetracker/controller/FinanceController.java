@@ -15,10 +15,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import org.springframework.http.ResponseEntity;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -134,6 +138,89 @@ public class FinanceController {
     @GetMapping("/expenses")
     public List<ExpenseDTO> getExpenses(HttpServletRequest httpRequest) {
         return financeService.listTransactions(requireUserId(httpRequest), null, null, null, null);
+    }
+
+    @PutMapping("/transaction/{id}")
+    public ExpenseDTO updateTransaction(@PathVariable Long id,
+                                        @RequestBody TransactionRequest request,
+                                        HttpServletRequest httpRequest) {
+        String userId = requireUserId(httpRequest);
+        Expense expense = expenseRepository.findById(id)
+                .filter(e -> userId.equals(e.getUserId()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "transaction_not_found"));
+        if (request.amount() != null) {
+            expense.setAmount(request.amount());
+        }
+        if (request.currency() != null) {
+            expense.setCurrency(request.currency());
+        }
+        if (request.category() != null) {
+            expense.setCategory(request.category());
+        }
+        if (request.description() != null) {
+            expense.setDescription(request.description());
+        }
+        if (request.type() != null) {
+            expense.setType(request.type());
+        }
+        if (request.occurredAt() != null) {
+            expense.setOccurredAt(request.occurredAt());
+        }
+        return dtoMapper.toDTO(expenseRepository.save(expense));
+    }
+
+    @DeleteMapping("/transaction/{id}")
+    public ResponseEntity<Void> deleteTransaction(@PathVariable Long id, HttpServletRequest httpRequest) {
+        String userId = requireUserId(httpRequest);
+        return expenseRepository.findById(id)
+                .filter(e -> userId.equals(e.getUserId()))
+                .map(e -> {
+                    expenseRepository.delete(e);
+                    return ResponseEntity.noContent().<Void>build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Import bank transactions from CSV. Each line: {@code date,amount,category,description}
+     * (header line is skipped). Amounts are stored as expenses. Returns imported/skipped counts.
+     */
+    @PostMapping("/import-csv")
+    public Map<String, Object> importCsv(@RequestBody Map<String, String> body, HttpServletRequest httpRequest) {
+        String userId = requireUserId(httpRequest);
+        String csv = body == null ? "" : body.getOrDefault("csv", "");
+        int imported = 0;
+        int skipped = 0;
+        for (String raw : csv.split("\\r?\\n")) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.toLowerCase().startsWith("date,")) {
+                continue;
+            }
+            String[] c = line.split(",", 4);
+            try {
+                if (c.length < 2) {
+                    skipped++;
+                    continue;
+                }
+                LocalDate date = LocalDate.parse(c[0].trim());
+                BigDecimal amount = new BigDecimal(c[1].trim()).abs();
+                Expense expense = new Expense();
+                expense.setUserId(userId);
+                expense.setAmount(amount);
+                expense.setCurrency("EUR");
+                expense.setCategory(c.length > 2 && !c[2].isBlank() ? c[2].trim() : "imported");
+                expense.setDescription(c.length > 3 ? c[3].trim() : null);
+                expense.setType(TransactionType.EXPENSE);
+                expense.setOccurredAt(date.atStartOfDay());
+                expense.setSource(EntrySource.MANUAL);
+                expenseRepository.save(expense);
+                imported++;
+            } catch (RuntimeException ex) {
+                skipped++;
+            }
+        }
+        log.info("CSV import for {}: imported={} skipped={}", userId, imported, skipped);
+        return Map.of("imported", imported, "skipped", skipped);
     }
 
     public record TransactionRequest(

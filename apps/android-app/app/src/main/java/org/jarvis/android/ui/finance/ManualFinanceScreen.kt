@@ -25,6 +25,30 @@ import org.jarvis.android.data.local.PendingItem
 import java.util.UUID
 
 /**
+ * Parses the raw amount text and builds the finance-entry JSON payload used for the
+ * offline sync queue. Returns `null` when [rawAmount] is not a valid number so the
+ * caller can surface a validation error instead of queuing a bad entry.
+ *
+ * Pure function — extracted from the [ManualFinanceScreen] Save button's onClick
+ * lambda so the parsing/JSON-building logic can be unit tested directly.
+ */
+fun buildFinanceEntryPayload(
+    rawAmount: String,
+    currency: String,
+    category: String,
+    description: String
+): String? {
+    val amount = rawAmount.toDoubleOrNull() ?: return null
+    return buildJsonObject {
+        put("amount", JsonPrimitive(amount))
+        put("currency", JsonPrimitive(currency))
+        put("category", JsonPrimitive(category))
+        put("description", JsonPrimitive(description))
+        put("type", JsonPrimitive("EXPENSE"))
+    }.toString()
+}
+
+/**
  * Phase 12 — manual finance entry. Saves the entry into the offline
  * Room queue immediately; SyncWorker uploads in the background. Works
  * with no connectivity.
@@ -52,20 +76,13 @@ fun ManualFinanceScreen(modifier: Modifier = Modifier) {
         OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") })
         OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Description") })
         Button(onClick = {
-            val a = amount.toDoubleOrNull()
-            if (a == null) { feedback = "amount must be numeric"; return@Button }
-            val payload = buildJsonObject {
-                put("amount", JsonPrimitive(a))
-                put("currency", JsonPrimitive(currency))
-                put("category", JsonPrimitive(category))
-                put("description", JsonPrimitive(description))
-                put("type", JsonPrimitive("EXPENSE"))
-            }
+            val payloadJson = buildFinanceEntryPayload(amount, currency, category, description)
+            if (payloadJson == null) { feedback = "amount must be numeric"; return@Button }
             scope.launch {
                 dao.upsert(PendingItem(
                     id = UUID.randomUUID().toString(),
                     kind = "FINANCE_ENTRY",
-                    payloadJson = payload.toString(),
+                    payloadJson = payloadJson,
                     createdAtEpochMs = System.currentTimeMillis()
                 ))
                 feedback = "queued — will sync on next worker run"

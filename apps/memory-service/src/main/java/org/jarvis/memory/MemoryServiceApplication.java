@@ -1,7 +1,9 @@
 package org.jarvis.memory;
 
+import org.jarvis.memory.cv.ScreenContextProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
 import java.time.Clock;
@@ -18,6 +20,7 @@ import java.time.Clock;
  * - Session summaries
  */
 @SpringBootApplication
+@EnableConfigurationProperties(ScreenContextProperties.class)
 public class MemoryServiceApplication {
 
     public static void main(String[] args) {

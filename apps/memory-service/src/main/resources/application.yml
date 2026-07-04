@@ -2,11 +2,48 @@ server:
   port: ${JARVIS_MEMORY_SERVICE_PORT:8093}
   shutdown: graceful
 
+jarvis:
+  audit:
+    consumer-group: ${JARVIS_AUDIT_CONSUMER_GROUP:audit-projector}
+  memory:
+    obsidian:
+      enabled: ${JARVIS_OBSIDIAN_ENABLED:true}
+      vault-path: ${JARVIS_OBSIDIAN_VAULT_PATH:~/JarvisVault}
+      deleted-log-subdir: ${JARVIS_OBSIDIAN_DELETED_LOG_SUBDIR:06_System/deleted-memory-log}
+      daily-subdir: ${JARVIS_OBSIDIAN_DAILY_SUBDIR:01_Daily}
+      inbox-subdir: ${JARVIS_OBSIDIAN_INBOX_SUBDIR:00_Inbox}
+    embedding:
+      enabled: ${JARVIS_MEMORY_EMBEDDING_ENABLED:true}
+      url: ${JARVIS_MEMORY_EMBEDDING_URL:http://embedding-service:5001/embed}
+      timeout-ms: ${JARVIS_MEMORY_EMBEDDING_TIMEOUT_MS:5000}
+    # CV screen-context consumer (jarvis.cv.screen_context.created -> Postgres).
+    cv:
+      enabled: ${JARVIS_MEMORY_CV_ENABLED:true}
+      topic: ${JARVIS_MEMORY_CV_TOPIC:jarvis.cv.screen_context.created}
+      consumer-group: ${JARVIS_MEMORY_CV_CONSUMER_GROUP:cv-screen-context-projector}
+      store-raw-screenshot: ${JARVIS_MEMORY_CV_STORE_RAW_SCREENSHOT:true}
+      max-screenshot-bytes: ${JARVIS_MEMORY_CV_MAX_SCREENSHOT_BYTES:8388608}
+      embed: ${JARVIS_MEMORY_CV_EMBED:true}
+
 spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   application:
     name: memory-service
+
+  # Phase 8: Kafka consumer for the audit projector. Topology is declared
+  # by jarvis-common's KafkaTopologyConfig (auto-loaded when bootstrap-servers is set).
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    consumer:
+      group-id: ${JARVIS_AUDIT_CONSUMER_GROUP:audit-projector}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: record
+      missing-topics-fatal: false
 
   datasource:
     url: ${SPRING_DATASOURCE_URL}

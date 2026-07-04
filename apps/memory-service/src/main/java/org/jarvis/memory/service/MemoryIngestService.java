@@ -69,8 +69,18 @@ public class MemoryIngestService {
         List<String> chunks = chunkingService.chunkConversation(texts);
 
         if (chunks.isEmpty()) {
-            log.debug("[{}] No chunks created (text too short)", correlationId);
-            return;
+            // The chunker drops text below its minimum length. That silently
+            // made short facts ("запомни: код = X") unrecallable — ingest
+            // returned status:ok yet nothing was embedded. Fall back to storing
+            // the raw joined text as a single chunk so short memories still work.
+            String joined = String.join("\n", texts).trim();
+            if (joined.isBlank()) {
+                log.warn("[{}] Ingest produced no chunks and no content — nothing stored", correlationId);
+                return;
+            }
+            log.warn("[{}] Chunker returned 0 chunks (text below threshold); "
+                    + "storing 1 fallback chunk so the memory stays recallable", correlationId);
+            chunks = List.of(joined);
         }
 
         log.debug("[{}] Created {} chunks", correlationId, chunks.size());

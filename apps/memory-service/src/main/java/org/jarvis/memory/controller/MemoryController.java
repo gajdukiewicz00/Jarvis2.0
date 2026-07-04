@@ -23,7 +23,9 @@ import java.util.UUID;
  */
 @Slf4j
 @RestController
-@RequestMapping("/memory")
+// Dual base path: internal callers use /memory/*, the api-gateway forwards the
+// full /api/v1/memory/* path unchanged — both must resolve to this controller.
+@RequestMapping({"/memory", "/api/v1/memory"})
 @RequiredArgsConstructor
 public class MemoryController {
 

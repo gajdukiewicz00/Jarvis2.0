@@ -2,6 +2,7 @@ package org.jarvis.memory.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.memory.audit.MemorySearchAuditService;
 import org.jarvis.memory.dto.*;
 import org.jarvis.memory.entity.ConversationMessage;
 import org.jarvis.memory.entity.MemoryChunk;
@@ -10,6 +11,7 @@ import org.jarvis.memory.exception.MemoryDependencyUnavailableException;
 import org.jarvis.memory.repository.ConversationMessageRepository;
 import org.jarvis.memory.repository.MemoryChunkRepository;
 import org.jarvis.memory.repository.SessionSummaryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Async;
@@ -38,6 +40,15 @@ public class MemoryService {
     private final ChunkingService chunkingService;
     private final MemoryIngestService memoryIngestService;
     private final Clock clock;
+
+    /**
+     * Optional. When present, every successful search appends a row to
+     * {@code memory_search_audit}. Failures inside the audit path are
+     * intentionally swallowed by {@link MemorySearchAuditService} so the
+     * search response is never degraded.
+     */
+    @Autowired(required = false)
+    private MemorySearchAuditService memorySearchAuditService;
 
     @Value("${memory.search.top-k:5}")
     private int defaultTopK;
@@ -104,19 +115,23 @@ public class MemoryService {
                     request.getUserId(), queryVector, maxDistance, PageRequest.of(0, topK));
 
             SearchResponse semanticResponse = buildSemanticResponse(
-                    request.getUserId(), rawResults, maxTokens, startTime, correlationId);
+                    request.getUserId(), rawResults, maxTokens, startTime, correlationId,
+                    request.isIncludeLocalOnly(), request.isIncludeSensitive());
             if (!semanticResponse.getChunks().isEmpty()) {
+                recordSearchAudit(request, semanticResponse, correlationId);
                 return semanticResponse;
             }
 
             log.info("[{}] Semantic search returned no results, falling back to lexical ranking", correlationId);
-            return buildLexicalFallbackResponse(
+            SearchResponse lexicalResponse = buildLexicalFallbackResponse(
                     request,
                     topK,
                     maxTokens,
                     startTime,
                     correlationId,
                     "Semantic search returned no matching chunks");
+            recordSearchAudit(request, lexicalResponse, correlationId);
+            return lexicalResponse;
         } catch (MemoryDependencyUnavailableException ex) {
             throw ex;
         } catch (RuntimeException ex) {
@@ -127,18 +142,45 @@ public class MemoryService {
         }
     }
 
+    /**
+     * B2 — whether a chunk of the given privacy level may be returned for the
+     * active provider. {@code local_only} requires includeLocalOnly;
+     * {@code sensitive} requires includeSensitive; public/private always pass.
+     */
+    static boolean privacyAllowed(String privacy, boolean includeLocalOnly, boolean includeSensitive) {
+        if (privacy == null || privacy.isBlank()) {
+            return true;
+        }
+        String p = privacy.trim().toLowerCase(java.util.Locale.ROOT).replace('-', '_');
+        if (p.equals("local_only")) {
+            return includeLocalOnly;
+        }
+        if (p.equals("sensitive")) {
+            return includeSensitive;
+        }
+        return true; // public / private
+    }
+
     private SearchResponse buildSemanticResponse(
             String userId,
             List<Object[]> rawResults,
             int maxTokens,
             long startTime,
-            String correlationId) {
+            String correlationId,
+            boolean includeLocalOnly,
+            boolean includeSensitive) {
         List<SearchResponse.ChunkResult> chunks = new ArrayList<>();
         StringBuilder contextBuilder = new StringBuilder();
         int tokenCount = 0;
+        int privacyExcluded = 0;
 
         for (Object[] row : rawResults) {
             MemoryChunk chunk = (MemoryChunk) row[0];
+            // B2 — drop chunks the active provider may not receive (no content logged).
+            if (!privacyAllowed(chunk.getPrivacy(), includeLocalOnly, includeSensitive)) {
+                privacyExcluded++;
+                continue;
+            }
             double distance = ((Number) row[1]).doubleValue();
             double similarity = roundSimilarity(Math.max(0.0d, Math.min(1.0d, 1.0d - distance)));
             int chunkTokens = chunkingService.estimateTokens(chunk.getChunkText());
@@ -160,8 +202,8 @@ public class MemoryService {
 
         long elapsed = System.currentTimeMillis() - startTime;
         long totalChunks = chunkRepository.countByUserId(userId);
-        log.info("[{}] Search complete: {} results in {}ms (total chunks: {})",
-                correlationId, chunks.size(), elapsed, totalChunks);
+        log.info("[{}] Search complete: {} results in {}ms (total chunks: {}, privacyExcluded={})",
+                correlationId, chunks.size(), elapsed, totalChunks, privacyExcluded);
 
         return SearchResponse.builder()
                 .chunks(chunks)
@@ -438,6 +480,17 @@ public class MemoryService {
     private String truncate(String s, int maxLen) {
         if (s == null) return "";
         return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    private void recordSearchAudit(SearchRequest request, SearchResponse response, String correlationId) {
+        if (memorySearchAuditService == null || response == null) {
+            return;
+        }
+        try {
+            memorySearchAuditService.record(request, response, null, false, correlationId);
+        } catch (RuntimeException ex) {
+            log.warn("[{}] memory search audit failed: {}", correlationId, ex.getMessage());
+        }
     }
 
     private record RankedMemoryItem(UUID id, String text, double score, OffsetDateTime createdAt) {

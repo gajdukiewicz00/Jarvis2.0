@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -14,12 +14,28 @@
     <name>Jarvis Memory Service</name>
     <description>Long-term memory service with pgvector for semantic search</description>
 
+    <properties>
+        <jib.container.port>8093</jib.container.port>
+        <jib.skip>false</jib.skip>
+    </properties>
+
     <dependencies>
         <!-- Jarvis Common (security, utilities) -->
         <dependency>
             <groupId>org.jarvis</groupId>
             <artifactId>jarvis-common</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 8: shared event schema for the audit projector. -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>event-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 8: Kafka consumer for jarvis.audit.events. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
         </dependency>
 
         <!-- Spring Boot -->
@@ -132,6 +148,10 @@
                         </exclude>
                     </excludes>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

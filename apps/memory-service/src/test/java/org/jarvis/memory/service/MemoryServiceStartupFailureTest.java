@@ -1,6 +1,7 @@
 package org.jarvis.memory.service;
 
 import org.jarvis.memory.MemoryServiceApplication;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -12,6 +13,7 @@ import org.testcontainers.utility.DockerImageName;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers(disabledWithoutDocker = true)
+@Tag("integration")
 class MemoryServiceStartupFailureTest {
 
     @Container

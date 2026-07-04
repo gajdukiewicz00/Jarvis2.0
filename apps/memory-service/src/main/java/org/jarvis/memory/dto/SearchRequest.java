@@ -47,6 +47,18 @@ public class SearchRequest {
     @Max(1)
     @Builder.Default
     private double minSimilarity = 0.5;
+
+    /**
+     * B2 — memory privacy enforcement. When false, results marked
+     * {@code local_only} / {@code sensitive} are excluded (e.g. when the active
+     * LLM provider is a remote API). Default true (local provider = include
+     * everything), preserving prior behaviour.
+     */
+    @Builder.Default
+    private boolean includeLocalOnly = true;
+
+    @Builder.Default
+    private boolean includeSensitive = true;
 }
 
 

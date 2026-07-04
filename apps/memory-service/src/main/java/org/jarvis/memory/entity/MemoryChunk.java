@@ -54,6 +54,11 @@ public class MemoryChunk {
     @Builder.Default
     private Map<String, Object> metadata = Map.of();
 
+    /** B2 — privacy level: public | private | sensitive | local_only. */
+    @Column(nullable = false)
+    @Builder.Default
+    private String privacy = "private";
+
     public static float[] toPrimitiveArray(java.util.List<Float> vector) {
         if (vector == null || vector.isEmpty()) {
             return null;

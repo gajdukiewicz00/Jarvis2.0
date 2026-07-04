@@ -1,5 +1,6 @@
 package org.jarvis.swarm.task;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import java.util.Comparator;
@@ -11,9 +12,11 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Thread-safe in-memory task store. The MVP avoids a database so the service stays
  * isolated (no migrations, no NetworkPolicy allowlist). Tasks are ephemeral and reset
- * on restart — documented as a known limitation.
+ * on restart — documented as a known limitation. Set {@code jarvis.agent.task-store=file}
+ * to opt into {@link FileBackedAgentTaskStore} instead, which survives a pod restart.
  */
 @Repository
+@ConditionalOnProperty(name = "jarvis.agent.task-store", havingValue = "memory", matchIfMissing = true)
 public class InMemoryAgentTaskStore implements AgentTaskStore {
 
     private final Map<String, AgentTask> tasks = new ConcurrentHashMap<>();

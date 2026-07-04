@@ -1,5 +1,6 @@
 package org.jarvis.media.job;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import java.util.Comparator;
@@ -11,9 +12,12 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Thread-safe in-memory job store. The MVP intentionally avoids a database so the
  * service stays isolated (no cross-service network policy, no migrations). Jobs are
- * ephemeral and reset on restart — documented as a known limitation.
+ * ephemeral and reset on restart — documented as a known limitation. Set
+ * {@code jarvis.media.job-store=file} to opt into {@link FileBackedMediaJobStore}
+ * instead, which survives a pod restart.
  */
 @Repository
+@ConditionalOnProperty(name = "jarvis.media.job-store", havingValue = "memory", matchIfMissing = true)
 public class InMemoryMediaJobStore implements MediaJobStore {
 
     private final Map<String, MediaJob> jobs = new ConcurrentHashMap<>();

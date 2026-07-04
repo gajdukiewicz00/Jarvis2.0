@@ -1,0 +1,16 @@
+# Note: torch is installed separately in Dockerfile with CUDA support
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+transformers==4.48.0
+accelerate==0.27.0
+numpy<2,>=1.24.0
+sentencepiece==0.1.99
+protobuf==4.25.1
+
+# Optional: 4-bit quantization (uncomment if needed)
+# bitsandbytes==0.42.0
+
+# llama-cpp-python is installed separately in Dockerfile if LLM_BACKEND=llamacpp
+# Default image: plain CPU-safe wheel. GPU image: add
+# --build-arg LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124

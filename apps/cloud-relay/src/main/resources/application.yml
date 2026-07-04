@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: cloud-relay
+
+server:
+  port: ${JARVIS_CLOUD_RELAY_PORT:8096}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+jarvis:
+  relay:
+    # Per-routingId blob cap. A burst burst over this rotates oldest out.
+    queue-cap: 256
+    # Maximum size of a single blob. Larger → 413.
+    max-blob-bytes: 65536
+    # TTL on stored blobs.
+    blob-ttl-seconds: 86400
+    # TTL on per-routingId queues themselves (idle timeout).
+    queue-idle-ttl-seconds: 604800
+
+logging:
+  level:
+    org.jarvis.cloudrelay: INFO

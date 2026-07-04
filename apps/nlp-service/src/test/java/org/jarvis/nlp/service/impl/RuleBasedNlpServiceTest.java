@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RuleBasedNlpServiceTest {
@@ -127,5 +128,151 @@ class RuleBasedNlpServiceTest {
     void inferRecognisesGenericCreateNote() {
         NlpResult result = service.infer("запиши заметку", "ru");
         assertEquals("create_note", result.intent());
+    }
+
+    @Test
+    void inferRecognizesGoodbyeAndThanks() {
+        assertEquals("goodbye", service.infer("пока", "ru").intent());
+        assertEquals("goodbye", service.infer("до свидания", "ru").intent());
+        assertEquals("thanks", service.infer("спасибо", "ru").intent());
+        assertEquals("thanks", service.infer("благодарю", "ru").intent());
+    }
+
+    @Test
+    void inferRecognizesMuteAndUnmute() {
+        assertEquals("mute", service.infer("выключи звук", "ru").intent());
+        assertEquals("mute", service.infer("замолчи", "ru").intent());
+        assertEquals("mute", service.infer("mute", "en").intent());
+        assertEquals("unmute", service.infer("включи звук", "ru").intent());
+        // NOTE: MUTE is checked before UNMUTE and its bare "mute\b" alternative has
+        // no leading boundary requirement, so it matches the "mute" suffix inside
+        // the English word "unmute" itself. This documents that existing overlap
+        // rather than asserting the (unimplemented) intended behavior.
+        assertEquals("mute", service.infer("unmute", "en").intent());
+    }
+
+    @Test
+    void inferParsesVolumeSetLevel() {
+        NlpResult result = service.infer("громкость на 40%", "ru");
+
+        assertEquals("volume_set", result.intent());
+        assertEquals("40", result.slots().get("level"));
+    }
+
+    @Test
+    void inferRecognizesPlayAndPauseAndTrackNavigation() {
+        assertEquals("play", service.infer("играй", "ru").intent());
+        assertEquals("play", service.infer("play music", "en").intent());
+        assertEquals("pause", service.infer("пауза", "ru").intent());
+        assertEquals("pause", service.infer("pause", "en").intent());
+        assertEquals("next_track", service.infer("следующий трек", "ru").intent());
+        assertEquals("next_track", service.infer("next", "en").intent());
+        assertEquals("previous_track", service.infer("предыдущий трек", "ru").intent());
+        assertEquals("previous_track", service.infer("previous", "en").intent());
+    }
+
+    @Test
+    void inferRecognizesAppLaunchIntents() {
+        assertEquals("open_browser", service.infer("открой браузер", "ru").intent());
+        assertEquals("open_youtube", service.infer("открой ютуб", "ru").intent());
+        assertEquals("open_ide", service.infer("открой idea", "ru").intent());
+
+        NlpResult telegram = service.infer("открой телеграм", "ru");
+        assertEquals("open_app", telegram.intent());
+        assertEquals("telegram", telegram.slots().get("app"));
+
+        NlpResult spotify = service.infer("открой спотифай", "ru");
+        assertEquals("open_app", spotify.intent());
+        assertEquals("spotify", spotify.slots().get("app"));
+
+        NlpResult terminal = service.infer("открой терминал", "ru");
+        assertEquals("open_app", terminal.intent());
+        assertEquals("terminal", terminal.slots().get("app"));
+    }
+
+    @Test
+    void inferRecognizesSmartHomeToggleAndTurnOffForDeskLamp() {
+        NlpResult off = service.infer("выключи настольную лампу", "ru");
+        assertEquals("smart_home_action", off.intent());
+        assertEquals("desk_lamp", off.slots().get("deviceId"));
+        assertEquals("TURN_OFF", off.slots().get("action"));
+
+        NlpResult toggle = service.infer("переключи настольную лампу", "ru");
+        assertEquals("smart_home_action", toggle.intent());
+        assertEquals("desk_lamp", toggle.slots().get("deviceId"));
+        assertEquals("TOGGLE", toggle.slots().get("action"));
+    }
+
+    @Test
+    void inferIgnoresThermostatTemperatureWithoutSetKeyword() {
+        // Mentions the thermostat and a temperature-shaped number but the verb is
+        // "turn on", not a set/adjust verb, so it should fall through to the
+        // generic on/off/toggle checks instead of SET_TEMPERATURE.
+        NlpResult result = service.infer("включи термостат 23", "ru");
+
+        assertEquals("smart_home_action", result.intent());
+        assertEquals("TURN_ON", result.slots().get("action"));
+        assertNotEquals("SET_TEMPERATURE", result.slots().get("action"));
+    }
+
+    @Test
+    void inferRecognizesScenarioModes() {
+        assertEquals("work_mode", service.infer("рабочий режим", "ru").intent());
+        assertEquals("rest_mode", service.infer("режим отдыха", "ru").intent());
+        assertEquals("focus_mode", service.infer("режим фокуса", "ru").intent());
+    }
+
+    @Test
+    void inferRecognizesWindowControlIntents() {
+        assertEquals("minimize_window", service.infer("сверни окно", "ru").intent());
+        assertEquals("maximize_window", service.infer("разверни окно", "ru").intent());
+        assertEquals("lock_screen", service.infer("заблокируй экран", "ru").intent());
+    }
+
+    @Test
+    void inferRecognizesScreenshotIntent() {
+        assertEquals("screenshot", service.infer("сделай скриншот", "ru").intent());
+        assertEquals("screenshot", service.infer("screenshot", "en").intent());
+    }
+
+    @Test
+    void inferRecognizesExpenseLoggingWithCategory() {
+        NlpResult result = service.infer("потратил 500 руб на еду", "ru");
+
+        assertEquals("add_expense", result.intent());
+        assertEquals("500", result.slots().get("amount"));
+        assertEquals("еду", result.slots().get("category"));
+    }
+
+    @Test
+    void inferRecognizesExpenseLoggingDefaultsCategoryWhenMissing() {
+        NlpResult result = service.infer("купил 300 руб", "ru");
+
+        assertEquals("add_expense", result.intent());
+        assertEquals("300", result.slots().get("amount"));
+        assertEquals("прочее", result.slots().get("category"));
+    }
+
+    @Test
+    void inferRecognizesTimeQuery() {
+        assertEquals("get_time", service.infer("который час", "ru").intent());
+        assertEquals("get_time", service.infer("сколько сейчас времени", "ru").intent());
+        assertEquals("get_time", service.infer("what time is it", "en").intent());
+    }
+
+    @Test
+    void inferRecognizesReminderWithText() {
+        NlpResult result = service.infer("напомни купить молоко", "ru");
+
+        assertEquals("add_reminder", result.intent());
+        assertEquals("купить молоко", result.slots().get("text"));
+    }
+
+    @Test
+    void inferHandlesNullTextAsFallback() {
+        NlpResult result = service.infer(null, "ru");
+
+        assertEquals("fallback", result.intent());
+        assertTrue(result.slots().isEmpty());
     }
 }

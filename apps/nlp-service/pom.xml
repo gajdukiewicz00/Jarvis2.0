@@ -48,6 +48,14 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Test-only: MockMvc web-slice testing + Mockito + MockRestServiceServer,
+             needed to cover NlpController (@WebMvcTest) and FastIntentClient's
+             internal RestTemplate (bound via reflection in tests). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
     <build>
         <plugins>

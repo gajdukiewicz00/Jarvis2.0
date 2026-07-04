@@ -17,7 +17,7 @@ internal HTTPS hop:
 Behavior in this overlay:
 
 - `analytics-service` serves HTTPS on its existing service port `8087`
-- `api-gateway` calls `https://analytics-service.jarvis.svc.cluster.local:8087`
+- `api-gateway` calls `https://analytics-service.jarvis-prod.svc.cluster.local:8087`
 - `analytics-service` liveness/readiness/startup probes switch to HTTPS
 - `api-gateway` reuses its existing Jarvis CA trust and does not add a new
   internal listener or change any other downstream URL
@@ -45,4 +45,4 @@ The dedicated smoke proves:
 - `analytics-service` readiness responds on HTTPS
 - `analytics-service` no longer accepts plain HTTP on `8087` in this slice
 - `api-gateway` completes a real analytics overview request against
-  `https://analytics-service.jarvis.svc.cluster.local:8087`
+  `https://analytics-service.jarvis-prod.svc.cluster.local:8087`

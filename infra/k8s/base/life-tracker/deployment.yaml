@@ -1,0 +1,94 @@
+# Life Tracker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-tracker
+  namespace: jarvis-prod
+  labels:
+    app: life-tracker
+    app.kubernetes.io/name: life-tracker
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: life-tracker
+  template:
+    metadata:
+      labels:
+        app: life-tracker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: life-tracker
+          image: jarvis/life-tracker
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8085
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres.jarvis-prod.svc.cluster.local:5432/jarvis_db"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8085
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8085
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8085
+            initialDelaySeconds: 30
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: life-tracker
+  namespace: jarvis-prod
+  labels:
+    app: life-tracker
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8085
+      targetPort: 8085
+      name: http
+  selector:
+    app: life-tracker

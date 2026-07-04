@@ -1,0 +1,32 @@
+# =============================================================================
+# vision-security-service — Kubernetes Service (workstation-local bridge).
+# =============================================================================
+# DNS:  vision-security-service.jarvis-prod.svc.cluster.local
+#
+# vision-security-service requires camera + screen access on the user's
+# workstation, so it is NEVER deployed as a public pod (see
+# docs/services/vision-security-service.md and README.md). Instead, this
+# selectorless Service exposes the local Java process on host port 8094 to
+# api-gateway via a manually maintained Endpoints object (endpoints.yaml).
+# That object is patched at deploy time by
+# infra/scripts/microk8s/apply-host-endpoints.sh (same pattern as the
+# host-model-daemon bridge). Only api-gateway is allowed to reach this
+# Service (enforced via NetworkPolicy in the prod overlay).
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: vision-security-service
+  namespace: jarvis-prod
+  labels:
+    app: vision-security-service
+    app.kubernetes.io/name: vision-security-service
+    app.kubernetes.io/component: workstation-bridge
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8094
+      targetPort: 8094
+      protocol: TCP

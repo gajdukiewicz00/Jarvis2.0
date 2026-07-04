@@ -18,7 +18,7 @@ internal HTTPS hop:
 Behavior in this overlay:
 
 - `pc-control` serves HTTPS on its existing service port `8084`
-- `api-gateway` calls `https://pc-control.jarvis.svc.cluster.local:8084`
+- `api-gateway` calls `https://pc-control.jarvis-prod.svc.cluster.local:8084`
 - `pc-control` liveness/readiness/startup probes switch to HTTPS
 - `api-gateway` reuses its existing Jarvis CA trust and does not add a new
   internal listener or change any other downstream URL
@@ -47,4 +47,4 @@ The dedicated smoke proves:
 - `pc-control` readiness responds on HTTPS
 - `pc-control` no longer accepts plain HTTP on `8084` in this slice
 - `api-gateway` completes a real pc-control action request against
-  `https://pc-control.jarvis.svc.cluster.local:8084`
+  `https://pc-control.jarvis-prod.svc.cluster.local:8084`

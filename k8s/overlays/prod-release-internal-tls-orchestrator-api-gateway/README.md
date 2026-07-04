@@ -12,7 +12,7 @@ Purpose:
 
 What changes:
 
-- `orchestrator` calls `https://api-gateway.jarvis.svc.cluster.local:8443`
+- `orchestrator` calls `https://api-gateway.jarvis-prod.svc.cluster.local:8443`
 - `orchestrator` mounts a dedicated truststore secret for the gateway CA
 - network policy is patched narrowly so `orchestrator` uses `api-gateway:8443`
 

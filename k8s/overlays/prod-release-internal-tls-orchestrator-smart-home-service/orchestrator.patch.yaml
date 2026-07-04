@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: orchestrator
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,7 +13,7 @@ spec:
         - name: orchestrator
           env:
             - name: SMART_HOME_URL
-              value: https://smart-home-service.jarvis.svc.cluster.local:8086
+              value: https://smart-home-service.jarvis-prod.svc.cluster.local:8086
             - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:

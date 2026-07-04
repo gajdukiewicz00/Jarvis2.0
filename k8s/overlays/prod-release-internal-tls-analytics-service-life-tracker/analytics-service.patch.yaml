@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: analytics-service
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,7 +13,7 @@ spec:
         - name: analytics-service
           env:
             - name: LIFE_TRACKER_URL
-              value: https://life-tracker.jarvis.svc.cluster.local:8085
+              value: https://life-tracker.jarvis-prod.svc.cluster.local:8085
             - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:

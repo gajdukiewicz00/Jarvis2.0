@@ -1,17 +1,17 @@
 # =============================================================================
-# Persistent Volume Claim for LLM models in production.
+# Persistent Volume Claim for Voice Gateway Vosk models in production.
 # The actual backing volume is provisioned by the cluster StorageClass.
 # =============================================================================
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: llm-models-pvc
-  namespace: jarvis
+  name: vosk-models-pvc
+  namespace: jarvis-prod
   labels:
-    app: llm-server
+    app: voice-gateway
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 50Gi
+      storage: 10Gi

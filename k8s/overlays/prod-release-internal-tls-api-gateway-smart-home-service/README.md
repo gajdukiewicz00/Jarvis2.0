@@ -6,7 +6,7 @@ exactly one additional internal HTTPS hop:
 
 - `smart-home-service` serves HTTPS on `8086`
 - `api-gateway` calls `smart-home-service` over
-  `https://smart-home-service.jarvis.svc.cluster.local:8086`
+  `https://smart-home-service.jarvis-prod.svc.cluster.local:8086`
 
 Prepare and validate the slice with:
 

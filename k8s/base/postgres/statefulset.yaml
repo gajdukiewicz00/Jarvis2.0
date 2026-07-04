@@ -31,7 +31,7 @@ spec:
           image: pgvector/pgvector:pg16
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -65,6 +65,10 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: init-scripts
               mountPath: /docker-entrypoint-initdb.d
+            - name: postgres-run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
           resources:
             limits:
               memory: "1Gi"
@@ -88,6 +92,10 @@ spec:
         - name: init-scripts
           configMap:
             name: postgres-init
+        - name: postgres-run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

@@ -1,0 +1,97 @@
+# =============================================================================
+# Jarvis 2.0 - Production Overlay (Kubernetes)
+# =============================================================================
+# Configures:
+# - Base services (vendored under this overlay for kustomize root-restricted builds)
+# - Optional LLM/Memory stack (enabled via flags in jarvis-launch.sh)
+# - Persistent storage via PVCs (portable across nodes/clusters)
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis-prod
+
+resources:
+  # Base workspace and core deployments
+  - ../../base
+
+  # Infra
+  - priority-class-core.yaml
+
+  # RBAC baseline (dedicated ServiceAccounts for core workloads)
+  - rbac-core-serviceaccounts.yaml
+
+  # Admission baseline (Kyverno)
+  - kyverno/01-runtime-hardening-policy.yaml
+  - kyverno/02-container-hardening-policy.yaml
+  - kyverno/03-host-isolation-policy.yaml
+  - kyverno/04-core-resources-policy.yaml
+  - kyverno/05-core-disallow-capabilities-policy.yaml
+  - kyverno/06-disallow-latest-tag-policy.yaml
+  # Audit-mode supply-chain verification. Staging patches this to Enforce.
+  - kyverno/07-verify-images-policy.yaml
+
+  # Network security baseline (default-deny + allowlist)
+  - networkpolicy-baseline.yaml
+  - networkpolicy-allowlist.yaml
+
+  # Model storage (PVC)
+  - pvc-vosk-models.yaml
+  - pdb-core-services.yaml
+  # LLM/Memory stack. llm-service talks to the base host-model-daemon
+  # Service/Endpoints, which route to llama.cpp on the Linux host.
+  - postgres-init-scripts.yaml
+  - postgres-pgvector.yaml
+  - embedding-service.yaml
+  - memory-service.yaml
+  - llm-service.yaml
+
+images:
+  - name: jarvis/api-gateway
+    newName: localhost:5000/jarvis/api-gateway
+    newTag: local
+  - name: jarvis/security-service
+    newName: localhost:5000/jarvis/security-service
+    newTag: local
+  - name: jarvis/life-tracker
+    newName: localhost:5000/jarvis/life-tracker
+    newTag: local
+  - name: jarvis/analytics-service
+    newName: localhost:5000/jarvis/analytics-service
+    newTag: local
+  - name: jarvis/voice-gateway
+    newName: localhost:5000/jarvis/voice-gateway
+    newTag: local
+  - name: jarvis/pc-control
+    newName: localhost:5000/jarvis/pc-control
+    newTag: local
+  - name: jarvis/smart-home-service
+    newName: localhost:5000/jarvis/smart-home-service
+    newTag: local
+  - name: jarvis/nlp-service
+    newName: localhost:5000/jarvis/nlp-service
+    newTag: local
+  - name: jarvis/orchestrator
+    newName: localhost:5000/jarvis/orchestrator
+    newTag: local
+  - name: jarvis/user-profile
+    newName: localhost:5000/jarvis/user-profile
+    newTag: local
+  - name: jarvis/planner-service
+    newName: localhost:5000/jarvis/planner-service
+    newTag: local
+  - name: jarvis/sync-service
+    newName: localhost:5000/jarvis/sync-service
+    newTag: local
+  - name: jarvis/llm-service
+    newName: localhost:5000/jarvis/llm-service
+    newTag: release-2026-04-09-k8s
+  - name: jarvis/embedding-service
+    newName: localhost:5000/jarvis/embedding-service
+    newTag: release-2026-03-21
+  - name: jarvis/memory-service
+    newName: localhost:5000/jarvis/memory-service
+    newTag: release-2026-03-21
+
+patches:
+  - path: ha-core-deployments.patch.yaml

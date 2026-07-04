@@ -6,7 +6,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: jarvis
+namespace: jarvis-prod
 
 resources:
   - namespace.yaml
@@ -22,8 +22,16 @@ resources:
   - security-service/deployment.yaml
   - user-profile/deployment.yaml
   - smart-home-service/deployment.yaml
+  - media-service/deployment.yaml
+  - agent-service/deployment.yaml
+  - sync-service/deployment.yaml
   - mosquitto/deployment.yaml
   - postgres/statefulset.yaml
+  # Host model daemon — Service + Endpoints pointing at llama.cpp on the
+  # Linux host. The Endpoints IP is a TEST-NET placeholder and is patched at
+  # deploy time by infra/scripts/microk8s/apply-host-endpoints.sh.
+  - host-model-daemon/service.yaml
+  - host-model-daemon/endpoints.yaml
   # Observability stack
   - observability/prometheus.yaml
   - observability/loki.yaml
@@ -38,27 +46,33 @@ patches:
 
 images:
   - name: jarvis/api-gateway
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/voice-gateway
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/nlp-service
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/orchestrator
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/pc-control
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/life-tracker
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/analytics-service
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/planner-service
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/security-service
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/user-profile
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
   - name: jarvis/smart-home-service
-    newTag: 0.1.0-SNAPSHOT
+    newTag: 1.0.0
+  - name: jarvis/media-service
+    newTag: 1.0.0
+  - name: jarvis/agent-service
+    newTag: 1.0.0
+  - name: jarvis/sync-service
+    newTag: 1.0.0
 
 labels:
   - pairs:

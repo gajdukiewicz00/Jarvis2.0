@@ -8,7 +8,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres-pgvector
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: postgres-pgvector
     app.kubernetes.io/name: postgres-pgvector
@@ -16,7 +16,7 @@ metadata:
 spec:
   serviceName: postgres-pgvector
   # postgres-pgvector is optional - scale to 0 if not needed
-  # To enable: kubectl -n jarvis scale statefulset postgres-pgvector --replicas=1
+  # To enable: kubectl -n jarvis-prod scale statefulset postgres-pgvector --replicas=1
   replicas: 0
   selector:
     matchLabels:
@@ -130,7 +130,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres-pgvector
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: postgres-pgvector
 spec:

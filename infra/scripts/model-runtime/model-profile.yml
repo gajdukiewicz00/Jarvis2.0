@@ -1,0 +1,32 @@
+# =============================================================================
+# Local model-runtime profile (Phase 3 host-model-daemon).
+# =============================================================================
+# Generated for jarvis-prod migration. Only the `main` brain is active because
+# only Qwen2.5-3B-Instruct is downloaded under ~/.jarvis/models/llm/. To enable
+# `coding`/`router` later, drop the corresponding GGUF files in place and
+# uncomment the sections.
+# =============================================================================
+
+main:
+  name: main-local-brain
+  path: /home/kwaqa/.jarvis/models/llm/qwen2.5-3b-instruct-q4_k_m.gguf
+  port: 18080
+  context: 8192
+  gpu_layers: auto
+  temperature: 0.3
+
+# coding:
+#   name: coding-local-brain
+#   path: /home/kwaqa/.jarvis/models/llm/coding/coding.gguf
+#   port: 18081
+#   context: 8192
+#   gpu_layers: auto
+#   temperature: 0.2
+
+# router:
+#   name: fast-intent-router
+#   path: /home/kwaqa/.jarvis/models/llm/router/router.gguf
+#   port: 18082
+#   context: 2048
+#   gpu_layers: auto
+#   temperature: 0.0

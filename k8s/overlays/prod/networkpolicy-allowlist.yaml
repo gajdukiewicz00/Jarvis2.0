@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: api-gateway-ingress-allow
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -33,7 +33,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: api-gateway-egress-core
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -118,12 +118,26 @@ spec:
       ports:
         - protocol: TCP
           port: 8093
+    - to:
+        - podSelector:
+            matchLabels:
+              app: user-profile
+      ports:
+        - protocol: TCP
+          port: 8089
+    - to:
+        - podSelector:
+            matchLabels:
+              app: sync-service
+      ports:
+        - protocol: TCP
+          port: 8095
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: core-backends-ingress-from-api-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchExpressions:
@@ -141,6 +155,8 @@ spec:
           - analytics-service
           - llm-service
           - memory-service
+          - user-profile
+          - sync-service
   policyTypes:
     - Ingress
   ingress:
@@ -171,12 +187,16 @@ spec:
           port: 8092
         - protocol: TCP
           port: 8093
+        - protocol: TCP
+          port: 8089
+        - protocol: TCP
+          port: 8095
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: voice-gateway-egress-orchestrator
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -196,7 +216,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: orchestrator-ingress-from-voice-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -215,8 +235,48 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
+  name: voice-gateway-egress-nlp
+  namespace: jarvis-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: voice-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: nlp-service
+      ports:
+        - protocol: TCP
+          port: 8082
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: nlp-ingress-from-voice-gateway
+  namespace: jarvis-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: nlp-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: voice-gateway
+      ports:
+        - protocol: TCP
+          port: 8082
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
   name: orchestrator-egress-internal
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -257,7 +317,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: nlp-pc-llm-ingress-from-orchestrator
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchExpressions:
@@ -286,7 +346,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: planner-egress-internal
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -334,7 +394,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: life-analytics-user-llm-ingress-from-planner
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchExpressions:
@@ -366,7 +426,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: analytics-egress-life-tracker
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -386,7 +446,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: life-tracker-ingress-analytics
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -406,7 +466,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: db-clients-egress-postgres
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchExpressions:
@@ -432,7 +492,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: postgres-ingress-from-db-clients
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -458,7 +518,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: smart-home-egress-mosquitto
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -478,7 +538,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: mosquitto-ingress-from-smart-home
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -498,7 +558,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: llm-service-egress-optional
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -506,13 +566,19 @@ spec:
   policyTypes:
     - Egress
   egress:
+    # host-model-daemon is a selectorless Service with manual Endpoints that
+    # point to the Linux host. NetworkPolicy cannot select that target by pod,
+    # so egress is constrained to the daemon ports only.
     - to:
-        - podSelector:
-            matchLabels:
-              app: llm-server
+        - ipBlock:
+            cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
-          port: 5000
+          port: 18080
+        - protocol: TCP
+          port: 18081
+        - protocol: TCP
+          port: 18082
     - to:
         - podSelector:
             matchLabels:
@@ -531,15 +597,14 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: llm-server-memory-user-ingress-from-llm
-  namespace: jarvis
+  name: memory-user-ingress-from-llm
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchExpressions:
       - key: app
         operator: In
         values:
-          - llm-server
           - memory-service
           - user-profile
   policyTypes:
@@ -551,8 +616,6 @@ spec:
               app: llm-service
       ports:
         - protocol: TCP
-          port: 5000
-        - protocol: TCP
           port: 8093
         - protocol: TCP
           port: 8089
@@ -561,7 +624,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: memory-egress-embedding-pgvector
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchLabels:
@@ -588,7 +651,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: embedding-pgvector-ingress-from-memory
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   podSelector:
     matchExpressions:

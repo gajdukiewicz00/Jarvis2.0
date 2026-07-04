@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: security-service
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: security-service
     app.kubernetes.io/name: security-service
@@ -46,7 +46,7 @@ spec:
                 name: jarvis-secrets
           env:
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://postgres.jarvis.svc.cluster.local:5432/jarvis_security"
+              value: "jdbc:postgresql://postgres.jarvis-prod.svc.cluster.local:5432/jarvis_security"
           resources:
             limits:
               memory: "512Mi"
@@ -58,21 +58,26 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8088
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 20
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8088
             initialDelaySeconds: 60
-            periodSeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: 8088
-            initialDelaySeconds: 30
-            periodSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: tmp
           emptyDir: {}
@@ -81,7 +86,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: security-service
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: security-service
 spec:

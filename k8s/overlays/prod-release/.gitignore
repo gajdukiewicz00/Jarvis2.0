@@ -1,3 +1,5 @@
 *
 !.gitignore
 !README.md
+!exclude-llm-stack.patch.yaml
+!kustomization.yaml

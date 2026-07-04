@@ -13,7 +13,7 @@ Purpose:
 
 What changes:
 
-- `voice-gateway` calls `https://api-gateway.jarvis.svc.cluster.local:8443`
+- `voice-gateway` calls `https://api-gateway.jarvis-prod.svc.cluster.local:8443`
 - `voice-gateway` mounts a dedicated truststore secret for the gateway CA
 - network policy is patched narrowly so `voice-gateway` uses `api-gateway:8443`
 

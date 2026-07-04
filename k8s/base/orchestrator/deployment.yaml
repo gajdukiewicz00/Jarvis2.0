@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: orchestrator
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: orchestrator
     app.kubernetes.io/name: orchestrator
@@ -55,21 +55,26 @@ spec:
             httpGet:
               path: /actuator/health
               port: 8083
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 20
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8083
-            initialDelaySeconds: 45
-            periodSeconds: 10
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: 8083
-            initialDelaySeconds: 30
-            periodSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: tmp
           emptyDir: {}
@@ -78,7 +83,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: orchestrator
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: orchestrator
 spec:

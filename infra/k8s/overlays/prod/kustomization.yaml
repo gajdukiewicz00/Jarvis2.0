@@ -1,0 +1,115 @@
+# =============================================================================
+# Jarvis 2.0 - Production Overlay (Kubernetes)
+# =============================================================================
+# Configures:
+# - Base services (vendored under this overlay for kustomize root-restricted builds)
+# - Optional LLM/Memory stack (enabled via flags in jarvis-launch.sh)
+# - Persistent storage via PVCs (portable across nodes/clusters)
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis-prod
+
+resources:
+  # Base workspace and core deployments
+  - ../../base
+
+  # Infra
+  - priority-class-core.yaml
+
+  # RBAC baseline (dedicated ServiceAccounts for core workloads)
+  - rbac-core-serviceaccounts.yaml
+
+  # Admission baseline (Kyverno)
+  - kyverno/01-runtime-hardening-policy.yaml
+  - kyverno/02-container-hardening-policy.yaml
+  - kyverno/03-host-isolation-policy.yaml
+  - kyverno/04-core-resources-policy.yaml
+  - kyverno/05-core-disallow-capabilities-policy.yaml
+  - kyverno/06-disallow-latest-tag-policy.yaml
+  # Audit-mode supply-chain verification. Staging patches this to Enforce.
+  - kyverno/07-verify-images-policy.yaml
+
+  # Network security baseline (default-deny + allowlist)
+  - networkpolicy-baseline.yaml
+  - networkpolicy-allowlist.yaml
+  - networkpolicy-brokers.yaml
+
+  # Model storage (PVC)
+  - pvc-vosk-models.yaml
+  - pdb-core-services.yaml
+  # LLM/Memory stack. llm-service points at the in-cluster llm-server by
+  # default; operators wanting to use a host-side llama.cpp can override
+  # LLM_SERVER_URL to host-model-daemon.jarvis-prod.svc.cluster.local:18080
+  # and patch host-model-daemon Endpoints via
+  # infra/scripts/microk8s/apply-host-endpoints.sh.
+  - postgres-init-scripts.yaml
+  - postgres-pgvector.yaml
+  - embedding-service.yaml
+  - memory-service.yaml
+  - llm-service.yaml
+  - llm-server.yaml
+
+# Externalize the on-host model directory so dev-hostpath / prod overlays
+# can share a single source of truth (used by scripts/seed-vosk-models-pvc.sh
+# and scripts/seed-llm-model-pvc.sh — the launcher reads the same value).
+configMapGenerator:
+  - name: jarvis-models-path
+    envs:
+      - models-path.env
+
+images:
+  - name: jarvis/api-gateway
+    newName: localhost:5000/jarvis/api-gateway
+    newTag: local
+  - name: jarvis/security-service
+    newName: localhost:5000/jarvis/security-service
+    newTag: local
+  - name: jarvis/life-tracker
+    newName: localhost:5000/jarvis/life-tracker
+    newTag: local
+  - name: jarvis/analytics-service
+    newName: localhost:5000/jarvis/analytics-service
+    newTag: local
+  - name: jarvis/voice-gateway
+    newName: localhost:5000/jarvis/voice-gateway
+    newTag: local
+  - name: jarvis/pc-control
+    newName: localhost:5000/jarvis/pc-control
+    newTag: local
+  - name: jarvis/smart-home-service
+    newName: localhost:5000/jarvis/smart-home-service
+    newTag: local
+  - name: jarvis/nlp-service
+    newName: localhost:5000/jarvis/nlp-service
+    newTag: local
+  - name: jarvis/orchestrator
+    newName: localhost:5000/jarvis/orchestrator
+    newTag: local
+  - name: jarvis/user-profile
+    newName: localhost:5000/jarvis/user-profile
+    newTag: local
+  - name: jarvis/planner-service
+    newName: localhost:5000/jarvis/planner-service
+    newTag: local
+  - name: jarvis/sync-service
+    newName: localhost:5000/jarvis/sync-service
+    newTag: local
+  - name: jarvis/llm-service
+    newName: localhost:5000/jarvis/llm-service
+    newTag: local
+  - name: jarvis/llm-server
+    newName: localhost:5000/jarvis/llm-server
+    newTag: local
+  - name: jarvis/embedding-service
+    newName: localhost:5000/jarvis/embedding-service
+    newTag: local
+  - name: jarvis/memory-service
+    newName: localhost:5000/jarvis/memory-service
+    newTag: local
+
+patches:
+  - path: ha-core-deployments.patch.yaml
+  - path: patches/local-prod-replicas.yaml
+  - path: patches/runtime-dependencies.yaml

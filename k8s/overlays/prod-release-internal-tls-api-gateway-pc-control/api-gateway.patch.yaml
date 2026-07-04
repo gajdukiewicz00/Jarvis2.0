@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,4 +13,4 @@ spec:
         - name: api-gateway
           env:
             - name: PC_CONTROL_URL
-              value: https://pc-control.jarvis.svc.cluster.local:8084
+              value: https://pc-control.jarvis-prod.svc.cluster.local:8084

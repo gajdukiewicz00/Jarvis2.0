@@ -1,0 +1,136 @@
+# =============================================================================
+# Memory Service Deployment (Spring Boot)
+# =============================================================================
+# Provides long-term memory storage and RAG capabilities:
+# - POST /memory/ingest - store conversation messages
+# - POST /memory/search - semantic search in memory
+# - POST /memory/summarize-session - generate session summaries
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-service
+  namespace: jarvis-prod
+  labels:
+    app: memory-service
+    app.kubernetes.io/name: memory-service
+    app.kubernetes.io/component: backend
+spec:
+  # Memory service is optional - scale to 0 if postgres-pgvector is not available
+  # To enable: kubectl -n jarvis-prod scale deploy/memory-service --replicas=1
+  replicas: 0
+  selector:
+    matchLabels:
+      app: memory-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8093"
+        prometheus.io/scheme: http
+      labels:
+        app: memory-service
+        app.kubernetes.io/name: memory-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Memory service is optional - no blocking init containers
+      # If postgres-pgvector is not available, service will start and handle connection errors gracefully
+      # initContainers removed to allow graceful degradation
+      containers:
+        - name: memory-service
+          image: jarvis/memory-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8093
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+          env:
+            # Database connection
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres-pgvector:5432/jarvis_memory"
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_USER
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_PASSWORD
+            # Embedding service
+            - name: EMBEDDING_SERVICE_URL
+              value: "http://embedding-service:5001"
+            # Memory settings
+            - name: MEMORY_TOPK
+              value: "5"
+            - name: MEMORY_MAX_TOKENS
+              value: "600"
+            - name: CHUNK_SIZE
+              value: "500"
+            # JVM settings for container
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx512m -XX:+UseG1GC"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "768Mi"
+          readinessProbe:
+            httpGet:
+              path: /memory/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /memory/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memory-service
+  namespace: jarvis-prod
+  labels:
+    app: memory-service
+spec:
+  type: ClusterIP
+  selector:
+    app: memory-service
+  ports:
+    - name: http
+      port: 8093
+      targetPort: 8093

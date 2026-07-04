@@ -1,0 +1,239 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis-prod
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: jarvis-api-gateway-sa
+      automountServiceAccountToken: false
+      priorityClassName: jarvis-core-high
+      terminationGracePeriodSeconds: 35
+      containers:
+        - name: api-gateway
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 25"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: api-gateway
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: api-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-service
+  namespace: jarvis-prod
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: jarvis-security-service-sa
+      automountServiceAccountToken: false
+      priorityClassName: jarvis-core-high
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: security-service
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 20"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: security-service
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: security-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis-prod
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: jarvis-planner-service-sa
+      automountServiceAccountToken: false
+      priorityClassName: jarvis-core-high
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: planner-service
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 20"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: planner-service
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: planner-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis-prod
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: jarvis-orchestrator-sa
+      automountServiceAccountToken: false
+      priorityClassName: jarvis-core-high
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: orchestrator
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 20"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: orchestrator
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: orchestrator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis-prod
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: jarvis-voice-gateway-sa
+      automountServiceAccountToken: false
+      priorityClassName: jarvis-core-high
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: voice-gateway
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 35"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: voice-gateway
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: voice-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-tracker
+  namespace: jarvis-prod
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: jarvis-life-tracker-sa
+      automountServiceAccountToken: false
+      priorityClassName: jarvis-core-high
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: life-tracker
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 20"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: life-tracker
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: life-tracker

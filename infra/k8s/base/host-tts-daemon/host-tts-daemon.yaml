@@ -1,0 +1,63 @@
+# =============================================================================
+# Host TTS Daemon — Piper neural TTS reachable by the cluster (movie-JARVIS voice).
+# =============================================================================
+# Mirrors the host-model-daemon pattern: a selectorless Service whose Endpoints
+# point at the Piper HTTP daemon (scripts/jarvis-tts-daemon.py) running on the
+# Linux host at <nodeIP>:18090. The namespace is default-deny egress, so a
+# NetworkPolicy explicitly permits voice-gateway to reach it.
+#
+# The Endpoints IP must match the host's node IP (patch per machine, like
+# apply-host-endpoints.sh). DNS: host-tts-daemon.jarvis-prod.svc.cluster.local
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: host-tts-daemon
+  namespace: jarvis-prod
+  labels:
+    app: host-tts-daemon
+    app.kubernetes.io/name: host-tts-daemon
+    app.kubernetes.io/component: tts-daemon
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - name: tts
+      port: 18090
+      targetPort: 18090
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: host-tts-daemon
+  namespace: jarvis-prod
+  labels:
+    app: host-tts-daemon
+    app.kubernetes.io/name: host-tts-daemon
+subsets:
+  - addresses:
+      - ip: 10.113.0.176   # node IP — patch per machine
+    ports:
+      - name: tts
+        port: 18090
+        protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: voice-gateway-egress-tts
+  namespace: jarvis-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: voice-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 18090
+          protocol: TCP
+      to:
+        - ipBlock:
+            cidr: 10.113.0.176/32   # host node IP only (scoped, not 0.0.0.0/0)

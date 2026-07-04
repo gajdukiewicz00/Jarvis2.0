@@ -6,7 +6,7 @@ exactly one additional internal HTTPS hop:
 
 - `voice-gateway` serves HTTPS on `8081`
 - `api-gateway` calls `voice-gateway` over
-  `https://voice-gateway.jarvis.svc.cluster.local:8081`
+  `https://voice-gateway.jarvis-prod.svc.cluster.local:8081`
 
 Prepare and validate the slice with:
 

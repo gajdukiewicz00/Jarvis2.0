@@ -11,7 +11,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: llm-service
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: llm-service
     app.kubernetes.io/name: llm-service
@@ -40,7 +40,7 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       # LLM is optional - no blocking init containers
-      # If llm-server is not available, service will start and return DEGRADED status
+      # If host-model-daemon is not reachable, service will start and return DEGRADED status
       # initContainers removed to allow graceful degradation
       containers:
         - name: llm-service
@@ -65,9 +65,19 @@ spec:
                 name: observability-env
                 optional: true
           env:
-            # LLM Server connection
+            # Host model daemon connection (llama.cpp OpenAI-compatible API)
             - name: LLM_SERVER_URL
-              value: "http://llm-server:5000"
+              value: "http://host-model-daemon.jarvis-prod.svc.cluster.local:18080"
+            - name: JARVIS_HOST_DAEMON_ENABLED
+              value: "true"
+            - name: JARVIS_HOST_DAEMON_HOST
+              value: "host-model-daemon.jarvis-prod.svc.cluster.local"
+            - name: JARVIS_HOST_DAEMON_MAIN_PORT
+              value: "18080"
+            - name: JARVIS_HOST_DAEMON_CODING_PORT
+              value: "18081"
+            - name: JARVIS_HOST_DAEMON_ROUTER_PORT
+              value: "18082"
             - name: JARVIS_LLM_ENABLED
               value: "true"
             # Timeouts (LLM inference can be slow)
@@ -142,7 +152,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: llm-service
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: llm-service
 spec:

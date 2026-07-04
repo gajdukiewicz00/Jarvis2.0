@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,4 +13,4 @@ spec:
         - name: api-gateway
           env:
             - name: ANALYTICS_URL
-              value: https://analytics-service.jarvis.svc.cluster.local:8087
+              value: https://analytics-service.jarvis-prod.svc.cluster.local:8087

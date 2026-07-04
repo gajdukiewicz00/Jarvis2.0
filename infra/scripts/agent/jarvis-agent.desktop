@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Jarvis Agent
+GenericName=Native Desktop AI Assistant
+Comment=Local home brain — voice, automation, secure command pipeline
+# Categories per freedesktop.org spec.
+Categories=Utility;Office;System;
+Terminal=false
+StartupNotify=true
+# Operator-managed env file lets you override the broker, backend URL,
+# confirmation strategy, etc., without editing this entry.
+Exec=sh -c '. ${HOME}/.jarvis/agent/agent.env 2>/dev/null; exec @JARVIS_AGENT_LAUNCHER@'
+Icon=@JARVIS_AGENT_ICON@
+# Launching by URL is reserved for Phase 11 deep-links.
+MimeType=
+# Show in the standard desktop application listing.
+NoDisplay=false
+# Always start single-instance per session (the agent talks to RabbitMQ).
+SingleMainWindow=true
+# Hint for autostart.
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,47 @@
+# =============================================================================
+# Jarvis Local Model Daemon — Profile Configuration (Phase 3)
+# =============================================================================
+# Copy this file to `model-profile.yml` (no .example) and edit the model paths
+# and tuning to match your local llama.cpp installation.
+#
+# Each section starts a separate llama.cpp server process on a dedicated host
+# port. Comment out (or delete) sections you do not currently need.
+#
+# The host process is launched by:
+#     ./infra/scripts/model-runtime/start-llama-server.sh
+# and stopped by:
+#     ./infra/scripts/model-runtime/stop-llama-server.sh
+# Health is checked by:
+#     ./infra/scripts/model-runtime/health-llama-server.sh
+#
+# The Kubernetes Service `host-model-daemon.jarvis-prod.svc.cluster.local`
+# fronts these ports. Pods address them by name:port. Only `llm-service`
+# is allowed to call them (SPEC-1: no other service may bypass that boundary).
+#
+# Model files are NEVER downloaded automatically (SPEC-1). You place the GGUF
+# files yourself, typically under `~/.jarvis/models/llm/{main,coding,router}/`.
+# =============================================================================
+
+main:
+  name: main-local-brain
+  path: /home/kwaqa/.jarvis/models/llm/main/main.gguf
+  port: 18080
+  context: 8192
+  gpu_layers: auto       # `auto` lets llama.cpp decide; or set explicit integer
+  temperature: 0.3
+
+coding:
+  name: coding-local-brain
+  path: /home/kwaqa/.jarvis/models/llm/coding/coding.gguf
+  port: 18081
+  context: 8192
+  gpu_layers: auto
+  temperature: 0.2
+
+router:
+  name: fast-intent-router
+  path: /home/kwaqa/.jarvis/models/llm/router/router.gguf
+  port: 18082
+  context: 2048
+  gpu_layers: auto
+  temperature: 0.0

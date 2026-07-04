@@ -1,0 +1,37 @@
+# =============================================================================
+# Host Model Daemon — Kubernetes Service (Phase 3).
+# =============================================================================
+# DNS:  host-model-daemon.jarvis-prod.svc.cluster.local
+# Ports point at llama.cpp processes running directly on the Linux host.
+# The matching Endpoints object (endpoints.yaml) provides the host IP — it is
+# patched at deploy time by infra/scripts/microk8s/apply-host-endpoints.sh.
+#
+# This Service has NO selector on purpose. The Endpoints object is managed
+# manually so the Service routes to a process outside the cluster.
+# Only `llm-service` is allowed to call these ports (SPEC-1).
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: host-model-daemon
+  namespace: jarvis-prod
+  labels:
+    app: host-model-daemon
+    app.kubernetes.io/name: host-model-daemon
+    app.kubernetes.io/component: model-daemon
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - name: main
+      port: 18080
+      targetPort: 18080
+      protocol: TCP
+    - name: coding
+      port: 18081
+      targetPort: 18081
+      protocol: TCP
+    - name: router
+      port: 18082
+      targetPort: 18082
+      protocol: TCP

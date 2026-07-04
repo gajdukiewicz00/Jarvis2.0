@@ -1,0 +1,105 @@
+# Phase 12 — sync-service runs IN-HOME (MicroK8s, jarvis-prod). It holds
+# the per-device decryption keys and dispatches plaintext to life-tracker /
+# orchestrator. Must NEVER be deployed to a public cloud.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-service
+  namespace: jarvis-prod
+  labels:
+    app: sync-service
+    app.kubernetes.io/name: sync-service
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sync-service
+  template:
+    metadata:
+      labels:
+        app: sync-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sync-service
+          image: jarvis/sync-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - containerPort: 8095
+              name: http
+          envFrom:
+            # Pulls SERVICE_JWT_SECRET, JWT_SECRET, POSTGRES_*, etc. so the
+            # jarvis-common autoconfig boots without "service.jwt.secret is
+            # required" startup failures.
+            - secretRef:
+                name: jarvis-secrets
+          env:
+            - name: JARVIS_SYNC_LIFE_TRACKER_URL
+              value: "http://life-tracker.jarvis-prod.svc.cluster.local:8085"
+            - name: JARVIS_SYNC_ORCHESTRATOR_URL
+              value: "http://orchestrator.jarvis-prod.svc.cluster.local:8080"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: SPRING_KAFKA_BOOTSTRAP_SERVERS
+                  optional: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            limits:
+              memory: "256Mi"
+              cpu: "300m"
+            requests:
+              memory: "128Mi"
+              cpu: "50m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8095
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8095
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8095
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sync-service
+  namespace: jarvis-prod
+  labels:
+    app: sync-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8095
+      targetPort: 8095
+      name: http
+  selector:
+    app: sync-service

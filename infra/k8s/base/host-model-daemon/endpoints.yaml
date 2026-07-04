@@ -1,0 +1,36 @@
+# =============================================================================
+# Host Model Daemon — Endpoints (Phase 3).
+# =============================================================================
+# This file ships with a placeholder IP. The actual host IP is patched at
+# deploy time by `infra/scripts/microk8s/apply-host-endpoints.sh`, which
+# detects the host's primary network interface and sends a strategic-merge
+# patch to update `subsets[0].addresses[0].ip` in-cluster.
+#
+# If you ever apply this base manifest without the patcher, traffic from
+# llm-service to the daemon will fail fast (the placeholder IP is non-routable)
+# — that is intentional, the operator must run the patcher consciously.
+# =============================================================================
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: host-model-daemon
+  namespace: jarvis-prod
+  labels:
+    app: host-model-daemon
+    app.kubernetes.io/name: host-model-daemon
+    app.kubernetes.io/component: model-daemon
+    app.kubernetes.io/part-of: jarvis
+subsets:
+  - addresses:
+      # RFC 5737 TEST-NET-1 placeholder; replaced at deploy time.
+      - ip: 192.0.2.1
+    ports:
+      - name: main
+        port: 18080
+        protocol: TCP
+      - name: coding
+        port: 18081
+        protocol: TCP
+      - name: router
+        port: 18082
+        protocol: TCP

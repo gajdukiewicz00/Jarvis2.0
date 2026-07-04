@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: voice-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: voice-gateway
     app.kubernetes.io/name: voice-gateway
@@ -48,8 +48,17 @@ spec:
             - secretRef:
                 name: jarvis-secrets
           env:
+            # SPEC-1 Phase 5/6: voice confirmation publishes on
+            # jarvis.commands.confirmation.result, so Rabbit is mandatory.
+            # SPRING_RABBITMQ_USERNAME/PASSWORD come from jarvis-secrets.
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_RABBITMQ_VHOST
+              value: jarvis
             - name: MANAGEMENT_HEALTH_RABBIT_ENABLED
-              value: "false"
+              value: "true"
             - name: JARVIS_VOSK_MODEL_PATH_RU
               value: /models/stt/vosk/vosk-model-small-ru-0.22
             - name: JARVIS_VOSK_MODEL_PATH_EN
@@ -58,8 +67,7 @@ spec:
               value: >-
                 org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,
                 org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,
-                org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration,
-                org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+                org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
           resources:
             limits:
               memory: "12Gi"
@@ -71,21 +79,26 @@ spec:
             httpGet:
               path: /actuator/health/liveness
               port: 8081
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 20
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8081
-            initialDelaySeconds: 45
-            periodSeconds: 10
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: 8081
-            initialDelaySeconds: 30
-            periodSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
       volumes:
         - name: vosk-models
           persistentVolumeClaim:
@@ -97,7 +110,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: voice-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: voice-gateway
 spec:

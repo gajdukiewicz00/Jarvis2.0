@@ -9,7 +9,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: jarvis
+namespace: jarvis-prod
 
 resources:
   # Base workspace and core deployments
@@ -37,62 +37,67 @@ resources:
 
   # Model storage (PVC)
   - pvc-vosk-models.yaml
-  - pv-models.yaml
   - pdb-core-services.yaml
-  # LLM/Memory stack (always defined; runtime scale controlled by launch flags)
+  # LLM/Memory stack. llm-service talks to the base host-model-daemon
+  # Service/Endpoints, which route to llama.cpp on the Linux host.
   - postgres-init-scripts.yaml
   - postgres-pgvector.yaml
   - embedding-service.yaml
   - memory-service.yaml
-  - llm-server.yaml
   - llm-service.yaml
 
 images:
   - name: jarvis/api-gateway
     newName: localhost:5000/jarvis/api-gateway
-    newTag: local
+    newTag: movie7
   - name: jarvis/security-service
     newName: localhost:5000/jarvis/security-service
-    newTag: local
+    newTag: movie1
   - name: jarvis/life-tracker
     newName: localhost:5000/jarvis/life-tracker
-    newTag: local
+    newTag: movie9
   - name: jarvis/analytics-service
     newName: localhost:5000/jarvis/analytics-service
-    newTag: local
+    newTag: movie3
   - name: jarvis/voice-gateway
     newName: localhost:5000/jarvis/voice-gateway
-    newTag: local
+    newTag: movie6
   - name: jarvis/pc-control
     newName: localhost:5000/jarvis/pc-control
     newTag: local
   - name: jarvis/smart-home-service
     newName: localhost:5000/jarvis/smart-home-service
-    newTag: local
+    newTag: movie3
+  - name: jarvis/media-service
+    newName: localhost:5000/jarvis/media-service
+    newTag: movie1
+  - name: jarvis/agent-service
+    newName: localhost:5000/jarvis/agent-service
+    newTag: movie1
   - name: jarvis/nlp-service
     newName: localhost:5000/jarvis/nlp-service
-    newTag: local
+    newTag: movie6
   - name: jarvis/orchestrator
     newName: localhost:5000/jarvis/orchestrator
-    newTag: local
+    newTag: moviepc7
   - name: jarvis/user-profile
     newName: localhost:5000/jarvis/user-profile
-    newTag: local
+    newTag: movie1
   - name: jarvis/planner-service
     newName: localhost:5000/jarvis/planner-service
-    newTag: local
-  - name: jarvis/llm-server
-    newName: localhost:5000/jarvis/llm-server
-    newTag: release-2026-04-09-k8s
+    newTag: movie4
+  - name: jarvis/sync-service
+    newName: localhost:5000/jarvis/sync-service
+    newTag: movie2
   - name: jarvis/llm-service
     newName: localhost:5000/jarvis/llm-service
-    newTag: release-2026-04-09-k8s
+    newTag: movie9
   - name: jarvis/embedding-service
     newName: localhost:5000/jarvis/embedding-service
     newTag: release-2026-03-21
   - name: jarvis/memory-service
     newName: localhost:5000/jarvis/memory-service
-    newTag: release-2026-03-21
+    newTag: movie18
 
 patches:
   - path: ha-core-deployments.patch.yaml

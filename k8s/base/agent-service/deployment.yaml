@@ -1,0 +1,101 @@
+# Agent Service Deployment (EPIC 12 — role-based agent swarm)
+# Stateless, no database (in-memory tasks). readOnlyRootFilesystem with a writable
+# /tmp emptyDir that also holds the per-task sandbox root.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-service
+  namespace: jarvis-prod
+  labels:
+    app: agent-service
+    app.kubernetes.io/name: agent-service
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-service
+  template:
+    metadata:
+      labels:
+        app: agent-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent-service
+          image: localhost:5000/jarvis/agent-service:movie1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: SWARM_ENABLED
+              value: "true"
+            - name: SWARM_SANDBOX_DIR
+              value: /tmp/jarvis-agents
+            # Conservative system permission backstop: dangerous perms NOT granted.
+            - name: JARVIS_TOOLS_GRANTED_PERMISSIONS
+              value: "PLANNER_ACCESS,CALENDAR_ACCESS,MEMORY_ACCESS,SMART_HOME_ACCESS,PC_CONTROL,NOTIFICATION_ACCESS,READ_FILES,NETWORK_ACCESS"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8090
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8090
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8090
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8090
+            initialDelaySeconds: 20
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-service
+  namespace: jarvis-prod
+  labels:
+    app: agent-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8090
+      targetPort: 8090
+      name: http
+  selector:
+    app: agent-service

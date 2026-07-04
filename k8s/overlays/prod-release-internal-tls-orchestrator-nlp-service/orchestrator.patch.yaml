@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: orchestrator
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,7 +13,7 @@ spec:
         - name: orchestrator
           env:
             - name: NLP_SERVICE_URL
-              value: https://nlp-service.jarvis.svc.cluster.local:8082
+              value: https://nlp-service.jarvis-prod.svc.cluster.local:8082
             - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:

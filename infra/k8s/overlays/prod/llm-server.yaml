@@ -1,22 +1,29 @@
 # =============================================================================
-# LLM Server Deployment
+# LLM Server (llama.cpp wrapper, Python image)
 # =============================================================================
-# K8S defaults to a CPU-safe llama.cpp profile until the cluster has an
-# NVIDIA device plugin and allocatable gpu resources.
+# Provides /v1/chat/completions and friends; consumed by llm-service.
+# The model file is mounted from llm-models-pvc.  The PVC is provisioned
+# out-of-band:
+#   * dev / workstation:  k8s/overlays/dev-hostpath (hostPath PV pointing at
+#                         ${HOME}/.jarvis/models/llm)
+#   * prod:               any RWO PVC named llm-models-pvc with the GGUF
+#                         model copied in via scripts/seed-llm-model-pvc.sh
+# That PVC stays out of this overlay because hostPath is operator-specific.
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: llm-server
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: llm-server
     app.kubernetes.io/name: llm-server
     app.kubernetes.io/component: inference
 spec:
+  # Scaled up by the local-prod-replicas patch when --enable-llm is requested.
   replicas: 0
   strategy:
-    type: Recreate  # GPU resources can't be shared during rolling update
+    type: Recreate
   selector:
     matchLabels:
       app: llm-server
@@ -47,51 +54,38 @@ spec:
             - containerPort: 5000
               name: http
           env:
-            # CPU-safe backend profile for clusters without a GPU plugin.
             - name: LLM_BACKEND
-              value: "llamacpp"
+              value: llamacpp
             - name: DEVICE
-              value: "cpu"
+              value: cpu
             - name: LLM_DEVICE
-              value: "cpu"
+              value: cpu
             - name: ENABLE_GPU
               value: "false"
-            # Model path (seed the PVC with scripts/seed-llm-model-pvc.sh)
             - name: MODEL_PATH
-              value: "/models"
+              value: /models
             - name: GGUF_MODEL_PATH
-              value: "/models/qwen2.5-3b-instruct-q4_k_m.gguf"
-            # llama.cpp settings
+              value: /models/qwen2.5-3b-instruct-q4_k_m.gguf
             - name: N_GPU_LAYERS
               value: "0"
             - name: N_CTX
               value: "4096"
             - name: N_BATCH
               value: "512"
-            # Generation settings
             - name: MAX_NEW_TOKENS
               value: "700"
             - name: MAX_GENERATION_SECONDS
               value: "120"
             - name: TEMPERATURE
               value: "0.7"
-            # Performance
             - name: ENABLE_STREAMING
               value: "true"
             - name: ENABLE_WARMUP
               value: "true"
-            # Logging
             - name: LOG_LEVEL
-              value: "INFO"
+              value: INFO
             - name: VERBOSE_LLAMACPP
               value: "false"
-          resources:
-            requests:
-              cpu: "1"
-              memory: "4Gi"
-            limits:
-              cpu: "8"
-              memory: "8Gi"
           volumeMounts:
             - name: llm-models
               mountPath: /models
@@ -100,7 +94,13 @@ spec:
               mountPath: /tmp
             - name: app-cache
               mountPath: /app/.cache
-          # Startup probe - model loading can take 2-5 minutes
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+            limits:
+              cpu: "8"
+              memory: 8Gi
           startupProbe:
             httpGet:
               path: /health
@@ -108,8 +108,7 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 30  # 5 minutes max
-          # Readiness - only ready when model is loaded
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /health
@@ -118,7 +117,6 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-          # Liveness - check if server is responding
           livenessProbe:
             httpGet:
               path: /health
@@ -140,7 +138,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: llm-server
-  namespace: jarvis
+  namespace: jarvis-prod
   labels:
     app: llm-server
 spec:

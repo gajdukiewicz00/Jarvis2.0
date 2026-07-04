@@ -1,0 +1,382 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-security-service
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until wget -qO- http://security-service:8088/actuator/health/readiness | grep -q '"status":"UP"'; do
+                echo "waiting for security-service readiness"
+                sleep 3
+              done
+        - name: wait-orchestrator
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until wget -qO- http://orchestrator:8083/actuator/health/readiness | grep -q '"status":"UP"'; do
+                echo "waiting for orchestrator readiness"
+                sleep 3
+              done
+      containers:
+        - name: api-gateway
+          env:
+            - name: MEMORY_SERVICE_ENABLED
+              value: "true"
+            - name: MEMORY_SERVICE_URL
+              value: "http://memory-service:8093"
+            - name: JARVIS_LLM_ENABLED
+              value: "false"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: security-service
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z postgres 5432; do
+                echo "waiting for postgres:5432"
+                sleep 2
+              done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: life-tracker
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z postgres 5432; do
+                echo "waiting for postgres:5432"
+                sleep 2
+              done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z postgres 5432; do
+                echo "waiting for postgres:5432"
+                sleep 2
+              done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-profile
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-postgres
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z postgres 5432; do
+                echo "waiting for postgres:5432"
+                sleep 2
+              done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-nlp-service
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until wget -qO- http://nlp-service:8082/actuator/health/readiness | grep -q '"status":"UP"'; do
+                echo "waiting for nlp-service readiness"
+                sleep 3
+              done
+        - name: wait-rabbitmq
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z rabbitmq 5672; do
+                echo "waiting for rabbitmq:5672"
+                sleep 2
+              done
+        - name: wait-kafka
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until nc -z kafka 9092; do
+                echo "waiting for kafka:9092"
+                sleep 2
+              done
+        - name: wait-llm-optional
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: JARVIS_LLM_ENABLED
+              value: "false"
+          command:
+            - sh
+            - -ec
+            - |
+              if [ "${JARVIS_LLM_ENABLED}" != "true" ]; then
+                echo "llm-service disabled for this overlay"
+                exit 0
+              fi
+              until wget -qO- http://llm-service:8091/api/v1/llm/health | grep -Eq '"status":"(healthy|degraded|ready|partial)"'; do
+                echo "waiting for llm-service health"
+                sleep 5
+              done
+      containers:
+        - name: orchestrator
+          env:
+            - name: JARVIS_LLM_ENABLED
+              value: "false"
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+            - name: SPRING_RABBITMQ_PORT
+              value: "5672"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: voice-gateway
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-orchestrator
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until wget -qO- http://orchestrator:8083/actuator/health/readiness | grep -q '"status":"UP"'; do
+                echo "waiting for orchestrator readiness"
+                sleep 3
+              done
+      containers:
+        - name: voice-gateway
+          env:
+            - name: JARVIS_ORCHESTRATOR_URL
+              value: http://orchestrator:8083
+            # k8s overlay ships without Google TTS credentials and without
+            # espeak-ng in the base image; TTS calls return TTS_UNAVAILABLE
+            # via GlobalExceptionHandler. Don't fail readiness on that.
+            # NB: application.yaml resolves both variants below.
+            - name: JARVIS_VOICE_TTS_REQUIRED_FOR_READINESS
+              value: "false"
+            - name: JARVIS_VOICE_TTS_REQUIREDFORREADINESS
+              value: "false"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-service
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait-postgres-pgvector
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jarvis-secrets
+                  key: POSTGRES_PASSWORD
+          command:
+            - sh
+            - -ec
+            - |
+              until PGPASSWORD="${POSTGRES_PASSWORD}" pg_isready -h postgres-pgvector -p 5432 -U "${POSTGRES_USER}" -d jarvis_memory; do
+                echo "waiting for postgres-pgvector"
+                sleep 3
+              done
+              until PGPASSWORD="${POSTGRES_PASSWORD}" psql -h postgres-pgvector -U "${POSTGRES_USER}" -d jarvis_memory -tAc "SELECT extname FROM pg_extension WHERE extname = 'vector';" | grep -qx vector; do
+                echo "waiting for pgvector extension"
+                sleep 3
+              done
+        - name: wait-embedding-service
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -ec
+            - |
+              until wget -qO- http://embedding-service:5001/health | grep -qi healthy; do
+                echo "waiting for embedding-service health"
+                sleep 3
+              done
+      containers:
+        - name: memory-service
+          startupProbe:
+            httpGet:
+              path: /memory/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-pgvector
+  namespace: jarvis-prod
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

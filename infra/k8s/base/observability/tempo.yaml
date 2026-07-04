@@ -1,0 +1,157 @@
+# Grafana Tempo — distributed tracing backend
+# Receives OTLP traces from Jarvis services at tempo:4317 (gRPC) / tempo:4318 (HTTP)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo-config
+  namespace: jarvis-prod
+  labels:
+    app: tempo
+    app.kubernetes.io/name: tempo
+    app.kubernetes.io/part-of: jarvis
+data:
+  tempo-config.yml: |
+    server:
+      http_listen_port: 3200
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: "0.0.0.0:4317"
+            http:
+              endpoint: "0.0.0.0:4318"
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+    metrics_generator:
+      registry:
+        external_labels:
+          source: tempo
+          cluster: jarvis-prod
+      storage:
+        path: /var/tempo/generator/wal
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tempo-data
+  namespace: jarvis-prod
+  labels:
+    app: tempo
+    app.kubernetes.io/name: tempo
+    app.kubernetes.io/part-of: jarvis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tempo
+  namespace: jarvis-prod
+  labels:
+    app: tempo
+    app.kubernetes.io/name: tempo
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tempo
+  template:
+    metadata:
+      labels:
+        app: tempo
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: tempo
+          image: grafana/tempo:2.4.1
+          args: ["-config.file=/etc/tempo/tempo-config.yml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 3200
+              name: http
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/tempo
+            - name: data
+              mountPath: /var/tempo
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            # 512Mi caused recurring Exit 137 OOMKills when all 12 jarvis
+            # services pushed OTLP traces under load; 1Gi keeps headroom.
+            requests:
+              memory: "256Mi"
+              cpu: "50m"
+            limits:
+              memory: "1Gi"
+              cpu: "750m"
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3200
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 3200
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: config
+          configMap:
+            name: tempo-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: tempo-data
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tempo
+  namespace: jarvis-prod
+  labels:
+    app: tempo
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3200
+      targetPort: 3200
+      name: http
+    - port: 4317
+      targetPort: 4317
+      name: otlp-grpc
+    - port: 4318
+      targetPort: 4318
+      name: otlp-http
+  selector:
+    app: tempo

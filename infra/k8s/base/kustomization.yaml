@@ -1,0 +1,95 @@
+# =============================================================================
+# Jarvis 2.0 - Kubernetes Base Kustomization
+# =============================================================================
+# Base resources shared across all environments
+# =============================================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis-prod
+
+resources:
+  - namespace.yaml
+  - ingress.yaml
+  - api-gateway/deployment.yaml
+  - voice-gateway/deployment.yaml
+  - nlp-service/deployment.yaml
+  - orchestrator/deployment.yaml
+  - pc-control/deployment.yaml
+  - life-tracker/deployment.yaml
+  - analytics-service/deployment.yaml
+  - planner-service/deployment.yaml
+  - security-service/deployment.yaml
+  - user-profile/deployment.yaml
+  - smart-home-service/deployment.yaml
+  # NOTE: Mosquitto is deprecated in the core baseline per SPEC-1
+  # ("Delete: Mosquitto as core messaging backbone. It may return later only
+  # for smart-home/MQTT integrations."). It is still listed here because
+  # smart-home-service hardcodes `MQTT_BROKER_URL=tcp://mosquitto:1883` and
+  # would crash on startup without it. The cleanup (move smart-home off
+  # MQTT or extract Mosquitto into a dedicated smart-home overlay) is owned
+  # by the smart-home phase, not Phase 1.
+  - mosquitto/deployment.yaml
+  - postgres/statefulset.yaml
+  - kafka/statefulset.yaml
+  - rabbitmq/statefulset.yaml
+  # Host model daemon — Service + Endpoints pointing at llama.cpp on the
+  # Linux host (Phase 3). The Endpoints IP is a TEST-NET placeholder and is
+  # patched at deploy time by infra/scripts/microk8s/apply-host-endpoints.sh.
+  - host-model-daemon/service.yaml
+  - host-model-daemon/endpoints.yaml
+  # Vision-security workstation bridge — selectorless Service + Endpoints
+  # pointing at the local vision-security-service Java process on host port
+  # 8094. The CV stack requires camera + screen access on the user's
+  # workstation, so it is never deployed as a pod (see README and
+  # docs/services/vision-security-service.md). The Endpoints IP is a
+  # TEST-NET placeholder that jarvis-launch.sh patches once the local
+  # process is healthy.
+  - vision-security-service/service.yaml
+  - vision-security-service/endpoints.yaml
+  # Sync-service (Phase 12) — receives encrypted blobs from paired Android
+  # devices, decrypts on-prem, dispatches to life-tracker (finance) and
+  # orchestrator (commands). MUST run only here, never in the cloud overlay.
+  - sync-service/deployment.yaml
+  # Observability stack
+  - observability/prometheus.yaml
+  - observability/loki.yaml
+  - observability/tempo.yaml
+  - observability/grafana.yaml
+  - observability/alloy.yaml
+  - observability/env-config.yaml
+  - observability/networkpolicy.yaml
+
+patches:
+  - path: observability/observability-env.patch.yaml
+
+images:
+  - name: jarvis/api-gateway
+    newTag: 1.0.0
+  - name: jarvis/voice-gateway
+    newTag: 1.0.0
+  - name: jarvis/nlp-service
+    newTag: 1.0.0
+  - name: jarvis/orchestrator
+    newTag: 1.0.0
+  - name: jarvis/pc-control
+    newTag: 1.0.0
+  - name: jarvis/life-tracker
+    newTag: 1.0.0
+  - name: jarvis/analytics-service
+    newTag: 1.0.0
+  - name: jarvis/planner-service
+    newTag: 1.0.0
+  - name: jarvis/security-service
+    newTag: 1.0.0
+  - name: jarvis/user-profile
+    newTag: 1.0.0
+  - name: jarvis/smart-home-service
+    newTag: 1.0.0
+  - name: jarvis/sync-service
+    newTag: 1.0.0
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: jarvis
+      app.kubernetes.io/managed-by: kustomize

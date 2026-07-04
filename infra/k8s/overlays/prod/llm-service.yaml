@@ -1,0 +1,168 @@
+# =============================================================================
+# LLM Service Deployment (Spring Boot)
+# =============================================================================
+# Orchestrates LLM conversations with:
+# - Personalized system prompts
+# - Long-term memory (RAG)
+# - Token budget management
+# - Russian language enforcement
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-service
+  namespace: jarvis-prod
+  labels:
+    app: llm-service
+    app.kubernetes.io/name: llm-service
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: llm-service
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8091"
+        prometheus.io/scheme: http
+      labels:
+        app: llm-service
+        app.kubernetes.io/name: llm-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # LLM is optional - no blocking init containers
+      # If host-model-daemon is not reachable, service will start and return DEGRADED status
+      # initContainers removed to allow graceful degradation
+      containers:
+        - name: llm-service
+          image: jarvis/llm-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8091
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+            - configMapRef:
+                name: observability-env
+                optional: true
+          env:
+            # In-cluster llm-server (llama.cpp wrapper) is the canonical
+            # backend. Override LLM_SERVER_URL/JARVIS_HOST_DAEMON_* if you
+            # want llm-service to use a host-side llama.cpp via
+            # host-model-daemon Endpoints instead.
+            - name: LLM_SERVER_URL
+              value: "http://llm-server.jarvis-prod.svc.cluster.local:5000"
+            - name: JARVIS_HOST_DAEMON_ENABLED
+              value: "false"
+            - name: JARVIS_HOST_DAEMON_HOST
+              value: "host-model-daemon.jarvis-prod.svc.cluster.local"
+            - name: JARVIS_HOST_DAEMON_MAIN_PORT
+              value: "18080"
+            - name: JARVIS_HOST_DAEMON_CODING_PORT
+              value: "18081"
+            - name: JARVIS_HOST_DAEMON_ROUTER_PORT
+              value: "18082"
+            - name: JARVIS_LLM_ENABLED
+              value: "true"
+            # Timeouts (LLM inference can be slow)
+            - name: LLM_CONNECT_TIMEOUT_MS
+              value: "5000"
+            - name: LLM_READ_TIMEOUT_MS
+              value: "600000"  # 10 minutes for long generations
+            # Memory service integration
+            - name: MEMORY_ENABLED
+              value: "true"
+            - name: MEMORY_SERVICE_URL
+              value: "http://memory-service:8093"
+            - name: MEMORY_SERVICE_ENABLED
+              value: "true"
+            - name: MEMORY_TOPK
+              value: "5"
+            - name: MEMORY_MAX_TOKENS
+              value: "600"
+            # Token budgets
+            - name: LLM_BUDGET_SYSTEM
+              value: "500"
+            - name: LLM_BUDGET_MEMORY
+              value: "600"
+            - name: LLM_BUDGET_HISTORY
+              value: "1400"
+            - name: LLM_BUDGET_TOTAL
+              value: "3500"
+            # User profile (optional, disabled by default)
+            - name: USER_PROFILE_URL
+              value: "http://user-profile:8089"
+            - name: USER_PROFILE_ENABLED
+              value: "false"
+            # JVM settings
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx512m -XX:+UseG1GC"
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          startupProbe:
+            httpGet:
+              path: /api/v1/llm/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24  # 2 minutes for Spring Boot + LLM warmup
+          readinessProbe:
+            httpGet:
+              path: /api/v1/llm/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/v1/llm/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-service
+  namespace: jarvis-prod
+  labels:
+    app: llm-service
+spec:
+  type: ClusterIP
+  selector:
+    app: llm-service
+  ports:
+    - name: http
+      port: 8091
+      targetPort: 8091

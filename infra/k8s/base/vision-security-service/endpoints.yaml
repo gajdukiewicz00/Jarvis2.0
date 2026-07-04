@@ -1,0 +1,33 @@
+# =============================================================================
+# vision-security-service — Endpoints (workstation-local bridge).
+# =============================================================================
+# This file ships with a placeholder IP (RFC 5737 TEST-NET-1). The real host
+# IP is patched at deploy time by
+# infra/scripts/microk8s/apply-vision-security-host-endpoints.sh, which is
+# invoked from jarvis-launch.sh once the local vision-security-service
+# process is healthy on host port 8094.
+#
+# If the manifest is applied without the patcher (or while the local
+# vision-security-service is not running), traffic from api-gateway will
+# fail fast against the placeholder address — that is intentional, so the
+# operator must run the patcher consciously after starting the local
+# service.
+# =============================================================================
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: vision-security-service
+  namespace: jarvis-prod
+  labels:
+    app: vision-security-service
+    app.kubernetes.io/name: vision-security-service
+    app.kubernetes.io/component: workstation-bridge
+    app.kubernetes.io/part-of: jarvis
+subsets:
+  - addresses:
+      # RFC 5737 TEST-NET-1 placeholder; replaced at deploy time.
+      - ip: 192.0.2.1
+    ports:
+      - name: http
+        port: 8094
+        protocol: TCP

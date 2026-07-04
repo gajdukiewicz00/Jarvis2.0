@@ -1,0 +1,104 @@
+# Planner Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+  namespace: jarvis-prod
+  labels:
+    app: planner-service
+    app.kubernetes.io/name: planner-service
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: planner-service
+  template:
+    metadata:
+      labels:
+        app: planner-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: planner-service
+          image: jarvis/planner-service
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8092
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres.jarvis-prod.svc.cluster.local:5432/jarvis_db?currentSchema=planner"
+            - name: SPRING_FLYWAY_TABLE
+              value: "flyway_schema_history_planner"
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: "planner"
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: "planner"
+            - name: SPRING_FLYWAY_CREATE_SCHEMAS
+              value: "true"
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
+              value: "planner"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8092
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8092
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8092
+            initialDelaySeconds: 30
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: planner-service
+  namespace: jarvis-prod
+  labels:
+    app: planner-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8092
+      targetPort: 8092
+      name: http
+  selector:
+    app: planner-service

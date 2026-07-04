@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: planner-service
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,7 +13,7 @@ spec:
         - name: planner-service
           env:
             - name: VOICE_GATEWAY_URL
-              value: https://voice-gateway.jarvis.svc.cluster.local:8081
+              value: https://voice-gateway.jarvis-prod.svc.cluster.local:8081
             - name: JARVIS_JAVA_TRUSTSTORE_PASSWORD
               valueFrom:
                 secretKeyRef:

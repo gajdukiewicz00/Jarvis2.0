@@ -6,7 +6,7 @@ migrates exactly one additional internal HTTPS hop:
 
 - `orchestrator` serves HTTPS on `8083`
 - `api-gateway` calls `orchestrator` over
-  `https://orchestrator.jarvis.svc.cluster.local:8083`
+  `https://orchestrator.jarvis-prod.svc.cluster.local:8083`
 
 Prepare and validate the slice with:
 

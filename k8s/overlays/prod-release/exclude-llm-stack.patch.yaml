@@ -1,0 +1,13 @@
+$patch: delete
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-service
+  namespace: jarvis-prod
+---
+$patch: delete
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-service
+  namespace: jarvis-prod

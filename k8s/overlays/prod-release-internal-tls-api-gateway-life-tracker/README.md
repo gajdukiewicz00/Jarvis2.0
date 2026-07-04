@@ -6,7 +6,7 @@ exactly one additional internal HTTPS hop:
 
 - `life-tracker` serves HTTPS on `8085`
 - `api-gateway` calls `life-tracker` over
-  `https://life-tracker.jarvis.svc.cluster.local:8085`
+  `https://life-tracker.jarvis-prod.svc.cluster.local:8085`
 
 Prepare and validate the slice with:
 

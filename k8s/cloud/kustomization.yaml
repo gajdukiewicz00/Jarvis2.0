@@ -1,0 +1,18 @@
+# Phase 12 — separate kustomization for the off-prem (cloud) bits.
+# Apply with: kubectl apply -k k8s/cloud
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: jarvis-relay
+
+resources:
+  - cloud-relay/deployment.yaml
+
+images:
+  - name: jarvis/cloud-relay
+    newTag: 1.0.0
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: jarvis
+      app.kubernetes.io/managed-by: kustomize

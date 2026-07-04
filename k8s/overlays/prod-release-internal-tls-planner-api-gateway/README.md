@@ -13,7 +13,7 @@ What changes:
 
 - `api-gateway` keeps HTTP on `8080` for ingress and non-migrated callers
 - `api-gateway` adds a second internal HTTPS listener on `8443`
-- `planner-service` calls `https://api-gateway.jarvis.svc.cluster.local:8443`
+- `planner-service` calls `https://api-gateway.jarvis-prod.svc.cluster.local:8443`
 - `api-gateway` probes switch to the migrated HTTPS listener in this overlay
 - network policy is patched narrowly for `planner-service -> api-gateway:8443`
 

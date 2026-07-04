@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: api-gateway
-  namespace: jarvis
+  namespace: jarvis-prod
 spec:
   template:
     metadata:
@@ -13,4 +13,4 @@ spec:
         - name: api-gateway
           env:
             - name: VOICE_GATEWAY_URL
-              value: https://voice-gateway.jarvis.svc.cluster.local:8081
+              value: https://voice-gateway.jarvis-prod.svc.cluster.local:8081

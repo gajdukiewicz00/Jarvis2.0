@@ -5,6 +5,24 @@ Status as of **2026-05-26**. Honest done/partial/next. Cross-refs:
 [`docs/COMPONENT_STATUS.md`](COMPONENT_STATUS.md),
 [`docs/audit/JARVIS_AUDIT_REPORT.md`](audit/JARVIS_AUDIT_REPORT.md).
 
+## 2026-07-04 update — cluster DOWN, backlog reconciled
+
+- **Cluster status: DOWN.** The k3s cluster (`jarvis-prod`) went down after a host
+  reboot on 2026-07-04. Nothing in this roadmap has been re-verified live since.
+  Recover with `scripts/product/jarvis-recover-after-reboot.sh`.
+- **Dual-k8s-tree tag-stomp — FIXED.** The recurring risk described below (the
+  canonical `infra/k8s/` tree not knowing about `movie*` image tags, so a re-apply
+  silently reverted `agent-service`/`media-service` to generic tags) was fixed
+  2026-07-04: the canonical `infra/k8s` tree now pins the movie tags directly.
+- **Backlog reconciled against the code:** 334 DONE / 135 PARTIAL / 239 TODO of 708
+  (47% / 19% / 34%), DONE+PARTIAL = 66% — up from the ~60% figure in
+  `docs/USER_STORIES_STATUS.md`'s 2026-06-05 pass. Full per-epic table, plus three
+  bonus modules found beyond the backlog (`agent-service` ~85%, `media-service` ~55%
+  with mock ASR/translation/TTS, `vision-security-service` ~65% host-only), are in
+  [`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
+  — the current source of truth for backlog status, superseding the ~41%/~20%/~40%
+  headline in `docs/USER_STORIES_STATUS.md`.
+
 ## ✅ Done (verified)
 
 - **Local-first microservice stack deployed and healthy** on k3s (`jarvis-prod`,

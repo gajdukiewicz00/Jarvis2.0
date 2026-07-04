@@ -1,5 +1,13 @@
 # Jarvis 2.0 — 5-Minute Demo
 
+> **SUPERSEDED** for the current k3s + Piper + Qwen3-14B stack. This page describes the
+> older local-runtime path (vosk/espeak-ng, `Qwen2.5-3B`) from before the movie-J.A.R.V.I.S.
+> upgrade. The canonical demo for the current stack is
+> [`docs/HUMAN_LAYER_DEMO_RUNBOOK.md`](HUMAN_LAYER_DEMO_RUNBOOK.md); the operator runbook
+> is [`docs/JARVIS_FINAL_RUNBOOK.md`](JARVIS_FINAL_RUNBOOK.md) and the quickstart is
+> [`docs/START_HERE.md`](START_HERE.md). Kept here for the local-only/no-k8s path, which
+> is still a valid (if smaller-model) way to run Jarvis.
+
 This is the canonical demo path for Jarvis v1.0. It is written for: a recruiter clicking through the project, a thesis examiner reviewing a defense, a friend who wants to see what Jarvis does.
 
 If anything below fails, the answer is in [docs/services/](services/) (per-service troubleshooting) or [docs/audit/JARVIS_AUDIT_REPORT.md](audit/JARVIS_AUDIT_REPORT.md).

@@ -4,14 +4,23 @@ Your local, on-device cinematic assistant. Qwen3-14B brain on your RTX 5070, run
 k3s cluster, with voice, memory, and safe PC control. This page is the 60-second path to a
 working demo. Run everything from the repo root: `~/Jarvis/Jarvis2.0`.
 
+> **Cluster DOWN as of 2026-07-04** (host reboot). Every "10/10" / "8/8" / "READY" mark on
+> this page is **last verified 2026-06-07 while the cluster was up — NOT re-run since.**
+> Recover first: `./scripts/product/jarvis-recover-after-reboot.sh`, then re-run step 1
+> below to re-verify. See
+> [`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
+> for the full picture.
+
 ---
 
 ## 1. Run this first (heals + verifies everything)
 ```bash
 ./scripts/jarvis-final-check.sh --repair
 ```
-Expect **10/10 PASS**. `--repair` fixes the one recurring gremlin (the host-model-daemon
-endpoint reset) automatically. If you only want to check without changing anything, drop `--repair`.
+Expect **10/10 PASS** _(last verified 2026-06-07 while cluster was up; run the recovery
+script above first if the cluster is still down)_. `--repair` fixes the one recurring
+gremlin (the host-model-daemon endpoint reset) automatically. If you only want to check
+without changing anything, drop `--repair`.
 
 ## 2. Is it demo-ready?
 ```bash
@@ -74,14 +83,15 @@ Proves the safety flow: voice → intent (`сделай тише` → volume_dow
 
 ---
 
-## What works now (verified)
+## What works now (verified 2026-06-07 while cluster was up; NOT re-run since the 2026-07-04 reboot)
 - **14B brain chat** (`qwen3-14b-q4_k_m.gguf`), 100% local on GPU.
 - **RAG memory** recall, **Obsidian semantic search**, idempotent upsert (duplicates cleaned).
 - **Voice intent**: `сделай тише`→volume_down, `сделай громче`→volume_up, `выключи звук`→mute.
 - **STT** (Vosk, EN+RU) and **TTS** (Piper neural) engines.
 - **PC-control safe reads** (volume, windows, system info).
 - **Confirmation gate** (risk=MEDIUM actions require explicit approval).
-- smoke-verify **8/8**, final-check **10/10**, demo-check **READY**.
+- smoke-verify **8/8**, final-check **10/10**, demo-check **READY** _(2026-06-07; re-run
+  `./scripts/jarvis-final-check.sh --repair` after cluster recovery to re-confirm)_.
 
 ## What still needs your hardware
 - **Microphone + speakers** — the live spoken loop (steps 4–5 audibly).

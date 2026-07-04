@@ -121,11 +121,23 @@ Java 21 / Spring Boot (services) · Kotlin (desktop + Android) · Python (llm/em
 llama.cpp + Qwen3-14B · Piper · Vosk · Porcupine · tesseract · PostgreSQL + pgvector · Kafka · RabbitMQ ·
 Mosquitto · k3s · Jib · nginx ingress · Prometheus/Grafana/Loki/Tempo.
 
-## 7. Maturity (against the 701-story product backlog)
-~**41% done, ~20% partial, ~40% to-do** (see `docs/USER_STORIES_STATUS.md`). Strongest:
-architecture, infra/observability, PC-control, brain, voice, security. Largest remaining:
-smart-home/wearables breadth, desktop UX screens, deeper analytics/insight & memory-UI features,
-voice DSP (noise/echo/barge-in), and the deeper auth model (roles/scopes/panic).
+## 7. Maturity (against the 701/708-story product backlog)
+As of the **2026-07-04 reconciliation** (see
+[`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md),
+the current source of truth, superseding the 2026-06-05 ~41%/~20%/~40% pass in
+`docs/USER_STORIES_STATUS.md`): **334 DONE (47%), 135 PARTIAL (19%), 239 TODO (34%)** of
+708 — DONE+PARTIAL = **66%**. Strongest: architecture, infra/observability, PC-control,
+brain, voice, security (security improved +5 DONE/-8 TODO this pass). Largest remaining:
+smart-home/wearables breadth, desktop UX screens, deeper analytics/insight features,
+voice DSP (noise/echo/barge-in), LLM/Agent Brain scaffolding-vs-wired gaps, and the
+deeper auth model (roles/scopes/panic). Plus three bonus modules outside the backlog:
+`agent-service` (~85% real), `media-service` (~55% real, RU-dubbing ASR/translation/TTS
+still 100% mock), `vision-security-service` (~65% real, host-only).
+
+**Cluster status (2026-07-04): DOWN** after a host reboot; recover via
+`scripts/product/jarvis-recover-after-reboot.sh`. The dual-k8s-tree tag-stomp risk that
+could silently revert `agent-service`/`media-service` image tags on re-apply has been
+**fixed** — canonical `infra/k8s` now pins the movie tags.
 
 ## 8. How to run
 ```bash
@@ -143,5 +155,7 @@ scripts/jarvis-say.sh "Good evening, sir."                  # neural voice
 - The working tree carries a large operator-approved uncommitted change set ("treat as truth, do not commit").
 
 ---
-_See also: `MOVIE_JARVIS.md` (the cinematic upgrade), `USER_STORIES_STATUS.md` (701-story status),
-`JARVIS_ALIVE.md` (the end-to-end loop), `architecture/` (ADRs + phase evidence)._
+_See also: `MOVIE_JARVIS.md` (the cinematic upgrade), `audit/2026-07-04-status-reconciliation.md`
+(current 708-story backlog status, source of truth), `USER_STORIES_STATUS.md` (701-story
+status, 2026-06-05 pass), `JARVIS_ALIVE.md` (the end-to-end loop), `architecture/` (ADRs +
+phase evidence)._

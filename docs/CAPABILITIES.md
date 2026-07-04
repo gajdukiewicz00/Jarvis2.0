@@ -5,6 +5,21 @@ Source: [docs/COMPONENT_STATUS.md](COMPONENT_STATUS.md), [docs/audit/JARVIS_AUDI
 
 This matrix tells a recruiter, professor, or potential contributor at a glance what works today and what does not. It is updated at every release per [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) § 6.
 
+> **2026-07-04 honesty note — "code-DONE" vs "verified-live":** the ✅/🟡 marks below
+> predate the 2026-06 movie-upgrade sessions logged in [docs/COMPONENT_STATUS.md](COMPONENT_STATUS.md)
+> and were last exercised while the cluster was up. The cluster (`jarvis-prod`) is
+> currently **DOWN** after a 2026-07-04 host reboot — recover via
+> `scripts/product/jarvis-recover-after-reboot.sh`. A ✅ here means **the implementation
+> exists, compiles, and was exercised at least once** — it does **not** mean it has been
+> re-run against the live stack since this reboot. Per
+> [`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md) §(d),
+> roughly **15-20%** of the wider 708-story backlog is headlessly re-verifiable
+> (API-level, scriptable) right now; the rest of the DONE/PARTIAL figure is "verified by
+> reading the code and its tests" — materially weaker than "watched it work live."
+> Voice E2E, desktop GUI visuals, real (non-stub) PC actions, and Android pairing are
+> the clearest **code-DONE-but-not-verified-live** examples (see that audit's §(d) for
+> specifics on each).
+
 ## Status Legend
 
 - ✅ **working** — implemented, tested in the canonical demo path, evidence linked.
@@ -82,6 +97,13 @@ This matrix tells a recruiter, professor, or potential contributor at a glance w
 | ❌ not in scope | 3 | 6% |
 
 A v1.0 release is sane to ship when the ✅ + 🟡 set covers the canonical demo path (it does today), every 🟡 has an honest disclaimer in the README or per-service doc (audit gap-list), and every ⏳ in v1.1 has a tracked issue.
+
+**Code-DONE vs verified-live (2026-07-04):** treat every ✅/🟡 row above as "implementation
+exists and was exercised at least once," not "verified against the currently-running
+stack" — the cluster is down as of 2026-07-04. See
+[`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
+for the honest current split between headlessly re-verifiable capabilities (~15-20%) and
+code-verified-only ones.
 
 ## How to update this matrix
 

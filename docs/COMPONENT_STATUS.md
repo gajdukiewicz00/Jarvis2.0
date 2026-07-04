@@ -507,3 +507,42 @@ Run one of:
   (485KB WAV), android dry-run OK, obsidian PASS, desktop **324/0/0**, 26/26 pods, HOST_DAEMON_ENABLED=false.
 - **Status: GREEN backend / YELLOW only for mic/speakers/display/phone (hardware-gated).**
 - Decisions made autonomously; no git writes; no secrets; volume restored; cluster kept green throughout.
+- **All "10/10" / "8/8" / "GREEN" marks above are last-verified 2026-06-07, while the
+  cluster was up.** They have **not** been re-run since the 2026-07-04 reboot (see below).
+
+---
+
+## 2026-07-04 (l) — Post-reboot status reconciliation (cluster DOWN)
+
+Read-only static audit; no cluster access, no builds. Cluster is currently **DOWN**
+after a host reboot. Full detail, per-epic table, and verification commands:
+[`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md).
+
+### DONE (this pass)
+- **Backlog reconciliation**: 334 DONE / 135 PARTIAL / 239 TODO of 708 (47%/19%/34%),
+  DONE+PARTIAL=66% — corrects the 2026-06-05 pass in `docs/USER_STORIES_STATUS.md`
+  (~289/~137/~283, ~41%/~20%/~40%). Largest corrections: LLM/Agent Brain (-6 DONE/+11
+  TODO), Memory (+14 DONE/-12 TODO), Security (+5 DONE/-8 TODO).
+- **Dual-k8s-tree tag-stomp — FIXED.** `k8s/` (legacy) hardcoded `movie1` image tags for
+  `agent-service`/`media-service` while the canonical `infra/k8s/` tree pinned generic
+  `local`/`1.0.0` tags — a reboot or re-apply of `infra/k8s/overlays/prod` would have
+  silently reverted those two services. Canonical `infra/k8s` now pins the movie tags.
+- **3 bonus modules confirmed** (not in the 708-story backlog, code + test counts
+  verified directly): `agent-service` ~85% real (51 `@Test`), `media-service` ~55% real
+  (80 `@Test`; ffmpeg/ffprobe real, but ASR/translation/TTS are 100% mock), and
+  `vision-security-service` ~65% real (134 `@Test`; host-only, no `Deployment` in
+  `infra/k8s/base/vision-security-service/`).
+- **Reboot recovery script**: `scripts/product/jarvis-recover-after-reboot.sh` (REPRO-7).
+
+### Cluster status — DOWN
+The k3s cluster (`jarvis-prod`) is down after the 2026-07-04 host reboot. Every
+"10/10"/"8/8"/"GREEN"/"READY" mark in the sections above (2026-06-06/07) is **last
+verified while the cluster was up — NOT re-run since this reboot.** Recover with
+`scripts/product/jarvis-recover-after-reboot.sh`, then re-run
+`./scripts/jarvis-final-check.sh --repair` before trusting any status claim in this
+file again.
+
+### NEXT
+- Bring the cluster back up (`scripts/product/jarvis-recover-after-reboot.sh`) and
+  re-run `jarvis-final-check.sh --repair` to re-verify the 2026-06-07 scoreboard.
+- Consolidate the two k8s trees onto one canonical source (tracked REPRO-1..5).

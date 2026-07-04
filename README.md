@@ -1,8 +1,23 @@
 # Jarvis 2.0
 
-A **local-first, single-user personal AI assistant**: Java 21 / Spring Boot microservices, JavaFX desktop, real voice loop (vosk STT + espeak-ng TTS), local LLM via `host-model-daemon` (llama.cpp), semantic memory (PostgreSQL + pgvector), and full observability (Prometheus + Loki + Tempo + Grafana + Alloy).
+A **local-first, single-user personal AI assistant** styled after the film J.A.R.V.I.S.:
+Java 21 / Spring Boot microservices, JavaFX desktop, a real voice loop (Vosk STT +
+**Piper neural TTS**), a local **Qwen3-14B** brain on GPU via `host-model-daemon`
+(llama.cpp), semantic memory (PostgreSQL + pgvector), and full observability
+(Prometheus + Loki + Tempo + Grafana + Alloy). Run and manage it with the unified
+`./jarvis` CLI (`up / status / health / doctor / logs / backup / restore / update / stop`).
 
-> **Audit date:** 2026-05-09. **Status:** v1.0 in development. **Audience:** university defense + portfolio. See [docs/audit/JARVIS_AUDIT_REPORT.md](docs/audit/JARVIS_AUDIT_REPORT.md) for the current honest status, [docs/architecture/JARVIS_TARGET_STATE.md](docs/architecture/JARVIS_TARGET_STATE.md) for the v1.0 target, and [docs/DEMO.md](docs/DEMO.md) for the 5-minute demo path.
+> **Audit date:** 2026-05-09 (component inventory); **backlog status refreshed 2026-07-04** — see
+> [docs/audit/2026-07-04-status-reconciliation.md](docs/audit/2026-07-04-status-reconciliation.md)
+> for the current honest 708-story backlog status (334 DONE / 135 PARTIAL / 239 TODO,
+> 47%/19%/34%) and note that the k3s cluster is currently **DOWN** after a 2026-07-04 host
+> reboot (recover via `scripts/product/jarvis-recover-after-reboot.sh`).
+> **Status:** v1.0 in development. **Audience:** university defense + portfolio. See
+> [docs/audit/JARVIS_AUDIT_REPORT.md](docs/audit/JARVIS_AUDIT_REPORT.md) for the prior
+> component-level audit, [docs/architecture/JARVIS_TARGET_STATE.md](docs/architecture/JARVIS_TARGET_STATE.md)
+> for the v1.0 target, and [docs/START_HERE.md](docs/START_HERE.md) /
+> [docs/JARVIS_FINAL_RUNBOOK.md](docs/JARVIS_FINAL_RUNBOOK.md) for the current operator
+> path ([docs/DEMO.md](docs/DEMO.md) is the older, superseded local-runtime demo).
 
 ## Quickstart (local, 5 commands)
 

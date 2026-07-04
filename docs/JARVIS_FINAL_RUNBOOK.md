@@ -4,6 +4,23 @@ Single source of truth for running, verifying, and troubleshooting the live stac
 Last verified: 2026-06-06 against `jarvis-prod` (k3s, node `10.113.0.176`).
 Honest status only — nothing here is claimed working unless it was actually tested.
 
+## 0. Cluster status — READ FIRST (2026-07-04)
+
+**The k3s cluster (`jarvis-prod`) is currently DOWN** after a host reboot on
+2026-07-04. Every "10/10" / "8/8" / "READY" mark anywhere below reflects the last time
+it was actually run (2026-06-06/07, while the cluster was up) — **none of it has been
+re-run since this reboot.**
+
+Recover with:
+```bash
+./scripts/product/jarvis-recover-after-reboot.sh
+```
+Then re-run `./scripts/jarvis-final-check.sh --repair` to re-verify before trusting any
+status claim in this document again. See
+[`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
+for the full picture (backlog reconciliation, the dual-k8s-tree tag-stomp fix, and the
+three bonus modules).
+
 > Conventions: gateway is `https://10.113.0.176` with header `Host: api.jarvis.local`.
 > Login: `POST /api/v1/security/auth/login` (test user `test1111/test1111`).
 > `kubectl` = `sudo k3s kubectl -n jarvis-prod`.
@@ -35,7 +52,8 @@ Manage it with: `systemctl --user {status,restart,stop,start} jarvis-llm@18080`.
 ./jarvis doctor         # GPU, disk, k3s, host LLM/TTS, ingress, host-model-daemon endpoint
 ./scripts/jarvis-smoke-verify.sh   # 8 end-to-end checks
 ```
-Expected: `READY (deploys=22, all pods Running, LLM=200 TTS=200)`, smoke `8 passed, 0 failed`.
+Expected: `READY (deploys=22, all pods Running, LLM=200 TTS=200)`, smoke `8 passed, 0 failed`
+_(last verified 2026-06-06 while the cluster was up; NOT re-run since the 2026-07-04 reboot — see §0)_.
 
 ## 3. Fix host-model-daemon endpoint (after the 14B brain goes silent)
 The selectorless `host-model-daemon` Service can reset to the `192.0.2.1` placeholder
@@ -137,13 +155,13 @@ curl -s -X POST http://10.113.0.176:30095/api/v1/sync/pairing/init -d '' ; echo 
 5. **Finance** → add an expense → lands in life-tracker (occurredAt normalized to LocalDateTime).
 **Troubleshooting:** see §15.
 
-## 10. What is working (verified 2026-06-06)
+## 10. What is working (verified 2026-06-06; NOT re-run since the 2026-07-04 reboot — see §0)
 - 14B GPU brain via host-model-daemon:18080; durable endpoint guard.
 - Memory: semantic chunk search + **semantic Obsidian note search** (unified endpoint).
 - Idempotent Obsidian indexing (upsert, no duplicates).
 - Embeddings (note + chunk), Piper TTS, rule-based fast intents (incl. fixed volume up/down).
 - sync-service finance/replay/pairing fixes; life-tracker @Transactional health-entry.
-- smoke 8/8, Obsidian 11 unit tests, host-endpoint cluster-reachable.
+- smoke **8/8** _(last verified 2026-06-06 while cluster was up; not re-run since)_, Obsidian 11 unit tests, host-endpoint cluster-reachable.
 
 ## 11. What is partial / manual
 - **Android E2E**: server side ready + verified server-side; full phone round-trip requires
@@ -215,7 +233,8 @@ Still requires operator hardware: real mic→speaker loop (mic + speakers); desk
 ### Verification & recovery (updated 2026-06-06 (h))
 - One-shot verifier: **`./scripts/jarvis-final-check.sh`** (read-only) — prints PASS/FAIL for jarvis
   health, doctor, host-model-daemon endpoint, llm chat (14B), voice diagnostics, voice session intent,
-  desktop dry-run, obsidian tests, android dry-run. Current: **10/10**.
+  desktop dry-run, obsidian tests, android dry-run. Last known: **10/10**
+  _(2026-06-06, while cluster was up; NOT re-run since the 2026-07-04 reboot — see §0)_.
 - The cluster-brain endpoint reset is recurring. **After any `kubectl apply`/re-apply of `k8s/base`,
   run one of:**
   ```

@@ -453,7 +453,14 @@ prepare_prod_overlay() {
     # We render overlay to a temp dir, so relative "../../base" must be rewritten.
     sed -i -E "s#(^[[:space:]]*-[[:space:]]+)../../base\$#\\1./_base#g" "${rendered_overlay}/kustomization.yaml"
     sed -i -E "s#(^[[:space:]]*newName:[[:space:]]+)jarvis/#\\1${escaped_base}/#g" "${rendered_overlay}/kustomization.yaml"
-    sed -i -E "s#(^[[:space:]]*newTag:[[:space:]]+).*\$#\\1${escaped_tag}#g" "${rendered_overlay}/kustomization.yaml"
+    # Tag-stomp guard (durability fix): by default the launcher PRESERVES the
+    # pinned newTag values in the overlay (the movie-tagged features). Only
+    # rewrite every newTag to the single global ${IMAGE_TAG} when an operator
+    # explicitly opts in with JARVIS_RETAG_ON_APPLY=true. Without this guard a
+    # plain "./jarvis up" / reboot re-apply stomped every tag back to ":local".
+    if [[ "${JARVIS_RETAG_ON_APPLY:-false}" == "true" ]]; then
+        sed -i -E "s#(^[[:space:]]*newTag:[[:space:]]+).*\$#\\1${escaped_tag}#g" "${rendered_overlay}/kustomization.yaml"
+    fi
 
     printf '%s' "${rendered_overlay}"
 }

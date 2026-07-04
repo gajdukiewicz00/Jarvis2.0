@@ -8,14 +8,19 @@
 #   2. Consume a refs file with image@sha256 entries produced elsewhere (CI)
 #
 # Output:
-#   ${JARVIS_RELEASE_OUTPUT_DIR:-k8s/overlays/prod-release}/kustomization.yaml
+#   ${JARVIS_RELEASE_OUTPUT_DIR:-infra/k8s/overlays/prod-release}/kustomization.yaml
 # =============================================================================
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-OUTPUT_DIR="${JARVIS_RELEASE_OUTPUT_DIR:-${PROJECT_ROOT}/k8s/overlays/prod-release}"
+# Canonical tree is infra/k8s/ (see infra/k8s/README.md and jarvis-launch.sh
+# line 13). jarvis-launch.sh apply_release_overlay() reads
+# ${K8S_DIR}/overlays/prod-release == infra/k8s/overlays/prod-release, so the
+# promoted overlay must be written there by default. Override with
+# JARVIS_RELEASE_OUTPUT_DIR for out-of-tree/CI builds.
+OUTPUT_DIR="${JARVIS_RELEASE_OUTPUT_DIR:-${PROJECT_ROOT}/infra/k8s/overlays/prod-release}"
 PROD_OVERLAY_IMAGE_BASE="${PROD_OVERLAY_IMAGE_BASE:-localhost:5000/jarvis}"
 
 IMAGE_REGISTRY="${IMAGE_REGISTRY:-}"

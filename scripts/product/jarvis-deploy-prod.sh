@@ -8,7 +8,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-OVERLAY_PATH="${PROJECT_ROOT}/k8s/overlays/prod-release"
+# Canonical tree is infra/k8s/ (see infra/k8s/README.md and jarvis-launch.sh
+# line 13). Matches jarvis-launch.sh RELEASE_OVERLAY_PATH default
+# (${K8S_DIR}/overlays/prod-release). Override with --overlay=PATH.
+OVERLAY_PATH="${PROJECT_ROOT}/infra/k8s/overlays/prod-release"
 NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 PREFLIGHT_ONLY=false
 
@@ -17,7 +20,7 @@ usage() {
 Usage: ./scripts/product/jarvis-deploy-prod.sh [options]
 
 Options:
-  --overlay=PATH      Release overlay path, default: k8s/overlays/prod-release
+  --overlay=PATH      Release overlay path, default: infra/k8s/overlays/prod-release
   --namespace=NAME    Kubernetes namespace, default: jarvis-prod
   --preflight-only    Run server-side preflight but skip apply + rollout validation
   --help, -h          Show this help

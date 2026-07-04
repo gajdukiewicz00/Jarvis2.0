@@ -22,6 +22,12 @@ resources:
   - security-service/deployment.yaml
   - user-profile/deployment.yaml
   - smart-home-service/deployment.yaml
+  # Bonus modules (stateless, no DB): media-service (EPIC 8 — Russian dubbing
+  # assistant) and agent-service (EPIC 12 — role-based agent swarm). Ported
+  # from the legacy k8s/ tree so both are deployable from the canonical
+  # infra/k8s/ tree instead of only the legacy overlay.
+  - media-service/deployment.yaml
+  - agent-service/deployment.yaml
   # NOTE: Mosquitto is deprecated in the core baseline per SPEC-1
   # ("Delete: Mosquitto as core messaging backbone. It may return later only
   # for smart-home/MQTT integrations."). It is still listed here because

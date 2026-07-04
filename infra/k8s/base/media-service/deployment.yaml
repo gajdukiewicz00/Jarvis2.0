@@ -1,0 +1,103 @@
+# Media Service Deployment (EPIC 8 — Russian dubbing assistant)
+# Stateless, no database (in-memory jobs). readOnlyRootFilesystem with a writable
+# /tmp emptyDir that also holds the media workspace.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: jarvis-prod
+  labels:
+    app: media-service
+    app.kubernetes.io/name: media-service
+    app.kubernetes.io/part-of: jarvis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: media-service
+  template:
+    metadata:
+      labels:
+        app: media-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: media-service
+          image: localhost:5000/jarvis/media-service:movie1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: MEDIA_ENABLED
+              value: "true"
+            - name: MEDIA_WORKSPACE_DIR
+              value: /tmp/jarvis-media
+            # Providers default to mock; the base image ships no ffmpeg binary.
+            - name: MEDIA_FFPROBE_MODE
+              value: mock
+            - name: MEDIA_FFMPEG_MODE
+              value: mock
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          ports:
+            - containerPort: 8095
+              name: http
+          envFrom:
+            - secretRef:
+                name: jarvis-secrets
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8095
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8095
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8095
+            initialDelaySeconds: 20
+            periodSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-service
+  namespace: jarvis-prod
+  labels:
+    app: media-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8095
+      targetPort: 8095
+      name: http
+  selector:
+    app: media-service

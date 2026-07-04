@@ -72,7 +72,7 @@ Cases where docs / scripts / manifests disagree.
 
 | Drift | Where | Reality | Fix path |
 | --- | --- | --- | --- |
-| Working-tree deletion of `k8s/overlays/prod/llm-server.yaml` while `jarvis-launch.sh` still scales `deployment/llm-server`. | [`jarvis-launch.sh`](../jarvis-launch.sh) lines 1265, 1275, 1314 vs `git status` working-tree `D k8s/overlays/prod/llm-server.yaml` (deleted on disk). | If a user runs `jarvis-launch.sh --enable-llm` from this working tree, the deployment scale call will fail because the manifest is no longer applied. | Either restore the manifest **or** rewrite the launcher's `LLM_SERVICES` array to drop `llm-server` and route exclusively to `host-model-daemon`. **Do not auto-fix without operator decision.** |
+| Working-tree deletion of `k8s/overlays/prod/llm-server.yaml` while `jarvis-launch.sh` still scales `deployment/llm-server`. | [`jarvis-launch.sh`](../jarvis-launch.sh) lines 1265, 1275, 1314 vs `git status` working-tree `D k8s/overlays/prod/llm-server.yaml` (deleted on disk). | If a user runs `jarvis-launch.sh --enable-llm` from this working tree, the deployment scale call will fail because the manifest is no longer applied. | **RESOLVED (2026-07-04):** canonical tree is `infra/k8s/` (`jarvis-launch.sh` `K8S_DIR` line 16). The in-cluster llm-server is retained: `infra/k8s/overlays/prod/llm-server.yaml` IS present and wired (overlay `kustomization.yaml` resources, `networkpolicy-allowlist.yaml`, `patches/local-prod-replicas.yaml`), pinned at tag `movie9`. Because the launcher renders from `infra/k8s/`, `--enable-llm` scaling `deployment/llm-server` is backed by an applied manifest; the legacy `k8s/overlays/prod/llm-server.yaml` deletion no longer affects the launcher. |
 | `docker/` references in service docs | [`docs/services/llm-server.md`](services/llm-server.md), [`docs/services/embedding-service.md`](services/embedding-service.md) point at `docker/embedding-service/app/main.py` etc. | The `docker/` directory has been removed. The Python workers live under `apps/embedding-service-py/` and `apps/llm-server-py/`. | Doc update — banner + path swap (handled by this audit). |
 | README "no mobile client/module exists" vs catalog row "`apps/android-app` Phase 12 scaffold" | [`README.md`](../README.md) line 86 vs line 170 (in pre-audit copy). | The Android scaffold exists as a Gradle subproject excluded from the Maven reactor. | Doc update — single source of truth (handled by this audit). |
 | README "optional Python AI workers under `docker/`" | [`README.md`](../README.md) line 13 (pre-audit). | Workers now live under `apps/{embedding-service-py,llm-server-py}` and the `docker/` directory is gone. | Doc update (handled by this audit). |
@@ -106,11 +106,19 @@ These look old, but at least one canonical script touches them:
 - [x] Document legacy and cleanup state — this file
 - [x] Fix README mobile contradiction and `docker/` references
 - [x] Add banners to `docs/services/llm-server.md` and `docs/services/embedding-service.md`
-- [ ] Operator decision needed: should `jarvis-launch.sh --enable-llm` still
-      scale `deployment/llm-server`, given `k8s/overlays/prod/llm-server.yaml`
-      is deleted in the working tree? **Do not silently restore or remove.**
-- [ ] Operator decision needed: which K8s tree (`k8s/` vs `infra/k8s/`) is the
-      go-forward production layout? Document it in both READMEs.
+- [x] Operator decision (2026-07-04): **YES** — `jarvis-launch.sh --enable-llm`
+      keeps scaling `deployment/llm-server`. The in-cluster llm-server is
+      retained on the canonical `infra/k8s/` tree, where
+      `infra/k8s/overlays/prod/llm-server.yaml` **is present and wired** (overlay
+      `kustomization.yaml` resources, `networkpolicy-allowlist.yaml`, and
+      `patches/local-prod-replicas.yaml`) and pinned at tag `movie9`. The legacy
+      `k8s/overlays/prod/llm-server.yaml` working-tree deletion is moot on the
+      canonical tree.
+- [x] Operator decision (2026-07-04): **`infra/k8s/` is the go-forward
+      production layout** — it is the tree `jarvis-launch.sh` renders via
+      `K8S_DIR=${PROJECT_DIR}/infra/k8s` (line 16). Legacy `k8s/` is retained
+      frozen for reference until a later removal pass; both READMEs should note
+      `infra/k8s/` as canonical.
 
 ### P1 — Marking deprecated paths
 

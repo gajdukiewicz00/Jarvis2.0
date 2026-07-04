@@ -11,7 +11,10 @@ import org.jarvis.voicegateway.service.SttService;
 import org.jarvis.voicegateway.service.TtsService;
 import org.jarvis.voicegateway.voice.VoiceAssetLoader;
 import org.jarvis.voicegateway.voice.WavResponseRegistry;
+import org.springframework.amqp.rabbit.connection.Connection;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -52,6 +55,13 @@ public class VoiceReadinessService {
     private final WavResponseRegistry wavResponseRegistry;
     private final RestClient.Builder restClientBuilder;
     private final ServiceJwtProvider serviceJwtProvider;
+    /**
+     * Optional — RabbitTemplate is auto-configured only when
+     * {@code spring.rabbitmq.host} is set. Tests and dev profiles may run
+     * without a broker; in that case the rabbit component reports DOWN with
+     * a clear reason.
+     */
+    private final ObjectProvider<ConnectionFactory> rabbitConnectionFactoryProvider;
 
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
@@ -70,6 +80,15 @@ public class VoiceReadinessService {
 
     @Value("${jarvis.voice.readiness.cache-ttl:PT15S}")
     private Duration cacheTtl;
+
+    @Value("${jarvis.voice.confirmation.enabled:true}")
+    private boolean confirmationEnabled;
+
+    // application.yaml defines jarvis.voice.tts.required-for-readiness with
+    // env fallback to JARVIS_VOICE_TTS_REQUIRED_FOR_READINESS (and a legacy
+    // JARVIS_VOICE_TTS_REQUIREDFORREADINESS alias for migration).
+    @Value("${jarvis.voice.tts.required-for-readiness:true}")
+    private boolean ttsRequiredForReadiness;
 
     private volatile Snapshot cachedSnapshot;
     private volatile Instant cachedUntil = Instant.EPOCH;
@@ -104,6 +123,7 @@ public class VoiceReadinessService {
         ComponentSnapshot assets = inspectAssets();
         ComponentSnapshot orchestrator = inspectOrchestrator();
         ComponentSnapshot websocket = inspectWebsocket();
+        ComponentSnapshot rabbit = inspectRabbit();
         DownstreamRouteSnapshot downstream = inspectApiGatewayRoute();
 
         Map<String, ComponentSnapshot> componentDetails = new LinkedHashMap<>();
@@ -112,6 +132,7 @@ public class VoiceReadinessService {
         componentDetails.put("assets", assets);
         componentDetails.put("orchestrator", orchestrator);
         componentDetails.put("websocket", websocket);
+        componentDetails.put("rabbit", rabbit);
 
         Map<String, String> componentStatuses = new LinkedHashMap<>();
         componentDetails.forEach((name, component) -> componentStatuses.put(name, component.status()));
@@ -128,9 +149,23 @@ public class VoiceReadinessService {
         if (isDown(components.get("stt")) || isDown(components.get("websocket"))) {
             return STATUS_DOWN;
         }
-        if (isDown(components.get("tts"))
-                || isDown(components.get("assets"))
-                || isDown(components.get("orchestrator"))) {
+        // Rabbit is the channel for owner confirmations: when confirmation is
+        // enabled, a missing broker drops the gateway out of the readiness
+        // group. Tests/dev sandboxes can opt out via jarvis.voice.confirmation.enabled=false.
+        if (confirmationEnabled && isDown(components.get("rabbit"))) {
+            return STATUS_DOWN;
+        }
+        boolean ttsDown = isDown(components.get("tts"));
+        boolean otherDegraded = isDown(components.get("assets"))
+                || isDown(components.get("orchestrator"))
+                || isDown(components.get("rabbit"));
+        // In k8s deployments without Google TTS credentials and without espeak
+        // in the base image, TTS is an optional degraded capability rather
+        // than a readiness blocker. Operators opt in by setting
+        // jarvis.voice.tts.required-for-readiness=false (or env
+        // JARVIS_VOICE_TTS_REQUIRED_FOR_READINESS=false). Synthesis calls
+        // still surface TTS_UNAVAILABLE through GlobalExceptionHandler.
+        if (otherDegraded || (ttsRequiredForReadiness && ttsDown)) {
             return STATUS_DEGRADED;
         }
         return STATUS_UP;
@@ -270,6 +305,32 @@ public class VoiceReadinessService {
                     "API_GATEWAY_UNREACHABLE",
                     e.getMessage(),
                     immutableDetails(details));
+        }
+    }
+
+    private ComponentSnapshot inspectRabbit() {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("confirmationEnabled", confirmationEnabled);
+        ConnectionFactory factory = rabbitConnectionFactoryProvider.getIfAvailable();
+        if (factory == null) {
+            details.put("reason", "no spring.rabbitmq configuration on classpath");
+            return ComponentSnapshot.down("RABBIT_NOT_CONFIGURED",
+                    "RabbitMQ connection factory is not available", details);
+        }
+        details.put("host", factory.getHost());
+        details.put("port", factory.getPort());
+        details.put("virtualHost", factory.getVirtualHost());
+        try (Connection connection = factory.createConnection()) {
+            if (!connection.isOpen()) {
+                return ComponentSnapshot.down("RABBIT_CONNECTION_CLOSED",
+                        "RabbitMQ connection opened but reported closed", details);
+            }
+            return ComponentSnapshot.up("RABBIT_READY",
+                    "RabbitMQ broker reachable and confirmation queue topology owns publish path",
+                    details);
+        } catch (RuntimeException e) {
+            details.put("error", e.getMessage());
+            return ComponentSnapshot.down("RABBIT_UNREACHABLE", e.getMessage(), details);
         }
     }
 

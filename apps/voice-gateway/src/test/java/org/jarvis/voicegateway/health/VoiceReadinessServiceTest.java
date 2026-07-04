@@ -7,6 +7,8 @@ import org.jarvis.voicegateway.voice.VoiceAssetLoader;
 import org.jarvis.voicegateway.voice.WavResponseRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 
@@ -22,13 +24,30 @@ class VoiceReadinessServiceTest {
 
     @BeforeEach
     void setUp() {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<ConnectionFactory> rabbitProvider = mock(ObjectProvider.class);
         service = new VoiceReadinessService(
                 mock(SttService.class),
                 mock(TtsService.class),
                 mock(VoiceAssetLoader.class),
                 mock(WavResponseRegistry.class),
                 RestClient.builder(),
-                mock(ServiceJwtProvider.class));
+                mock(ServiceJwtProvider.class),
+                rabbitProvider);
+        ReflectionTestUtils.setField(service, "confirmationEnabled", true);
+        ReflectionTestUtils.setField(service, "ttsRequiredForReadiness", true);
+    }
+
+    @Test
+    void marksReadinessDegradedWhenTtsIsDownAndNotRequiredForReadiness() {
+        ReflectionTestUtils.setField(service, "ttsRequiredForReadiness", false);
+        assertEquals("UP", overallStatus(Map.of(
+                "stt", component("UP"),
+                "tts", component("DOWN"),
+                "assets", component("UP"),
+                "orchestrator", component("UP"),
+                "websocket", component("UP"),
+                "rabbit", component("UP"))));
     }
 
     @Test
@@ -38,7 +57,8 @@ class VoiceReadinessServiceTest {
                 "tts", component("UP"),
                 "assets", component("UP"),
                 "orchestrator", component("UP"),
-                "websocket", component("UP"))));
+                "websocket", component("UP"),
+                "rabbit", component("UP"))));
     }
 
     @Test
@@ -48,7 +68,32 @@ class VoiceReadinessServiceTest {
                 "tts", component("UP"),
                 "assets", component("UP"),
                 "orchestrator", component("UP"),
-                "websocket", component("DOWN"))));
+                "websocket", component("DOWN"),
+                "rabbit", component("UP"))));
+    }
+
+    @Test
+    void marksReadinessDownWhenRabbitIsDownAndConfirmationEnabled() {
+        ReflectionTestUtils.setField(service, "confirmationEnabled", true);
+        assertEquals("DOWN", overallStatus(Map.of(
+                "stt", component("UP"),
+                "tts", component("UP"),
+                "assets", component("UP"),
+                "orchestrator", component("UP"),
+                "websocket", component("UP"),
+                "rabbit", component("DOWN"))));
+    }
+
+    @Test
+    void marksReadinessDegradedWhenRabbitIsDownAndConfirmationDisabled() {
+        ReflectionTestUtils.setField(service, "confirmationEnabled", false);
+        assertEquals("DEGRADED", overallStatus(Map.of(
+                "stt", component("UP"),
+                "tts", component("UP"),
+                "assets", component("UP"),
+                "orchestrator", component("UP"),
+                "websocket", component("UP"),
+                "rabbit", component("DOWN"))));
     }
 
     @Test
@@ -58,19 +103,22 @@ class VoiceReadinessServiceTest {
                 "tts", component("DOWN"),
                 "assets", component("UP"),
                 "orchestrator", component("UP"),
-                "websocket", component("UP"))));
+                "websocket", component("UP"),
+                "rabbit", component("UP"))));
         assertEquals("DEGRADED", overallStatus(Map.of(
                 "stt", component("UP"),
                 "tts", component("UP"),
                 "assets", component("DOWN"),
                 "orchestrator", component("UP"),
-                "websocket", component("UP"))));
+                "websocket", component("UP"),
+                "rabbit", component("UP"))));
         assertEquals("DEGRADED", overallStatus(Map.of(
                 "stt", component("UP"),
                 "tts", component("UP"),
                 "assets", component("UP"),
                 "orchestrator", component("DOWN"),
-                "websocket", component("UP"))));
+                "websocket", component("UP"),
+                "rabbit", component("UP"))));
     }
 
     @Test
@@ -80,7 +128,8 @@ class VoiceReadinessServiceTest {
                 "tts", component("UP"),
                 "assets", component("UP"),
                 "orchestrator", component("UP"),
-                "websocket", component("UP"))));
+                "websocket", component("UP"),
+                "rabbit", component("UP"))));
     }
 
     private String overallStatus(Map<String, VoiceReadinessService.ComponentSnapshot> components) {

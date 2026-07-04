@@ -32,6 +32,7 @@ public class TtsService {
 
     private static final String PROVIDER_GOOGLE = "google";
     private static final String PROVIDER_ESPEAK = "espeak";
+    private static final String PROVIDER_PIPER = "piper";
     @Value("${tts.enabled:true}")
     private boolean ttsEnabled;
 
@@ -40,6 +41,16 @@ public class TtsService {
 
     @Value("${tts.espeak.binary-path:}")
     private String configuredEspeakBinaryPath;
+
+    @Value("${tts.piper.url:}")
+    private String piperUrl;
+
+    @Value("${tts.piper.timeout-ms:15000}")
+    private long piperTimeoutMs;
+
+    private volatile boolean piperAvailable = false;
+    private volatile String piperInitStatus = "Piper TTS not initialized";
+    private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
 
     private TextToSpeechClient googleTtsClient;
     private boolean googleTtsAvailable = false;
@@ -80,8 +91,16 @@ public class TtsService {
                 log.warn("⚠️ TTS DEGRADED: espeak binary not found on host. " +
                         "Run ./scripts/setup-voice-local.sh to install the canonical local eSpeak path.");
             }
+        } else if (PROVIDER_PIPER.equalsIgnoreCase(ttsProvider)) {
+            piperAvailable = checkPiperAvailable();
+            if (piperAvailable) {
+                log.info("Using Piper neural TTS provider (configured), url={}", piperUrl);
+            } else {
+                log.warn("⚠️ TTS DEGRADED: Piper daemon not reachable at {} ({}). Will use eSpeak if available.",
+                        piperUrl, piperInitStatus);
+            }
         } else {
-            log.warn("Unsupported TTS provider configured: {}. Supported providers: google, espeak", ttsProvider);
+            log.warn("Unsupported TTS provider configured: {}. Supported providers: google, espeak, piper", ttsProvider);
         }
     }
 
@@ -200,6 +219,15 @@ public class TtsService {
                     selection.reason());
         }
 
+        if (PROVIDER_PIPER.equals(selection.actualProvider())) {
+            return new SynthesisResult(
+                    synthesizeWithPiper(text, languageCode),
+                    selection.configuredProvider(),
+                    PROVIDER_PIPER,
+                    selection.status(),
+                    selection.reason());
+        }
+
         throw new TtsUnavailableException(selection.reason());
     }
 
@@ -294,6 +322,79 @@ public class TtsService {
         }
     }
 
+    /** Synthesize via the host-side Piper neural TTS daemon (HTTP). Returns canonical WAV. */
+    private byte[] synthesizeWithPiper(String text, String languageCode) {
+        try {
+            String lang = languageCode != null ? languageCode : "";
+            String body = "{\"text\":" + jsonString(text) + ",\"language\":" + jsonString(lang) + "}";
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(piperUrl.replaceAll("/+$", "") + "/synthesize"))
+                    .timeout(java.time.Duration.ofMillis(piperTimeoutMs))
+                    .header("Content-Type", "application/json")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body, java.nio.charset.StandardCharsets.UTF_8))
+                    .build();
+            java.net.http.HttpResponse<byte[]> resp =
+                    httpClient.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+            if (resp.statusCode() != 200) {
+                throw new RuntimeException("Piper daemon returned HTTP " + resp.statusCode());
+            }
+            byte[] wav = resp.body();
+            byte[] normalized = normalizeEspeakAudio(wav);
+            log.info("Piper TTS synthesis successful, rawSize={} bytes, normalizedSize={} bytes",
+                    wav.length, normalized.length);
+            return normalized;
+        } catch (IOException e) {
+            log.error("Piper TTS failed (IO): {}", e.getMessage());
+            throw new RuntimeException("Piper TTS synthesis failed: IO error", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Piper TTS synthesis failed: Interrupted", e);
+        }
+    }
+
+    private boolean checkPiperAvailable() {
+        if (piperUrl == null || piperUrl.isBlank()) {
+            piperInitStatus = "tts.piper.url is not configured";
+            return false;
+        }
+        try {
+            java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(piperUrl.replaceAll("/+$", "") + "/health"))
+                    .timeout(java.time.Duration.ofSeconds(3))
+                    .GET().build();
+            java.net.http.HttpResponse<String> resp =
+                    httpClient.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            boolean ok = resp.statusCode() == 200;
+            piperInitStatus = ok ? "ready" : "Piper health HTTP " + resp.statusCode();
+            return ok;
+        } catch (Exception e) {
+            piperInitStatus = "Piper health check failed: " + e.getMessage();
+            return false;
+        }
+    }
+
+    private static String jsonString(String s) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.append("\"").toString();
+    }
+
     private ProviderSelection resolveProviderSelection() {
         String configured = normalizeProvider(ttsProvider);
         if (!ttsEnabled) {
@@ -322,8 +423,20 @@ public class TtsService {
                 yield new ProviderSelection(PROVIDER_ESPEAK, "none", "unavailable", false,
                         espeakUnavailableReason(), false);
             }
+            case PROVIDER_PIPER -> {
+                if (piperAvailable) {
+                    yield new ProviderSelection(PROVIDER_PIPER, PROVIDER_PIPER, "available", true,
+                            "Piper neural TTS is ready", espeakAvailable);
+                }
+                if (espeakAvailable) {
+                    yield new ProviderSelection(PROVIDER_PIPER, PROVIDER_ESPEAK, "degraded", true,
+                            "Configured Piper TTS is unavailable. Falling back to eSpeak.", true);
+                }
+                yield new ProviderSelection(PROVIDER_PIPER, "none", "unavailable", false,
+                        piperInitStatus + ". No local eSpeak fallback detected.", false);
+            }
             default -> new ProviderSelection(configured, "none", "unavailable", false,
-                    "Unsupported TTS provider '" + configured + "'. Supported providers: google, espeak.", false);
+                    "Unsupported TTS provider '" + configured + "'. Supported providers: google, espeak, piper.", false);
         };
     }
 

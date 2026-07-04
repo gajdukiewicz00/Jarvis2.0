@@ -17,7 +17,23 @@ spring:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
       - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
       - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
-  
+
+  # SPEC-1 Phase 5/6 — voice confirmation publishes ConfirmationResult on
+  # jarvis.commands.confirmation.result. RabbitTemplate + queue topology come
+  # from jarvis-common's RabbitTopologyConfig (auto-loaded once host is set).
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:jarvis}
+    password: ${SPRING_RABBITMQ_PASSWORD:jarvis}
+    virtual-host: ${SPRING_RABBITMQ_VHOST:jarvis}
+    template:
+      mandatory: true
+    listener:
+      simple:
+        acknowledge-mode: auto
+        prefetch: 4
+
   servlet:
     multipart:
       enabled: true
@@ -38,6 +54,16 @@ jarvis:
     # Hybrid voice: use pre-recorded .wav when available, TTS fallback
     pre-recorded:
       enabled: ${JARVIS_VOICE_PRE_RECORDED_ENABLED:true}
+    confirmation:
+      # SPEC-1 mandates a Rabbit-backed confirmation channel; only switch off
+      # in unit tests / dev sandboxes that intentionally have no broker.
+      enabled: ${JARVIS_VOICE_CONFIRMATION_ENABLED:true}
+    tts:
+      # When true, TTS DOWN drags voice-gateway readiness into DEGRADED.
+      # Set to false in k8s deployments that ship without espeak-ng in the
+      # base image so /actuator/health/readiness stays UP while TTS calls
+      # still surface TTS_UNAVAILABLE.
+      required-for-readiness: ${JARVIS_VOICE_TTS_REQUIRED_FOR_READINESS:${JARVIS_VOICE_TTS_REQUIREDFORREADINESS:true}}
   orchestrator:
     url: ${JARVIS_ORCHESTRATOR_URL:http://orchestrator:8083}
 
@@ -70,6 +96,11 @@ management:
         order: down,out-of-service,degraded,up,unknown
       group:
         readiness:
+          # voiceReadiness already aggregates STT/TTS/assets/orchestrator/websocket
+          # AND rabbit (see VoiceReadinessService.inspectRabbit), so the pod still
+          # fails readiness when the broker is unreachable. Listing `rabbit`
+          # explicitly here breaks startup whenever RabbitAutoConfiguration is
+          # excluded (local runtime / dev profiles without a broker).
           include: voiceReadiness
   metrics:
     tags:

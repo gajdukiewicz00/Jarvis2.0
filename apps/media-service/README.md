@@ -41,6 +41,50 @@ the real implementations exist and are unit-tested for safe argument constructio
 | `media.translation.mode` | echo `[RU] …` | (LLM-backed — flagged follow-up) |
 | `media.tts.mode` | neutral placeholder audio | (Piper/neutral RU TTS — follow-up) |
 
+## Decision: ASR / translation / TTS ship as deterministic mocks (mock-MVP)
+
+**Status: intentional, documented scope decision — not a bug or an oversight.**
+
+`MockAsrProvider`, `MockTranslationProvider`, and `NeutralRussianTtsProvider` are the
+**only** implementations of `AsrProvider` / `TranslationProvider` / `TtsProvider` that
+exist in this codebase today. Each is deterministic (fixed/derived output, no model
+inference, no network call) and is wired as the default via
+`@ConditionalOnProperty(..., matchIfMissing = true)`. Unlike `media.ffprobe.mode` /
+`media.ffmpeg.mode` — which already have working `real` implementations
+(`RealFFprobeClient`, `RealFFmpegClient`) that are simply not the default — there is
+**no `real` mode to switch to** for ASR/translation/TTS yet; setting e.g.
+`media.asr.mode=whisper` yields zero `AsrProvider` beans (fails closed, see
+`MediaProviderSelectionTest`) rather than silently degrading.
+
+What "real" would require, per stage:
+
+| Stage | Real implementation | Needs |
+|---|---|---|
+| ASR (`media.asr.mode`) | `whisper.cpp` (or Vosk, matching `voice-gateway`'s STT choices) | model weights on disk, a native/JNI or subprocess binding, decoded PCM/WAV input (which itself needs real `ffmpeg`) |
+| Translation (`media.translation.mode`) | Local/self-hosted translation (or routed through `llm-service`, already `MediaTextGuard`-neutralized) | a translation model or an internal network call to `llm-service`, plus a NetworkPolicy allowlist change |
+| TTS (`media.tts.mode`) | Piper neutral RU voice | Piper binary/model on disk, a subprocess/JNI binding, and output-format alignment with the mux stage |
+
+Why deferred rather than built now:
+
+- **No `ffmpeg`/native binaries in the base image.** The container image ships no
+  `ffmpeg`, and by extension no `whisper.cpp`/Piper binaries either — the same
+  constraint that already keeps `media.ffprobe.mode`/`media.ffmpeg.mode` on mock in
+  production (see table above). Real ASR/TTS have the same dependency, plus their own
+  multi-hundred-MB model files, so adding them means growing the base image for every
+  dependent build/CI run, not just this service.
+- **Cluster/disk constraints.** `k3s` (jarvis-prod) is the deploy target; adding model
+  weights (whisper/Piper, hundreds of MB–GBs) and native binaries multiplies image size
+  and node disk pressure across every media-service pod, with no autoscaling story yet.
+- **Cross-service blast radius.** Real translation likely means calling `llm-service`,
+  which means new NetworkPolicy allowlist entries — a deliberately separate, reviewable
+  change (see `MediaTextGuard` consolidation note below), not bundled into this
+  increment.
+
+This mirrors the safety posture in the section above: the mock-MVP is not a shortcut
+that skips guardrails — `MediaTextGuard` neutralization and the untrusted-data envelope
+run unconditionally regardless of provider mode, so turning on a future real
+translation backend does not require re-deriving the injection-safety story.
+
 ## API
 
 All endpoints require gateway/service authentication except `/actuator/health`.

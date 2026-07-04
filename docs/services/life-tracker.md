@@ -118,6 +118,12 @@ Module test command:
 mvn -pl apps/life-tracker -am test
 ```
 
+The default Maven test command is Docker-free and skips `LifeTrackerIntegrationTest`. Run the Testcontainers-backed service integration suite explicitly:
+
+```bash
+mvn -pl apps/life-tracker -am verify -Pintegration
+```
+
 Runtime:
 
 - local: `./scripts/runtime-up.sh`

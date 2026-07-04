@@ -1,8 +1,21 @@
 # embedding-service
 
+> **Status: Active but optional. Path moved.**
+>
+> The path under `docker/embedding-service/` no longer exists on disk. The
+> current Python embedding worker lives at
+> [`apps/embedding-service-py/`](../../apps/embedding-service-py/) and is
+> built daemonless via `podman build -f Containerfile`. It remains active
+> and is required by `memory-service` whenever `ENABLE_MEMORY=true`.
+>
+> All path references in this file that begin with `docker/embedding-service/...`
+> should be read as `apps/embedding-service-py/...`. See
+> [docs/LEGACY_AND_CLEANUP.md](../LEGACY_AND_CLEANUP.md) for the migration
+> log.
+
 ## 1. Name
 
-`docker/embedding-service`
+`apps/embedding-service-py` (formerly `docker/embedding-service`)
 
 ## 2. Type
 
@@ -16,16 +29,18 @@ Generates vector embeddings used by `memory-service`.
 
 This is a real runtime component but, like `llm-server`, it is outside the Maven reactor and is started by runtime/Docker paths. It is optional because `memory-service` itself is optional.
 
+Deprecated runtime path. Kept temporarily for compatibility and migration evidence. Production runtime target is native host + MicroK8s under `jarvis-prod`.
+
 ## 5. Entry Points
 
-- Python app entry: `docker/embedding-service/app/main.py`
+- Python app entry: `apps/embedding-service-py/app/main.py`
 - FastAPI app object: `app`
 
 ## 6. Configuration
 
 Main configuration source:
 
-- `docker/embedding-service/app/config.py`
+- `apps/embedding-service-py/app/config.py`
 
 Important settings include:
 
@@ -79,7 +94,7 @@ ENABLE_MEMORY=true ./scripts/runtime-up.sh
 
 Python-side tests exist:
 
-- `docker/embedding-service/tests/test_service.py`
+- `apps/embedding-service-py/tests/test_service.py`
 
 ## 13. Implementation Status
 

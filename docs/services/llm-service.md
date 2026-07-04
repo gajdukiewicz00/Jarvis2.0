@@ -14,7 +14,7 @@ Provides authenticated LLM-facing REST and WebSocket APIs, prompt/session handli
 
 ## 4. Current Reality
 
-This service is implemented but optional. It is disabled by default in configuration and depends on `llm-server` for actual model inference.
+This service is implemented but optional. It is disabled by default in configuration and, in production, calls llama.cpp through the selectorless `host-model-daemon` Service and manually patched Endpoints.
 
 ## 5. Entry Points
 
@@ -32,7 +32,7 @@ Important settings include:
 
 - server port `8091`
 - `jarvis.llm.enabled`, default `false`
-- `llm.base-url`
+- `llm.base-url` / `LLM_SERVER_URL`, pointing at `http://host-model-daemon.jarvis-prod.svc.cluster.local:18080` in production
 - request budgets and model profiles
 - admission control and executor limits
 - memory integration flags and URL
@@ -48,6 +48,8 @@ REST endpoints:
 - `GET /api/v1/llm/health`
 - `GET /api/v1/llm/runtime`
 - `POST /api/v1/llm/orchestrate`
+
+The public Jarvis chat endpoint remains `POST /api/v1/llm/chat`; `LlmClient` forwards inference to the upstream llama.cpp OpenAI-compatible endpoint `POST /v1/chat/completions`.
 
 STOMP messaging surface:
 
@@ -69,7 +71,7 @@ STOMP messaging surface:
 
 ## 9. Dependencies On Other Services
 
-- `docker/llm-server`
+- `host-model-daemon` Service + manual Endpoints to the Linux host llama.cpp server
 - `memory-service` when enabled
 - `user-profile` when enabled
 
@@ -104,5 +106,6 @@ Implemented, optional.
 
 ## 14. Known Gaps / Caveats
 
-- Process health does not guarantee inference readiness; the module can be up while `llm-server` is unavailable.
+- Process health does not guarantee inference readiness; the module can be up while `host-model-daemon` is unavailable.
 - This module is not part of the core runtime baseline.
+- Kubernetes/public ingress is only a supported release claim when the generated `k8s/overlays/prod-release` overlay includes an immutable ref for `llm-service`. Model execution remains outside the cluster through `host-model-daemon`.

@@ -1,0 +1,167 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "background": "#eef7e6",
+    "fontFamily": "Arial",
+    "fontSize": "13px",
+    "lineColor": "#6a8360",
+    "textColor": "#111111",
+    "primaryColor": "#f4faef",
+    "primaryBorderColor": "#7a9271",
+    "clusterBkg": "#e9f4e4",
+    "clusterBorder": "#9db28e"
+  }
+}}%%
+flowchart LR
+
+  subgraph LEFT["Codex Configuration Map"]
+    direction TB
+
+    subgraph GLOBAL["global"]
+      direction TB
+      GROOT["~/.codex/"]
+      G1["AGENTS.md"]
+      G2["AGENTS.override.md"]
+      G3["config.toml"]
+      G4["agents/&lt;agent&gt;.toml"]
+      G5["log/"]
+      G6["prompts/ ?"]
+      GSROOT["$HOME/.agents/skills/"]
+      GS1["&lt;skill&gt;/SKILL.md"]
+      GS2["scripts/"]
+      GS3["references/"]
+      GS4["assets/"]
+      GS5["agents/openai.yaml"]
+    end
+
+    subgraph PROJECT["project"]
+      direction TB
+      PROOT["project/"]
+      P1["AGENTS.md"]
+      P2["subdir/AGENTS.override.md"]
+      P3[".codex/config.toml"]
+      P4[".codex/hooks.json<br/>or inline [hooks]"]
+      P5[".codex/hooks/"]
+      P6[".codex/agents/&lt;agent&gt;.toml"]
+      PA0[".agents/skills/"]
+      PA1["&lt;skill&gt;/SKILL.md"]
+      PA2["scripts/"]
+      PA3["references/"]
+      PA4["assets/"]
+      PA5["agents/openai.yaml"]
+      P7["docs/"]
+    end
+
+    subgraph SESSION["session command"]
+      direction TB
+      S1["/init"]
+      S2["/model"]
+      S3["/permissions"]
+      S4["/mcp"]
+      S5["/agent"]
+      S6["/diff"]
+      S7["/plan"]
+      S8["/compact"]
+    end
+
+    subgraph ADMIN["admin / enterprise"]
+      direction TB
+      A1["/etc/codex/config.toml"]
+      A2["/etc/codex/requirements.toml"]
+      A3["/etc/codex/managed_config.toml"]
+    end
+  end
+
+  C0["<b>Current repo</b><br/>- present now: AGENTS.md, docs/<br/>- not detected: .codex/, .agents/skills/, AGENTS.override.md<br/>- map shows supported optional structure"] 
+  C1["<b>Global AGENTS</b><br/>- personal reusable guidance<br/>- loaded before repo guidance<br/>- override wins when present"] 
+  C2["<b>Global config.toml</b><br/>- user config shared by CLI + IDE<br/>- model, provider, approvals, sandbox<br/>- MCP, hooks, feature flags, log_dir"] 
+  C3["<b>Custom agents</b><br/>- optional user-scoped spawned-agent defs<br/>- inherit normal config keys<br/>- useful for specialized workflows"] 
+  C4["<b>log/</b><br/>- default is $CODEX_HOME/log<br/>- docs mention codex-tui.log<br/>- session-*.jsonl only if enabled"] 
+  C5["<b>prompts/</b><br/>- verify in official docs<br/>- not verified in current docs snapshot<br/>- not treated as a supported layer here"] 
+  C6["<b>User skills</b><br/>- official global skill location is $HOME/.agents/skills<br/>- not under ~/.codex<br/>- SKILL.md is required entrypoint"] 
+  C7["<b>Skill extras</b><br/>- scripts: executable helpers<br/>- references: docs loaded on demand<br/>- assets: templates/resources<br/>- agents/openai.yaml: UI metadata, invocation policy, tool deps"] 
+
+  C8["<b>Repo AGENTS</b><br/>- persistent repo instructions<br/>- build/test/lint rules<br/>- conventions and do-not rules"] 
+  C9["<b>Nested override</b><br/>- per directory, Codex checks override first<br/>- only one instruction file per directory<br/>- closer directories win later in merge"] 
+  C10["<b>Project config.toml</b><br/>- trusted projects only<br/>- layers stack from repo root to cwd<br/>- overrides user config for matching keys"] 
+  C11["<b>Hooks config</b><br/>- discovered via hooks.json or inline [hooks]<br/>- matching hooks from multiple layers all run<br/>- user/system hooks still load in untrusted repos"] 
+  C12["<b>Hook scripts</b><br/>- script folder is a convention, not discovery<br/>- official examples use .codex/hooks/<br/>- scripts must be referenced explicitly"] 
+  C13["<b>Project custom agents</b><br/>- optional repo-scoped spawned-agent defs<br/>- good for team-specific specialist agents"] 
+  C14["<b>Repo skills</b><br/>- official path is .agents/skills<br/>- Codex scans cwd up to repo root<br/>- replaces requested top-level skills/ sketch"] 
+  C15["<b>docs/</b><br/>- normal project docs<br/>- not a special Codex discovery path<br/>- good place for generated onboarding docs"] 
+
+  C16["<b>Built-in slash commands</b><br/>- session controls, not repo files<br/>- /init, /model, /permissions, /mcp<br/>- /agent, /diff, /plan, /compact"] 
+  C17["<b>Config precedence</b><br/>1. CLI flags / --config<br/>2. profile values<br/>3. project .codex/config.toml root to cwd<br/>4. ~/.codex/config.toml<br/>5. /etc/codex/config.toml<br/>6. built-in defaults"] 
+  C18["<b>AGENTS loading</b><br/>1. global override or global AGENTS<br/>2. project root to cwd, one file per dir<br/>3. root-to-leaf merge, closer guidance wins"] 
+  C19["<b>MCP</b><br/>- configured in config.toml via [mcp_servers.&lt;id&gt;]<br/>- command or url, env/env_vars, timeouts<br/>- enabled_tools, disabled_tools, required<br/>- inspect active tools with /mcp"] 
+  C20["<b>Subagents</b><br/>- spawn only when explicitly requested<br/>- parallel codebase exploration or multi-step work<br/>- extra tokens, but better isolation and fan-out"] 
+  C21["<b>Hooks lifecycle</b><br/>- deterministic scripts during Codex lifecycle<br/>- SessionStart, PreToolUse, PermissionRequest<br/>- PostToolUse, UserPromptSubmit, Stop<br/>- current docs say keep codex_hooks explicit"] 
+
+  C22["<b>System config</b><br/>- lowest normal config file layer above defaults<br/>- useful for machine-wide defaults"] 
+  C23["<b>requirements.toml</b><br/>- admin-enforced constraints<br/>- approvals, sandbox, web search, MCP allowlists<br/>- managed hooks, rules, feature pins<br/>- not a normal project-team config"] 
+  C24["<b>managed_config.toml</b><br/>- managed startup defaults<br/>- users can change values during a session<br/>- reapplied on next launch"] 
+
+  G1 --> C1
+  G2 --> C1
+  G3 --> C2
+  G4 --> C3
+  G5 --> C4
+  G6 -.-> C5
+  GSROOT --> C6
+  GS1 --> C6
+  GS2 --> C7
+  GS3 --> C7
+  GS4 --> C7
+  GS5 --> C7
+
+  PROOT --> C0
+  P1 --> C8
+  P2 --> C9
+  P3 --> C10
+  P4 --> C11
+  P5 --> C12
+  P6 --> C13
+  PA0 --> C14
+  PA1 --> C14
+  PA2 --> C7
+  PA3 --> C7
+  PA4 --> C7
+  PA5 --> C7
+  P7 --> C15
+
+  S1 --> C16
+  S2 --> C16
+  S3 --> C16
+  S4 --> C16
+  S5 --> C16
+  S6 --> C16
+  S7 --> C16
+  S8 --> C16
+
+  G3 --> C17
+  P3 --> C17
+  A1 --> C17
+  G1 --> C18
+  P1 --> C18
+  P2 --> C18
+  G3 --> C19
+  P3 --> C19
+  S4 --> C19
+  G4 --> C20
+  P6 --> C20
+  S5 --> C20
+  P4 --> C21
+  P5 --> C21
+  A1 --> C22
+  A2 --> C23
+  A3 --> C24
+
+  class GROOT,G1,G2,G3,G4,G5,GSROOT,GS1,GS2,GS3,GS4,GS5,PROOT,P1,P2,P3,P4,P5,P6,PA0,PA1,PA2,PA3,PA4,PA5,P7,S1,S2,S3,S4,S5,S6,S7,S8,A1,A2,A3 tree
+  class GLOBAL,PROJECT,SESSION,ADMIN pane
+  class C0,C1,C2,C3,C4,C6,C7,C8,C9,C10,C11,C12,C13,C14,C15,C16,C17,C18,C19,C20,C21,C22,C23,C24 card
+  class G6,C5 verify
+
+  classDef tree fill:#f4faef,stroke:#7a9271,color:#111111,stroke-width:1px;
+  classDef pane fill:#e9f4e4,stroke:#9db28e,color:#111111,stroke-width:1px;
+  classDef card fill:#efe0c2,stroke:#6b5a44,color:#111111,stroke-width:1px;
+  classDef verify fill:#f8ead9,stroke:#b86b3d,color:#111111,stroke-width:1px,stroke-dasharray: 5 3;

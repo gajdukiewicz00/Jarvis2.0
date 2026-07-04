@@ -79,7 +79,7 @@ Readiness endpoint on `/actuator/health/readiness` returns:
 
 Diagnostics endpoint on `/api/v1/voice/diagnostics` returns machine-readable component truth for:
 
-- capture ownership (`desktop-client`, not backend host microphone probing)
+- capture ownership (`desktop-client`, implemented today by the Native Desktop Agent in `desktop-javafx`, not by backend host microphone probing)
 - execution boundaries and downstream-capability hand-off points
 - STT and TTS configured-vs-working state
 - bundled voice asset availability
@@ -165,7 +165,7 @@ Implemented.
 ## 14. Known Gaps / Caveats
 
 - Command handling remains primarily rule-based by design; LLM usage is not required for the core voice path.
-- Wake-word detection is not a `voice-gateway` responsibility. It lives in `desktop-javafx` and is optional.
+- Wake-word detection is not a `voice-gateway` responsibility. It lives in the Native Desktop Agent implementation (`desktop-javafx`) and is optional.
 - Runtime quality still depends on installed STT/TTS assets and binaries, but readiness and runtime endpoints now report those gaps explicitly instead of masking them behind a generic healthy state.
 - `voice-gateway` readiness proves the voice path itself. It does not by itself prove that a real workstation desktop executor is connected on `/ws/pc-control`.
 
@@ -182,7 +182,7 @@ The explicitly advertised demo-safe phrases should stay narrow and evidence-back
 Phrases that still depend on downstream capability and are therefore intentionally not part of the guaranteed demo surface:
 
 - `be quiet` / `STANDBY_MODE` is recognized, but local fallback is explicitly unsupported when the orchestrator is down.
-- wake-word activation phrase `Jarvis` belongs to `desktop-javafx`; it is not a `voice-gateway` responsibility.
+- wake-word activation phrase `Jarvis` belongs to the Native Desktop Agent implementation in `desktop-javafx`; it is not a `voice-gateway` responsibility.
 
 ## 16. Local / Docker / K8s Parity Notes
 
@@ -194,7 +194,7 @@ Observed parity from runtime scripts, Dockerfile, and manifests:
 | Voice readiness probe | `/actuator/health/readiness`, accepts `UP` or `DEGRADED` as healthy | Docker `HEALTHCHECK` hits readiness | K8s probes hit readiness; TLS overlay changes probe scheme to `HTTPS` | unified semantics |
 | STT model path | `~/.jarvis/models/...` via `scripts/runtime/common.sh` | image copies repo `models/` to `/app/models`, but a production/demo container still needs real Vosk content via repo-populated `models/` or an explicit mount such as `~/.jarvis/models:/models` plus `JARVIS_VOSK_MODEL_PATH_*` | PVC mounted at `/models` with explicit `JARVIS_VOSK_MODEL_PATH_*` | same model requirement, different mount source; not hidden |
 | TTS provider | local canonical stack expects `espeak` | image installs `espeak-ng` | depends on cluster image/env; same app config keys | readiness/diagnostics expose missing TTS explicitly |
-| Orchestrator URL | local scripts force `JARVIS_ORCHESTRATOR_URL=http://127.0.0.1:8083` for direct module run | default app config uses `http://orchestrator:8083` | internal TLS overlay patches `JARVIS_ORCHESTRATOR_URL=https://orchestrator.jarvis.svc.cluster.local:8083` plus truststore | explicit config drift, behavior documented |
+| Orchestrator URL | local scripts force `JARVIS_ORCHESTRATOR_URL=http://127.0.0.1:8083` for direct module run | default app config uses `http://orchestrator:8083` | internal TLS overlay patches `JARVIS_ORCHESTRATOR_URL=https://orchestrator.jarvis-prod.svc.cluster.local:8083` plus truststore | explicit config drift, behavior documented |
 | JWT secret assumptions | local runtime collapses `SERVICE_JWT_SECRET` to `JWT_SECRET` unless `JARVIS_ALLOW_DISTINCT_LOCAL_SERVICE_JWT_SECRET=true` | container uses supplied env as-is and requires explicit non-empty 32+ byte `JWT_SECRET` / `SERVICE_JWT_SECRET` values | cluster secrets provide independent values | local convenience only; container and cluster are explicit |
 | Desktop control execution | requires a connected authenticated desktop client on `/ws/pc-control` | unchanged | real desktop control is runtime-mode sensitive; check `api-gateway /api/v1/capabilities` and `pc-control` deployment mode | not hidden by voice readiness; capability boundary is explicit |
 

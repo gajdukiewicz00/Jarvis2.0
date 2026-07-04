@@ -46,8 +46,41 @@ REST endpoints:
 - `POST /memory/summarize-session`
 - `GET /memory/health`
 - `POST /api/v1/tools/memory/search`
+- `GET /api/v1/memory/cv/screen-context/recent?userId=&limit=` — recent CV
+  screen-context observations (newest first; no raw image bytes)
+- `GET /api/v1/memory/cv/screen-context/{id}` — one observation's metadata
 
 No WebSocket endpoint.
+
+## 7a. CV screen-context consumer
+
+`memory-service` consumes the **`jarvis.cv.screen_context.created`** Kafka topic
+(produced by `vision-security-service`) and persists each observation into the
+`screen_context_observation` table (Flyway `V7`).
+
+- Component: `org.jarvis.memory.cv.ScreenContextEventConsumer` →
+  `ScreenContextPersistenceService` → `ScreenContextObservationRepository`.
+- Config (`jarvis.memory.cv.*`): `enabled` (default true), `topic`,
+  `consumer-group` (default `cv-screen-context-projector`),
+  `store-raw-screenshot` (default true), `max-screenshot-bytes` (default 8 MiB),
+  `embed` (default true).
+- **Persisted:** userId, capturedAt, display server, active window/process,
+  semantic tags, OCR text + blocks, UI/object detections, screenshot path,
+  engine/language, success/error.
+- **Optional raw screenshot bytes:** stored only when `store-raw-screenshot` is
+  on AND the file is readable by this process AND within the size cap. In a
+  clustered deployment the consumer pod cannot read the producer host's file
+  (ADR-0011 keeps raw frames host-local), so only the path is kept there.
+- **Optional embedding:** the OCR text is embedded via the local
+  embedding-service into the `embedding vector(384)` column for future semantic
+  recall. A missing/failing embedding-service degrades gracefully — the row is
+  still persisted with a null embedding.
+- **Idempotent:** a derived key (userId + capturedAt + screenshotPath) dedupes
+  redelivered records. No silent data loss; malformed payloads are logged and
+  acked so the partition never blocks.
+
+See the full contract in
+[docs/architecture/cv-screen-context-event.md](../architecture/cv-screen-context-event.md).
 
 ## 8. Main Internal Components
 
@@ -59,7 +92,7 @@ No WebSocket endpoint.
 
 ## 9. Dependencies On Other Services
 
-- `docker/embedding-service`
+- [`apps/embedding-service-py`](../../apps/embedding-service-py/) (formerly `docker/embedding-service` — that tree was retired; see [docs/services/embedding-service.md](embedding-service.md))
 - PostgreSQL with pgvector support
 
 ## 10. Data / Storage

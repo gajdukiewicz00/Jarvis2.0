@@ -6,15 +6,17 @@
 
 ## 2. Type
 
-Unified JavaFX desktop application module.
+Unified JavaFX desktop application module and current Native Desktop Agent.
 
 ## 3. Purpose
 
 Provides the production desktop surface for Jarvis: launcher/runtime controls, login/auth bootstrap, shell navigation, feature views, diagnostics, WebSocket clients, and desktop-side config resolution.
 
+This is the current official Native Desktop Agent implementation. It is not deprecated in Phase 0.
+
 ## 4. Current Reality
 
-This module replaces the former three-way split in the desktop JavaFX layer.
+This module replaces the former three-way split in the desktop JavaFX layer and is the current native-host desktop implementation that Jarvis ships today.
 
 Single-module responsibilities now include:
 
@@ -32,6 +34,11 @@ Single-module responsibilities now include:
 - shell host: `org.jarvis.desktop.app.DesktopShellHost`
 
 The launcher is now the single startup path. Opening the desktop shell happens inside the same JVM/module instead of spawning a second desktop jar process.
+
+Relationship note:
+
+- supporting launcher scripts such as `scripts/product/jarvis-launcher.sh` wrap this same runtime path
+- some runtime diagnostics still use the historical label `desktop-client`, but the code-backed implementation is `desktop-javafx`
 
 ## 6. Configuration
 

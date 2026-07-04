@@ -224,7 +224,8 @@ mvn -pl apps/api-gateway test
 Runtime paths:
 
 - local: `./scripts/runtime-up.sh`
-- k8s: `./jarvis-launch.sh`
+- k8s mutable launcher path: `./jarvis-launch.sh`
+- k8s digest-pinned release path: `./scripts/product/jarvis-deploy-prod.sh --overlay=./k8s/overlays/prod-release`
 
 ## 17. Verification Coverage
 

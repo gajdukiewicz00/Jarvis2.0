@@ -1,8 +1,21 @@
 # llm-server
 
+> **Status: Deprecated runtime path / Legacy candidate.**
+>
+> The path under `docker/llm-server/` no longer exists on disk. The current
+> Python wrapper lives at [`apps/llm-server-py/`](../../apps/llm-server-py/),
+> which itself is **deprecated** in favour of the native Phase-3
+> `host-model-daemon` (see [docs/services/host-model-daemon.md](host-model-daemon.md)
+> and [docs/LEGACY_AND_CLEANUP.md](../LEGACY_AND_CLEANUP.md)).
+>
+> All path references in this file that begin with `docker/llm-server/...`
+> should be read as `apps/llm-server-py/...`. Configuration semantics are
+> unchanged. Do not rely on this file for fresh integrations — point new
+> work at `host-model-daemon`.
+
 ## 1. Name
 
-`docker/llm-server`
+`apps/llm-server-py` (formerly `docker/llm-server`)
 
 ## 2. Type
 
@@ -16,16 +29,18 @@ Loads a local language model and provides the actual inference endpoint used by 
 
 This is a real runtime component, but it is not part of the Maven reactor. It is managed through Docker/runtime scripts and is optional in both local and Kubernetes paths.
 
+Deprecated runtime path. Kept temporarily for compatibility and migration evidence. Production runtime target is native host + MicroK8s under `jarvis-prod`.
+
 ## 5. Entry Points
 
-- Python app entry: `docker/llm-server/app/main.py`
+- Python app entry: `apps/llm-server-py/app/main.py`
 - FastAPI app object: `app`
 
 ## 6. Configuration
 
 Main configuration source:
 
-- `docker/llm-server/app/config.py`
+- `apps/llm-server-py/app/config.py`
 
 Important settings include:
 
@@ -80,13 +95,13 @@ Supported repo runtime path:
 ENABLE_LLM=true ./scripts/runtime-up.sh
 ```
 
-The module is also packaged by its Dockerfile under `docker/llm-server/`.
+The module is now packaged via [`apps/llm-server-py/Containerfile`](../../apps/llm-server-py/Containerfile) (rootless OCI build with podman/buildah). The older `docker/llm-server/` tree was retired and a CI guard ([`scripts/guards/reject-new-docker-runtime-files.sh`](../../scripts/guards/reject-new-docker-runtime-files.sh)) rejects new files in that path.
 
-Canonical direct Docker path:
+Canonical direct container path:
 
 ```bash
-docker build -t jarvis-llm-server ./docker/llm-server
-docker run --rm -p 15000:5000 \
+podman build -t jarvis-llm-server -f apps/llm-server-py/Containerfile apps/llm-server-py
+podman run --rm -p 15000:5000 \
   -v "$HOME/.jarvis/models/llm:/models:ro" \
   jarvis-llm-server
 ```
@@ -96,26 +111,32 @@ That default image is CPU-safe by design: it keeps `LLM_BACKEND=llamacpp`, mount
 Explicit transformers build profile:
 
 ```bash
-docker build \
+podman build \
   --build-arg REQUIREMENTS_FILE=requirements.txt \
   --build-arg INSTALL_TORCH=true \
   -t jarvis-llm-server-transformers \
-  ./docker/llm-server
+  -f apps/llm-server-py/Containerfile apps/llm-server-py
 ```
 
 Explicit GPU llama.cpp build profile:
 
 ```bash
-docker build \
+podman build \
   --build-arg LLAMA_CPP_EXTRA_INDEX_URL=https://abetlen.github.io/llama-cpp-python/whl/cu124 \
   -t jarvis-llm-server-gpu \
-  ./docker/llm-server
+  -f apps/llm-server-py/Containerfile apps/llm-server-py
 
-docker run --rm --gpus all -p 15000:5000 \
+podman run --rm --device nvidia.com/gpu=all -p 15000:5000 \
   -e N_GPU_LAYERS=-1 \
   -v "$HOME/.jarvis/models/llm:/models:ro" \
   jarvis-llm-server-gpu
 ```
+
+Note: the new canonical Phase-3 production path is the **native llama.cpp host
+daemon** (see [docs/services/host-model-daemon.md](host-model-daemon.md));
+the `apps/llm-server-py/` Python wrapper is retained only because the
+local-runtime AI scripts (`scripts/ai-up.sh`, `scripts/runtime-up.sh
+ENABLE_LLM=true`) still drive it.
 
 ## 13. Implementation Status
 

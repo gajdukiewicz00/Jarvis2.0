@@ -8,11 +8,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Component
 public class SmartHomeDeviceCatalog {
 
-    private final List<SmartHomeDeviceDefinition> devices = List.of(
+    // Mutable so devices can be added/removed at runtime without a redeploy.
+    private final List<SmartHomeDeviceDefinition> devices = new CopyOnWriteArrayList<>(List.of(
             new SmartHomeDeviceDefinition(
                     "kitchen_light",
                     "Kitchen Light",
@@ -40,10 +42,22 @@ public class SmartHomeDeviceCatalog {
                     "Entrance",
                     SmartHomeDeviceType.LOCK,
                     List.of("LOCK", "UNLOCK"),
-                    new LinkedHashMap<>(Map.of("locked", true))));
+                    new LinkedHashMap<>(Map.of("locked", true)))));
 
     public List<SmartHomeDeviceDefinition> all() {
-        return devices;
+        return List.copyOf(devices);
+    }
+
+    /** Add or replace a device definition at runtime. */
+    public SmartHomeDeviceDefinition register(SmartHomeDeviceDefinition definition) {
+        devices.removeIf(d -> d.id().equals(definition.id()));
+        devices.add(definition);
+        return definition;
+    }
+
+    /** Remove a device by id. Returns true if a device was removed. */
+    public boolean remove(String deviceId) {
+        return devices.removeIf(d -> d.id().equals(deviceId));
     }
 
     public Optional<SmartHomeDeviceDefinition> findById(String deviceId) {

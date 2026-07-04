@@ -63,7 +63,7 @@ clean:
 
 obs-status:
 	@echo "Observability pod status:"
-	@$(KUBECTL) get pods -n jarvis -l 'app in (prometheus,grafana,loki,tempo,alloy)' -o wide 2>/dev/null || echo "(kubectl not available or cluster not running)"
+	@$(KUBECTL) get pods -n jarvis-prod -l 'app in (prometheus,grafana,loki,tempo,alloy)' -o wide 2>/dev/null || echo "(kubectl not available or cluster not running)"
 
 obs-verify:
 	./scripts/verify-observability.sh
@@ -75,19 +75,19 @@ obs-grafana:
 	@echo "Fallback helper only. Primary Grafana URL is https://grafana.jarvis.local"
 	@echo "Grafana credentials live in ~/.jarvis/secrets/secrets.env"
 	@echo "Opening Grafana port-forward on http://localhost:3000"
-	$(KUBECTL) port-forward -n jarvis svc/grafana 3000:3000
+	$(KUBECTL) port-forward -n jarvis-prod svc/grafana 3000:3000
 
 obs-prometheus:
 	@echo "Opening Prometheus port-forward on http://localhost:9090"
-	$(KUBECTL) port-forward -n jarvis svc/prometheus 9090:9090
+	$(KUBECTL) port-forward -n jarvis-prod svc/prometheus 9090:9090
 
 obs-loki:
 	@echo "Opening Loki port-forward on http://localhost:3100"
-	$(KUBECTL) port-forward -n jarvis svc/loki 3100:3100
+	$(KUBECTL) port-forward -n jarvis-prod svc/loki 3100:3100
 
 obs-tempo:
 	@echo "Opening Tempo port-forward on http://localhost:3200"
-	$(KUBECTL) port-forward -n jarvis svc/tempo 3200:3200
+	$(KUBECTL) port-forward -n jarvis-prod svc/tempo 3200:3200
 
 launch:
 	./jarvis-launch.sh

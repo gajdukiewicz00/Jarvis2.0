@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "openaiDeveloperDocs": {
+      "url": "https://developers.openai.com/mcp"
+    },
+    "jarvisExampleLocalServer": {
+      "command": "python3",
+      "args": [
+        "./path/to/local_mcp_server.py"
+      ],
+      "env": {
+        "JARVIS_EXAMPLE_SECRET": "set-locally-only"
+      }
+    }
+  }
+}

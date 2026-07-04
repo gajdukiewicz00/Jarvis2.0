@@ -13,7 +13,7 @@
 
     <groupId>org.jarvis</groupId>
     <artifactId>jarvis-root</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <properties>
@@ -32,9 +32,25 @@
         <commons-fileupload.version>1.6.0</commons-fileupload.version>
         <log4j2.version>2.25.3</log4j2.version>
         <logstash.logback.encoder.version>7.4</logstash.logback.encoder.version>
+        <jib.maven.plugin.version>3.4.4</jib.maven.plugin.version>
+        <jib.from.image>eclipse-temurin:21-jre-jammy</jib.from.image>
+        <jib.image.registry>localhost:5000</jib.image.registry>
+        <jib.image.namespace>jarvis</jib.image.namespace>
+        <jib.image.tag>local</jib.image.tag>
+        <jib.container.port>8080</jib.container.port>
+        <!-- Skip Jib by default. Service modules override this to false. -->
+        <jib.skip>true</jib.skip>
+        <!-- Keep the default test lifecycle Docker-free. -->
+        <jarvis.surefire.excludedGroups>integration,microk8s</jarvis.surefire.excludedGroups>
+        <jarvis.failsafe.groups>integration</jarvis.failsafe.groups>
     </properties>
 
     <modules>
+        <!-- Shared libraries (no Spring, pure POJOs / contracts). -->
+        <module>libs/command-schema</module>
+        <module>libs/event-schema</module>
+        <module>libs/sync-protocol</module>
+
         <module>apps/jarvis-common</module>
         <module>apps/api-gateway</module>
         <module>apps/voice-gateway</module>
@@ -50,6 +66,10 @@
         <module>apps/llm-service</module>
         <module>apps/memory-service</module>
         <module>apps/smart-home-service</module>
+        <module>apps/media-service</module>
+        <module>apps/agent-service</module>
+        <module>apps/sync-service</module>
+        <module>apps/cloud-relay</module>
         <module>apps/desktop-javafx</module>
     </modules>
 
@@ -170,6 +190,50 @@
                         <excludeFilterFile>${maven.multiModuleProjectDirectory}/config/quality/spotbugs-exclude-baseline.xml</excludeFilterFile>
                     </configuration>
                 </plugin>
+
+                <!--
+                    Jib — Dockerless OCI image build (Phase 2).
+                    Activate per-service by adding <plugin>jib-maven-plugin</plugin>
+                    to its <build><plugins> block. Override jib.container.port in
+                    that service's <properties> to match its k8s containerPort.
+                    Build modes:
+                        mvn -pl apps/<svc> -am -DskipTests jib:buildTar  (offline tar, no daemon)
+                        mvn -pl apps/<svc> -am -DskipTests jib:build     (push to localhost:5000 registry)
+                -->
+                <plugin>
+                    <groupId>com.google.cloud.tools</groupId>
+                    <artifactId>jib-maven-plugin</artifactId>
+                    <version>${jib.maven.plugin.version}</version>
+                    <configuration>
+                        <skip>${jib.skip}</skip>
+                        <from>
+                            <image>${jib.from.image}</image>
+                        </from>
+                        <to>
+                            <image>${jib.image.registry}/${jib.image.namespace}/${project.artifactId}</image>
+                            <tags>
+                                <tag>${jib.image.tag}</tag>
+                                <tag>${project.version}</tag>
+                            </tags>
+                        </to>
+                        <container>
+                            <user>1000:1000</user>
+                            <ports>
+                                <port>${jib.container.port}</port>
+                            </ports>
+                            <jvmFlags>
+                                <jvmFlag>-XX:+UseContainerSupport</jvmFlag>
+                                <jvmFlag>-XX:MaxRAMPercentage=75.0</jvmFlag>
+                                <jvmFlag>-Djava.security.egd=file:/dev/./urandom</jvmFlag>
+                            </jvmFlags>
+                            <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
+                        </container>
+                        <allowInsecureRegistries>true</allowInsecureRegistries>
+                        <outputPaths>
+                            <tar>${project.build.directory}/${project.artifactId}-${project.version}.image.tar</tar>
+                        </outputPaths>
+                    </configuration>
+                </plugin>
             </plugins>
         </pluginManagement>
 
@@ -186,10 +250,82 @@
                 <groupId>com.github.spotbugs</groupId>
                 <artifactId>spotbugs-maven-plugin</artifactId>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludedGroups>${jarvis.surefire.excludedGroups}</excludedGroups>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <groups>${jarvis.failsafe.groups}</groups>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*TestCase.java</include>
+                        <include>**/*IT.java</include>
+                        <include>**/*ITCase.java</include>
+                        <include>**/*IntegrationTest.java</include>
+                    </includes>
+                    <failIfNoTests>false</failIfNoTests>
+                    <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
     <profiles>
+        <profile>
+            <id>integration</id>
+            <properties>
+                <jarvis.failsafe.groups>integration</jarvis.failsafe.groups>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default</id>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>microk8s</id>
+            <properties>
+                <jarvis.failsafe.groups>microk8s</jarvis.failsafe.groups>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>default</id>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <profile>
             <id>ci-quality</id>
             <build>

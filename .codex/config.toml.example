@@ -1,0 +1,41 @@
+# Jarvis2.0 native Codex project config example.
+# Copy to .codex/config.toml only if the team decides to commit a shared project config.
+# Keep secrets out of this file.
+
+model = "set-for-your-account"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[features]
+multi_agent = true
+personality = true
+codex_hooks = false
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
+enabled = true
+required = false
+tool_timeout_sec = 60
+
+# Optional native hook wiring example.
+# Uncomment only after reviewing .codex/hooks/README.md.
+#
+# [features]
+# codex_hooks = true
+#
+# [[hooks.PreToolUse]]
+# matcher = "^Bash$"
+# [[hooks.PreToolUse.hooks]]
+# type = "command"
+# command = 'bash "$(git rev-parse --show-toplevel)/.codex/hooks/pre-command.sh"'
+# timeout = 10
+# statusMessage = "Running Jarvis pre-command check"
+#
+# [[hooks.PostToolUse]]
+# matcher = "^Bash$"
+# [[hooks.PostToolUse.hooks]]
+# type = "command"
+# command = 'bash "$(git rev-parse --show-toplevel)/.codex/hooks/post-command.sh"'
+# timeout = 10
+# statusMessage = "Running Jarvis post-command summary"

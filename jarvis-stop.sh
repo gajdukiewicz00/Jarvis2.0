@@ -3,7 +3,7 @@
 # =============================================================================
 # Jarvis 2.0 - Kubernetes Stop Script (prod-only)
 # =============================================================================
-# Stops all Jarvis resources in the jarvis namespace.
+# Stops all Jarvis resources in the production namespace.
 # =============================================================================
 
 set -euo pipefail
@@ -11,7 +11,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}"
 K8S_DIR="${PROJECT_DIR}/k8s"
-NAMESPACE="jarvis"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 JARVIS_HOME="${HOME}/.jarvis"
 
 YES=false
@@ -54,6 +54,15 @@ fi
 echo -e "${YELLOW}⏳${NC} Останавливаю port-forward..."
 pkill -f "kubectl port-forward.*jarvis" 2>/dev/null || true
 echo -e "${GREEN}✓${NC} Port-forward остановлен"
+
+# Останавливаем workstation-local vision-security host process (если был поднят
+# jarvis-launch.sh --full). Безопасно вызывать, даже если ничего не запущено.
+VISION_DOWN_SCRIPT="${PROJECT_DIR}/scripts/product/jarvis-vision-security-down.sh"
+if [[ -x "${VISION_DOWN_SCRIPT}" ]]; then
+    echo -e "${YELLOW}⏳${NC} Останавливаю workstation vision-security-service..."
+    "${VISION_DOWN_SCRIPT}" >/dev/null 2>&1 || true
+    echo -e "${GREEN}✓${NC} vision-security-service остановлен"
+fi
 
 echo ""
 if [[ "$YES" != "true" ]]; then

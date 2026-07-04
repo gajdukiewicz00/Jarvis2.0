@@ -1,0 +1,27 @@
+# AGENTS.local.md
+
+Jarvis project convention.
+
+Codex does not auto-load `AGENTS.local.md`. Keep private notes here if you want a local, gitignored scratchpad for:
+
+- machine-specific commands
+- personal verification preferences
+- temporary do-not-run reminders
+- local tool paths
+
+If you want Codex to apply some of these instructions automatically, copy the safe subset into:
+
+- `~/.codex/AGENTS.override.md` for a personal global override, or
+- `AGENTS.override.md` in the working directory when you intentionally want a repo-local override
+
+Suggested structure:
+
+```md
+# Local notes
+
+- Prefer local smoke checks before Kubernetes checks.
+- My preferred module test command:
+  `mvn -pl apps/<module> -am test`
+- Local-only tools:
+  `/path/to/private/tool`
+```

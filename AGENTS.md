@@ -210,3 +210,24 @@ The goal: Be helpful without being annoying. Check in a few times a day, do usef
 ## Make It Yours
 
 This is a starting point. Add your own conventions, style, and rules as you figure out what works.
+
+## Codex Workspace
+
+This repository also maintains a Codex-oriented workspace under `.codex/` and repo-scoped native skills under `.agents/skills/`.
+
+- Prefer native Codex locations for shared behavior:
+  - `AGENTS.md`
+  - `.codex/config.toml`
+  - `.codex/hooks.json` or inline `[hooks]`
+  - `.agents/skills/`
+- Treat these as Jarvis project conventions unless a file says otherwise:
+  - `AGENTS.local.md`
+  - `.mcp.json`
+  - `.codex/prompts/`
+  - `.codex/workflows/`
+  - `.codex/agents/*.md`
+- Never commit private local overrides:
+  - `AGENTS.local.md`
+  - `.codex/config.local.toml`
+  - `.mcp.json`
+- Keep the central explanation in `.codex/README.md` honest about what Codex loads natively versus what the Jarvis repo uses as supporting workflow docs.

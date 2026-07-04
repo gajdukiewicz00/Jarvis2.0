@@ -10,8 +10,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="${SCRIPT_DIR}"
-K8S_DIR="${PROJECT_DIR}/k8s"
-NAMESPACE="jarvis"
+# Canonical source of truth for Kubernetes manifests. infra/k8s/ supersedes the
+# legacy k8s/ tree (see infra/k8s/README.md). JARVIS_K8S_DIR override exists for
+# migration smoke tests only and is not honored by production tooling.
+K8S_DIR="${JARVIS_K8S_DIR:-${PROJECT_DIR}/infra/k8s}"
+NAMESPACE="${JARVIS_NAMESPACE:-jarvis-prod}"
 
 JARVIS_HOME="${HOME}/.jarvis"
 JARVIS_MODELS_DIR="${JARVIS_MODELS_DIR:-${PROJECT_DIR}/models}"
@@ -29,19 +32,121 @@ GRAFANA_SECRET_USER_KEY="GRAFANA_ADMIN_USER"
 GRAFANA_SECRET_PASSWORD_KEY="GRAFANA_ADMIN_PASSWORD"
 
 # Feature flags
-ENABLE_LLM="${ENABLE_LLM:-false}"
-ENABLE_MEMORY="${ENABLE_MEMORY:-false}"
+# A "full" launch (memory + llm + workstation-local vision-security) is the
+# default so user-facing flows like /api/v1/memory/recent and
+# /api/v1/llm/* surface real data instead of FEATURE_DISABLED. Operators can
+# downgrade to core-only with --core-only (no memory / no LLM / no vision)
+# or disable each independently.
+ENABLE_LLM="${ENABLE_LLM:-true}"
+ENABLE_MEMORY="${ENABLE_MEMORY:-true}"
 ENABLE_GPU="${ENABLE_GPU:-true}"
+# vision-security-service is workstation-local by design (camera + screen).
+# When enabled, jarvis-launch.sh starts the host Java process on port 8094
+# and patches the selectorless Endpoints object so api-gateway pods can
+# proxy /api/v1/vision-security/** to the host.
+ENABLE_VISION_SECURITY="${ENABLE_VISION_SECURITY:-true}"
 ENABLE_BUILD="${ENABLE_BUILD:-true}"
 ENABLE_IMPORT="${ENABLE_IMPORT:-auto}"
 ENABLE_PORT_FORWARD="${ENABLE_PORT_FORWARD:-false}"
 REQUIRE_VOICE_GATEWAY="${JARVIS_REQUIRE_VOICE_GATEWAY:-false}"
 FORCE_REDEPLOY="${JARVIS_FORCE_REDEPLOY:-false}"
+VISION_SECURITY_BRIDGE_WIRED="false"
 
 # Image configuration (single source of truth for build + deploy)
-IMAGE_REGISTRY="${IMAGE_REGISTRY:-}"
+IMAGE_REGISTRY="${IMAGE_REGISTRY:-localhost:5000}"
 IMAGE_REPO="${IMAGE_REPO:-jarvis}"
 IMAGE_TAG="${IMAGE_TAG:-local}"
+RELEASE_OVERLAY_PATH="${JARVIS_RELEASE_OVERLAY_PATH:-${K8S_DIR}/overlays/prod-release}"
+USE_RELEASE_OVERLAY="false"
+DRY_RUN="false"
+
+print_usage() {
+    cat <<EOF
+Usage: ./jarvis-launch.sh [options]
+
+Options:
+  --help, -h                 Show this help and exit without touching the cluster
+  --dry-run                  Print the resolved deploy plan and exit without side effects
+  --force-redeploy           Skip readiness short-circuit checks and re-apply the deploy path
+  --release-overlay[=PATH]   Deploy from a digest-pinned prod-release overlay instead of mutable local tags
+  --full                     Bring up memory + LLM + workstation-local
+                             vision-security (the launcher default)
+  --core-only                Skip memory + LLM + vision-security (only core
+                             backend, observability, voice-gateway)
+  --enable-llm               Request optional LLM workloads (on by default; pair with --core-only)
+  --disable-llm              Skip LLM workloads even in full mode
+  --enable-memory            Request optional memory workloads (on by default; pair with --core-only)
+  --disable-memory           Skip memory workloads even in full mode
+  --enable-vision-security   Start the workstation-local vision-security
+                             service and wire the k8s host bridge (default)
+  --disable-vision-security  Skip vision-security; api-gateway keeps the
+                             /api/v1/vision-security/** route in FEATURE_DISABLED
+  --disable-gpu              Disable GPU-dependent LLM setup for this run
+
+Notes:
+  - Default launcher mode is the mutable local k3s/dev path with memory + LLM enabled.
+  - --core-only matches the "minimal smoke" pre-2026-05 default if you don't have a model PVC seeded.
+  - Honest release deployments should use --release-overlay or ./scripts/product/jarvis-deploy-prod.sh.
+EOF
+}
+
+for arg in "$@"; do
+    case "${arg}" in
+        --help|-h)
+            print_usage
+            exit 0
+            ;;
+        --dry-run)
+            DRY_RUN="true"
+            ;;
+        --force-redeploy)
+            FORCE_REDEPLOY="true"
+            ;;
+        --release-overlay)
+            USE_RELEASE_OVERLAY="true"
+            ;;
+        --release-overlay=*)
+            USE_RELEASE_OVERLAY="true"
+            RELEASE_OVERLAY_PATH="${arg#*=}"
+            ;;
+        --enable-llm)
+            ENABLE_LLM="true"
+            ;;
+        --disable-llm)
+            ENABLE_LLM="false"
+            ;;
+        --enable-memory)
+            ENABLE_MEMORY="true"
+            ;;
+        --disable-memory)
+            ENABLE_MEMORY="false"
+            ;;
+        --enable-vision-security)
+            ENABLE_VISION_SECURITY="true"
+            ;;
+        --disable-vision-security)
+            ENABLE_VISION_SECURITY="false"
+            ;;
+        --full)
+            ENABLE_LLM="true"
+            ENABLE_MEMORY="true"
+            ENABLE_VISION_SECURITY="true"
+            ;;
+        --core-only)
+            ENABLE_LLM="false"
+            ENABLE_MEMORY="false"
+            ENABLE_VISION_SECURITY="false"
+            ;;
+        --disable-gpu)
+            ENABLE_GPU="false"
+            ;;
+        *)
+            echo "❌ Unknown argument: ${arg}" >&2
+            print_usage >&2
+            exit 1
+            ;;
+    esac
+done
 
 CORE_SERVICES=(
     "api-gateway"
@@ -120,7 +225,9 @@ write_run_summary() {
   "grafanaUrl": "${RUN_GRAFANA_URL}",
   "enableLlm": "${ENABLE_LLM}",
   "enableMemory": "${ENABLE_MEMORY}",
-  "enableGpu": "${ENABLE_GPU}"
+  "enableGpu": "${ENABLE_GPU}",
+  "enableVisionSecurity": "${ENABLE_VISION_SECURITY}",
+  "visionSecurityBridgeWired": "${VISION_SECURITY_BRIDGE_WIRED}"
 }
 EOF
 }
@@ -140,6 +247,32 @@ warn() {
 
 info() {
     echo -e "${CYAN}[INFO]${NC} $*"
+}
+
+print_dry_run_summary() {
+    init_image_config
+
+    echo "Jarvis launch dry run"
+    echo "  mode: $([[ "${USE_RELEASE_OVERLAY}" == "true" ]] && echo "digest-pinned release overlay" || echo "mutable local launcher")"
+    if [[ "${USE_RELEASE_OVERLAY}" == "true" ]]; then
+        echo "  release overlay: ${RELEASE_OVERLAY_PATH}"
+        if [[ -f "${RELEASE_OVERLAY_PATH}/kustomization.yaml" ]]; then
+            echo "  overlay status: present"
+        else
+            echo "  overlay status: missing"
+        fi
+    else
+        echo "  image base: ${IMAGE_BASE}"
+        echo "  image tag: ${IMAGE_TAG}"
+        echo "  mutable skip-redeploy: disabled"
+    fi
+    echo "  optional llm: ${ENABLE_LLM}"
+    echo "  optional memory: ${ENABLE_MEMORY}"
+    echo "  optional vision-security host bridge: ${ENABLE_VISION_SECURITY}"
+    echo "  gpu requested: ${ENABLE_GPU}"
+    echo "  force redeploy: ${FORCE_REDEPLOY}"
+    echo ""
+    echo "No cluster or filesystem changes were made."
 }
 
 is_truthy() {
@@ -200,6 +333,109 @@ image_name() {
 image_ref() {
     local service="$1"
     printf '%s:%s' "$(image_name "${service}")" "${IMAGE_TAG}"
+}
+
+mutable_app_deployments() {
+    local -a candidates=("${CORE_SERVICES[@]}" "sync-service")
+    local deployment
+    local -A seen=()
+
+    if [[ "${ENABLE_LLM}" == "true" ]]; then
+        candidates+=("${LLM_SERVICES[@]}")
+    fi
+    if [[ "${ENABLE_MEMORY}" == "true" ]]; then
+        candidates+=("${MEMORY_SERVICES[@]}")
+    fi
+
+    for deployment in "${candidates[@]}"; do
+        if [[ -n "${seen[${deployment}]:-}" ]]; then
+            continue
+        fi
+        seen["${deployment}"]=1
+        printf '%s\n' "${deployment}"
+    done
+}
+
+force_mutable_image_refresh_policy() {
+    if [[ "${USE_RELEASE_OVERLAY}" == "true" ]]; then
+        return 0
+    fi
+
+    local deployment
+    while IFS= read -r deployment; do
+        if [[ -z "${deployment}" ]]; then
+            continue
+        fi
+        if ! kubectl get deployment "${deployment}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+            continue
+        fi
+        if ! kubectl patch deployment "${deployment}" -n "${NAMESPACE}" --type='json' \
+            -p='[{"op":"replace","path":"/spec/template/spec/containers/0/imagePullPolicy","value":"Always"}]' \
+            >/dev/null; then
+            warn "Failed to set imagePullPolicy=Always on deployment/${deployment}"
+            OPTIONAL_FAILED="true"
+        fi
+    done < <(mutable_app_deployments)
+}
+
+restart_mutable_app_workloads() {
+    if [[ "${USE_RELEASE_OVERLAY}" == "true" ]]; then
+        return 0
+    fi
+
+    local -a refs=()
+    local deployment
+    while IFS= read -r deployment; do
+        if [[ -z "${deployment}" ]]; then
+            continue
+        fi
+        if kubectl get deployment "${deployment}" -n "${NAMESPACE}" >/dev/null 2>&1; then
+            refs+=("deployment/${deployment}")
+        fi
+    done < <(mutable_app_deployments)
+
+    if [[ "${#refs[@]}" -eq 0 ]]; then
+        return 0
+    fi
+
+    info "Restarting mutable app workloads so ${IMAGE_BASE}/*:${IMAGE_TAG} images are refreshed..."
+    if ! kubectl rollout restart -n "${NAMESPACE}" "${refs[@]}" >/dev/null; then
+        warn "Failed to restart one or more mutable app workloads"
+        OPTIONAL_FAILED="true"
+    fi
+}
+
+has_release_overlay() {
+    [[ -f "${RELEASE_OVERLAY_PATH}/kustomization.yaml" ]]
+}
+
+release_overlay_includes_service() {
+    local service="$1"
+    has_release_overlay || return 1
+    grep -Eq "^[[:space:]]*name:[[:space:]]*jarvis/${service}[[:space:]]*$" "${RELEASE_OVERLAY_PATH}/kustomization.yaml"
+}
+
+ensure_release_overlay_supports_requested_features() {
+    if [[ "${USE_RELEASE_OVERLAY}" != "true" ]]; then
+        return 0
+    fi
+
+    has_release_overlay || fail "Missing digest-pinned release overlay: ${RELEASE_OVERLAY_PATH}/kustomization.yaml. Generate it with ./scripts/product/jarvis-promote-images.sh first."
+
+    if [[ "${ENABLE_LLM}" == "true" ]]; then
+        release_overlay_includes_service "llm-server" || fail "Release overlay does not pin llm-server. Regenerate it with ./scripts/product/jarvis-promote-images.sh --include-llm."
+        release_overlay_includes_service "llm-service" || fail "Release overlay does not pin llm-service. Regenerate it with ./scripts/product/jarvis-promote-images.sh --include-llm."
+    fi
+
+    if [[ "${ENABLE_MEMORY}" == "true" ]]; then
+        release_overlay_includes_service "embedding-service" || fail "Release overlay does not pin embedding-service. Regenerate it with ./scripts/product/jarvis-promote-images.sh --include-data."
+        release_overlay_includes_service "memory-service" || fail "Release overlay does not pin memory-service. Regenerate it with ./scripts/product/jarvis-promote-images.sh --include-data."
+    fi
+}
+
+apply_release_overlay() {
+    ensure_release_overlay_supports_requested_features
+    "${PROJECT_DIR}/scripts/product/jarvis-deploy-prod.sh" --namespace="${NAMESPACE}" --overlay="${RELEASE_OVERLAY_PATH}"
 }
 
 prepare_prod_overlay() {
@@ -705,6 +941,8 @@ build_images() {
     IMAGE_REGISTRY="${IMAGE_REGISTRY}" \
     IMAGE_REPO="${IMAGE_REPO}" \
     IMAGE_TAG="${IMAGE_TAG}" \
+    REGISTRY="${IMAGE_REGISTRY}" \
+    IMAGE_NAMESPACE="${IMAGE_REPO}" \
     BUILD_MVN_CLEAN=false \
     JARVIS_IMPORT_REQUIRE_K3S_CONTEXT="${require_k3s_context}" \
     JARVIS_K3S_IMPORT_MODE=auto \
@@ -726,12 +964,20 @@ workload_is_ready() {
     local desired=""
     local ready=""
     local available=""
+    local updated=""
+    local current=""
+    local generation=""
+    local observed_generation=""
 
     case "${kind}" in
         deployment)
             desired="$(jsonpath_value deployment "${name}" '{.spec.replicas}')"
             ready="$(jsonpath_value deployment "${name}" '{.status.readyReplicas}')"
             available="$(jsonpath_value deployment "${name}" '{.status.availableReplicas}')"
+            updated="$(jsonpath_value deployment "${name}" '{.status.updatedReplicas}')"
+            current="$(jsonpath_value deployment "${name}" '{.status.replicas}')"
+            generation="$(jsonpath_value deployment "${name}" '{.metadata.generation}')"
+            observed_generation="$(jsonpath_value deployment "${name}" '{.status.observedGeneration}')"
             ;;
         statefulset)
             desired="$(jsonpath_value statefulset "${name}" '{.spec.replicas}')"
@@ -746,12 +992,22 @@ workload_is_ready() {
     [[ "${desired}" =~ ^[0-9]+$ ]] || return 1
     [[ "${ready}" =~ ^[0-9]+$ ]] || ready=0
     [[ "${available}" =~ ^[0-9]+$ ]] || available=0
+    [[ "${updated}" =~ ^[0-9]+$ ]] || updated="${ready}"
+    [[ "${current}" =~ ^[0-9]+$ ]] || current="${desired}"
 
     if [[ "${desired}" -eq 0 ]]; then
         if [[ "${allow_zero}" == "true" ]]; then
             return 0
         fi
         return 1
+    fi
+
+    if [[ "${kind}" == "deployment" ]]; then
+        if [[ "${generation}" =~ ^[0-9]+$ && "${observed_generation}" =~ ^[0-9]+$ && "${observed_generation}" -lt "${generation}" ]]; then
+            return 1
+        fi
+        [[ "${updated}" -ge "${desired}" ]] || return 1
+        [[ "${current}" -le "${updated}" ]] || return 1
     fi
 
     [[ "${ready}" -ge "${desired}" && "${available}" -ge "${desired}" ]]
@@ -804,6 +1060,27 @@ backend_core_ready() {
         return 1
     fi
 
+    if ! pods_have_no_image_pull_failures; then
+        return 1
+    fi
+
+    return 0
+}
+
+pods_have_no_image_pull_failures() {
+    # Surface ImagePullBackOff / ErrImagePull in the namespace so the launcher
+    # cannot mark itself "ready" while a workload is permanently broken on its
+    # image. Returns 0 when no failures, 1 otherwise.
+    local broken
+    broken="$(kubectl get pods -n "${NAMESPACE}" \
+        -o "jsonpath={range .items[*]}{range .status.containerStatuses[*]}{.state.waiting.reason}{'|'}{end}{end}" 2>/dev/null \
+        | tr '|' '\n' \
+        | grep -E '^(ImagePullBackOff|ErrImagePull|CrashLoopBackOff)$' \
+        | head -n 1 || true)"
+    if [[ -n "${broken}" ]]; then
+        warn "Pod(s) in ${NAMESPACE} are in ${broken} — readiness blocked"
+        return 1
+    fi
     return 0
 }
 
@@ -829,6 +1106,11 @@ assess_optional_workloads() {
             OPTIONAL_FAILED="true"
             warn "Optional memory workloads not fully ready"
         fi
+    fi
+
+    if [[ "${ENABLE_VISION_SECURITY}" == "true" && "${VISION_SECURITY_BRIDGE_WIRED}" != "true" ]]; then
+        OPTIONAL_FAILED="true"
+        warn "Optional vision-security host bridge not wired"
     fi
 }
 
@@ -956,6 +1238,16 @@ print_ready_status() {
     echo -e "  ${CYAN}API Gateway (HTTPS):${NC} ${RUN_API_URL}"
     echo -e "  ${CYAN}Voice Gateway (WSS):${NC} ${RUN_VOICE_URL}"
     echo -e "  ${CYAN}Grafana:${NC} ${RUN_GRAFANA_URL}"
+    if [[ "${ENABLE_VISION_SECURITY}" == "true" ]]; then
+        if [[ "${VISION_SECURITY_BRIDGE_WIRED}" == "true" ]]; then
+            echo -e "  ${CYAN}Vision Security (host bridge):${NC} http://127.0.0.1:8094  →  vision-security-service.${NAMESPACE}.svc.cluster.local:8094"
+        else
+            echo -e "  ${YELLOW}Vision Security:${NC} requested but host bridge not wired (see warnings)"
+        fi
+    else
+        echo -e "  ${CYAN}Vision Security:${NC} disabled (--disable-vision-security or --core-only)"
+    fi
+    echo -e "  ${CYAN}TTS:${NC} optional in k8s — voice-gateway returns TTS_UNAVAILABLE when espeak-ng is not in the image (JARVIS_VOICE_TTS_REQUIRED_FOR_READINESS=false keeps readiness UP)"
     echo ""
     echo -e "${CYAN}Status:${NC} ${overall_status}"
     echo -e "${YELLOW}Next:${NC}"
@@ -969,13 +1261,25 @@ maybe_skip_redeploy() {
         return 1
     fi
 
+    if [[ "${USE_RELEASE_OVERLAY}" != "true" ]]; then
+        info "Mutable launcher mode is active; forcing redeploy to avoid stale-runtime drift"
+        return 1
+    fi
+
+    ensure_release_overlay_supports_requested_features
+
     if ! backend_core_ready; then
+        return 1
+    fi
+
+    if ! "${PROJECT_DIR}/scripts/product/jarvis-rollout-validate.sh" --namespace="${NAMESPACE}" --overlay="${RELEASE_OVERLAY_PATH}" >/dev/null 2>&1; then
+        info "Live cluster does not match the digest-pinned release overlay; redeploy required"
         return 1
     fi
 
     verify_observability_stack
 
-    info "Backend already running and core workloads are ready; skipping rebuild/reapply"
+    info "Backend already matches the digest-pinned release overlay; skipping rebuild/reapply"
     assess_optional_workloads
     if [[ "${OPTIONAL_FAILED}" == "true" ]]; then
         RUN_STATUS="degraded"
@@ -997,6 +1301,66 @@ print_header() {
     echo ""
 }
 
+# Workstation-local vision-security-service bridge.
+# vision-security-service requires camera + screen access on the host, so we
+# run it as a host Java process and expose it to api-gateway pods via the
+# selectorless Service in infra/k8s/base/vision-security-service/. After the
+# host process is healthy we patch the Endpoints object to the host's LAN IP
+# (same pattern as the host-model-daemon bridge).
+ensure_vision_security_local_bridge() {
+    if [[ "${ENABLE_VISION_SECURITY}" != "true" ]]; then
+        info "vision-security disabled; skipping workstation host bridge"
+        return 0
+    fi
+
+    local up_script="${PROJECT_DIR}/scripts/product/jarvis-vision-security-up.sh"
+    local patcher="${PROJECT_DIR}/infra/scripts/microk8s/apply-vision-security-host-endpoints.sh"
+
+    if [[ ! -x "${up_script}" ]]; then
+        warn "Missing or non-executable ${up_script}; vision-security bridge skipped"
+        return 1
+    fi
+    if [[ ! -x "${patcher}" ]]; then
+        warn "Missing or non-executable ${patcher}; vision-security bridge skipped"
+        return 1
+    fi
+
+    info "Starting workstation-local vision-security-service on host port 8094..."
+    if ! "${up_script}"; then
+        warn "vision-security host process failed to become healthy; bridge not wired"
+        return 1
+    fi
+
+    info "Patching vision-security-service Endpoints with the host IP..."
+    if ! "${patcher}" >/dev/null; then
+        warn "Failed to patch vision-security-service Endpoints; bridge not wired"
+        return 1
+    fi
+
+    VISION_SECURITY_BRIDGE_WIRED="true"
+    info "vision-security workstation bridge is wired (Service -> host:8094)"
+    return 0
+}
+
+apply_vision_security_gateway_env() {
+    if [[ "${VISION_SECURITY_BRIDGE_WIRED}" == "true" ]]; then
+        if ! kubectl set env deployment/api-gateway -n "${NAMESPACE}" \
+            VISION_SECURITY_ENABLED=true VISION_SECURITY_LOCAL_BRIDGE=true \
+            >/dev/null 2>&1; then
+            warn "Failed to set api-gateway vision-security env vars"
+            return 1
+        fi
+    else
+        if ! kubectl set env deployment/api-gateway -n "${NAMESPACE}" \
+            VISION_SECURITY_ENABLED=false VISION_SECURITY_LOCAL_BRIDGE=false \
+            >/dev/null 2>&1; then
+            warn "Failed to clear api-gateway vision-security env vars"
+            return 1
+        fi
+    fi
+    wait_workload deployment api-gateway 180s true "deployment/api-gateway not ready after vision-security env update"
+}
+
 preflight_check_port_conflicts() {
     local -a conflict_ports=(80 443)
     if is_truthy "${ENABLE_PORT_FORWARD}"; then
@@ -1015,7 +1379,7 @@ preflight_check_port_conflicts() {
             blocking_found="true"
             warn "docker-proxy is listening on port ${port} — likely a stale Docker container with restart policy"
             warn "  Identified listener: $(echo "${listener_pid}" | head -1)"
-            warn "  Fix: docker ps --filter 'publish=${port}' | identify the container | docker rm -f <id>"
+            warn "  Fix: use your container runtime CLI to identify and remove the stale container publishing port ${port}"
         elif echo "${listener_pid}" | grep -q "traefik"; then
             warn "traefik is listening on port ${port} — will attempt to resolve via ensure_ingress_routing"
         elif echo "${listener_pid}" | grep -q "nginx"; then
@@ -1026,11 +1390,20 @@ preflight_check_port_conflicts() {
     done
 
     if [[ "${blocking_found}" == "true" ]]; then
-        fail "Stale Docker listener(s) detected on ingress ports. Remove them before launching Jarvis k8s stack. Run: docker ps --format '{{.ID}} {{.Ports}}' to identify, then docker rm -f <id>."
+        fail "Stale Docker listener(s) detected on ingress ports. Remove them before launching Jarvis k8s stack."
     fi
 }
 
 # === Start ===
+if [[ "${DRY_RUN}" == "true" ]]; then
+    print_dry_run_summary
+    exit 0
+fi
+
+if [[ "${USE_RELEASE_OVERLAY}" == "true" ]]; then
+    ensure_release_overlay_supports_requested_features
+fi
+
 print_header
 
 require_cmd kubectl
@@ -1071,15 +1444,19 @@ if [[ "${ENABLE_LLM}" == "true" && "${ENABLE_GPU}" == "true" ]]; then
     if ! kubectl get nodes -o jsonpath='{.items[*].status.allocatable}' 2>/dev/null | grep -q 'nvidia.com/gpu'; then
         info "GPU not detected in cluster, attempting GPU setup..."
         if [[ -x "${PROJECT_DIR}/scripts/product/jarvis-gpu-setup.sh" ]]; then
-            run_privileged "${PROJECT_DIR}/scripts/product/jarvis-gpu-setup.sh"
+            # Best-effort. Failure (nvidia-ctk missing, etc.) is logged but
+            # does NOT abort the launch — llm-server runs on CPU when the
+            # GGUF model is loaded with LLM_DEVICE=cpu / N_GPU_LAYERS=0.
+            if ! run_privileged "${PROJECT_DIR}/scripts/product/jarvis-gpu-setup.sh"; then
+                warn "GPU setup did not complete (likely no NVIDIA driver). Falling back to CPU LLM."
+            fi
         else
             warn "GPU setup script not found: ${PROJECT_DIR}/scripts/product/jarvis-gpu-setup.sh"
         fi
     fi
     if ! kubectl get nodes -o jsonpath='{.items[*].status.allocatable}' 2>/dev/null | grep -q 'nvidia.com/gpu'; then
-        warn "GPU not detected in cluster; disabling LLM for this run."
-        ENABLE_LLM="false"
-        OPTIONAL_FAILED="true"
+        warn "GPU not detected; running LLM on CPU (LLM_DEVICE=cpu, N_GPU_LAYERS=0)."
+        ENABLE_GPU="false"
     fi
 fi
 
@@ -1102,20 +1479,25 @@ ensure_disk_space() {
 
 ensure_disk_space
 
-build_images
-
-info "Applying core manifests..."
-if [ -d "${K8S_DIR}/overlays/prod" ]; then
-    init_image_config
-    OVERLAY_PATH="$(prepare_prod_overlay)"
-    trap '[[ -n "${OVERLAY_PATH:-}" && -d "${OVERLAY_PATH}" ]] && rm -rf "${OVERLAY_PATH}"' EXIT
-    MODELS_PATH="${JARVIS_MODELS_DIR}"
-    MODELS_PATH_ENV_FILE="${OVERLAY_PATH}/models-path.env"
-    printf "JARVIS_MODELS_PATH=%s\n" "${MODELS_PATH}" > "${MODELS_PATH_ENV_FILE}"
-    kubectl kustomize --load-restrictor=LoadRestrictionsNone "${OVERLAY_PATH}" | \
-        kubectl apply -f - >/dev/null
+if [[ "${USE_RELEASE_OVERLAY}" == "true" ]]; then
+    info "Applying digest-pinned release overlay..."
+    apply_release_overlay
 else
-    fail "Overlay not found: ${K8S_DIR}/overlays/prod"
+    build_images
+
+    info "Applying core manifests..."
+    if [ -d "${K8S_DIR}/overlays/prod" ]; then
+        init_image_config
+        OVERLAY_PATH="$(prepare_prod_overlay)"
+        trap '[[ -n "${OVERLAY_PATH:-}" && -d "${OVERLAY_PATH}" ]] && rm -rf "${OVERLAY_PATH}"' EXIT
+        MODELS_PATH="${JARVIS_MODELS_DIR}"
+        MODELS_PATH_ENV_FILE="${OVERLAY_PATH}/models-path.env"
+        printf "JARVIS_MODELS_PATH=%s\n" "${MODELS_PATH}" > "${MODELS_PATH_ENV_FILE}"
+        kubectl kustomize --load-restrictor=LoadRestrictionsNone "${OVERLAY_PATH}" | \
+            kubectl apply -f - >/dev/null
+    else
+        fail "Overlay not found: ${K8S_DIR}/overlays/prod"
+    fi
 fi
 
 # Optional LLM/Memory runtime scaling
@@ -1147,6 +1529,31 @@ else
     fi
 fi
 
+# Keep the api-gateway capability flags in sync with the actual scale state so
+# /api/v1/memory and /api/v1/llm degrade with FEATURE_DISABLED instead of
+# bubbling Bad-Gateway/Service-Unavailable noise from a missing downstream pod.
+if [[ "${ENABLE_MEMORY}" == "true" ]]; then
+    kubectl set env deployment/api-gateway -n "${NAMESPACE}" \
+        MEMORY_SERVICE_ENABLED=true SERVICES_MEMORY_ENABLED=true JARVIS_MEMORY_ENABLED=true \
+        >/dev/null 2>&1 || true
+else
+    kubectl set env deployment/api-gateway -n "${NAMESPACE}" \
+        MEMORY_SERVICE_ENABLED=false SERVICES_MEMORY_ENABLED=false JARVIS_MEMORY_ENABLED=false \
+        >/dev/null 2>&1 || true
+fi
+if [[ "${ENABLE_LLM}" == "true" ]]; then
+    kubectl set env deployment/api-gateway -n "${NAMESPACE}" \
+        JARVIS_LLM_ENABLED=true SERVICES_LLM_ENABLED=true \
+        >/dev/null 2>&1 || true
+else
+    kubectl set env deployment/api-gateway -n "${NAMESPACE}" \
+        JARVIS_LLM_ENABLED=false SERVICES_LLM_ENABLED=false \
+        >/dev/null 2>&1 || true
+fi
+
+force_mutable_image_refresh_policy
+restart_mutable_app_workloads
+
 # Wait for core services
 info "Waiting for core services..."
 wait_workload statefulset postgres 180s true "statefulset/postgres not ready"
@@ -1160,21 +1567,38 @@ wait_workload deployment user-profile 180s true "deployment/user-profile not rea
 wait_workload deployment nlp-service 180s true "deployment/nlp-service not ready"
 wait_workload deployment pc-control 180s true "deployment/pc-control not ready"
 wait_workload deployment smart-home-service 180s true "deployment/smart-home-service not ready"
+wait_workload deployment sync-service 180s false "Optional deployment/sync-service not ready (image pull or crash; check pod logs)"
 if is_truthy "${REQUIRE_VOICE_GATEWAY}"; then
     wait_workload deployment voice-gateway 180s true "Required deployment/voice-gateway not ready"
 else
     wait_workload deployment voice-gateway 180s false "Optional deployment/voice-gateway not ready; backend is available in DEGRADED mode"
 fi
 
-# Optional waits
+# Optional waits — generous timeouts because llama.cpp warm-up loads a
+# multi-GB GGUF model into memory before the readiness probe goes UP.
 if [[ "${ENABLE_LLM}" == "true" ]]; then
-    wait_workload deployment embedding-service 180s false "Optional deployment/embedding-service not ready"
-    wait_workload deployment llm-server 600s false "Optional deployment/llm-server not ready"
-    wait_workload deployment llm-service 180s false "Optional deployment/llm-service not ready"
+    wait_workload deployment embedding-service 300s false "Optional deployment/embedding-service not ready"
+    wait_workload deployment llm-server 900s false "Optional deployment/llm-server not ready"
+    wait_workload deployment llm-service 360s false "Optional deployment/llm-service not ready"
 fi
 if [[ "${ENABLE_MEMORY}" == "true" ]]; then
-    wait_workload statefulset postgres-pgvector 180s false "Optional statefulset/postgres-pgvector not ready"
-    wait_workload deployment memory-service 180s false "Optional deployment/memory-service not ready"
+    wait_workload statefulset postgres-pgvector 300s false "Optional statefulset/postgres-pgvector not ready"
+    wait_workload deployment memory-service 300s false "Optional deployment/memory-service not ready"
+fi
+
+# Workstation-local vision-security host bridge. Brought up after the k8s
+# core is ready so api-gateway exists when we flip its capability env vars.
+if [[ "${ENABLE_VISION_SECURITY}" == "true" ]]; then
+    if ensure_vision_security_local_bridge; then
+        apply_vision_security_gateway_env || OPTIONAL_FAILED="true"
+    else
+        OPTIONAL_FAILED="true"
+        warn "vision-security bridge not wired; api-gateway keeps VISION_SECURITY_ENABLED=false"
+        ENABLE_VISION_SECURITY="false"
+        apply_vision_security_gateway_env || true
+    fi
+else
+    apply_vision_security_gateway_env || OPTIONAL_FAILED="true"
 fi
 
 # Endpoints

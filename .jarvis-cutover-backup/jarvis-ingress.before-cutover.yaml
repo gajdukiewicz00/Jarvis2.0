@@ -1,0 +1,81 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"annotations":{"nginx.ingress.kubernetes.io/cors-allow-credentials":"true","nginx.ingress.kubernetes.io/cors-allow-headers":"Authorization, Content-Type, X-Requested-With","nginx.ingress.kubernetes.io/cors-allow-methods":"GET, POST, PUT, DELETE, PATCH, OPTIONS","nginx.ingress.kubernetes.io/cors-allow-origin":"https://api.jarvis.local,https://voice.jarvis.local","nginx.ingress.kubernetes.io/enable-cors":"true","nginx.ingress.kubernetes.io/force-ssl-redirect":"true","nginx.ingress.kubernetes.io/proxy-body-size":"50m","nginx.ingress.kubernetes.io/proxy-connect-timeout":"60","nginx.ingress.kubernetes.io/proxy-http-version":"1.1","nginx.ingress.kubernetes.io/proxy-read-timeout":"120","nginx.ingress.kubernetes.io/proxy-send-timeout":"120","nginx.ingress.kubernetes.io/ssl-redirect":"true","nginx.ingress.kubernetes.io/websocket-services":"api-gateway"},"labels":{"app":"jarvis-ingress","app.kubernetes.io/managed-by":"kustomize","app.kubernetes.io/name":"jarvis-ingress","app.kubernetes.io/part-of":"jarvis"},"name":"jarvis-ingress","namespace":"jarvis"},"spec":{"ingressClassName":"nginx","rules":[{"host":"api.jarvis.local","http":{"paths":[{"backend":{"service":{"name":"api-gateway","port":{"number":8080}}},"path":"/","pathType":"Prefix"}]}},{"host":"voice.jarvis.local","http":{"paths":[{"backend":{"service":{"name":"api-gateway","port":{"number":8080}}},"path":"/ws","pathType":"Prefix"},{"backend":{"service":{"name":"api-gateway","port":{"number":8080}}},"path":"/","pathType":"Prefix"}]}},{"host":"grafana.jarvis.local","http":{"paths":[{"backend":{"service":{"name":"grafana","port":{"number":3000}}},"path":"/","pathType":"Prefix"}]}}],"tls":[{"hosts":["api.jarvis.local","voice.jarvis.local","grafana.jarvis.local"],"secretName":"jarvis-tls"}]}}
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    nginx.ingress.kubernetes.io/cors-allow-headers: Authorization, Content-Type, X-Requested-With
+    nginx.ingress.kubernetes.io/cors-allow-methods: GET, POST, PUT, DELETE, PATCH,
+      OPTIONS
+    nginx.ingress.kubernetes.io/cors-allow-origin: https://api.jarvis.local,https://voice.jarvis.local
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/websocket-services: api-gateway
+  creationTimestamp: "2026-03-06T14:14:15Z"
+  generation: 3
+  labels:
+    app: jarvis-ingress
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: jarvis-ingress
+    app.kubernetes.io/part-of: jarvis
+  name: jarvis-ingress
+  namespace: jarvis
+  resourceVersion: "9787581"
+  uid: 8504d5d7-e01b-44c7-ab08-c6adb14dbcfa
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: api.jarvis.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  - host: voice.jarvis.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+        path: /ws
+        pathType: Prefix
+      - backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  - host: grafana.jarvis.local
+    http:
+      paths:
+      - backend:
+          service:
+            name: grafana
+            port:
+              number: 3000
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - api.jarvis.local
+    - voice.jarvis.local
+    - grafana.jarvis.local
+    secretName: jarvis-tls
+status:
+  loadBalancer:
+    ingress:
+    - ip: 10.113.0.176

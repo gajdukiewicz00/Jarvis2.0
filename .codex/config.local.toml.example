@@ -1,0 +1,22 @@
+# Jarvis project convention.
+# Codex does not auto-load .codex/config.local.toml by native filename.
+#
+# Use this as a private scratch file for machine-specific preferences, then either:
+# - copy selected values into a real native .codex/config.toml, or
+# - pass them explicitly with CLI overrides
+#
+# This file should remain local and gitignored when copied to .codex/config.local.toml.
+
+model = "my-private-model-choice"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[mcp_servers.private_example]
+command = "/absolute/path/to/private/mcp-server"
+args = ["--mode", "local"]
+
+[mcp_servers.private_example.env]
+PRIVATE_PLACEHOLDER = "set-locally-only"
+
+# Example of a private local log directory.
+# log_dir = "/absolute/path/to/private/codex-logs"

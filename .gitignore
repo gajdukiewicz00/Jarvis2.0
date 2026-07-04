@@ -122,6 +122,12 @@ __pycache__/
 *.pyd
 .pytest_cache/
 
+### Python virtualenvs ###
+.venv/
+.venv-*/
+venv/
+**/venv/
+
 ### Agent workspace artifacts ###
 /audit-logs/
 /memory/

@@ -1,0 +1,24 @@
+# Test profile for media-service.
+# Disables the hard requirement for a service-JWT secret so the context can start
+# without cluster secrets. The security filter chain stays ACTIVE (SecurityConfig is
+# @Profile("!dev")), so authentication is still enforced and auth tests are meaningful.
+service:
+  jwt:
+    required: false
+
+media:
+  enabled: true
+  ffprobe:
+    mode: mock
+  ffmpeg:
+    mode: mock
+  asr:
+    mode: mock
+  translation:
+    mode: mock
+  tts:
+    mode: mock
+
+logging:
+  level:
+    org.jarvis.media: INFO

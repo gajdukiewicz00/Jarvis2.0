@@ -1,0 +1,75 @@
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  application:
+    name: media-service
+
+server:
+  port: ${JARVIS_MEDIA_PORT:8095}
+  shutdown: graceful
+  ssl:
+    enabled: ${JARVIS_MEDIA_SSL_ENABLED:false}
+    key-store: ${JARVIS_MEDIA_KEYSTORE_PATH:}
+    key-store-password: ${JARVIS_MEDIA_KEYSTORE_PASSWORD:changeit}
+    key-store-type: ${JARVIS_MEDIA_KEYSTORE_TYPE:PKCS12}
+
+# Media service configuration (EPIC 8 — feature-flagged, safe-by-default)
+media:
+  # Master feature flag. When false, job endpoints are disabled and return 503.
+  enabled: ${MEDIA_ENABLED:true}
+  workspace:
+    # Writable workspace root. Pod runs readOnlyRootFilesystem=true, only /tmp is writable.
+    dir: ${MEDIA_WORKSPACE_DIR:/tmp/jarvis-media}
+    # Additional read-only roots from which input media may be read (colon-separated).
+    input-roots: ${MEDIA_INPUT_ROOTS:}
+  executor:
+    pool-size: ${MEDIA_EXECUTOR_POOL_SIZE:2}
+    queue-capacity: ${MEDIA_EXECUTOR_QUEUE_CAPACITY:32}
+  # Provider modes: 'mock' (default, no native binary required) or 'real' (requires ffmpeg/ffprobe/ASR/TTS).
+  # The container base image ships no ffmpeg binary, so prod defaults to mock.
+  ffprobe:
+    mode: ${MEDIA_FFPROBE_MODE:mock}
+    binary: ${MEDIA_FFPROBE_BINARY:ffprobe}
+    timeout-seconds: ${MEDIA_FFPROBE_TIMEOUT:30}
+  ffmpeg:
+    mode: ${MEDIA_FFMPEG_MODE:mock}
+    binary: ${MEDIA_FFMPEG_BINARY:ffmpeg}
+    timeout-seconds: ${MEDIA_FFMPEG_TIMEOUT:600}
+  asr:
+    mode: ${MEDIA_ASR_MODE:mock}
+  translation:
+    mode: ${MEDIA_TRANSLATION_MODE:mock}
+  tts:
+    mode: ${MEDIA_TTS_MODE:mock}
+    # USER_OWNED voice profiles require explicit consent; real-person cloning is never implemented.
+    allow-user-voice-profile: ${MEDIA_ALLOW_USER_VOICE_PROFILE:false}
+  subtitle:
+    # Quality-warning thresholds.
+    max-segment-seconds: ${MEDIA_MAX_SEGMENT_SECONDS:7}
+    min-confidence: ${MEDIA_MIN_CONFIDENCE:0.5}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${OTEL_TRACES_SAMPLER_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+
+logging:
+  level:
+    org.jarvis.media: DEBUG
+    org.springframework.web: INFO

@@ -91,6 +91,129 @@ class DesktopEntryApplicationCatalogTest {
         assertThrows(IllegalArgumentException.class, () -> catalog.resolve("firefox; rm -rf /"));
     }
 
+    @Test
+    void rejectsBlankApplicationQuery() {
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(tempDir));
+
+        assertThrows(IllegalArgumentException.class, () -> catalog.resolve("   "));
+    }
+
+    @Test
+    void resolveThrowsWhenNoApplicationMatches() {
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(tempDir));
+
+        assertThrows(IllegalArgumentException.class, () -> catalog.resolve("nonexistent"));
+    }
+
+    @Test
+    void resolveFallsBackToPartialAliasMatch() throws IOException {
+        Path systemApps = Files.createDirectories(tempDir.resolve("system-apps"));
+        writeDesktopEntry(systemApps.resolve("firefox.desktop"), """
+                [Desktop Entry]
+                Type=Application
+                Name=Firefox Web Browser
+                Exec=firefox %u
+                """);
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(systemApps));
+
+        DesktopLaunchTarget target = catalog.resolve("web browser");
+
+        assertEquals("firefox.desktop", target.application().desktopId());
+    }
+
+    @Test
+    void skipsEntriesWithHiddenTrue() throws IOException {
+        Path systemApps = Files.createDirectories(tempDir.resolve("system-apps"));
+        writeDesktopEntry(systemApps.resolve("hidden.desktop"), """
+                [Desktop Entry]
+                Type=Application
+                Name=Hidden Tool
+                Exec=hidden-tool
+                Hidden=true
+                """);
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(systemApps));
+
+        assertTrue(catalog.listApplications().isEmpty());
+    }
+
+    @Test
+    void skipsEntriesWithNonApplicationType() throws IOException {
+        Path systemApps = Files.createDirectories(tempDir.resolve("system-apps"));
+        writeDesktopEntry(systemApps.resolve("link.desktop"), """
+                [Desktop Entry]
+                Type=Link
+                Name=Some Link
+                Exec=some-link
+                """);
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(systemApps));
+
+        assertTrue(catalog.listApplications().isEmpty());
+    }
+
+    @Test
+    void skipsEntriesWithoutExecCommand() throws IOException {
+        Path systemApps = Files.createDirectories(tempDir.resolve("system-apps"));
+        writeDesktopEntry(systemApps.resolve("noexec.desktop"), """
+                [Desktop Entry]
+                Type=Application
+                Name=No Exec Tool
+                """);
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(systemApps));
+
+        assertTrue(catalog.listApplications().isEmpty());
+    }
+
+    @Test
+    void extractsGenericNameAsAliasAndHandlesQuotedExecTokens() throws IOException {
+        Path systemApps = Files.createDirectories(tempDir.resolve("system-apps"));
+        writeDesktopEntry(systemApps.resolve("editor.desktop"), """
+                [Desktop Entry]
+                Type=Application
+                Name=Text Editor
+                GenericName=Editor
+                Exec="/usr/bin/text-editor" --new-window '%f'
+                """);
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(systemApps));
+
+        DesktopLaunchTarget target = catalog.resolve("Editor");
+
+        assertEquals("Text Editor", target.application().name());
+        assertEquals(List.of("/usr/bin/text-editor", "--new-window"), target.command());
+    }
+
+    @Test
+    void ignoresDirectoriesThatDoNotExistOrAreBlank() {
+        DesktopControlProperties properties = new DesktopControlProperties();
+        properties.setApplicationDirs(List.of("", "  ", tempDir.resolve("does-not-exist").toString()));
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties);
+
+        assertTrue(catalog.listApplications().isEmpty());
+    }
+
+    @Test
+    void deduplicatesApplicationsAcrossMultipleDirectoriesByDesktopId() throws IOException {
+        Path systemApps = Files.createDirectories(tempDir.resolve("system-apps"));
+        Path userApps = Files.createDirectories(tempDir.resolve("user-apps"));
+        String entry = """
+                [Desktop Entry]
+                Type=Application
+                Name=Editor
+                Exec=editor
+                """;
+        writeDesktopEntry(systemApps.resolve("editor.desktop"), entry);
+        writeDesktopEntry(userApps.resolve("editor.desktop"), entry);
+
+        DesktopEntryApplicationCatalog catalog = new DesktopEntryApplicationCatalog(properties(systemApps, userApps));
+
+        assertEquals(1, catalog.listApplications().size());
+    }
+
     private DesktopControlProperties properties(Path... applicationDirs) {
         DesktopControlProperties properties = new DesktopControlProperties();
         properties.setApplicationDirs(List.of(applicationDirs).stream().map(Path::toString).toList());

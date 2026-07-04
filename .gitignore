@@ -45,8 +45,20 @@ build/
 
 ### Mac OS ###
 .DS_Store
-# Vosk models (large files - download separately)
-models/
+# Model binaries are NEVER committed (Phase 2 / SPEC-1).
+# Only metadata (README.md, .gitkeep, manifest.yml) lives in git.
+models/*
+!models/README.md
+!models/.gitkeep
+!models/**/
+!models/**/.gitkeep
+**/*.gguf
+**/*.bin
+**/*.onnx
+**/*.pt
+**/*.safetensors
+**/*.ckpt
+**/*.h5
 **/vosk-model-*.zip
 **/vosk-model-*/
 
@@ -64,8 +76,7 @@ secrets.env
 *.jks
 *.p12
 *.pfx
-secrets/
-!secrets/
+secrets/*
 !secrets/.gitkeep
 !secrets/*.example.env
 secrets*.yaml
@@ -120,3 +131,8 @@ PHASE*_REPORT.log
 
 ### Cursor / IDE workspace ###
 .cursor/
+
+### Codex local overrides ###
+AGENTS.local.md
+.mcp.json
+.codex/config.local.toml

@@ -533,6 +533,21 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 case "random_fact" -> phraseProvider.getPhrase(PhraseContext.RANDOM_FACT, lang);
                 case "standby_mode" -> phraseProvider.getPhrase(PhraseContext.STANDBY_MODE, lang);
 
+                // ==================== Read-only queries (time/date) ====================
+                case "get_time", "what_time", "current_time" -> {
+                    java.time.LocalTime now = java.time.LocalTime.now();
+                    String hhmm = String.format("%02d:%02d", now.getHour(), now.getMinute());
+                    log.info("🕐 get_time -> {}, correlationId={}", hhmm, correlationId);
+                    yield lang == Language.RU ? "Сейчас " + hhmm + ", сэр."
+                            : "It is " + hhmm + ", sir.";
+                }
+                case "get_date", "what_date", "current_date" -> {
+                    java.time.LocalDate today = java.time.LocalDate.now();
+                    log.info("📅 get_date -> {}, correlationId={}", today, correlationId);
+                    yield lang == Language.RU ? "Сегодня " + today + ", сэр."
+                            : "Today is " + today + ", sir.";
+                }
+
                 // ==================== Media / Legacy URL actions ====================
                 case "play_music" -> {
                     String url = slots != null ? slots.get("url") : null;
@@ -670,45 +685,49 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     result);
             if (!dispatchResult.executionSucceeded()) {
                 log.warn(
-                        "⚠️ API Gateway PC action was not executed: action={}, correlationId={}, failureReason={}",
+                        "⚠️ API Gateway PC action was not executed (action={}, reason={}); trying direct host pc-control, correlationId={}",
                         action,
-                        correlationId,
-                        dispatchResult.failureReason());
+                        dispatchResult.failureReason(),
+                        correlationId);
+                PcDispatchResult direct = tryDirectPcControl(action, params, userId, correlationId);
+                if (direct != null) {
+                    return direct;
+                }
             }
             return dispatchResult;
         } catch (RuntimeException e) {
-            log.warn("⚠️ Failed to send PC action via API Gateway ({}), apiGatewayUrl={}, falling back to direct call, correlationId={}",
+            log.warn("⚠️ Failed to send PC action via API Gateway ({}), apiGatewayUrl={}, falling back to direct host pc-control, correlationId={}",
                     e.getMessage(), apiGatewayUrl, correlationId);
-            try {
-                Map<String, String> stringParams = new HashMap<>();
-                params.forEach((k, v) -> stringParams.put(k, String.valueOf(v)));
-                pcControlClient.executeAction(userId != null && !userId.isBlank() ? userId : "local-user",
-                        new PcControlClient.ActionRequest(action, stringParams));
-                PcDispatchResult dispatchResult = new PcDispatchResult(
-                        true,
-                        true,
-                        true,
-                        null,
-                        Map.of("backend", "direct-pc-control"));
-                rememberPcActionMetadata(action, dispatchResult);
-                log.info(
-                        "✅ Direct pc-control fallback result: action={}, executionSucceeded={}, failureReason={}, correlationId={}",
-                        action,
-                        dispatchResult.executionSucceeded(),
-                        dispatchResult.failureReason(),
-                        correlationId);
-                return dispatchResult;
-            } catch (RuntimeException ex) {
-                log.error("❌ Failed to execute PC action: {}, correlationId={}", ex.getMessage(), correlationId);
-                PcDispatchResult dispatchResult = new PcDispatchResult(
-                        false,
-                        true,
-                        false,
-                        ex.getMessage(),
-                        Map.of());
-                rememberPcActionMetadata(action, dispatchResult);
-                return dispatchResult;
+            PcDispatchResult direct = tryDirectPcControl(action, params, userId, correlationId);
+            if (direct != null) {
+                return direct;
             }
+            PcDispatchResult dispatchResult = new PcDispatchResult(false, true, false, e.getMessage(), Map.of());
+            rememberPcActionMetadata(action, dispatchResult);
+            return dispatchResult;
+        }
+    }
+
+    /**
+     * Direct HTTP path to pc-control (host bridge), used when the WebSocket desktop
+     * executor is not connected. Returns the success result, or null if it also fails.
+     */
+    private PcDispatchResult tryDirectPcControl(String action, Map<String, Object> params, String userId,
+                                                String correlationId) {
+        try {
+            Map<String, String> stringParams = new HashMap<>();
+            params.forEach((k, v) -> stringParams.put(k, String.valueOf(v)));
+            pcControlClient.executeAction(userId != null && !userId.isBlank() ? userId : "local-user",
+                    new PcControlClient.ActionRequest(action, stringParams));
+            PcDispatchResult dispatchResult = new PcDispatchResult(
+                    true, true, true, null, Map.of("backend", "direct-pc-control"));
+            rememberPcActionMetadata(action, dispatchResult);
+            log.info("✅ Direct host pc-control executed: action={}, correlationId={}", action, correlationId);
+            return dispatchResult;
+        } catch (RuntimeException ex) {
+            log.warn("⚠️ Direct host pc-control failed: action={}, error={}, correlationId={}",
+                    action, ex.getMessage(), correlationId);
+            return null;
         }
     }
 

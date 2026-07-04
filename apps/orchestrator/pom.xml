@@ -6,11 +6,16 @@
     <parent>
         <groupId>org.jarvis</groupId>
         <artifactId>jarvis-root</artifactId>
-        <version>0.1.0-SNAPSHOT</version>
+        <version>1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>orchestrator</artifactId>
+
+    <properties>
+        <jib.container.port>8083</jib.container.port>
+        <jib.skip>false</jib.skip>
+    </properties>
 
     <dependencies>
         <!-- Jarvis Common (security, utilities) -->
@@ -19,7 +24,23 @@
             <artifactId>jarvis-common</artifactId>
             <version>${project.version}</version>
         </dependency>
-        
+        <!-- Phase 4: command pipeline schema. -->
+        <dependency>
+            <groupId>org.jarvis</groupId>
+            <artifactId>command-schema</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- Phase 4: RabbitMQ publisher + result listener. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <!-- Phase 8: Kafka audit publisher. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -51,6 +72,10 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.google.cloud.tools</groupId>
+                <artifactId>jib-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

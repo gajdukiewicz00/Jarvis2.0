@@ -21,7 +21,9 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -264,6 +266,11 @@ class OrchestratorUserRoutingTest {
                         "executionSucceeded", false,
                         "executionFailed", true,
                         "failureReason", "No desktop executor is connected"));
+        // The orchestrator now falls back to the direct host pc-control bridge when the
+        // gateway WebSocket executor is absent; simulate that bridge ALSO being down so
+        // this remains a genuine "no executor available -> failure" scenario.
+        doThrow(new RuntimeException("host pc-control bridge unavailable"))
+                .when(pcControlClient).executeAction(any(), any());
         when(phraseProvider.getPhrase(eq(PhraseContext.ACK_ERROR), eq(Language.RU)))
                 .thenReturn("Не удалось выполнить команду.");
 

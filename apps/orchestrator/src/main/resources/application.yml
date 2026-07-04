@@ -17,6 +17,22 @@ spring:
       - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
       - org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
       - org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration
+  # Phase 4: RabbitMQ command pipeline. Topology auto-declared by
+  # jarvis-common's RabbitTopologyConfig once spring.rabbitmq.host is set.
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:rabbitmq}
+    port: ${SPRING_RABBITMQ_PORT:5672}
+    username: ${SPRING_RABBITMQ_USERNAME:jarvis}
+    password: ${SPRING_RABBITMQ_PASSWORD:jarvis}
+    virtual-host: ${SPRING_RABBITMQ_VHOST:jarvis}
+    listener:
+      simple:
+        acknowledge-mode: auto
+        prefetch: 4
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 500ms
   cloud:
     openfeign:
       client:
@@ -28,6 +44,11 @@ spring:
 
 # Service URLs (in-cluster defaults)
 jarvis:
+  # Phase 4: command pipeline tuning
+  command:
+    default-ttl-seconds: ${JARVIS_COMMAND_DEFAULT_TTL_SECONDS:30}
+    pending:
+      sweep-interval-ms: ${JARVIS_COMMAND_PENDING_SWEEP_MS:1000}
   nlp:
     url: ${NLP_SERVICE_URL:http://nlp-service:8082}
   pc-control:

@@ -51,11 +51,15 @@ spec:
           protocol: TCP
         - port: 8089
           protocol: TCP
+        - port: 8090
+          protocol: TCP
         - port: 8091
           protocol: TCP
         - port: 8092
           protocol: TCP
         - port: 8093
+          protocol: TCP
+        - port: 8095
           protocol: TCP
         - port: 8443
           protocol: TCP
@@ -87,6 +91,9 @@ spec:
           - llm-service
           - planner-service
           - memory-service
+          - agent-service
+          - media-service
+          - sync-service
   policyTypes:
     - Ingress
   ingress:
@@ -148,6 +155,9 @@ spec:
           - llm-service
           - planner-service
           - memory-service
+          - agent-service
+          - media-service
+          - sync-service
   policyTypes:
     - Egress
   egress:

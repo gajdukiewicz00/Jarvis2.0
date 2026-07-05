@@ -124,6 +124,36 @@ class FinanceServiceTest {
     }
 
     @Test
+    void summarizeRangeAggregatesOverArbitraryDateWindowWithGivenLabel() {
+        LocalDate from = LocalDate.of(2026, 3, 9);
+        LocalDate to = LocalDate.of(2026, 3, 15);
+        Expense groceries = expense(new BigDecimal("25.00"), TransactionType.EXPENSE, "Groceries", "EUR");
+        Expense income = expense(new BigDecimal("500.00"), TransactionType.INCOME, "Salary", "EUR");
+        when(expenseRepository.findByUserIdAndOccurredAtBetween(
+                eq("user-1"), eq(from.atStartOfDay()), eq(to.atTime(23, 59, 59))))
+                .thenReturn(List.of(groceries, income));
+
+        FinanceSummaryDTO summary = financeService.summarizeRange("user-1", from, to, "WEEK");
+
+        assertThat(summary.getMonth()).isEqualTo("WEEK");
+        assertThat(summary.getTotalIncome()).isEqualByComparingTo("500.00");
+        assertThat(summary.getTotalExpense()).isEqualByComparingTo("25.00");
+        assertThat(summary.getByCategory()).containsEntry("Groceries", new BigDecimal("25.00"));
+    }
+
+    @Test
+    void summarizeMonthDelegatesToSummarizeRangeWithMonthBounds() {
+        YearMonth month = YearMonth.of(2026, 5);
+        when(expenseRepository.findByUserIdAndOccurredAtBetween(
+                eq("user-1"), eq(month.atDay(1).atStartOfDay()), eq(month.atEndOfMonth().atTime(23, 59, 59))))
+                .thenReturn(List.of());
+
+        FinanceSummaryDTO summary = financeService.summarizeMonth("user-1", month);
+
+        assertThat(summary.getMonth()).isEqualTo("2026-05");
+    }
+
+    @Test
     void summarizeMonthDefaultsCurrencyToEurWhenNoneRecorded() {
         YearMonth month = YearMonth.of(2026, 4);
         when(expenseRepository.findByUserIdAndOccurredAtBetween(

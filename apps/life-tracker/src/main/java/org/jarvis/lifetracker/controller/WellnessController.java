@@ -4,7 +4,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.jarvis.lifetracker.domain.WellnessLog;
 import org.jarvis.lifetracker.domain.WellnessType;
+import org.jarvis.lifetracker.dto.HabitStreakDTO;
+import org.jarvis.lifetracker.dto.WellnessSummaryDTO;
 import org.jarvis.lifetracker.repository.WellnessLogRepository;
+import org.jarvis.lifetracker.service.WellnessService;
 import org.jarvis.lifetracker.util.UserContext;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -23,7 +26,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WellnessController {
 
+    private static final int DEFAULT_SUMMARY_DAYS = 30;
+
     private final WellnessLogRepository repository;
+    private final WellnessService wellnessService;
 
     public record LogRequest(WellnessType type, Double value, String note, LocalDate day) {
     }
@@ -59,6 +65,39 @@ public class WellnessController {
     @GetMapping("/recent")
     public List<WellnessLog> recent(HttpServletRequest http) {
         return repository.findTop200ByUserIdOrderByLoggedAtDesc(requireUserId(http));
+    }
+
+    /** Current + longest streak for a single habit, matched by name (case-insensitive). */
+    @GetMapping("/habit/streak")
+    public HabitStreakDTO habitStreak(@RequestParam(required = false) String name, HttpServletRequest http) {
+        if (name == null || name.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required");
+        }
+        return wellnessService.habitStreak(requireUserId(http), name);
+    }
+
+    /** Streaks for every distinct habit the user has logged. */
+    @GetMapping("/habits")
+    public List<HabitStreakDTO> habits(HttpServletRequest http) {
+        return wellnessService.listHabitStreaks(requireUserId(http));
+    }
+
+    /**
+     * Aggregate stats (average/min/max/latest) for a numeric metric over a date window.
+     * Defaults to the trailing {@value #DEFAULT_SUMMARY_DAYS} days ending today when no
+     * explicit range is given.
+     */
+    @GetMapping("/summary")
+    public WellnessSummaryDTO summary(
+            @RequestParam WellnessType type,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Integer days,
+            HttpServletRequest http) {
+        LocalDate effectiveTo = to != null ? to : LocalDate.now();
+        int window = days != null ? days : DEFAULT_SUMMARY_DAYS;
+        LocalDate effectiveFrom = from != null ? from : effectiveTo.minusDays(Math.max(0, window - 1));
+        return wellnessService.summary(requireUserId(http), type, effectiveFrom, effectiveTo);
     }
 
     /** Ingest a phone Health Connect snapshot (sync-service forwards HEALTH_ENTRY here). */

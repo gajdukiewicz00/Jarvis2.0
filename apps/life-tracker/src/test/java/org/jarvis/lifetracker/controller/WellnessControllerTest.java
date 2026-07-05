@@ -2,7 +2,10 @@ package org.jarvis.lifetracker.controller;
 
 import org.jarvis.lifetracker.domain.WellnessLog;
 import org.jarvis.lifetracker.domain.WellnessType;
+import org.jarvis.lifetracker.dto.HabitStreakDTO;
+import org.jarvis.lifetracker.dto.WellnessSummaryDTO;
 import org.jarvis.lifetracker.repository.WellnessLogRepository;
+import org.jarvis.lifetracker.service.WellnessService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -34,6 +37,9 @@ class WellnessControllerTest {
 
     @MockBean
     private WellnessLogRepository repository;
+
+    @MockBean
+    private WellnessService wellnessService;
 
     @Test
     void logWithoutTypeReturnsBadRequest() throws Exception {
@@ -164,5 +170,67 @@ class WellnessControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.day").value(LocalDate.now().toString()));
+    }
+
+    @Test
+    void habitStreakWithoutNameReturnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/v1/life/wellness/habit/streak").header("X-User-Id", "user-1"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void habitStreakDelegatesToWellnessService() throws Exception {
+        when(wellnessService.habitStreak("user-1", "Meditate"))
+                .thenReturn(new HabitStreakDTO("Meditate", 5, 7, LocalDate.now(), true, 10));
+
+        mockMvc.perform(get("/api/v1/life/wellness/habit/streak")
+                        .header("X-User-Id", "user-1")
+                        .param("name", "Meditate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.currentStreak").value(5))
+                .andExpect(jsonPath("$.longestStreak").value(7));
+    }
+
+    @Test
+    void habitsListsAllStreaksForUser() throws Exception {
+        when(wellnessService.listHabitStreaks("user-1")).thenReturn(List.of(
+                new HabitStreakDTO("Meditate", 3, 3, LocalDate.now(), true, 3),
+                new HabitStreakDTO("Exercise", 0, 2, LocalDate.now().minusDays(5), false, 2)));
+
+        mockMvc.perform(get("/api/v1/life/wellness/habits").header("X-User-Id", "user-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    @Test
+    void summaryDefaultsToTrailingThirtyDaysWhenNoRangeGiven() throws Exception {
+        LocalDate today = LocalDate.now();
+        when(wellnessService.summary("user-1", WellnessType.WEIGHT, today.minusDays(29), today))
+                .thenReturn(new WellnessSummaryDTO(WellnessType.WEIGHT, today.minusDays(29), today,
+                        2, 79.5, 79.0, 80.0, 79.0, today));
+
+        mockMvc.perform(get("/api/v1/life/wellness/summary")
+                        .header("X-User-Id", "user-1")
+                        .param("type", "WEIGHT"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.average").value(79.5));
+    }
+
+    @Test
+    void summaryUsesExplicitFromAndTo() throws Exception {
+        LocalDate from = LocalDate.of(2026, 3, 1);
+        LocalDate to = LocalDate.of(2026, 3, 31);
+        when(wellnessService.summary("user-1", WellnessType.MOOD, from, to))
+                .thenReturn(new WellnessSummaryDTO(WellnessType.MOOD, from, to, 1, 4.0, 4.0, 4.0, 4.0, to));
+
+        mockMvc.perform(get("/api/v1/life/wellness/summary")
+                        .header("X-User-Id", "user-1")
+                        .param("type", "MOOD")
+                        .param("from", "2026-03-01")
+                        .param("to", "2026-03-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.entryCount").value(1));
+
+        verify(wellnessService).summary("user-1", WellnessType.MOOD, from, to);
     }
 }

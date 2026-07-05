@@ -50,9 +50,14 @@ public class FinanceService {
     }
 
     public FinanceSummaryDTO summarizeMonth(String userId, YearMonth month) {
-        LocalDateTime from = month.atDay(1).atStartOfDay();
-        LocalDateTime to = month.atEndOfMonth().atTime(23, 59, 59);
-        List<Expense> expenses = expenseRepository.findByUserIdAndOccurredAtBetween(userId, from, to);
+        return summarizeRange(userId, month.atDay(1), month.atEndOfMonth(), month.toString());
+    }
+
+    /** Same aggregation as {@link #summarizeMonth}, but over an arbitrary inclusive date range. */
+    public FinanceSummaryDTO summarizeRange(String userId, LocalDate from, LocalDate to, String label) {
+        LocalDateTime fromDateTime = from.atStartOfDay();
+        LocalDateTime toDateTime = to.atTime(23, 59, 59);
+        List<Expense> expenses = expenseRepository.findByUserIdAndOccurredAtBetween(userId, fromDateTime, toDateTime);
 
         BigDecimal totalIncome = sumAmount(expenses, TransactionType.INCOME);
         BigDecimal totalExpense = sumAmount(expenses, TransactionType.EXPENSE);
@@ -65,7 +70,7 @@ public class FinanceService {
                         expense -> expense.getCategory() != null ? expense.getCategory() : "Uncategorized",
                         Collectors.reducing(BigDecimal.ZERO, Expense::getAmount, BigDecimal::add)));
 
-        return new FinanceSummaryDTO(month.toString(), totalIncome, totalExpense, currency, byCategory);
+        return new FinanceSummaryDTO(label, totalIncome, totalExpense, currency, byCategory);
     }
 
     public SpendingAnalysisDTO analyzeSpending(String userId, LocalDateTime from, LocalDateTime to, String groupBy) {

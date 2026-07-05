@@ -14,4 +14,6 @@ public interface WellnessLogRepository extends JpaRepository<WellnessLog, Long> 
     List<WellnessLog> findByUserIdAndTypeOrderByLoggedAtAsc(String userId, WellnessType type);
 
     List<WellnessLog> findTop200ByUserIdOrderByLoggedAtDesc(String userId);
+
+    List<WellnessLog> findByUserIdAndDayBetweenOrderByLoggedAtAsc(String userId, LocalDate start, LocalDate end);
 }

@@ -308,6 +308,61 @@ class FinanceControllerTest {
     }
 
     @Test
+    void addCashExpenseWithoutAmountReturnsBadRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/life/finance/cash-expense")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+
+        verify(expenseRepository, never()).save(any());
+    }
+
+    @Test
+    void addCashExpenseSavesExpenseWithCashPaymentMethodAndDefaults() throws Exception {
+        when(expenseRepository.save(any(Expense.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(dtoMapper.toDTO(any(Expense.class))).thenReturn(new ExpenseDTO());
+
+        mockMvc.perform(post("/api/v1/life/finance/cash-expense")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": 8.50, "description": "coffee"}
+                                """))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<Expense> captor = org.mockito.ArgumentCaptor.forClass(Expense.class);
+        verify(expenseRepository).save(captor.capture());
+        Expense saved = captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(saved.getUserId()).isEqualTo("user-1");
+        org.assertj.core.api.Assertions.assertThat(saved.getAmount()).isEqualByComparingTo("8.50");
+        org.assertj.core.api.Assertions.assertThat(saved.getCurrency()).isEqualTo("EUR");
+        org.assertj.core.api.Assertions.assertThat(saved.getCategory()).isEqualTo("cash");
+        org.assertj.core.api.Assertions.assertThat(saved.getPaymentMethod()).isEqualTo("CASH");
+        org.assertj.core.api.Assertions.assertThat(saved.getType()).isEqualTo(TransactionType.EXPENSE);
+        org.assertj.core.api.Assertions.assertThat(saved.getSource()).isEqualTo(EntrySource.MANUAL);
+    }
+
+    @Test
+    void addCashExpenseHonoursExplicitCategoryAndCurrency() throws Exception {
+        when(expenseRepository.save(any(Expense.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(dtoMapper.toDTO(any(Expense.class))).thenReturn(new ExpenseDTO());
+
+        mockMvc.perform(post("/api/v1/life/finance/cash-expense")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"amount": 20.00, "currency": "USD", "category": "Transport"}
+                                """))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<Expense> captor = org.mockito.ArgumentCaptor.forClass(Expense.class);
+        verify(expenseRepository).save(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().getCurrency()).isEqualTo("USD");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().getCategory()).isEqualTo("Transport");
+    }
+
+    @Test
     void importCsvImportsValidLinesAndSkipsInvalidOnes() throws Exception {
         when(expenseRepository.save(any(Expense.class))).thenAnswer(inv -> inv.getArgument(0));
         String csv = "date,amount,category,description\n"

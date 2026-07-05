@@ -1,5 +1,6 @@
 package org.jarvis.lifetracker.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jarvis.lifetracker.domain.Expense;
 import org.jarvis.lifetracker.domain.TransactionType;
 import org.jarvis.lifetracker.dto.ParsedTransactionDTO;
@@ -16,10 +17,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -32,6 +35,9 @@ class BankNotificationControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @MockBean
     private BankNotificationParser parser;
@@ -121,6 +127,42 @@ class BankNotificationControllerTest {
                                 {"text": "Platnosc 45.99 PLN Lidl", "store": true}
                                 """))
                 .andExpect(status().isUnauthorized());
+
+        verify(expenseRepository, never()).save(any(Expense.class));
+    }
+
+    @Test
+    void importCsvNotificationsStoresHighConfidenceAndReturnsLowConfidenceForReview() throws Exception {
+        when(parser.parse("Platnosc 45.99 PLN Lidl")).thenReturn(parsedDto(true, "HIGH", false));
+        when(parser.parse("something unclear")).thenReturn(parsedDto(false, "LOW", true));
+        when(expenseRepository.save(any(Expense.class))).thenAnswer(inv -> {
+            Expense e = inv.getArgument(0);
+            e.setId(1L);
+            return e;
+        });
+        String csv = "text\n\"Platnosc 45.99 PLN Lidl\"\n\"something unclear\"\n";
+
+        mockMvc.perform(post("/api/v1/life/finance/import-csv-notifications")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("csv", csv))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(1))
+                .andExpect(jsonPath("$.needsReview.length()").value(1))
+                .andExpect(jsonPath("$.totalRows").value(3));
+
+        verify(expenseRepository, times(1)).save(any(Expense.class));
+    }
+
+    @Test
+    void importCsvNotificationsWithEmptyBodyImportsNothing() throws Exception {
+        mockMvc.perform(post("/api/v1/life/finance/import-csv-notifications")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(0))
+                .andExpect(jsonPath("$.needsReview.length()").value(0));
 
         verify(expenseRepository, never()).save(any(Expense.class));
     }

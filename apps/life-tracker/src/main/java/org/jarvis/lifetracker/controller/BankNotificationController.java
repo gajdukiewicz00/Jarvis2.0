@@ -8,6 +8,7 @@ import org.jarvis.lifetracker.domain.Expense;
 import org.jarvis.lifetracker.dto.ParsedTransactionDTO;
 import org.jarvis.lifetracker.repository.ExpenseRepository;
 import org.jarvis.lifetracker.service.BankNotificationParser;
+import org.jarvis.lifetracker.util.CsvUtils;
 import org.jarvis.lifetracker.util.UserContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,6 +16,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Bank push-notification → transaction draft (Banking Push Parser epic).
@@ -63,6 +68,52 @@ public class BankNotificationController {
                     d.rawMasked(), d.notes(), saved.getId());
         }
         return d;
+    }
+
+    /**
+     * Bulk CSV import of raw bank notification texts (one notification per row/field, CSV-quoted
+     * so embedded commas / decimal commas survive). Each row is run through the same deterministic
+     * {@link BankNotificationParser}; HIGH-confidence valid drafts are auto-stored, everything else
+     * (LOW/MEDIUM confidence, or invalid) is returned in {@code needsReview} for a manual inbox
+     * instead of being silently discarded (US-BANK-005).
+     */
+    @PostMapping("/import-csv-notifications")
+    public Map<String, Object> importCsvNotifications(@RequestBody Map<String, String> body, HttpServletRequest http) {
+        String userId = requireUserId(http);
+        String csv = body == null ? "" : body.getOrDefault("csv", "");
+        List<List<String>> rows = CsvUtils.parseCsv(csv);
+
+        int imported = 0;
+        List<ParsedTransactionDTO> needsReview = new ArrayList<>();
+        for (List<String> row : rows) {
+            if (row.isEmpty()) {
+                continue;
+            }
+            String text = row.get(0);
+            if (text == null || text.isBlank() || "text".equalsIgnoreCase(text.trim())) {
+                continue; // blank row / header row
+            }
+            ParsedTransactionDTO parsed = parser.parse(text);
+            if (parsed.valid() && "HIGH".equals(parsed.confidence()) && !parsed.needsReview()) {
+                Expense e = new Expense();
+                e.setUserId(userId);
+                e.setAmount(parsed.amount());
+                e.setCurrency(parsed.currency());
+                e.setCategory(parsed.category());
+                e.setMerchant(parsed.merchant());
+                e.setType(parsed.type());
+                e.setPaymentMethod(parsed.cardMask());
+                e.setDescription("bank: " + (parsed.merchant() == null ? "transaction" : parsed.merchant()));
+                e.setOccurredAt(parsed.occurredAt());
+                e.setSource(EntrySource.AI);
+                expenseRepository.save(e);
+                imported++;
+            } else {
+                needsReview.add(parsed);
+            }
+        }
+        log.info("CSV bank import for {}: imported={} needsReview={}", userId, imported, needsReview.size());
+        return Map.of("imported", imported, "needsReview", needsReview, "totalRows", rows.size());
     }
 
     private String requireUserId(HttpServletRequest request) {

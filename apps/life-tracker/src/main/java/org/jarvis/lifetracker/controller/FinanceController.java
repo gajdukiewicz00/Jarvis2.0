@@ -182,6 +182,31 @@ public class FinanceController {
     }
 
     /**
+     * Manual quick-add for a cash purchase: no card notification will ever arrive for it, so it
+     * needs its own low-friction entry point distinct from {@code /transaction}. Always recorded
+     * as an EXPENSE with {@code paymentMethod=CASH}.
+     */
+    @PostMapping("/cash-expense")
+    public ExpenseDTO addCashExpense(@RequestBody CashExpenseRequest request, HttpServletRequest httpRequest) {
+        if (request == null || request.amount() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount is required");
+        }
+        String userId = requireUserId(httpRequest);
+        Expense expense = new Expense();
+        expense.setUserId(userId);
+        expense.setAmount(request.amount());
+        expense.setCurrency(request.currency() != null ? request.currency() : "EUR");
+        expense.setCategory(request.category() != null ? request.category() : "cash");
+        expense.setDescription(request.description());
+        expense.setType(TransactionType.EXPENSE);
+        expense.setPaymentMethod("CASH");
+        expense.setOccurredAt(request.occurredAt() != null ? request.occurredAt() : LocalDateTime.now());
+        expense.setSource(EntrySource.MANUAL);
+        Expense saved = expenseRepository.save(expense);
+        return dtoMapper.toDTO(saved);
+    }
+
+    /**
      * Import bank transactions from CSV. Each line: {@code date,amount,category,description}
      * (header line is skipped). Amounts are stored as expenses. Returns imported/skipped counts.
      */
@@ -236,6 +261,10 @@ public class FinanceController {
     }
 
     public record ExpenseRequest(String userId, Double amount, String currency, String category, String description) {
+    }
+
+    public record CashExpenseRequest(
+            BigDecimal amount, String currency, String category, String description, LocalDateTime occurredAt) {
     }
 
     private String requireUserId(HttpServletRequest request) {

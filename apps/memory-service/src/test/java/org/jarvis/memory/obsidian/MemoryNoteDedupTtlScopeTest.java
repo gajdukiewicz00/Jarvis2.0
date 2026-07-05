@@ -307,4 +307,176 @@ class MemoryNoteDedupTtlScopeTest {
     private static Pageable argThat(java.util.function.Predicate<Pageable> predicate) {
         return org.mockito.ArgumentMatchers.argThat(predicate::test);
     }
+
+    // ------------------------------------------------- finance/health privacy guard
+
+    @Test
+    void writeForcesLocalOnlyPrivacyForFinanceScopeEvenWhenRequestSaysOtherwise() {
+        when(vaultWriter.write(any())).thenReturn(null);
+        when(embeddingClient.embed(any())).thenReturn(null);
+
+        MemoryNoteEntity result = service.write(MemoryNoteRequest.builder()
+                .title("Budget note")
+                .scope(MemoryScope.FINANCE)
+                .privacy("shared")
+                .build());
+
+        assertThat(result.getPrivacy()).isEqualTo("local-only");
+        assertThat(result.getFrontmatter().get("privacy")).isEqualTo("local-only");
+    }
+
+    @Test
+    void writeForcesLocalOnlyPrivacyForHealthScopeEvenWhenRequestSaysOtherwise() {
+        when(vaultWriter.write(any())).thenReturn(null);
+        when(embeddingClient.embed(any())).thenReturn(null);
+
+        MemoryNoteEntity result = service.write(MemoryNoteRequest.builder()
+                .title("Medication note")
+                .scope(MemoryScope.HEALTH)
+                .privacy("public")
+                .build());
+
+        assertThat(result.getPrivacy()).isEqualTo("local-only");
+    }
+
+    @Test
+    void writeHonoursRequestedPrivacyForNonSensitiveScope() {
+        when(vaultWriter.write(any())).thenReturn(null);
+        when(embeddingClient.embed(any())).thenReturn(null);
+
+        MemoryNoteEntity result = service.write(MemoryNoteRequest.builder()
+                .title("Project note")
+                .scope(MemoryScope.PROJECT)
+                .privacy("shared")
+                .build());
+
+        assertThat(result.getPrivacy()).isEqualTo("shared");
+    }
+
+    @Test
+    void updateForcesLocalOnlyPrivacyWhenScopeChangedToFinance() {
+        MemoryNoteEntity existing = MemoryNoteEntity.builder()
+                .memoryId("mem-scope")
+                .category(MemoryCategory.PROJECTS.name())
+                .scope(MemoryScope.USER_PROFILE.name())
+                .title("Existing")
+                .privacy("shared")
+                .status("ACTIVE")
+                .tags(new java.util.ArrayList<>())
+                .linkedEntities(new java.util.ArrayList<>())
+                .frontmatter(new java.util.LinkedHashMap<>())
+                .createdAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .updatedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .build();
+        when(repository.findById("mem-scope")).thenReturn(Optional.of(existing));
+        when(vaultWriter.write(any())).thenReturn(null);
+        when(embeddingClient.embed(any())).thenReturn(null);
+
+        MemoryNoteEntity result = service.update("mem-scope",
+                MemoryNoteRequest.builder().scope(MemoryScope.FINANCE).build());
+
+        assertThat(result.getPrivacy()).isEqualTo("local-only");
+    }
+
+    @Test
+    void updateKeepsForcingLocalOnlyWhenExistingScopeAlreadySensitiveAndUnchanged() {
+        MemoryNoteEntity existing = MemoryNoteEntity.builder()
+                .memoryId("mem-health")
+                .category(MemoryCategory.PROJECTS.name())
+                .scope(MemoryScope.HEALTH.name())
+                .title("Existing health note")
+                .privacy("local-only")
+                .status("ACTIVE")
+                .tags(new java.util.ArrayList<>())
+                .linkedEntities(new java.util.ArrayList<>())
+                .frontmatter(new java.util.LinkedHashMap<>())
+                .createdAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .updatedAt(Instant.parse("2026-01-01T00:00:00Z"))
+                .build();
+        when(repository.findById("mem-health")).thenReturn(Optional.of(existing));
+        when(vaultWriter.write(any())).thenReturn(null);
+        when(embeddingClient.embed(any())).thenReturn(null);
+
+        MemoryNoteEntity result = service.update("mem-health",
+                MemoryNoteRequest.builder().summary("updated summary").build());
+
+        assertThat(result.getPrivacy()).isEqualTo("local-only");
+    }
+
+    // ---------------------------------------------------- bypassDedup overload
+
+    @Test
+    void writeWithOutcomeBypassDedupSkipsDuplicateCheckEntirely() {
+        when(vaultWriter.write(any())).thenReturn(null);
+        when(embeddingClient.embed(any())).thenReturn(null);
+
+        MemoryNoteRequest request = MemoryNoteRequest.builder()
+                .title("Existing note")
+                .body("existing body")
+                .build();
+
+        MemoryNoteService.WriteOutcome outcome = service.writeWithOutcome(request, true);
+
+        assertThat(outcome.merged()).isFalse();
+        assertThat(outcome.note().getMemoryId()).startsWith("mem-");
+        verify(repository, never()).findFirstByContentHashAndStatusOrderByCreatedAtDesc(any(), any());
+    }
+
+    @Test
+    void writeWithOutcomeSingleArgOverloadStillAppliesDedup() {
+        MemoryNoteEntity existing = duplicate();
+        when(repository.findFirstByContentHashAndStatusOrderByCreatedAtDesc(anyString(), eq("ACTIVE")))
+                .thenReturn(Optional.of(existing));
+
+        MemoryNoteRequest request = MemoryNoteRequest.builder()
+                .title("Existing note")
+                .body("existing body")
+                .build();
+
+        MemoryNoteService.WriteOutcome outcome = service.writeWithOutcome(request);
+
+        assertThat(outcome.merged()).isTrue();
+        assertThat(outcome.note().getMemoryId()).isEqualTo("mem-dup");
+    }
+
+    // ------------------------------------------------- privacy-aware search
+
+    @Test
+    void searchUnifiedWithFlagsExcludesLocalOnlyNotesWhenNotIncluded() {
+        MemoryNoteEntity localOnlyNote = MemoryNoteEntity.builder()
+                .memoryId("mem-local").title("Local").privacy("local-only").build();
+        MemoryNoteEntity publicNote = MemoryNoteEntity.builder()
+                .memoryId("mem-public").title("Public").privacy("public").build();
+        when(embeddingClient.embed(any())).thenReturn(null);
+        when(repository.searchByText(eq("q"), any())).thenReturn(List.of(localOnlyNote, publicNote));
+
+        MemoryNoteService.NoteSearchResult result = service.searchUnified("q", 5, false, true);
+
+        assertThat(result.notes()).extracting(MemoryNoteEntity::getMemoryId).containsExactly("mem-public");
+        assertThat(result.mode()).isEqualTo("keyword");
+    }
+
+    @Test
+    void searchUnifiedWithFlagsIncludesLocalOnlyNotesWhenIncluded() {
+        MemoryNoteEntity localOnlyNote = MemoryNoteEntity.builder()
+                .memoryId("mem-local").title("Local").privacy("local-only").build();
+        when(embeddingClient.embed(any())).thenReturn(null);
+        when(repository.searchByText(eq("q"), any())).thenReturn(List.of(localOnlyNote));
+
+        MemoryNoteService.NoteSearchResult result = service.searchUnified("q", 5, true, true);
+
+        assertThat(result.notes()).hasSize(1);
+    }
+
+    @Test
+    void searchUnifiedTwoArgOverloadIsUnaffectedByPrivacyFiltering() {
+        MemoryNoteEntity localOnlyNote = MemoryNoteEntity.builder()
+                .memoryId("mem-local").title("Local").privacy("local-only").build();
+        when(embeddingClient.embed(any())).thenReturn(null);
+        when(repository.searchByText(eq("q"), any())).thenReturn(List.of(localOnlyNote));
+
+        MemoryNoteService.NoteSearchResult result = service.searchUnified("q", 5);
+
+        assertThat(result.notes()).hasSize(1);
+    }
 }

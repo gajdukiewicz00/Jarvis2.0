@@ -72,7 +72,13 @@ public class UnifiedSearchController {
         // 2) Note-store (Obsidian + memory notes): semantic-first, keyword fallback
         String noteMode = "none";
         try {
-            MemoryNoteService.NoteSearchResult nr = noteService.searchUnified(request.getQuery(), topK);
+            // Roadmap — honour the same B2 local-only/sensitive flags already
+            // threaded through SearchRequest for the chunk-store, so
+            // finance/health-scoped notes (always local-only, see
+            // MemoryNoteService#resolvePrivacy) never reach an external LLM
+            // via this unified/RAG context-assembly endpoint.
+            MemoryNoteService.NoteSearchResult nr = noteService.searchUnified(
+                    request.getQuery(), topK, request.isIncludeLocalOnly(), request.isIncludeSensitive());
             noteMode = nr.mode();
             for (MemoryNoteEntity n : nr.notes()) {
                 Map<String, Object> m = new LinkedHashMap<>();

@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.eventbus.AuditPublisher;
 import org.jarvis.events.AuditEventType;
 import org.jarvis.memory.exception.DuplicateMemoryException;
+import org.jarvis.memory.service.MemoryService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,6 +105,19 @@ public class MemoryNoteService {
      */
     @Transactional
     public WriteOutcome writeWithOutcome(MemoryNoteRequest request) {
+        return writeWithOutcome(request, false);
+    }
+
+    /**
+     * Roadmap P1 #9 — same as {@link #writeWithOutcome(MemoryNoteRequest)}, but
+     * lets a caller skip the ingest-time content-hash dedup check. Used by
+     * {@link MemoryExportService}'s "keep both" import-conflict resolution,
+     * which must guarantee a distinct new note even when its content is
+     * identical to an already-existing one (the exact case ordinary dedup
+     * exists to collapse).
+     */
+    @Transactional
+    public WriteOutcome writeWithOutcome(MemoryNoteRequest request, boolean bypassDedup) {
         if (request == null) {
             throw new IllegalArgumentException("request is required");
         }
@@ -129,7 +143,7 @@ public class MemoryNoteService {
         // of silently accumulating copies of the same fact.
         String contentHash = computeContentHash(request.getTitle(), request.getBody());
         MemoryDedupProperties dedup = effectiveDedupProperties();
-        if (dedup.isEnabled() && dedup.getStrategy() != MemoryDedupProperties.DedupStrategy.NONE) {
+        if (!bypassDedup && dedup.isEnabled() && dedup.getStrategy() != MemoryDedupProperties.DedupStrategy.NONE) {
             MemoryNoteEntity duplicate = repository
                     .findFirstByContentHashAndStatusOrderByCreatedAtDesc(contentHash, "ACTIVE")
                     .orElse(null);
@@ -148,6 +162,9 @@ public class MemoryNoteService {
         Instant now = Instant.now();
         String memoryId = (request.getMemoryId() == null || request.getMemoryId().isBlank())
                 ? MemoryNoteEntity.newMemoryId() : request.getMemoryId();
+        // Resolved once so the persisted row and the Obsidian frontmatter never
+        // disagree about a finance/health note's privacy.
+        String privacy = resolvePrivacy(scope, request.getPrivacy());
 
         MemoryNoteEntity note = MemoryNoteEntity.builder()
                 .memoryId(memoryId)
@@ -157,7 +174,7 @@ public class MemoryNoteService {
                 .summary(request.getSummary())
                 .body(request.getBody())
                 .source(request.getSource() == null ? "jarvis" : request.getSource())
-                .privacy(request.getPrivacy() == null ? "local-only" : request.getPrivacy())
+                .privacy(privacy)
                 .status("ACTIVE")
                 .confidence(request.getConfidence())
                 .contentHash(contentHash)
@@ -167,7 +184,7 @@ public class MemoryNoteService {
                 .createdAt(now)
                 .updatedAt(now)
                 .frontmatter(initialFrontmatter(memoryId, category, now,
-                        request.getSource(), request.getPrivacy(), request.getTags(),
+                        request.getSource(), privacy, request.getTags(),
                         request.getLinkedEntities(), request.getConfidence()))
                 .build();
 
@@ -238,8 +255,31 @@ public class MemoryNoteService {
         return null;
     }
 
-    /** SHA-256 over normalized title+body — stable regardless of whitespace/case drift. */
-    private static String computeContentHash(String title, String body) {
+    /**
+     * Roadmap — finance/health notes are inherently sensitive: their privacy
+     * is always forced to {@code local-only} regardless of what the caller
+     * requested, so a downstream consumer can reliably keep them away from an
+     * external LLM via {@link MemoryService#privacyAllowed} (see
+     * {@link #searchUnified(String, int, boolean, boolean)}).
+     */
+    static boolean isSensitiveScope(MemoryScope scope) {
+        return scope == MemoryScope.FINANCE || scope == MemoryScope.HEALTH;
+    }
+
+    private static String resolvePrivacy(MemoryScope scope, String requestedPrivacy) {
+        if (isSensitiveScope(scope)) {
+            return "local-only";
+        }
+        return requestedPrivacy == null ? "local-only" : requestedPrivacy;
+    }
+
+    /**
+     * SHA-256 over normalized title+body — stable regardless of whitespace/case
+     * drift. Package-private (not {@code private}) so {@link MemoryExportService}
+     * can reuse it for import-time conflict detection instead of duplicating the
+     * hashing scheme.
+     */
+    static String computeContentHash(String title, String body) {
         String normalized = normalize(title) + "" + normalize(body);
         try {
             java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
@@ -360,6 +400,27 @@ public class MemoryNoteService {
                 "keyword");
     }
 
+    /**
+     * Roadmap — privacy-aware variant of {@link #searchUnified(String, int)}.
+     * Mirrors {@link MemoryService}'s B2 chunk-store filter: when the caller
+     * cannot receive {@code local-only} / {@code sensitive} content (e.g. the
+     * active provider is a remote/external LLM), matching notes flagged that
+     * way are dropped from the result set. Finance/health-scoped notes are
+     * always {@code local-only} (see {@link #resolvePrivacy}), so this is the
+     * guard that keeps them from reaching an external LLM through unified
+     * search / RAG context assembly.
+     */
+    public NoteSearchResult searchUnified(String query, int topK, boolean includeLocalOnly, boolean includeSensitive) {
+        NoteSearchResult raw = searchUnified(query, topK);
+        List<MemoryNoteEntity> filtered = new java.util.ArrayList<>();
+        for (MemoryNoteEntity candidate : raw.notes()) {
+            if (MemoryService.privacyAllowed(candidate.getPrivacy(), includeLocalOnly, includeSensitive)) {
+                filtered.add(candidate);
+            }
+        }
+        return new NoteSearchResult(List.copyOf(filtered), raw.mode());
+    }
+
     /** Edit an existing note in place (only non-null fields are applied), then re-embed. */
     @Transactional
     public MemoryNoteEntity update(String memoryId, MemoryNoteRequest request) {
@@ -384,6 +445,12 @@ public class MemoryNoteService {
         }
         if (request.getScope() != null) {
             note.setScope(request.getScope().name());
+        }
+        // Roadmap — re-assert the finance/health local-only guard on every edit,
+        // whether this request just changed the scope or the note already had a
+        // sensitive scope from an earlier write.
+        if (isSensitiveScope(MemoryScope.fromString(note.getScope()))) {
+            note.setPrivacy("local-only");
         }
         Instant requestedExpiry = resolveExpiresAt(request, Instant.now());
         if (requestedExpiry != null) {

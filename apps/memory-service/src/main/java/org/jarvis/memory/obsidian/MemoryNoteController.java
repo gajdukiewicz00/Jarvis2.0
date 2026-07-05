@@ -17,8 +17,14 @@ import java.util.List;
  *   <li>{@code GET    /api/v1/memory/notes/pending?scope=&limit=} — review/pending queue (low/no confidence)</li>
  *   <li>{@code GET    /api/v1/memory/notes/export?scope=}         — bulk export (plaintext)</li>
  *   <li>{@code GET    /api/v1/memory/notes/export/encrypted?scope=} — bulk export (AES-256/GCM, flagged)</li>
+ *   <li>{@code GET    /api/v1/memory/notes/export/encrypted-or-plain?scope=} — encrypted when a key is
+ *       configured, else the plaintext takeout with an explicit {@code encrypted:false} flag</li>
  *   <li>{@code POST   /api/v1/memory/notes/import}                — bulk import (plaintext)</li>
  *   <li>{@code POST   /api/v1/memory/notes/import/encrypted}      — bulk import (AES-256/GCM, flagged)</li>
+ *   <li>{@code POST   /api/v1/memory/notes/import/resolve?mode=}  — bulk import (plaintext) with
+ *       explicit skip/overwrite/keep-both conflict resolution</li>
+ *   <li>{@code POST   /api/v1/memory/notes/import/encrypted/resolve?mode=} — encrypted variant of the above</li>
+ *   <li>{@code GET    /api/v1/memory/notes/{memoryId}/why}        — "why does Jarvis remember this?"</li>
  *   <li>{@code DELETE /api/v1/memory/notes/{memoryId}?actor=&reason=} — forget</li>
  * </ul>
  *
@@ -86,6 +92,17 @@ public class MemoryNoteController {
         return exportService.exportEncrypted(scope);
     }
 
+    /**
+     * Roadmap P1 #9 — like {@link #exportEncrypted}, but falls back to the
+     * plaintext takeout (flagged via {@code encrypted:false}) instead of a
+     * 400 when no encryption key is configured.
+     */
+    @GetMapping("/export/encrypted-or-plain")
+    public MemoryExportService.ExportPayload exportEncryptedOrPlain(
+            @RequestParam(required = false) MemoryScope scope) {
+        return exportService.exportPreferEncrypted(scope);
+    }
+
     /** Roadmap P1 #9 — bulk import (plaintext); reuses the single-note write pipeline per entry. */
     @PostMapping("/import")
     public MemoryExportService.ImportSummary importNotes(@RequestBody List<MemoryNoteRequest> notes) {
@@ -97,6 +114,36 @@ public class MemoryNoteController {
     public MemoryExportService.ImportSummary importEncrypted(
             @RequestBody MemoryExportService.ExportEnvelope envelope) {
         return exportService.importEncrypted(envelope);
+    }
+
+    /**
+     * Roadmap P1 #9 — bulk import (plaintext) with explicit conflict
+     * resolution ({@link ImportConflictMode}: skip / overwrite / keep-both),
+     * matched by {@code memoryId} first and then by content-hash.
+     */
+    @PostMapping("/import/resolve")
+    public MemoryExportService.ConflictImportSummary importWithConflictResolution(
+            @RequestBody List<MemoryNoteRequest> notes,
+            @RequestParam(defaultValue = "skip") String mode) {
+        return exportService.importNotesWithConflictResolution(notes, ImportConflictMode.fromString(mode));
+    }
+
+    /** Encrypted-payload variant of {@link #importWithConflictResolution}. */
+    @PostMapping("/import/encrypted/resolve")
+    public MemoryExportService.ConflictImportSummary importEncryptedWithConflictResolution(
+            @RequestBody MemoryExportService.ExportEnvelope envelope,
+            @RequestParam(defaultValue = "skip") String mode) {
+        return exportService.importEncryptedWithConflictResolution(envelope, ImportConflictMode.fromString(mode));
+    }
+
+    /**
+     * Roadmap P1 #9 — "why does Jarvis remember this?": source, confidence,
+     * scope, createdAt and a human-readable explanation for one note.
+     */
+    @GetMapping("/{memoryId}/why")
+    public ResponseEntity<WhyRememberedResponse> why(@PathVariable String memoryId) {
+        MemoryNoteEntity note = noteService.get(memoryId);
+        return note == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(WhyRememberedResponse.from(note));
     }
 
     @DeleteMapping("/{memoryId}")

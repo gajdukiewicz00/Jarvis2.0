@@ -56,6 +56,17 @@ public class MemoryExportService {
     /** Outcome of a bulk import: how many notes were created vs. merged (dedup) vs. failed. */
     public record ImportSummary(int received, int created, int merged, int failed, List<String> errors) {}
 
+    /**
+     * Roadmap P1 #9 — result of {@link #exportPreferEncrypted}: {@code encrypted}
+     * is the explicit flag callers should branch on (never guess from which of
+     * {@code envelope}/{@code notes} is null).
+     */
+    public record ExportPayload(boolean encrypted, ExportEnvelope envelope, List<MemoryNoteEntity> notes) {}
+
+    /** Outcome of a conflict-aware bulk import (see {@link ImportConflictMode}). */
+    public record ConflictImportSummary(int received, int created, int overwritten, int skipped, int failed,
+                                        List<String> errors) {}
+
     /** All ACTIVE notes, optionally filtered by scope — the plaintext takeout payload. */
     public List<MemoryNoteEntity> exportNotes(MemoryScope scope) {
         String scopeStr = scope == null ? null : scope.name();
@@ -70,6 +81,21 @@ public class MemoryExportService {
         requireEncryptionConfigured();
         String json = writeJson(exportNotes(scope));
         return encrypt(json);
+    }
+
+    /**
+     * Roadmap P1 #9 — {@link #exportEncrypted} when a key is configured;
+     * otherwise falls back to the existing plaintext takeout
+     * ({@link #exportNotes}) rather than failing the request outright. The
+     * caller always gets an explicit {@code encrypted} flag on the returned
+     * {@link ExportPayload} instead of having to infer the mode from which
+     * field is null.
+     */
+    public ExportPayload exportPreferEncrypted(MemoryScope scope) {
+        if (properties.isEncryptionConfigured()) {
+            return new ExportPayload(true, exportEncrypted(scope), null);
+        }
+        return new ExportPayload(false, null, exportNotes(scope));
     }
 
     /**
@@ -107,6 +133,89 @@ public class MemoryExportService {
         String json = decrypt(envelope);
         List<MemoryNoteRequest> requests = readJson(json);
         return importNotes(requests);
+    }
+
+    /**
+     * Roadmap P1 #9 — bulk import with explicit conflict resolution. A
+     * "conflict" is an existing ACTIVE note matched either by {@code memoryId}
+     * (exact match, checked first) or, failing that, by content-hash (same
+     * normalized title+body — the same signal {@link MemoryNoteService}'s
+     * ingest-time dedup uses). Unlike {@link #importNotes} (which always
+     * defers to the ambient {@link MemoryDedupProperties} merge-by-default
+     * behaviour), the caller's {@code mode} is authoritative here: SKIP drops
+     * the incoming entry, OVERWRITE replaces the conflicting note in place,
+     * and KEEP_BOTH creates a genuinely new note (bypassing dedup) alongside
+     * the existing one.
+     */
+    public ConflictImportSummary importNotesWithConflictResolution(List<MemoryNoteRequest> requests,
+                                                                    ImportConflictMode mode) {
+        if (requests == null || requests.isEmpty()) {
+            return new ConflictImportSummary(0, 0, 0, 0, 0, List.of());
+        }
+        ImportConflictMode effectiveMode = mode == null ? ImportConflictMode.SKIP : mode;
+        int created = 0;
+        int overwritten = 0;
+        int skipped = 0;
+        List<String> errors = new ArrayList<>();
+        for (MemoryNoteRequest request : requests) {
+            try {
+                MemoryNoteEntity conflict = findConflict(request);
+                if (conflict == null) {
+                    noteService.writeWithOutcome(request);
+                    created++;
+                    continue;
+                }
+                switch (effectiveMode) {
+                    case OVERWRITE -> {
+                        noteService.update(conflict.getMemoryId(), request);
+                        overwritten++;
+                    }
+                    case KEEP_BOTH -> {
+                        noteService.writeWithOutcome(stripMemoryId(request), true);
+                        created++;
+                    }
+                    default -> skipped++;
+                }
+            } catch (RuntimeException e) {
+                String title = request == null ? "<null>" : String.valueOf(request.getTitle());
+                errors.add("\"" + title + "\": " + e.getMessage());
+                log.warn("bulk import (conflict resolution): failed to write note '{}': {}", title, e.getMessage());
+            }
+        }
+        return new ConflictImportSummary(requests.size(), created, overwritten, skipped, errors.size(),
+                List.copyOf(errors));
+    }
+
+    /**
+     * Decrypts an {@link ExportEnvelope} and applies
+     * {@link #importNotesWithConflictResolution} to the notes it carries.
+     */
+    public ConflictImportSummary importEncryptedWithConflictResolution(ExportEnvelope envelope,
+                                                                        ImportConflictMode mode) {
+        requireEncryptionConfigured();
+        String json = decrypt(envelope);
+        List<MemoryNoteRequest> requests = readJson(json);
+        return importNotesWithConflictResolution(requests, mode);
+    }
+
+    /** Existing note conflicting with {@code request}: same memoryId first, else same content-hash. */
+    private MemoryNoteEntity findConflict(MemoryNoteRequest request) {
+        if (request == null) {
+            return null;
+        }
+        if (request.getMemoryId() != null && !request.getMemoryId().isBlank()) {
+            MemoryNoteEntity byId = noteService.get(request.getMemoryId());
+            if (byId != null) {
+                return byId;
+            }
+        }
+        String hash = MemoryNoteService.computeContentHash(request.getTitle(), request.getBody());
+        return repository.findFirstByContentHashAndStatusOrderByCreatedAtDesc(hash, "ACTIVE").orElse(null);
+    }
+
+    /** Forces a fresh memoryId so "keep both" cannot collide with the conflicting note. */
+    private static MemoryNoteRequest stripMemoryId(MemoryNoteRequest request) {
+        return request.toBuilder().memoryId(null).build();
     }
 
     private void requireEncryptionConfigured() {

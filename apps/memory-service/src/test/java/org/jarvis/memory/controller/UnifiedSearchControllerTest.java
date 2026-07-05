@@ -16,6 +16,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -59,7 +60,7 @@ class UnifiedSearchControllerTest {
                         .build()))
                 .build();
         when(memoryService.search(eq(request), any())).thenReturn(chunkResponse);
-        when(noteService.searchUnified(eq("hello"), eq(5)))
+        when(noteService.searchUnified(eq("hello"), eq(5), eq(true), eq(true)))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(
                         List.of(note("mem-1", "Obsidian note", "03_Memory/Projects/note.md"),
                                 note("mem-2", "Bare note", null)),
@@ -88,7 +89,7 @@ class UnifiedSearchControllerTest {
         SearchRequest request = SearchRequest.builder().query("q").topK(1).build();
         when(memoryService.search(any(), any())).thenReturn(
                 SearchResponse.builder().retrievalMode("semantic").chunks(List.of()).build());
-        when(noteService.searchUnified(any(), anyInt()))
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean()))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(List.of(), "keyword"));
 
         controller.unified(request, "header-user");
@@ -101,7 +102,7 @@ class UnifiedSearchControllerTest {
         SearchRequest request = SearchRequest.builder().query("q").topK(1).build();
         when(memoryService.search(any(), any())).thenReturn(
                 SearchResponse.builder().retrievalMode("semantic").chunks(List.of()).build());
-        when(noteService.searchUnified(any(), anyInt()))
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean()))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(List.of(), "keyword"));
 
         controller.unified(request, "   ");
@@ -114,19 +115,19 @@ class UnifiedSearchControllerTest {
         SearchRequest request = SearchRequest.builder().query("q").topK(0).build();
         when(memoryService.search(any(), any())).thenReturn(
                 SearchResponse.builder().retrievalMode("semantic").chunks(List.of()).build());
-        when(noteService.searchUnified(any(), anyInt()))
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean()))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(List.of(), "keyword"));
 
         controller.unified(request, null);
 
-        verify(noteService).searchUnified(eq("q"), eq(1));
+        verify(noteService).searchUnified(eq("q"), eq(1), eq(true), eq(true));
     }
 
     @Test
     void unifiedDegradesGracefullyWhenChunkStoreThrows() {
         SearchRequest request = SearchRequest.builder().query("q").topK(3).build();
         when(memoryService.search(any(), any())).thenThrow(new RuntimeException("chunk store down"));
-        when(noteService.searchUnified(any(), anyInt()))
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean()))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(List.of(), "keyword"));
 
         Map<String, Object> result = controller.unified(request, null);
@@ -141,7 +142,7 @@ class UnifiedSearchControllerTest {
         SearchRequest request = SearchRequest.builder().query("q").topK(3).build();
         when(memoryService.search(any(), any())).thenReturn(
                 SearchResponse.builder().retrievalMode("semantic").chunks(List.of()).build());
-        when(noteService.searchUnified(any(), anyInt())).thenThrow(new RuntimeException("note store down"));
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean())).thenThrow(new RuntimeException("note store down"));
 
         Map<String, Object> result = controller.unified(request, null);
 
@@ -163,7 +164,7 @@ class UnifiedSearchControllerTest {
                 .build();
         when(memoryService.search(any(), any())).thenReturn(
                 SearchResponse.builder().retrievalMode("semantic").chunks(List.of()).build());
-        when(noteService.searchUnified(any(), anyInt()))
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean()))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(List.of(longNote), "keyword"));
 
         Map<String, Object> result = controller.unified(request, null);
@@ -185,7 +186,7 @@ class UnifiedSearchControllerTest {
                 .build();
         when(memoryService.search(any(), any())).thenReturn(
                 SearchResponse.builder().retrievalMode("semantic").chunks(List.of()).build());
-        when(noteService.searchUnified(any(), anyInt()))
+        when(noteService.searchUnified(any(), anyInt(), anyBoolean(), anyBoolean()))
                 .thenReturn(new MemoryNoteService.NoteSearchResult(List.of(noBody), "keyword"));
 
         Map<String, Object> result = controller.unified(request, null);

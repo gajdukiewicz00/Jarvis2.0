@@ -146,8 +146,12 @@ public class MemoryService {
      * B2 — whether a chunk of the given privacy level may be returned for the
      * active provider. {@code local_only} requires includeLocalOnly;
      * {@code sensitive} requires includeSensitive; public/private always pass.
+     *
+     * <p>Public (not package-private) so {@link org.jarvis.memory.obsidian.MemoryNoteService}
+     * can reuse the exact same B2 semantics for the note-store instead of
+     * duplicating the privacy-string parsing rules.</p>
      */
-    static boolean privacyAllowed(String privacy, boolean includeLocalOnly, boolean includeSensitive) {
+    public static boolean privacyAllowed(String privacy, boolean includeLocalOnly, boolean includeSensitive) {
         if (privacy == null || privacy.isBlank()) {
             return true;
         }

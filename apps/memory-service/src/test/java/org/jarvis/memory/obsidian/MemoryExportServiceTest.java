@@ -13,12 +13,15 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -164,5 +167,189 @@ class MemoryExportServiceTest {
         assertThat(summary.failed()).isEqualTo(1);
         assertThat(summary.errors()).hasSize(1);
         assertThat(summary.errors().get(0)).contains("Failing");
+    }
+
+    // ------------------------------------------------- export fallback flag
+
+    @Test
+    void exportPreferEncryptedReturnsEncryptedPayloadWhenKeyConfigured() {
+        properties.setEncryptionKeyBase64(Base64.getEncoder().encodeToString(new byte[32]));
+        when(repository.searchByCategoryAndScope(any(), any(), eq("ACTIVE"), any()))
+                .thenReturn(List.of(note("mem-1", "One")));
+
+        MemoryExportService.ExportPayload payload = service.exportPreferEncrypted(null);
+
+        assertThat(payload.encrypted()).isTrue();
+        assertThat(payload.envelope()).isNotNull();
+        assertThat(payload.envelope().ciphertextBase64()).isNotBlank();
+        assertThat(payload.notes()).isNull();
+    }
+
+    @Test
+    void exportPreferEncryptedFallsBackToPlaintextWhenKeyNotConfigured() {
+        List<MemoryNoteEntity> notes = List.of(note("mem-1", "One"));
+        when(repository.searchByCategoryAndScope(any(), any(), eq("ACTIVE"), any())).thenReturn(notes);
+
+        MemoryExportService.ExportPayload payload = service.exportPreferEncrypted(null);
+
+        assertThat(payload.encrypted()).isFalse();
+        assertThat(payload.envelope()).isNull();
+        assertThat(payload.notes()).isEqualTo(notes);
+    }
+
+    // --------------------------------------- import with conflict resolution
+
+    @Test
+    void importNotesWithConflictResolutionReturnsEmptySummaryForNullOrEmptyList() {
+        MemoryExportService.ConflictImportSummary empty =
+                new MemoryExportService.ConflictImportSummary(0, 0, 0, 0, 0, List.of());
+        assertThat(service.importNotesWithConflictResolution(null, ImportConflictMode.SKIP)).isEqualTo(empty);
+        assertThat(service.importNotesWithConflictResolution(List.of(), ImportConflictMode.SKIP)).isEqualTo(empty);
+    }
+
+    @Test
+    void importNotesWithConflictResolutionCreatesWhenNoConflictFound() {
+        MemoryNoteRequest request = MemoryNoteRequest.builder().title("Brand new").body("body").build();
+        when(repository.findFirstByContentHashAndStatusOrderByCreatedAtDesc(anyString(), eq("ACTIVE")))
+                .thenReturn(Optional.empty());
+        when(noteService.writeWithOutcome(request))
+                .thenReturn(new MemoryNoteService.WriteOutcome(note("mem-new", "Brand new"), false));
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(request), ImportConflictMode.SKIP);
+
+        assertThat(summary.received()).isEqualTo(1);
+        assertThat(summary.created()).isEqualTo(1);
+        assertThat(summary.skipped()).isZero();
+        assertThat(summary.overwritten()).isZero();
+        verify(noteService).writeWithOutcome(request);
+    }
+
+    @Test
+    void importNotesWithConflictResolutionSkipsConflictingMemoryIdWhenModeIsSkip() {
+        MemoryNoteEntity existing = note("mem-1", "Existing");
+        MemoryNoteRequest request = MemoryNoteRequest.builder()
+                .memoryId("mem-1").title("Existing").body("body").build();
+        when(noteService.get("mem-1")).thenReturn(existing);
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(request), ImportConflictMode.SKIP);
+
+        assertThat(summary.skipped()).isEqualTo(1);
+        assertThat(summary.created()).isZero();
+        assertThat(summary.overwritten()).isZero();
+        verify(noteService, never()).update(any(), any());
+        verify(noteService, never()).writeWithOutcome(any(MemoryNoteRequest.class));
+        verify(noteService, never()).writeWithOutcome(any(MemoryNoteRequest.class), eq(true));
+    }
+
+    @Test
+    void importNotesWithConflictResolutionDefaultsToSkipWhenModeIsNull() {
+        MemoryNoteEntity existing = note("mem-1", "Existing");
+        MemoryNoteRequest request = MemoryNoteRequest.builder()
+                .memoryId("mem-1").title("Existing").body("body").build();
+        when(noteService.get("mem-1")).thenReturn(existing);
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(request), null);
+
+        assertThat(summary.skipped()).isEqualTo(1);
+    }
+
+    @Test
+    void importNotesWithConflictResolutionOverwritesConflictingMemoryIdWhenModeIsOverwrite() {
+        MemoryNoteEntity existing = note("mem-1", "Existing");
+        MemoryNoteRequest request = MemoryNoteRequest.builder()
+                .memoryId("mem-1").title("Updated title").body("body").build();
+        when(noteService.get("mem-1")).thenReturn(existing);
+        when(noteService.update("mem-1", request)).thenReturn(note("mem-1", "Updated title"));
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(request), ImportConflictMode.OVERWRITE);
+
+        assertThat(summary.overwritten()).isEqualTo(1);
+        assertThat(summary.created()).isZero();
+        assertThat(summary.skipped()).isZero();
+        verify(noteService).update("mem-1", request);
+    }
+
+    @Test
+    void importNotesWithConflictResolutionOverwritesNoteMatchedByContentHashWhenNoMemoryIdGiven() {
+        MemoryNoteEntity existing = note("mem-existing", "Same title");
+        MemoryNoteRequest request = MemoryNoteRequest.builder().title("Same title").body("body").build();
+        when(repository.findFirstByContentHashAndStatusOrderByCreatedAtDesc(anyString(), eq("ACTIVE")))
+                .thenReturn(Optional.of(existing));
+        when(noteService.update(eq("mem-existing"), any())).thenReturn(existing);
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(request), ImportConflictMode.OVERWRITE);
+
+        assertThat(summary.overwritten()).isEqualTo(1);
+        verify(noteService).update(eq("mem-existing"), eq(request));
+    }
+
+    @Test
+    void importNotesWithConflictResolutionKeepsBothCreatingASeparateNote() {
+        MemoryNoteEntity existing = note("mem-1", "Existing");
+        MemoryNoteRequest request = MemoryNoteRequest.builder()
+                .memoryId("mem-1").title("Existing").body("body").build();
+        when(noteService.get("mem-1")).thenReturn(existing);
+        when(noteService.writeWithOutcome(any(MemoryNoteRequest.class), eq(true)))
+                .thenReturn(new MemoryNoteService.WriteOutcome(note("mem-new", "Existing"), false));
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(request), ImportConflictMode.KEEP_BOTH);
+
+        assertThat(summary.created()).isEqualTo(1);
+        assertThat(summary.overwritten()).isZero();
+        assertThat(summary.skipped()).isZero();
+        ArgumentCaptor<MemoryNoteRequest> captor = ArgumentCaptor.forClass(MemoryNoteRequest.class);
+        verify(noteService).writeWithOutcome(captor.capture(), eq(true));
+        assertThat(captor.getValue().getMemoryId()).isNull();
+        assertThat(captor.getValue().getTitle()).isEqualTo("Existing");
+    }
+
+    @Test
+    void importNotesWithConflictResolutionRecordsFailuresWithoutAbortingBatch() {
+        MemoryNoteRequest failing = MemoryNoteRequest.builder().title("Failing").body("body").build();
+        MemoryNoteRequest ok = MemoryNoteRequest.builder().title("Ok").body("body2").build();
+        when(repository.findFirstByContentHashAndStatusOrderByCreatedAtDesc(anyString(), eq("ACTIVE")))
+                .thenReturn(Optional.empty());
+        when(noteService.writeWithOutcome(failing)).thenThrow(new IllegalArgumentException("boom"));
+        when(noteService.writeWithOutcome(ok))
+                .thenReturn(new MemoryNoteService.WriteOutcome(note("mem-ok", "Ok"), false));
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importNotesWithConflictResolution(List.of(failing, ok), ImportConflictMode.SKIP);
+
+        assertThat(summary.received()).isEqualTo(2);
+        assertThat(summary.created()).isEqualTo(1);
+        assertThat(summary.failed()).isEqualTo(1);
+        assertThat(summary.errors().get(0)).contains("Failing");
+    }
+
+    @Test
+    void importEncryptedWithConflictResolutionDecryptsThenAppliesResolution() {
+        properties.setEncryptionKeyBase64(Base64.getEncoder().encodeToString(new byte[32]));
+        MemoryNoteEntity existing = note("mem-1", "Secret");
+        when(noteService.get("mem-1")).thenReturn(existing);
+        when(repository.searchByCategoryAndScope(any(), any(), eq("ACTIVE"), any()))
+                .thenReturn(List.of(note("mem-1", "Secret")));
+        MemoryExportService.ExportEnvelope envelope = service.exportEncrypted(null);
+
+        MemoryExportService.ConflictImportSummary summary =
+                service.importEncryptedWithConflictResolution(envelope, ImportConflictMode.SKIP);
+
+        assertThat(summary.received()).isEqualTo(1);
+        assertThat(summary.skipped()).isEqualTo(1);
+    }
+
+    @Test
+    void importEncryptedWithConflictResolutionThrowsWhenKeyNotConfigured() {
+        MemoryExportService.ExportEnvelope envelope =
+                new MemoryExportService.ExportEnvelope("AES/GCM/NoPadding", "iv", "ciphertext");
+
+        assertThatThrownBy(() -> service.importEncryptedWithConflictResolution(envelope, ImportConflictMode.SKIP))
+                .isInstanceOf(MemoryExportEncryptionUnavailableException.class);
     }
 }

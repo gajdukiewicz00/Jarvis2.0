@@ -209,4 +209,87 @@ class MemoryNoteControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody()).isNull();
     }
+
+    // ------------------------------------------------ export/import additions
+
+    @Test
+    void exportEncryptedOrPlainDelegatesToExportService() {
+        MemoryExportService.ExportPayload payload =
+                new MemoryExportService.ExportPayload(false, null, List.of(note("mem-1", "One")));
+        when(exportService.exportPreferEncrypted(MemoryScope.FINANCE)).thenReturn(payload);
+
+        MemoryExportService.ExportPayload result = controller.exportEncryptedOrPlain(MemoryScope.FINANCE);
+
+        assertThat(result).isEqualTo(payload);
+    }
+
+    @Test
+    void importWithConflictResolutionParsesModeAndDelegates() {
+        List<MemoryNoteRequest> requests = List.of(MemoryNoteRequest.builder().title("Imported").build());
+        MemoryExportService.ConflictImportSummary summary =
+                new MemoryExportService.ConflictImportSummary(1, 0, 1, 0, 0, List.of());
+        when(exportService.importNotesWithConflictResolution(requests, ImportConflictMode.OVERWRITE))
+                .thenReturn(summary);
+
+        MemoryExportService.ConflictImportSummary result =
+                controller.importWithConflictResolution(requests, "overwrite");
+
+        assertThat(result).isEqualTo(summary);
+    }
+
+    @Test
+    void importWithConflictResolutionDefaultsModeToSkip() {
+        List<MemoryNoteRequest> requests = List.of(MemoryNoteRequest.builder().title("Imported").build());
+        MemoryExportService.ConflictImportSummary summary =
+                new MemoryExportService.ConflictImportSummary(1, 0, 0, 1, 0, List.of());
+        when(exportService.importNotesWithConflictResolution(requests, ImportConflictMode.SKIP))
+                .thenReturn(summary);
+
+        MemoryExportService.ConflictImportSummary result =
+                controller.importWithConflictResolution(requests, "skip");
+
+        assertThat(result).isEqualTo(summary);
+    }
+
+    @Test
+    void importEncryptedWithConflictResolutionParsesModeAndDelegates() {
+        MemoryExportService.ExportEnvelope envelope =
+                new MemoryExportService.ExportEnvelope("AES/GCM/NoPadding", "iv", "ciphertext");
+        MemoryExportService.ConflictImportSummary summary =
+                new MemoryExportService.ConflictImportSummary(1, 1, 0, 0, 0, List.of());
+        when(exportService.importEncryptedWithConflictResolution(envelope, ImportConflictMode.KEEP_BOTH))
+                .thenReturn(summary);
+
+        MemoryExportService.ConflictImportSummary result =
+                controller.importEncryptedWithConflictResolution(envelope, "keep-both");
+
+        assertThat(result).isEqualTo(summary);
+    }
+
+    // ------------------------------------------------------------- why
+
+    @Test
+    void whyReturnsExplanationWhenNoteFound() {
+        MemoryNoteEntity existing = note("mem-1", "Existing");
+        when(noteService.get("mem-1")).thenReturn(existing);
+
+        ResponseEntity<WhyRememberedResponse> response = controller.why("mem-1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().memoryId()).isEqualTo("mem-1");
+        assertThat(response.getBody().source()).isEqualTo("jarvis");
+        assertThat(response.getBody().confidence()).isEqualByComparingTo("0.5");
+        assertThat(response.getBody().explanation()).isNotBlank();
+    }
+
+    @Test
+    void whyReturnsNotFoundWhenMissing() {
+        when(noteService.get("mem-x")).thenReturn(null);
+
+        ResponseEntity<WhyRememberedResponse> response = controller.why("mem-x");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(response.getBody()).isNull();
+    }
 }

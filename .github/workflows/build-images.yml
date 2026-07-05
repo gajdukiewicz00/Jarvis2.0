@@ -1,0 +1,90 @@
+name: Build Service Images (validation)
+
+# Manual-only, guarded validation that the Jib-enabled Java service modules
+# still produce a container image. Deliberately NOT wired to push/PR — image
+# publishing to the operator's real registry/cluster stays a human action
+# (see "Why this doesn't push anywhere" below), so this workflow only proves
+# the build path still works, on demand.
+#
+# What this does:
+#   - `mvn ... jib:buildTar` for the Jib-enabled service modules (or a single
+#     module via the `service` input), producing local
+#     apps/<service>/target/<artifact>-<version>.image.tar files.
+#   - Jib's buildTar goal needs no container daemon, no registry, and no
+#     network egress — it assembles the OCI image layers straight from the
+#     already-built jar, entirely inside the GitHub-hosted runner.
+#   - It never touches localhost:5000 (the operator's local MicroK8s/k3s
+#     registry) and never contacts the live k3s cluster.
+#
+# Why this doesn't push anywhere / isn't wired to push/PR:
+#   - Real image promotion pushes to the operator's LAN-local registry
+#     (localhost:5000, only reachable from the workstation running
+#     MicroK8s/k3s) and then rolls those images out onto the live k3s
+#     cluster (28 pods, currently serving). A GitHub-hosted runner has no
+#     route to that registry or that cluster, and this repo's hard rule for
+#     automated changes is: never touch the live cluster.
+#   - The actual build+push+promote path is operator-run, via:
+#       ./scripts/build-images.sh (thin wrapper)
+#         -> infra/scripts/microk8s/build-images.sh --mode=registry
+#       -> scripts/product/jarvis-promote-images.sh
+#     both already exercised by scripts/ci/check-backend-release-wiring.sh
+#     (see .github/workflows/backend-readiness.yml's `release-wiring` job).
+#   - This workflow exists purely so a maintainer can smoke-test "does Jib
+#     still build a valid image for service X" without needing their own
+#     machine, before running the real operator-side promotion.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: >-
+          Single service to build (name only, e.g. "api-gateway" — matches
+          apps/<name>). Leave blank to build every Jib-enabled Java service.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-images-tar:
+    name: Jib build (local OCI tarball only, no push, no daemon)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Indirected through env (rather than interpolated straight into the
+      # `run:` script below) so a workflow_dispatch input can never be
+      # spliced into the shell command as literal script text.
+      SERVICE_INPUT: ${{ github.event.inputs.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build Java service image(s) as local OCI tarballs
+        run: |
+          set -euo pipefail
+          if [[ -n "${SERVICE_INPUT}" ]]; then
+            ./infra/scripts/microk8s/build-images.sh --mode=tar --no-python --service="${SERVICE_INPUT}"
+          else
+            ./infra/scripts/microk8s/build-images.sh --mode=tar --no-python
+          fi
+
+      - name: List produced image tarballs
+        run: |
+          set -euo pipefail
+          find apps -maxdepth 3 -name "*.image.tar" -exec ls -lh {} \;
+
+      - name: Upload image tarballs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: service-image-tarballs
+          path: "apps/*/target/*.image.tar"
+          if-no-files-found: warn
+          retention-days: 7

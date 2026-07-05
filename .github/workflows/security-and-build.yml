@@ -146,7 +146,9 @@ jobs:
             scripts/verify-ai.sh \
             scripts/verify-observability.sh \
             scripts/verify-prod.sh \
-            scripts/runtime/common.sh; do
+            scripts/runtime/common.sh \
+            scripts/ci/jacoco-coverage-summary.sh \
+            scripts/ci/test-jacoco-coverage-summary.sh; do
             echo "::group::$f"
             shellcheck -x "$f" || echo "(shellcheck issues above are advisory)"
             echo "::endgroup::"

@@ -1,0 +1,103 @@
+name: Reactor Test Suite
+
+# Runs the FULL Maven reactor unit-test suite (every apps/* and libs/*
+# module wired into the root pom.xml <modules>) on every push/PR to main.
+#
+# This closes a real gap: neither existing workflow actually runs the unit
+# tests that live under apps/**/src/test and libs/**/src/test.
+#   - security-and-build.yml's `reactor-compile-gate` job only proves the
+#     tree compiles (`mvn -DskipTests package`).
+#   - backend-readiness.yml only runs a handful of black-box runtime smoke
+#     scripts against a couple of services.
+# This workflow runs `mvn test` across the whole reactor and fails the
+# job the moment any module's tests fail.
+#
+# Test-tagged integration/microk8s tests (@Tag("integration"),
+# @Tag("microk8s"), several of them Testcontainers-backed, e.g.
+# apps/memory-service/src/test/java/.../MemoryServicePgvectorIntegrationTest)
+# are already excluded from the default `test` phase via the root pom's
+# <jarvis.surefire.excludedGroups>integration,microk8s</...> property — this
+# workflow does not start Postgres/Docker services and does not need to.
+#
+# Quality-gate plugins (checkstyle/pmd/spotbugs) are NOT bound to the `test`
+# phase by default in this repo — they only execute their `check` goals
+# under the opt-in `ci-quality` Maven profile (root pom.xml
+# <profiles><profile id="ci-quality">), which nothing here activates. The
+# explicit `-D*.skip=true` flags below are defensive belt-and-suspenders:
+# they keep this job a pure test gate even if a future pom change makes
+# that profile active by default.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "pom.xml"
+      - "apps/**"
+      - "libs/**"
+      - ".github/workflows/reactor-tests.yml"
+      - "scripts/ci/jacoco-coverage-summary.sh"
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "pom.xml"
+      - "apps/**"
+      - "libs/**"
+      - ".github/workflows/reactor-tests.yml"
+      - "scripts/ci/jacoco-coverage-summary.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  reactor-full-test:
+    name: Full reactor test suite (mvn -fae test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run full reactor test suite
+        # -fae (fail-at-end): keep building/testing every module even after
+        # one module's tests fail, so a single flaky/broken module doesn't
+        # hide failures elsewhere in the reactor. Maven still exits non-zero
+        # (and this step, and the job, still fail) if ANY module failed.
+        run: >-
+          mvn -B -ntp -fae test
+          -Dcheckstyle.skip=true
+          -Dpmd.skip=true
+          -Dspotbugs.skip=true
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: "**/target/surefire-reports/**"
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload jacoco reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-reports
+          path: "**/target/site/jacoco/**"
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: JaCoCo coverage summary
+        # Runs even when the test step above failed, so a partial coverage
+        # picture (for whichever modules did finish) is still visible.
+        if: always()
+        run: ./scripts/ci/jacoco-coverage-summary.sh >> "${GITHUB_STEP_SUMMARY}"

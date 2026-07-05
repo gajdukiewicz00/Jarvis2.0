@@ -107,6 +107,10 @@ services:
   llm:
     enabled: ${JARVIS_LLM_ENABLED:false}
     url: ${LLM_SERVICE_URL:http://llm-service:8091}
+  agent-service:
+    url: ${AGENT_SERVICE_URL:http://agent-service:8090}
+  media-service:
+    url: ${MEDIA_SERVICE_URL:http://media-service:8095}
 
 # Circuit Breaker
 resilience4j:

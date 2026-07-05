@@ -119,6 +119,20 @@ spec:
       ports:
         - protocol: TCP
           port: 8093
+    - to:
+        - podSelector:
+            matchLabels:
+              app: agent-service
+      ports:
+        - protocol: TCP
+          port: 8090
+    - to:
+        - podSelector:
+            matchLabels:
+              app: media-service
+      ports:
+        - protocol: TCP
+          port: 8095
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -142,6 +156,8 @@ spec:
           - analytics-service
           - llm-service
           - memory-service
+          - agent-service
+          - media-service
   policyTypes:
     - Ingress
   ingress:
@@ -167,11 +183,15 @@ spec:
         - protocol: TCP
           port: 8088
         - protocol: TCP
+          port: 8090
+        - protocol: TCP
           port: 8091
         - protocol: TCP
           port: 8092
         - protocol: TCP
           port: 8093
+        - protocol: TCP
+          port: 8095
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -679,3 +699,46 @@ spec:
       ports:
         - protocol: TCP
           port: 8094
+---
+# media-service's LlmTranslationProvider calls llm-service directly (subtitle
+# translation) when jarvis.media.translation.mode=llm — see MediaProperties /
+# RestClientConfig, default services.llm-service-url=http://llm-service:8091.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: media-egress-llm-service
+  namespace: jarvis-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: media-service
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: llm-service
+      ports:
+        - protocol: TCP
+          port: 8091
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: llm-service-ingress-from-media
+  namespace: jarvis-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: llm-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: media-service
+      ports:
+        - protocol: TCP
+          port: 8091

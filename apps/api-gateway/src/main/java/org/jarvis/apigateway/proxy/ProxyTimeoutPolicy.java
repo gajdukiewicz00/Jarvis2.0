@@ -20,7 +20,10 @@ public class ProxyTimeoutPolicy {
         return switch (downstreamService) {
             case "security-service", "life-tracker", "analytics-service", "vision-security-service", "planner-service", "memory-service" ->
                     EXTENDED_READ_TIMEOUT;
-            case "llm-service" -> LLM_READ_TIMEOUT;
+            // agent-service's POST /api/v1/agents/swarm?awaitCompletion=true blocks on
+            // SwarmCoordinator#awaitAndReport, which can take up to swarm.swarm-run.wait-timeout-seconds
+            // (default 60s) — the default 10s read timeout would spuriously time out that call.
+            case "llm-service", "agent-service" -> LLM_READ_TIMEOUT;
             default -> DEFAULT_READ_TIMEOUT;
         };
     }

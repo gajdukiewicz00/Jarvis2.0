@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,4 +56,43 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
     List<String> findSimilarNoteIds(@Param("qv") String qv,
                                     @Param("maxDistance") double maxDistance,
                                     @Param("k") int k);
+
+    /**
+     * Roadmap P1 #9 — category+scope aware listing. Additive alongside
+     * {@link #search(String, String, Pageable)} so existing category-only
+     * callers are untouched.
+     */
+    @Query("""
+            SELECT n FROM MemoryNoteEntity n
+             WHERE (:category IS NULL OR n.category = :category)
+               AND (:scope    IS NULL OR n.scope    = :scope)
+               AND (:status   IS NULL OR n.status   = :status)
+             ORDER BY n.createdAt DESC
+            """)
+    List<MemoryNoteEntity> searchByCategoryAndScope(@Param("category") String category,
+                                                    @Param("scope") String scope,
+                                                    @Param("status") String status,
+                                                    Pageable pageable);
+
+    /**
+     * Roadmap P1 #9 — "memory review / pending" queue: ACTIVE notes whose
+     * confidence is missing or below the configured threshold.
+     */
+    @Query("""
+            SELECT n FROM MemoryNoteEntity n
+             WHERE n.status = 'ACTIVE'
+               AND (:scope IS NULL OR n.scope = :scope)
+               AND (n.confidence IS NULL OR n.confidence < :maxConfidence)
+             ORDER BY n.createdAt DESC
+            """)
+    List<MemoryNoteEntity> findPendingReview(@Param("scope") String scope,
+                                             @Param("maxConfidence") BigDecimal maxConfidence,
+                                             Pageable pageable);
+
+    /** Newest note with this content hash in the given status — ingest-time dedup lookup. */
+    Optional<MemoryNoteEntity> findFirstByContentHashAndStatusOrderByCreatedAtDesc(String contentHash,
+                                                                                   String status);
+
+    /** Notes in the given status whose TTL has passed — scheduled expiry cleanup. */
+    List<MemoryNoteEntity> findByStatusAndExpiresAtBefore(String status, Instant instant);
 }

@@ -1,7 +1,9 @@
 package org.jarvis.memory.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.memory.exception.DuplicateMemoryException;
 import org.jarvis.memory.exception.MemoryDependencyUnavailableException;
+import org.jarvis.memory.exception.MemoryExportEncryptionUnavailableException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -30,6 +32,36 @@ public class GlobalExceptionHandler {
                 "EMBEDDING_SERVICE_UNAVAILABLE",
                 ex.getMessage(),
                 ex.getDependency(),
+                request);
+    }
+
+    /** Roadmap P1 #9 — ingest-time dedup rejected a near-identical note. */
+    @ExceptionHandler(DuplicateMemoryException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateMemory(
+            DuplicateMemoryException ex,
+            WebRequest request) {
+
+        log.info("Duplicate memory rejected: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.CONFLICT,
+                "DUPLICATE_MEMORY_NOTE",
+                ex.getMessage(),
+                ex.getExistingMemoryId(),
+                request);
+    }
+
+    /** Roadmap P1 #9 — encrypted export/import requested without a configured key, or bad ciphertext. */
+    @ExceptionHandler(MemoryExportEncryptionUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleExportEncryptionUnavailable(
+            MemoryExportEncryptionUnavailableException ex,
+            WebRequest request) {
+
+        log.warn("Memory export/import encryption unavailable: {}", ex.getMessage());
+        return buildErrorResponse(
+                HttpStatus.BAD_REQUEST,
+                "MEMORY_EXPORT_ENCRYPTION_UNAVAILABLE",
+                ex.getMessage(),
+                null,
                 request);
     }
 

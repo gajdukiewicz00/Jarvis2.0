@@ -144,4 +144,36 @@ class MemoryNoteServiceTest {
 
         assertThat(n.getTitle()).isEqualTo("old title");
     }
+
+    @Test
+    void updateAppliesScopeWhenProvided() {
+        MemoryNoteEntity n = active();
+        when(repository.findById("mem-1")).thenReturn(Optional.of(n));
+
+        service.update("mem-1", MemoryNoteRequest.builder().scope(MemoryScope.FINANCE).build());
+
+        assertThat(n.getScope()).isEqualTo(MemoryScope.FINANCE.name());
+    }
+
+    @Test
+    void updateLeavesScopeUntouchedWhenAbsent() {
+        MemoryNoteEntity n = active();
+        n.setScope(MemoryScope.HEALTH.name());
+        when(repository.findById("mem-1")).thenReturn(Optional.of(n));
+
+        service.update("mem-1", MemoryNoteRequest.builder().title("New title").build());
+
+        assertThat(n.getScope()).isEqualTo(MemoryScope.HEALTH.name());
+    }
+
+    @Test
+    void updateAppliesExplicitExpiresAt() {
+        MemoryNoteEntity n = active();
+        when(repository.findById("mem-1")).thenReturn(Optional.of(n));
+        Instant expiry = Instant.parse("2030-06-01T00:00:00Z");
+
+        service.update("mem-1", MemoryNoteRequest.builder().expiresAt(expiry).build());
+
+        assertThat(n.getExpiresAt()).isEqualTo(expiry);
+    }
 }

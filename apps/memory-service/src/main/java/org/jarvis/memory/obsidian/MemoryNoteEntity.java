@@ -96,6 +96,28 @@ public class MemoryNoteEntity {
     @Column(name = "deleted_at")
     private Instant deletedAt;
 
+    /**
+     * Roadmap P1 #9 — typed scope ({@link MemoryScope}), orthogonal to
+     * {@link #category}. Defaults to {@code USER_PROFILE} at the DB layer.
+     */
+    @Column(name = "scope", nullable = false)
+    private String scope;
+
+    /**
+     * Roadmap P1 #9 — SHA-256 of normalized title+body, used by
+     * {@link MemoryNoteService}'s ingest-time dedup check. {@code null}
+     * for rows written before this column existed.
+     */
+    @Column(name = "content_hash")
+    private String contentHash;
+
+    /**
+     * Roadmap P1 #9 — optional TTL. {@link MemoryExpiryCleanupService}
+     * soft-deletes ACTIVE notes once this instant has passed.
+     */
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
     public static String newMemoryId() {
         return "mem-" + java.util.UUID.randomUUID();
     }
@@ -106,5 +128,18 @@ public class MemoryNoteEntity {
 
     public List<String> linkedEntityList() {
         return linkedEntities == null ? List.of() : List.copyOf(linkedEntities);
+    }
+
+    /**
+     * Roadmap P1 #9 — human-readable provenance surfaced in API responses:
+     * "why does Jarvis remember this?" Derived from {@link #source} and
+     * {@link #confidence}; not persisted.
+     */
+    public String getWhyRemembered() {
+        String origin = (source == null || source.isBlank()) ? "unknown source" : source;
+        if (confidence == null) {
+            return origin;
+        }
+        return origin + " (confidence " + confidence.toPlainString() + ")";
     }
 }

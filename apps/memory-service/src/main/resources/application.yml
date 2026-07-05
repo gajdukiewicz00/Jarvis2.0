@@ -24,6 +24,19 @@ jarvis:
       store-raw-screenshot: ${JARVIS_MEMORY_CV_STORE_RAW_SCREENSHOT:true}
       max-screenshot-bytes: ${JARVIS_MEMORY_CV_MAX_SCREENSHOT_BYTES:8388608}
       embed: ${JARVIS_MEMORY_CV_EMBED:true}
+    # Roadmap P1 #9 — user-managed memory: dedup, TTL/expiry, review queue, export.
+    dedup:
+      enabled: ${JARVIS_MEMORY_DEDUP_ENABLED:true}
+      strategy: ${JARVIS_MEMORY_DEDUP_STRATEGY:MERGE}
+    expiry:
+      enabled: ${JARVIS_MEMORY_EXPIRY_ENABLED:true}
+      cleanup-interval-ms: ${JARVIS_MEMORY_EXPIRY_CLEANUP_INTERVAL_MS:3600000}
+    review:
+      pending-confidence-threshold: ${JARVIS_MEMORY_REVIEW_THRESHOLD:0.50}
+    export:
+      # Base64 AES-256 key. Blank (default) = /export/encrypted and
+      # /import/encrypted are disabled (400) rather than silently no-op encrypting.
+      encryption-key-base64: ${JARVIS_MEMORY_EXPORT_ENCRYPTION_KEY:}
 
 spring:
   lifecycle:

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -33,4 +34,13 @@ public class MemoryNoteRequest {
     private BigDecimal confidence;
     private List<String> tags;
     private List<String> linkedEntities;
+
+    /** Roadmap P1 #9 — typed scope; defaults to {@code USER_PROFILE} when absent. */
+    private MemoryScope scope;
+
+    /** Roadmap P1 #9 — explicit TTL expiry instant. Takes precedence over {@link #ttlSeconds}. */
+    private Instant expiresAt;
+
+    /** Roadmap P1 #9 — convenience TTL relative to write time (e.g. "remember for 30 days"). */
+    private Long ttlSeconds;
 }

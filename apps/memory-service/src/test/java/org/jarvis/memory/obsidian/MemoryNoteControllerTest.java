@@ -19,13 +19,15 @@ class MemoryNoteControllerTest {
 
     private MemoryNoteService noteService;
     private MemoryForgetService forgetService;
+    private MemoryExportService exportService;
     private MemoryNoteController controller;
 
     @BeforeEach
     void setUp() {
         noteService = mock(MemoryNoteService.class);
         forgetService = mock(MemoryForgetService.class);
-        controller = new MemoryNoteController(noteService, forgetService);
+        exportService = mock(MemoryExportService.class);
+        controller = new MemoryNoteController(noteService, forgetService, exportService);
     }
 
     private MemoryNoteEntity note(String memoryId, String title) {
@@ -81,14 +83,36 @@ class MemoryNoteControllerTest {
     }
 
     @Test
-    void listDelegatesCategoryAndLimitToService() {
+    void listDelegatesCategoryAndLimitToServiceWhenScopeAbsent() {
         List<MemoryNoteEntity> notes = List.of(note("mem-1", "One"), note("mem-2", "Two"));
         when(noteService.list(MemoryCategory.HEALTH, 10)).thenReturn(notes);
 
-        List<MemoryNoteEntity> result = controller.list(MemoryCategory.HEALTH, 10);
+        List<MemoryNoteEntity> result = controller.list(MemoryCategory.HEALTH, null, 10);
 
         assertThat(result).isEqualTo(notes);
         verify(noteService, times(1)).list(MemoryCategory.HEALTH, 10);
+    }
+
+    @Test
+    void listDelegatesCategoryAndScopeToServiceWhenScopePresent() {
+        List<MemoryNoteEntity> notes = List.of(note("mem-1", "One"));
+        when(noteService.list(MemoryCategory.HEALTH, MemoryScope.HEALTH, 10)).thenReturn(notes);
+
+        List<MemoryNoteEntity> result = controller.list(MemoryCategory.HEALTH, MemoryScope.HEALTH, 10);
+
+        assertThat(result).isEqualTo(notes);
+        verify(noteService, times(1)).list(MemoryCategory.HEALTH, MemoryScope.HEALTH, 10);
+        verify(noteService, times(0)).list(MemoryCategory.HEALTH, 10);
+    }
+
+    @Test
+    void pendingDelegatesScopeAndLimitToService() {
+        List<MemoryNoteEntity> notes = List.of(note("mem-1", "Pending"));
+        when(noteService.pendingReview(MemoryScope.USER_PROFILE, 20)).thenReturn(notes);
+
+        List<MemoryNoteEntity> result = controller.pending(MemoryScope.USER_PROFILE, 20);
+
+        assertThat(result).isEqualTo(notes);
     }
 
     @Test
@@ -115,13 +139,49 @@ class MemoryNoteControllerTest {
     }
 
     @Test
-    void exportDelegatesToServiceExportAll() {
+    void exportDelegatesToServiceExportAllWhenScopeAbsent() {
         List<MemoryNoteEntity> all = List.of(note("mem-1", "One"));
-        when(noteService.exportAll()).thenReturn(all);
+        when(noteService.exportAll(null)).thenReturn(all);
 
-        List<MemoryNoteEntity> result = controller.export();
+        List<MemoryNoteEntity> result = controller.export(null);
 
         assertThat(result).isEqualTo(all);
+    }
+
+    @Test
+    void exportEncryptedDelegatesToExportService() {
+        MemoryExportService.ExportEnvelope envelope =
+                new MemoryExportService.ExportEnvelope("AES/GCM/NoPadding", "iv", "ciphertext");
+        when(exportService.exportEncrypted(MemoryScope.FINANCE)).thenReturn(envelope);
+
+        MemoryExportService.ExportEnvelope result = controller.exportEncrypted(MemoryScope.FINANCE);
+
+        assertThat(result).isEqualTo(envelope);
+    }
+
+    @Test
+    void importNotesDelegatesToExportService() {
+        List<MemoryNoteRequest> requests = List.of(MemoryNoteRequest.builder().title("Imported").build());
+        MemoryExportService.ImportSummary summary =
+                new MemoryExportService.ImportSummary(1, 1, 0, 0, List.of());
+        when(exportService.importNotes(requests)).thenReturn(summary);
+
+        MemoryExportService.ImportSummary result = controller.importNotes(requests);
+
+        assertThat(result).isEqualTo(summary);
+    }
+
+    @Test
+    void importEncryptedDelegatesToExportService() {
+        MemoryExportService.ExportEnvelope envelope =
+                new MemoryExportService.ExportEnvelope("AES/GCM/NoPadding", "iv", "ciphertext");
+        MemoryExportService.ImportSummary summary =
+                new MemoryExportService.ImportSummary(1, 1, 0, 0, List.of());
+        when(exportService.importEncrypted(envelope)).thenReturn(summary);
+
+        MemoryExportService.ImportSummary result = controller.importEncrypted(envelope);
+
+        assertThat(result).isEqualTo(summary);
     }
 
     @Test

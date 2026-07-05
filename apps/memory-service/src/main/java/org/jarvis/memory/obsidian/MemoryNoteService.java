@@ -5,6 +5,7 @@ import jakarta.persistence.PersistenceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.eventbus.AuditPublisher;
 import org.jarvis.events.AuditEventType;
+import org.jarvis.memory.exception.DuplicateMemoryException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +42,24 @@ public class MemoryNoteService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
+    // Roadmap P1 #9 — optional field-injected config, same pattern as jdbcTemplate
+    // above. Kept out of the constructor so existing test call sites (which build
+    // this service with 5 positional args) are unaffected; falls back to
+    // property-class defaults when not wired by Spring.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private MemoryDedupProperties dedupProperties;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private MemoryReviewProperties reviewProperties;
+
+    private MemoryDedupProperties effectiveDedupProperties() {
+        return dedupProperties != null ? dedupProperties : new MemoryDedupProperties();
+    }
+
+    private MemoryReviewProperties effectiveReviewProperties() {
+        return reviewProperties != null ? reviewProperties : new MemoryReviewProperties();
+    }
+
     private static String str(Object o) {
         return o == null ? null : o.toString();
     }
@@ -58,6 +78,23 @@ public class MemoryNoteService {
 
     @Transactional
     public MemoryNoteEntity write(MemoryNoteRequest request) {
+        return writeWithOutcome(request).note();
+    }
+
+    /**
+     * Result of {@link #writeWithOutcome}: the note that now represents this
+     * write, plus whether it was folded into an already-existing near-duplicate
+     * (see {@link MemoryDedupProperties}) rather than created fresh.
+     */
+    public record WriteOutcome(MemoryNoteEntity note, boolean merged) {}
+
+    /**
+     * Same write path as {@link #write}, but also reports whether the request
+     * was merged into an existing near-duplicate note. Used by bulk import
+     * ({@link MemoryExportService}) to report created-vs-merged counts.
+     */
+    @Transactional
+    public WriteOutcome writeWithOutcome(MemoryNoteRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request is required");
         }
@@ -74,11 +111,30 @@ public class MemoryNoteService {
             MemoryNoteEntity existing =
                     repository.findFirstBySourceOrderByCreatedAtDesc(src).orElse(null);
             if (existing != null) {
-                return update(existing.getMemoryId(), request);
+                return new WriteOutcome(update(existing.getMemoryId(), request), false);
             }
         }
+
+        // Roadmap P1 #9 — ingest-time dedup: a same-content ACTIVE note already
+        // present is either merged into (default) or rejected outright, instead
+        // of silently accumulating copies of the same fact.
+        String contentHash = computeContentHash(request.getTitle(), request.getBody());
+        MemoryDedupProperties dedup = effectiveDedupProperties();
+        if (dedup.isEnabled() && dedup.getStrategy() != MemoryDedupProperties.DedupStrategy.NONE) {
+            MemoryNoteEntity duplicate = repository
+                    .findFirstByContentHashAndStatusOrderByCreatedAtDesc(contentHash, "ACTIVE")
+                    .orElse(null);
+            if (duplicate != null) {
+                if (dedup.getStrategy() == MemoryDedupProperties.DedupStrategy.REJECT) {
+                    throw new DuplicateMemoryException(duplicate.getMemoryId());
+                }
+                return new WriteOutcome(mergeDuplicate(duplicate, request), true);
+            }
+        }
+
         MemoryCategory category = request.getCategory() == null
                 ? MemoryCategory.PROJECTS : request.getCategory();
+        MemoryScope scope = request.getScope() == null ? MemoryScope.USER_PROFILE : request.getScope();
         Instant now = Instant.now();
         String memoryId = (request.getMemoryId() == null || request.getMemoryId().isBlank())
                 ? MemoryNoteEntity.newMemoryId() : request.getMemoryId();
@@ -86,6 +142,7 @@ public class MemoryNoteService {
         MemoryNoteEntity note = MemoryNoteEntity.builder()
                 .memoryId(memoryId)
                 .category(category.name())
+                .scope(scope.name())
                 .title(request.getTitle().trim())
                 .summary(request.getSummary())
                 .body(request.getBody())
@@ -93,6 +150,8 @@ public class MemoryNoteService {
                 .privacy(request.getPrivacy() == null ? "local-only" : request.getPrivacy())
                 .status("ACTIVE")
                 .confidence(request.getConfidence())
+                .contentHash(contentHash)
+                .expiresAt(resolveExpiresAt(request, now))
                 .tags(request.getTags() == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(request.getTags()))
                 .linkedEntities(request.getLinkedEntities() == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(request.getLinkedEntities()))
                 .createdAt(now)
@@ -117,7 +176,79 @@ public class MemoryNoteService {
                 Map.of("category", note.getCategory(),
                        "vaultPath", note.getVaultRelativePath() == null ? "" : note.getVaultRelativePath(),
                        "embedded", note.getEmbedding() != null));
-        return note;
+        return new WriteOutcome(note, false);
+    }
+
+    /**
+     * Folds an incoming write into an already-existing content-identical note:
+     * unions tags/linked-entities, keeps the higher confidence, refreshes TTL
+     * when the request specifies one, and bumps {@code updatedAt}. Does not
+     * re-write the vault file or re-embed — the title/body are unchanged by
+     * definition (that's what made it a dedup hit).
+     */
+    private MemoryNoteEntity mergeDuplicate(MemoryNoteEntity existing, MemoryNoteRequest request) {
+        if (request.getTags() != null && !request.getTags().isEmpty()) {
+            LinkedHashSet<String> merged = new LinkedHashSet<>(existing.tagList());
+            merged.addAll(request.getTags());
+            existing.setTags(new java.util.ArrayList<>(merged));
+        }
+        if (request.getLinkedEntities() != null && !request.getLinkedEntities().isEmpty()) {
+            LinkedHashSet<String> merged = new LinkedHashSet<>(existing.linkedEntityList());
+            merged.addAll(request.getLinkedEntities());
+            existing.setLinkedEntities(new java.util.ArrayList<>(merged));
+        }
+        if (request.getConfidence() != null
+                && (existing.getConfidence() == null
+                    || request.getConfidence().compareTo(existing.getConfidence()) > 0)) {
+            existing.setConfidence(request.getConfidence());
+        }
+        Instant now = Instant.now();
+        Instant requestedExpiry = resolveExpiresAt(request, now);
+        if (requestedExpiry != null) {
+            existing.setExpiresAt(requestedExpiry);
+        }
+        existing.setUpdatedAt(now);
+        if (existing.getFrontmatter() != null) {
+            existing.getFrontmatter().put("dedup_merged_at", now.toString());
+        }
+        existing = repository.save(existing);
+        emitAudit(AuditEventType.MEMORY_WRITTEN, existing,
+                Map.of("category", existing.getCategory(), "merged", true));
+        return existing;
+    }
+
+    /** Explicit {@code expiresAt} wins; otherwise derive from {@code ttlSeconds}; else no TTL. */
+    private static Instant resolveExpiresAt(MemoryNoteRequest request, Instant now) {
+        if (request.getExpiresAt() != null) {
+            return request.getExpiresAt();
+        }
+        if (request.getTtlSeconds() != null && request.getTtlSeconds() > 0) {
+            return now.plusSeconds(request.getTtlSeconds());
+        }
+        return null;
+    }
+
+    /** SHA-256 over normalized title+body — stable regardless of whitespace/case drift. */
+    private static String computeContentHash(String title, String body) {
+        String normalized = normalize(title) + "" + normalize(body);
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    private static String normalize(String s) {
+        if (s == null) {
+            return "";
+        }
+        return s.trim().toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ");
     }
 
     public MemoryNoteEntity get(String memoryId) {
@@ -128,6 +259,31 @@ public class MemoryNoteService {
         int safeLimit = Math.min(Math.max(limit, 1), 500);
         String categoryStr = category == null ? null : category.name();
         return repository.search(categoryStr, "ACTIVE",
+                org.springframework.data.domain.PageRequest.of(0, safeLimit));
+    }
+
+    /**
+     * Roadmap P1 #9 — category+scope aware listing, backing
+     * {@code GET /api/v1/memory/notes?category=&scope=}. Additive alongside
+     * {@link #list(MemoryCategory, int)}.
+     */
+    public List<MemoryNoteEntity> list(MemoryCategory category, MemoryScope scope, int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 500);
+        String categoryStr = category == null ? null : category.name();
+        String scopeStr = scope == null ? null : scope.name();
+        return repository.searchByCategoryAndScope(categoryStr, scopeStr, "ACTIVE",
+                org.springframework.data.domain.PageRequest.of(0, safeLimit));
+    }
+
+    /**
+     * Roadmap P1 #9 — the "memory review / pending" queue: ACTIVE notes whose
+     * confidence is missing or below {@code jarvis.memory.review.pending-confidence-threshold}.
+     * Backs {@code GET /api/v1/memory/notes/pending}.
+     */
+    public List<MemoryNoteEntity> pendingReview(MemoryScope scope, int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 500);
+        String scopeStr = scope == null ? null : scope.name();
+        return repository.findPendingReview(scopeStr, effectiveReviewProperties().getPendingConfidenceThreshold(),
                 org.springframework.data.domain.PageRequest.of(0, safeLimit));
     }
 
@@ -216,6 +372,13 @@ public class MemoryNoteService {
         if (request.getTags() != null) {
             note.setTags(new java.util.ArrayList<>(request.getTags()));
         }
+        if (request.getScope() != null) {
+            note.setScope(request.getScope().name());
+        }
+        Instant requestedExpiry = resolveExpiresAt(request, Instant.now());
+        if (requestedExpiry != null) {
+            note.setExpiresAt(requestedExpiry);
+        }
         note.setUpdatedAt(Instant.now());
         note = repository.save(note);
         String relativePath = vaultWriter.write(note);
@@ -232,6 +395,15 @@ public class MemoryNoteService {
     /** All active notes for this user — used by the data-export endpoint. */
     public List<MemoryNoteEntity> exportAll() {
         return repository.search(null, "ACTIVE",
+                org.springframework.data.domain.PageRequest.of(0, 500));
+    }
+
+    /** Roadmap P1 #9 — scope-filtered variant of {@link #exportAll()}. */
+    public List<MemoryNoteEntity> exportAll(MemoryScope scope) {
+        if (scope == null) {
+            return exportAll();
+        }
+        return repository.searchByCategoryAndScope(null, scope.name(), "ACTIVE",
                 org.springframework.data.domain.PageRequest.of(0, 500));
     }
 

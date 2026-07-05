@@ -1,27 +1,40 @@
 # Jarvis 2.0 — Operator Runbook
 
 Single source of truth for running, verifying, and troubleshooting the live stack.
-Last verified: 2026-06-06 against `jarvis-prod` (k3s, node `10.113.0.176`).
+Last verified: 2026-07-05 against `jarvis-prod` (k3s). Node IP is DHCP-assigned and
+changes on reboot — resolve it dynamically (see §0), do not hardcode it.
 Honest status only — nothing here is claimed working unless it was actually tested.
 
-## 0. Cluster status — READ FIRST (2026-07-04)
+## 0. Cluster status — READ FIRST
 
-**The k3s cluster (`jarvis-prod`) is currently DOWN** after a host reboot on
-2026-07-04. Every "10/10" / "8/8" / "READY" mark anywhere below reflects the last time
-it was actually run (2026-06-06/07, while the cluster was up) — **none of it has been
-re-run since this reboot.**
+**The k3s cluster (`jarvis-prod`) is HEALTHY** (last verified 2026-07-05): 28/28 pods
+Running, gateway reachable, the Qwen3-14B brain answers chat, `./jarvis doctor` is
+all-green, `./scripts/jarvis-smoke-verify.sh` passes, smoke-e2e is 4/4, and the image
+drift-check is 18/18.
 
-Recover with:
+The 2026-07-04 reboot that previously took the cluster down is resolved. See
+[`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
+for that incident's historical record (backlog reconciliation, the dual-k8s-tree
+tag-stomp fix, and the three bonus modules) — it is a dated snapshot, not current status.
+
+If you land here after a fresh reboot or a DHCP lease change and something looks off,
+recover with:
 ```bash
 ./scripts/product/jarvis-recover-after-reboot.sh
 ```
 Then re-run `./scripts/jarvis-final-check.sh --repair` to re-verify before trusting any
-status claim in this document again. See
-[`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
-for the full picture (backlog reconciliation, the dual-k8s-tree tag-stomp fix, and the
-three bonus modules).
+status claim in this document again.
 
-> Conventions: gateway is `https://10.113.0.176` with header `Host: api.jarvis.local`.
+**Node IP is dynamic (DHCP) — never hardcode it.** Resolve it fresh each session:
+```bash
+NODE_IP=$(sudo k3s kubectl -n jarvis-prod get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+```
+(currently `10.110.0.58`; it was `10.113.0.176` before the last DHCP change, and it
+will change again). `./jarvis up` / `scripts/jarvis-oneclick.sh` already re-resolve
+and re-patch cluster config + `/etc/hosts` automatically — this is only needed for
+manual `curl` use.
+
+> Conventions: gateway is `https://$NODE_IP` with header `Host: api.jarvis.local`.
 > Login: `POST /api/v1/security/auth/login` (test user `test1111/test1111`).
 > `kubectl` = `sudo k3s kubectl -n jarvis-prod`.
 
@@ -53,7 +66,7 @@ Manage it with: `systemctl --user {status,restart,stop,start} jarvis-llm@18080`.
 ./scripts/jarvis-smoke-verify.sh   # 8 end-to-end checks
 ```
 Expected: `READY (deploys=22, all pods Running, LLM=200 TTS=200)`, smoke `8 passed, 0 failed`
-_(last verified 2026-06-06 while the cluster was up; NOT re-run since the 2026-07-04 reboot — see §0)_.
+_(last verified 2026-06-06; overall cluster health reconfirmed 2026-07-05 — see §0)_.
 
 ## 3. Fix host-model-daemon endpoint (after the 14B brain goes silent)
 The selectorless `host-model-daemon` Service can reset to the `192.0.2.1` placeholder
@@ -67,11 +80,11 @@ on a cluster re-apply, making the GPU brain unreachable.
 ## 4. Verify the 14B brain
 ```bash
 curl -s -m4 http://127.0.0.1:18080/health           # host daemon up?
-TOKEN=$(curl -sk -H 'Host: api.jarvis.local' https://10.113.0.176/api/v1/security/auth/login \
+TOKEN=$(curl -sk -H 'Host: api.jarvis.local' https://$NODE_IP/api/v1/security/auth/login \
   -H 'Content-Type: application/json' -d '{"username":"test1111","password":"test1111"}' \
   | python3 -c 'import json,sys;print(json.load(sys.stdin)["accessToken"])')
 curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -X POST https://10.113.0.176/api/v1/llm/chat \
+  -X POST https://$NODE_IP/api/v1/llm/chat \
   -d '{"sessionId":"t","messages":[{"role":"user","content":"привет /no_think"}]}' | head
 # expect "model":"qwen3-14b-q4_k_m.gguf"
 ```
@@ -80,14 +93,14 @@ curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer $TOKEN" -H 'Conte
 ```bash
 curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer $TOKEN" -H 'X-User-Id: 2' \
   -H 'Content-Type: application/json' -X POST \
-  https://10.113.0.176/api/v1/memory/search -d '{"query":"jarvis","topK":2}'   # 200, semantic chunks
+  https://$NODE_IP/api/v1/memory/search -d '{"query":"jarvis","topK":2}'   # 200, semantic chunks
 ```
 
 ## 6. Verify Obsidian semantic search
 ```bash
 curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer $TOKEN" -H 'X-User-Id: 2' \
   -H 'Content-Type: application/json' -X POST \
-  https://10.113.0.176/api/v1/memory/search/unified -d '{"query":"парусное судно в океане","topK":5}'
+  https://$NODE_IP/api/v1/memory/search/unified -d '{"query":"парусное судно в океане","topK":5}'
 # expect noteSearchMode=semantic and source=obsidian hits even with NO shared keywords.
 ```
 `noteSearchMode` is `semantic` (pgvector via JdbcTemplate) or `keyword` (fallback if embeddings down).
@@ -145,7 +158,7 @@ spec:
   policyTypes: [Ingress]
   ingress: [{ports: [{protocol: TCP, port: 8095}]}]
 YAML
-curl -s -X POST http://10.113.0.176:30095/api/v1/sync/pairing/init -d '' ; echo   # expect JSON nonce
+curl -s -X POST http://$NODE_IP:30095/api/v1/sync/pairing/init -d '' ; echo   # expect JSON nonce
 ```
 **Pairing checklist (phone on same LAN):**
 1. Jarvis app → **Server** tab → enter `http://<host-LAN-ip>:30095`.
@@ -155,13 +168,13 @@ curl -s -X POST http://10.113.0.176:30095/api/v1/sync/pairing/init -d '' ; echo 
 5. **Finance** → add an expense → lands in life-tracker (occurredAt normalized to LocalDateTime).
 **Troubleshooting:** see §15.
 
-## 10. What is working (verified 2026-06-06; NOT re-run since the 2026-07-04 reboot — see §0)
+## 10. What is working (verified 2026-06-06; cluster health reconfirmed 2026-07-05 — see §0)
 - 14B GPU brain via host-model-daemon:18080; durable endpoint guard.
 - Memory: semantic chunk search + **semantic Obsidian note search** (unified endpoint).
 - Idempotent Obsidian indexing (upsert, no duplicates).
 - Embeddings (note + chunk), Piper TTS, rule-based fast intents (incl. fixed volume up/down).
 - sync-service finance/replay/pairing fixes; life-tracker @Transactional health-entry.
-- smoke **8/8** _(last verified 2026-06-06 while cluster was up; not re-run since)_, Obsidian 11 unit tests, host-endpoint cluster-reachable.
+- smoke **8/8** _(last verified 2026-06-06; overall cluster health reconfirmed 2026-07-05 — see §0)_, Obsidian 11 unit tests, host-endpoint cluster-reachable.
 
 ## 11. What is partial / manual
 - **Android E2E**: server side ready + verified server-side; full phone round-trip requires
@@ -234,7 +247,7 @@ Still requires operator hardware: real mic→speaker loop (mic + speakers); desk
 - One-shot verifier: **`./scripts/jarvis-final-check.sh`** (read-only) — prints PASS/FAIL for jarvis
   health, doctor, host-model-daemon endpoint, llm chat (14B), voice diagnostics, voice session intent,
   desktop dry-run, obsidian tests, android dry-run. Last known: **10/10**
-  _(2026-06-06, while cluster was up; NOT re-run since the 2026-07-04 reboot — see §0)_.
+  _(2026-06-06; overall cluster health reconfirmed 2026-07-05 — see §0)_.
 - The cluster-brain endpoint reset is recurring. **After any `kubectl apply`/re-apply of `k8s/base`,
   run one of:**
   ```

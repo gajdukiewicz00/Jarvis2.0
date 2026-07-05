@@ -4,12 +4,22 @@ Your local, on-device cinematic assistant. Qwen3-14B brain on your RTX 5070, run
 k3s cluster, with voice, memory, and safe PC control. This page is the 60-second path to a
 working demo. Run everything from the repo root: `~/Jarvis/Jarvis2.0`.
 
-> **Cluster DOWN as of 2026-07-04** (host reboot). Every "10/10" / "8/8" / "READY" mark on
-> this page is **last verified 2026-06-07 while the cluster was up — NOT re-run since.**
-> Recover first: `./scripts/product/jarvis-recover-after-reboot.sh`, then re-run step 1
-> below to re-verify. See
+> **Cluster status: HEALTHY** (verified 2026-07-05). 28/28 pods Running, gateway up, the
+> Qwen3-14B brain answers chat, `./jarvis doctor` is all-green, and
+> `./scripts/jarvis-smoke-verify.sh` / smoke-e2e pass. The 2026-07-04 reboot that took the
+> cluster down is resolved — see
 > [`docs/audit/2026-07-04-status-reconciliation.md`](audit/2026-07-04-status-reconciliation.md)
-> for the full picture.
+> for that incident's historical record. If the cluster is ever actually down, recover with
+> `./scripts/product/jarvis-recover-after-reboot.sh`, then re-run step 1 below to re-verify.
+>
+> **Node IP note:** the node's IP is DHCP-assigned and changes on reboot (currently
+> `10.110.0.58`; it was `10.113.0.176` before the last DHCP change). Don't hardcode it —
+> resolve fresh for any manual `curl`:
+> ```bash
+> NODE_IP=$(sudo k3s kubectl -n jarvis-prod get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+> ```
+> `scripts/jarvis-oneclick.sh` and `./jarvis up` already re-resolve and re-patch this
+> automatically; the note only matters for the manual examples below.
 
 ---
 
@@ -54,7 +64,7 @@ No mic handy? Use the bundled clip (no microphone needed):
 ./jarvis ask "что ты помнишь про проект Jarvis?"
 ./jarvis ask --speak "ответь одной фразой: ты онлайн?"   # speaks the answer (needs speakers)
 ```
-Ask what it can do: `curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer <token>" https://10.113.0.176/api/v1/voice/help`
+Ask what it can do: `curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer <token>" https://$NODE_IP/api/v1/voice/help` (set `$NODE_IP` per the note above)
 
 ## 4c. Parse a bank push notification → transaction (local-only AI-light)
 ```bash
@@ -83,15 +93,16 @@ Proves the safety flow: voice → intent (`сделай тише` → volume_dow
 
 ---
 
-## What works now (verified 2026-06-07 while cluster was up; NOT re-run since the 2026-07-04 reboot)
+## What works now (verified 2026-06-07; cluster health reconfirmed 2026-07-05)
 - **14B brain chat** (`qwen3-14b-q4_k_m.gguf`), 100% local on GPU.
 - **RAG memory** recall, **Obsidian semantic search**, idempotent upsert (duplicates cleaned).
 - **Voice intent**: `сделай тише`→volume_down, `сделай громче`→volume_up, `выключи звук`→mute.
 - **STT** (Vosk, EN+RU) and **TTS** (Piper neural) engines.
 - **PC-control safe reads** (volume, windows, system info).
 - **Confirmation gate** (risk=MEDIUM actions require explicit approval).
-- smoke-verify **8/8**, final-check **10/10**, demo-check **READY** _(2026-06-07; re-run
-  `./scripts/jarvis-final-check.sh --repair` after cluster recovery to re-confirm)_.
+- smoke-verify **8/8**, final-check **10/10**, demo-check **READY** _(2026-06-07;
+  overall cluster health reconfirmed 2026-07-05 — `./jarvis doctor` all-green, smoke-e2e
+  4/4, image drift-check 18/18)_.
 
 ## What still needs your hardware
 - **Microphone + speakers** — the live spoken loop (steps 4–5 audibly).
@@ -109,7 +120,7 @@ it opens an unauthenticated endpoint to the LAN — by design, see below). Run *
 ```bash
 sudo k3s kubectl -n jarvis-prod set env deploy/sync-service \
   SPRING_AUTOCONFIGURE_EXCLUDE='org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration,org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration,org.springframework.boot.autoconfigure.security.servlet.SecurityFilterAutoConfiguration'
-sleep 30 && curl -s -X POST http://10.113.0.176:30095/api/v1/sync/pairing/init -d '' ; echo   # expect JSON nonce
+sleep 30 && curl -s -X POST http://$NODE_IP:30095/api/v1/sync/pairing/init -d '' ; echo   # expect JSON nonce
 ```
 **Why this is safe by design:** sync-service is the device-facing, local-first sync endpoint. The
 phone pairs over an end-to-end encrypted handshake (Ed25519 signature + X25519 key exchange) and every
@@ -118,7 +129,8 @@ unauthenticated — confidentiality + integrity live in the E2E envelope, not th
 version of this decision is written in `apps/sync-service/.../config/SyncSecurityConfig.java`.)
 
 Then on the phone: install `~/jarvis-app-debug.apk`, open the **Server** tab, enter
-`http://10.113.0.176:30095` (or this machine's LAN IP), tap **Спарить**, grant Health Connect.
+`http://<NODE_IP>:30095` (resolve `$NODE_IP` per the note above — currently
+`10.110.0.58` — or use this machine's LAN IP), tap **Спарить**, grant Health Connect.
 > Full pairing requires a physical phone on the same LAN, so it is validated by hand, not headless.
 
 ## Emergency fixes

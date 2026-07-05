@@ -26,13 +26,15 @@ What's real here, not mocked:
   opening a URL, or `pc-control` running non-stub (its default) executing
   real volume/notify/screenshot/hotkey actions.
 
-## Demoable AFTER cluster recovery — Track B (k3s `jarvis-prod`)
+## Demoable RIGHT NOW — Track B (k3s `jarvis-prod`)
 
-**Currently DOWN on this machine.** Recovery is
+**Cluster status: HEALTHY** (verified 2026-07-05 — 28/28 pods Running, gateway up,
+brain answering, `./jarvis doctor` all-green). If you land here after a reboot or a
+DHCP lease change and something looks off, recovery is
 `scripts/product/jarvis-recover-after-reboot.sh` (never `./jarvis up` for a
-plain reboot recovery — see the runbook §2.1 for why). Once recovered and
-verified with `./scripts/jarvis-final-check.sh`, everything Track A can do
-also works against the cluster, plus:
+plain reboot recovery — see the runbook §2.1 for why). Verify with
+`./scripts/jarvis-final-check.sh`; everything Track A can do also works against the
+cluster, plus:
 
 - Grafana / Prometheus / Loki / Tempo observability dashboards.
 - Obsidian semantic vault search (unified memory endpoint).
@@ -41,10 +43,8 @@ also works against the cluster, plus:
   agents by design; see `scripts/jarvis-android-setup.sh --dry-run` for the
   server-side-only proof that doesn't need a phone).
 
-As of this writing the cluster hasn't been re-verified since the last
-recorded check — treat Track B claims as "should work once recovered," not
-"currently confirmed." Run `./scripts/jarvis-final-check.sh` after recovery
-before relying on any Track B claim in a live demo.
+Run `./scripts/jarvis-final-check.sh` before relying on any Track B claim in a live
+demo — this page reflects the last recorded verification, not a live probe.
 
 ## Honest caveats — hardware and environment
 

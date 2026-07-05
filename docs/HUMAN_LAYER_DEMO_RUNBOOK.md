@@ -8,8 +8,10 @@ demoed:
   service as a plain host process (no Kubernetes). This works even when the
   k3s cluster is down, and is the fastest path to a live demo.
 - **Track B — k3s `jarvis-prod`.** The full cluster deployment described in
-  [JARVIS_FINAL_RUNBOOK.md](JARVIS_FINAL_RUNBOOK.md). Currently **DOWN** on
-  this machine and needs recovery before it can be demoed (§2.1).
+  [JARVIS_FINAL_RUNBOOK.md](JARVIS_FINAL_RUNBOOK.md). **Cluster status: HEALTHY**
+  (verified 2026-07-05 — 28/28 pods Running, gateway up, brain answering, `./jarvis
+  doctor` all-green). §2.1 below still applies if you land here after a reboot or a
+  DHCP lease change and something looks off.
 
 Both tracks share the same host-resident "brains": the Qwen 14B LLM daemon on
 `:18080` and Piper TTS on `:18090` are systemd `--user` services
@@ -152,9 +154,9 @@ Requires `SERVICE_JWT_SECRET` in `~/.jarvis/wake.env`.
 
 ---
 
-## 2. Track B — k3s `jarvis-prod` (currently DOWN on this machine)
+## 2. Track B — k3s `jarvis-prod` (currently HEALTHY — verified 2026-07-05)
 
-### 2.1 Recover
+### 2.1 Recover (only needed if the cluster is actually down)
 
 ```bash
 systemctl is-active k3s || sudo systemctl restart k3s
@@ -191,10 +193,13 @@ unreachable from in-cluster services.
 
 ### 2.3 Voice loop / desktop / PC action against the cluster
 
-Same commands as §1.2–§1.4, pointed at the ingress instead of localhost:
+Same commands as §1.2–§1.4, pointed at the ingress instead of localhost. The node IP
+is DHCP-assigned and changes on reboot — resolve it dynamically rather than
+hardcoding it (see [JARVIS_FINAL_RUNBOOK.md](JARVIS_FINAL_RUNBOOK.md) §0):
 
 ```bash
-JARVIS_API_BASE=https://10.113.0.176 JARVIS_API_HOST=api.jarvis.local ./scripts/jarvis-voice-demo.sh --record 5
+NODE_IP=$(sudo k3s kubectl -n jarvis-prod get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+JARVIS_API_BASE=https://$NODE_IP JARVIS_API_HOST=api.jarvis.local ./scripts/jarvis-voice-demo.sh --record 5
 ./jarvis desktop        # defaults to https://api.jarvis.local already
 ```
 

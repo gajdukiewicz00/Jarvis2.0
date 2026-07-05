@@ -53,6 +53,25 @@ fail(){
 
 log "=== one-click start ==="
 
+# ---- 0. self-heal a stale k3s node-ip (DHCP changed the machine IP) ----
+# If the k3s config pins a node-ip that is no longer on any interface, k3s
+# crash-loops ("failed to find interface with specified node ip"). Repoint it
+# (and /etc/hosts) at the current primary IP before we touch the service.
+CFG="/etc/rancher/k3s/config.yaml"
+CUR_IP="$(ip -4 addr show scope global 2>/dev/null | grep -oE 'inet (10|192)\.[0-9.]+' | awk '{print $2; exit}')"
+[ -n "$CUR_IP" ] || CUR_IP="$(ip route get 1.1.1.1 2>/dev/null | grep -oE 'src [0-9.]+' | awk '{print $2}')"
+if [ -n "$CUR_IP" ] && [ -f "$CFG" ]; then
+  PINNED="$(grep -oE 'node-ip:[[:space:]]*[0-9.]+' "$CFG" 2>/dev/null | grep -oE '[0-9.]+$' | head -1)"
+  if [ -n "$PINNED" ] && [ "$PINNED" != "$CUR_IP" ] && ! ip -4 addr show 2>/dev/null | grep -q "inet ${PINNED}/"; then
+    step "IP машины сменился (${PINNED}→${CUR_IP}) — правлю конфиг k3s…"
+    log "self-heal node-ip ${PINNED} -> ${CUR_IP}"
+    sudo -n cp "$CFG" "${CFG}.bak.oneclick" 2>/dev/null || true
+    sudo -n sed -i "s/${PINNED}/${CUR_IP}/g" "$CFG" 2>/dev/null || true
+    sudo -n sed -i "s/${PINNED}/${CUR_IP}/g" /etc/hosts 2>/dev/null || true
+    sudo -n systemctl restart k3s >>"$LOG" 2>&1 || true
+  fi
+fi
+
 # ---- 1. k3s ----
 step "Проверка кластера k3s…"
 reach_cluster(){ local n="$1"; for _ in $(seq 1 "$n"); do $K get ns >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }

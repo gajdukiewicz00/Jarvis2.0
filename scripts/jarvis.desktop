@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Jarvis
+GenericName=Local AI Assistant
+Comment=Запустить Jarvis — поднимает кластер и открывает Центр управления
+Exec=/home/kwaqa/Jarvis/Jarvis2.0/scripts/jarvis-oneclick.sh
+Icon=/home/kwaqa/Jarvis/Jarvis2.0/icons/jarvis-icon.png
+Path=/home/kwaqa/Jarvis/Jarvis2.0
+Terminal=false
+Categories=Utility;Development;
+Keywords=Jarvis;AI;Assistant;ControlCenter;Qwen;
+StartupNotify=true
+StartupWMClass=org.jarvis.desktop.app.DesktopAppApplication

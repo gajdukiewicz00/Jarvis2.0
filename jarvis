@@ -15,9 +15,12 @@ Usage: ./jarvis <command> [args]
 
 Commands:
   up                 Build images, import into k3s, deploy, wait, smoke check
-  status             Show pods, deployments, and host brain/voice health
+  status             Show pods, deployments, node IP, and host brain/voice health
   health             Quick READY/DEGRADED/FAILED verdict for the stack
-  doctor             Self-check: GPU, disk, k3s, host LLM/TTS, ingress, pods
+  doctor             Self-check: GPU, disk, k3s, node, deploys, endpoint, gateway, brain
+  drift-check        Compare live deployment image tags vs infra/k8s/overlays/prod (canonical)
+  reboot-verify      Read-only post-reboot verification chain (see docs/DEPLOYMENT_CANONICAL.md)
+  smoke-e2e          Post-deploy smoke: login, LLM chat, memory, planner (PASS/FAIL)
   logs <svc> [n]     Tail n (default 80) log lines of a deployment
   backup [dir]       pg_dump the Postgres databases to a timestamped tarball
   restore <file>     Restore a Postgres dump (DESTRUCTIVE — asks to confirm)
@@ -66,14 +69,37 @@ cmd_up() {
   ok "Jarvis up complete"
 }
 
+# Detect the current node's InternalIP (never hardcode an IP — it changes
+# across networks/DHCP; see docs/DEPLOYMENT_CANONICAL.md).
+detect_node_ip() {
+  k get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}'
+}
+
 # --- status ------------------------------------------------------------------
 cmd_status() {
   resolve_kubectl
   log "Namespace: $JARVIS_NS  (kubectl: $KCTL)"
   k get deploy 2>/dev/null | awk 'NR==1||/[0-9]\/[0-9]/'
   echo ""
+  local total_deploy notready_deploy
+  total_deploy="$(k get deploy --no-headers 2>/dev/null | wc -l)"
+  notready_deploy="$(k get deploy --no-headers 2>/dev/null | awk '{split($2,a,"/"); if (a[1]!=a[2]) print $1}')"
+  if [ -z "$notready_deploy" ]; then
+    echo "deployments Ready: ${total_deploy:-0}/${total_deploy:-0}"
+  else
+    echo "deployments NOT fully Ready: $(echo "$notready_deploy" | wc -l)/${total_deploy:-?} -> $(echo "$notready_deploy" | tr '\n' ' ')"
+  fi
   local notready; notready="$(k get pods --no-headers 2>/dev/null | grep -vc ' Running ')"
   echo "pods not Running: ${notready:-?}"
+  echo ""
+  local node_ip; node_ip="$(detect_node_ip)"
+  echo "node InternalIP: ${node_ip:-unknown}"
+  local ep_ip; ep_ip="$(k get endpoints host-model-daemon -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)"
+  if [ -n "$node_ip" ] && [ "$ep_ip" = "$node_ip" ]; then
+    echo "host-model-daemon endpoint: OK ($ep_ip == node IP)"
+  else
+    echo "host-model-daemon endpoint: MISMATCH (endpoint=${ep_ip:-<empty>} node=${node_ip:-unknown})"
+  fi
   echo ""
   echo "host brains:"
   printf '  LLM  :18080  '; curl -s -m4 -o /dev/null -w 'health=%{http_code}\n' http://127.0.0.1:18080/health 2>/dev/null || echo "down"
@@ -105,15 +131,67 @@ cmd_doctor() {
     nvidia-smi --query-gpu=name,memory.used,memory.free --format=csv,noheader 2>/dev/null | sed 's/^/  GPU: /' || warn "GPU query failed"
   else warn "no nvidia-smi (GPU brain unavailable)"; fi
   local freg; freg="$(df -h "$HOME" | awk 'NR==2{print $4" free ("$5" used)"}')"; echo "  Disk($HOME): $freg"
+
+  # k3s systemd service — distinct from API reachability below; a unit can
+  # report 'active' while the API server is crashed, and vice versa a unit
+  # can be stopped while a stale kubeconfig still points elsewhere.
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl is-active --quiet k3s 2>/dev/null \
+      && ok "k3s systemd service active" \
+      || err "k3s systemd service NOT active (sudo systemctl start k3s)"
+  else
+    warn "systemctl not found — cannot confirm k3s service state"
+  fi
+
   k get ns >/dev/null 2>&1 && ok "k3s reachable ($JARVIS_NS)" || err "k3s not reachable"
+
+  # node reachable + Ready (InternalIP resolved dynamically — never hardcoded;
+  # see docs/DEPLOYMENT_CANONICAL.md)
+  local node_ip node_ready_count
+  node_ip="$(detect_node_ip)"
+  node_ready_count="$(k get nodes --no-headers 2>/dev/null | awk '$2 ~ /(^|,)Ready(,|$)/' | wc -l)"
+  if [ -n "$node_ip" ] && [ "${node_ready_count:-0}" -ge 1 ]; then
+    ok "node reachable and Ready (InternalIP=$node_ip)"
+  else
+    err "node not reachable/Ready"
+  fi
+
   for p in 18080 18090; do
     local c; c="$(curl -s -m4 -o /dev/null -w '%{http_code}' http://127.0.0.1:$p/health 2>/dev/null)"
     [ "$c" = "200" ] && ok "host :$p health 200" || warn "host :$p health=$c"
   done
   local nr; nr="$(k get pods --no-headers 2>/dev/null | grep -v ' Running ' | wc -l)"
   [ "${nr:-1}" -eq 0 ] && ok "all pods Running" || { warn "$nr pods not Running:"; k get pods --no-headers 2>/dev/null | grep -v ' Running '; }
-  curl -sk -m4 -o /dev/null -w '%{http_code}' -H 'Host: api.jarvis.local' https://10.113.0.176/actuator/health 2>/dev/null | grep -q 200 && ok "ingress reachable" || warn "ingress not reachable (check /etc/hosts api.jarvis.local)"
-  # host-model-daemon endpoint (catches the 192.0.2.1 placeholder reset → 14B brain unreachable)
+
+  # all Deployments Ready (readyReplicas == desired replicas), not just "no
+  # crashing pods" — catches a Deployment stuck at 0/1 with no pod at all.
+  local notready_deploy
+  notready_deploy="$(k get deploy --no-headers 2>/dev/null | awk '{split($2,a,"/"); if (a[1]!=a[2]) print $1"="$2}')"
+  if [ -z "$notready_deploy" ]; then
+    ok "all deployments Ready"
+  else
+    err "deployments not fully Ready:"; echo "$notready_deploy" | sed 's/^/    /'
+  fi
+
+  # gateway health — dynamic node IP (never hardcoded 10.113.x.x)
+  if [ -n "$node_ip" ]; then
+    if curl -sk -m4 -H 'Host: api.jarvis.local' "https://$node_ip/actuator/health" 2>/dev/null | grep -q '"status":"UP"'; then
+      ok "gateway /actuator/health UP (https://$node_ip)"
+    else
+      warn "gateway /actuator/health not UP (https://$node_ip; check /etc/hosts api.jarvis.local)"
+    fi
+  else
+    warn "gateway health — skipped, node IP unknown"
+  fi
+
+  # host-model-daemon endpoint IP must equal the current node InternalIP
+  # (catches the 192.0.2.1 placeholder reset -> 14B brain unreachable)
+  local ep_ip; ep_ip="$(k get endpoints host-model-daemon -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)"
+  if [ -n "$node_ip" ] && [ "$ep_ip" = "$node_ip" ]; then
+    ok "host-model-daemon endpoint IP ($ep_ip) == node InternalIP"
+  else
+    err "host-model-daemon endpoint IP (${ep_ip:-<empty>}) != node InternalIP (${node_ip:-unknown})"
+  fi
   if [ -x "$PROJECT_ROOT/scripts/jarvis-host-endpoint-check.sh" ]; then
     if "$PROJECT_ROOT/scripts/jarvis-host-endpoint-check.sh" >/tmp/jarvis-ep.$$ 2>&1; then
       ok "host-model-daemon endpoint wired ($(grep -oE 'cluster .*HTTP [0-9]+' /tmp/jarvis-ep.$$ | tail -1))"
@@ -175,7 +253,12 @@ cmd_update() {
 }
 
 cmd_stop() {
-  [ -x "${PROJECT_ROOT}/scripts/product/jarvis-stop.sh" ] && "${PROJECT_ROOT}/scripts/product/jarvis-stop.sh" || { err "scripts/product/jarvis-stop.sh missing"; exit 1; }
+  if [ -x "${PROJECT_ROOT}/scripts/product/jarvis-stop.sh" ]; then
+    "${PROJECT_ROOT}/scripts/product/jarvis-stop.sh" "$@"
+  else
+    err "scripts/product/jarvis-stop.sh missing"
+    exit 1
+  fi
 }
 
 case "$CMD" in
@@ -184,11 +267,14 @@ case "$CMD" in
   status)   cmd_status ;;
   health)   cmd_health ;;
   doctor)   cmd_doctor ;;
+  drift-check)    bash "$PROJECT_ROOT/scripts/jarvis-image-drift-check.sh" "$@" ;;
+  reboot-verify)  bash "$PROJECT_ROOT/scripts/jarvis-post-reboot-verify.sh" "$@" ;;
+  smoke-e2e)      bash "$PROJECT_ROOT/scripts/jarvis-smoke-e2e.sh" "$@" ;;
   logs)     cmd_logs "$@" ;;
   backup)   cmd_backup "$@" ;;
   restore)  cmd_restore "$@" ;;
   update)   cmd_update "$@" ;;
-  stop)     cmd_stop ;;
+  stop)     cmd_stop "$@" ;;
   obsidian) python3 "$PROJECT_ROOT/scripts/jarvis-obsidian.py" "$@" ;;
   ask)      bash "$PROJECT_ROOT/scripts/jarvis-ask.sh" "$@" ;;
   desktop)  bash "$PROJECT_ROOT/scripts/jarvis-desktop.sh" "$@" ;;

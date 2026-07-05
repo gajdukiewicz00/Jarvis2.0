@@ -5,6 +5,10 @@ Audit date: 2026-05-08. This page enumerates the runtime modes the repository
 brings up. Cross-reference: [COMPONENT_STATUS.md](COMPONENT_STATUS.md),
 [LEGACY_AND_CLEANUP.md](LEGACY_AND_CLEANUP.md).
 
+For the single canonical deploy path, the day-2 verification/drift-check
+scripts, and the "host just rebooted" runbook, see
+[DEPLOYMENT_CANONICAL.md](DEPLOYMENT_CANONICAL.md).
+
 ## Mode 1 — Local native processes
 
 Canonical entry point: [`scripts/runtime-up.sh`](../scripts/runtime-up.sh) and

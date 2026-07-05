@@ -1,15 +1,23 @@
 # Architecture
 
-Audit date: 2026-05-08. The canonical project overview lives in
-[README.md](README.md). This page summarizes the **runtime topology** and
-**data flows** as they exist in the current code, not the long-form Phase 0
-narrative.
+Audit date: 2026-05-08; **light-touch refresh 2026-07-05** to add the
+`agent-service`/`media-service` modules below (see note at the end of this
+section). The canonical project overview lives in [README.md](README.md).
+This page summarizes the **runtime topology** and **data flows** as they
+exist in the current code, not the long-form Phase 0 narrative.
 
 Cross-references:
 
+- [docs/STATUS.md](docs/STATUS.md) — current per-subsystem status, including
+  which wave-1 features (across `agent-service`, `memory-service`,
+  `planner-service`, `life-tracker`, `analytics-service`, `security-service`,
+  `media-service`, `smart-home-service`) are code-complete but not yet
+  redeployed
 - [docs/COMPONENT_STATUS.md](docs/COMPONENT_STATUS.md) — every module with
   status and evidence
 - [docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md) — supported entry points
+- [docs/DEPLOYMENT_CANONICAL.md](docs/DEPLOYMENT_CANONICAL.md) — the single
+  canonical deploy/recover path (`infra/k8s/overlays/prod`; `k8s/` is frozen)
 - [docs/LEGACY_AND_CLEANUP.md](docs/LEGACY_AND_CLEANUP.md) — drift items
 - [docs/architecture/SPEC-1-Jarvis-Local-AI-Operating-System.md](docs/architecture/SPEC-1-Jarvis-Local-AI-Operating-System.md) — Phase 0 spec
 - [docs/architecture/ADR/](docs/architecture/ADR/) — architecture decisions
@@ -69,7 +77,10 @@ Cross-references:
 ```
 
 Ports above match [`scripts/runtime/common.sh`](scripts/runtime/common.sh)
-defaults; in cluster mode the same containerPort values are used.
+defaults; in cluster mode the same containerPort values are used. The diagram
+predates two modules that are already deployed but not yet drawn in
+(`agent-service`, `media-service`) — see the note below the responsibilities
+table.
 
 ## Service Responsibilities
 
@@ -91,7 +102,20 @@ defaults; in cluster mode the same containerPort values are used.
 | `memory-service` | semantic memory; pgvector + embedding worker | `embedding-service-py`, PostgreSQL/pgvector |
 | `sync-service` | E2E sync inbox for paired devices | `cloud-relay` |
 | `cloud-relay` | off-prem opaque blob forwarder | `sync-service` |
+| `agent-service` | role-based agent swarm: task queue, permission guard, panic-checkpointed executors, git-worktree sandboxed code/tester roles | `api-gateway` (panic kill-switch), orchestrator-adjacent, own Postgres task store |
+| `media-service` | media pipeline: ffmpeg extraction/mux, async job queue, ASR → translation → subtitles/dubbing | `llm-service` (for real translation), own Postgres job store |
 | `desktop-javafx` | desktop shell, launcher UX, local auth bootstrap, host-present UI | api-gateway over HTTPS, voice-gateway over WSS |
+
+**Wave-1 note (2026-07-05):** `agent-service` and `media-service` are already
+deployed (movie-tagged images in `jarvis-prod`), but this wave added
+substantial new functionality to both — a Postgres-backed task store,
+git-worktree sandboxing, and a real TESTER-role executor for `agent-service`;
+real `ffmpeg`/Whisper.cpp/LLM-translation provider scaffolding for
+`media-service` (still mock-by-default) — that is code-complete and
+unit-tested but **not yet rebuilt into the running images**. The same wave
+added comparable code-only-not-deployed feature sets to `memory-service`,
+`planner-service`, `life-tracker`, `analytics-service`, and `security-service`.
+See [docs/STATUS.md](docs/STATUS.md) for the full per-service breakdown.
 
 ## Auth Flow
 

@@ -8,28 +8,31 @@ import org.jarvis.swarm.executor.RoleResult;
 import org.jarvis.swarm.process.OutputSanitizer;
 import org.jarvis.swarm.process.ProcessResult;
 import org.jarvis.swarm.process.ProcessRunner;
+import org.jarvis.swarm.process.TestCommandAllowlist;
+import org.jarvis.swarm.process.TestOutputSummarizer;
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.task.AgentTask;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 
 /**
  * TESTER: proposes a test command, and RUNS it only when RUN_SHELL is effectively granted
- * (role ∩ user ∩ system policy). Even then, only an allowlisted binary is executed inside
- * the sandbox, with a timeout, and the output is secret-redacted and truncated. Without
- * the grant it proposes the command but never executes — and if the task explicitly
- * REQUESTED RUN_SHELL without an effective grant, the action is rejected.
+ * (role ∩ user ∩ system policy). Even then, only a {@link TestCommandAllowlist}-approved
+ * command is executed inside the sandbox, with a timeout, and the output is
+ * secret-redacted and truncated. Without the grant it proposes the command but never
+ * executes — and if the task explicitly REQUESTED RUN_SHELL without an effective grant,
+ * the action is rejected. Real test-runner invocations (mvn/gradle/npm/pytest) are
+ * validated argument-by-argument, and their output is scanned for a recognizable
+ * pass/fail summary line (Surefire, Gradle, Jest, pytest formats).
  */
 @Slf4j
 @Component
 public class TesterAgentExecutor implements RoleExecutor {
 
-    /** Intentionally tiny, side-effect-free allowlist for the locked-down MVP container. */
-    private static final Set<String> ALLOWLIST = Set.of("echo", "true", "false", "ls", "cat", "printf", "pwd");
     private static final int PROCESS_TIMEOUT_SECONDS = 30;
 
     private final ProcessRunner runner;
@@ -59,15 +62,16 @@ public class TesterAgentExecutor implements RoleExecutor {
             ctx.guard().ensurePermission(task, ToolPermission.RUN_SHELL);
         }
 
+        boolean allowlisted = TestCommandAllowlist.isAllowed(command);
         boolean canRun = requestedShell
                 && ctx.guard().isPermitted(task, ToolPermission.RUN_SHELL)
-                && ALLOWLIST.contains(baseName(command.get(0)));
+                && allowlisted;
 
         if (ctx.dryRun() || !canRun) {
             String why = ctx.dryRun() ? "dry-run"
                     : !requestedShell ? "RUN_SHELL not requested"
-                    : ALLOWLIST.contains(baseName(command.get(0))) ? "RUN_SHELL not granted"
-                    : "binary not allowlisted";
+                    : allowlisted ? "RUN_SHELL not granted"
+                    : "command not allowlisted";
             return RoleResult.success(
                     "TESTER proposed test command (" + why + "): " + pretty,
                     null, List.of(), proposed, List.of(), List.of("Grant RUN_SHELL to execute"));
@@ -77,12 +81,19 @@ public class TesterAgentExecutor implements RoleExecutor {
             Path cwd = ctx.sandbox() == null ? null : ctx.sandbox().dir();
             ProcessResult result = runner.run(command, cwd, PROCESS_TIMEOUT_SECONDS);
             String output = sanitizer.sanitize(result.output());
+            String testSummary = TestOutputSummarizer.summarize(output);
             if (result.isSuccess()) {
-                return RoleResult.success("TESTER ran '" + pretty + "': passed (exit 0)",
-                        output, List.of(), proposed, List.of(), List.of());
+                String summary = "TESTER ran '" + pretty + "': passed (exit 0)"
+                        + (testSummary.isEmpty() ? "" : " — " + testSummary);
+                return RoleResult.success(summary, output, List.of(), proposed, List.of(), List.of());
             }
-            return RoleResult.failure("TESTER ran '" + pretty + "': failed (exit " + result.exitCode() + ")",
-                    List.of("Test command exited non-zero", summarizeFailure(output)));
+            List<String> risks = new ArrayList<>();
+            risks.add("Test command exited non-zero");
+            risks.add(summarizeFailure(output));
+            if (!testSummary.isEmpty()) {
+                risks.add(testSummary);
+            }
+            return RoleResult.failure("TESTER ran '" + pretty + "': failed (exit " + result.exitCode() + ")", risks);
         } catch (Exception e) {
             return RoleResult.failure("TESTER could not run command: " + e.getMessage(),
                     List.of("execution error"));
@@ -99,11 +110,6 @@ public class TesterAgentExecutor implements RoleExecutor {
             }
         }
         return List.of("mvn", "-q", "test");
-    }
-
-    private String baseName(String binary) {
-        int slash = binary.lastIndexOf('/');
-        return slash >= 0 ? binary.substring(slash + 1) : binary;
     }
 
     private String summarizeFailure(String output) {

@@ -72,9 +72,14 @@ public final class SwarmTestFactory {
             SwarmProperties props) {}
 
     public static SwarmProperties props(Path sandboxDir) {
+        return props(sandboxDir, "");
+    }
+
+    /** Same as {@link #props(Path)} but with a git repo dir wired for worktree-sandbox tests. */
+    public static SwarmProperties props(Path sandboxDir, String gitRepoDir) {
         return new SwarmProperties(
                 true,
-                new SwarmProperties.Workspace(sandboxDir.toString()),
+                new SwarmProperties.Workspace(sandboxDir.toString(), gitRepoDir),
                 new SwarmProperties.Queue(64, 3),
                 new SwarmProperties.Task(120, 1),
                 new SwarmProperties.SwarmRun(10, 7));
@@ -93,7 +98,8 @@ public final class SwarmTestFactory {
     public static Engine engine(Path sandboxDir, String grantedCsv, ExecutorService executor,
                                 List<RoleExecutor> executorsOverride) {
         SwarmProperties props = props(sandboxDir);
-        SandboxManager sandbox = new SandboxManager(props);
+        ProcessRunner runner = new ProcessRunner();
+        SandboxManager sandbox = new SandboxManager(props, runner);
         sandbox.init();
 
         RoleCatalog catalog = new RoleCatalog();
@@ -104,7 +110,6 @@ public final class SwarmTestFactory {
         SwarmMetrics metrics = new SwarmMetrics(new SimpleMeterRegistry());
         AgentActionGuard guard = new AgentActionGuard(panic, policy, audit);
 
-        ProcessRunner runner = new ProcessRunner();
         OutputSanitizer sanitizer = new OutputSanitizer();
         List<RoleExecutor> roleExecutors = executorsOverride != null ? executorsOverride : List.of(
                 new CoderAgentExecutor(sandbox),

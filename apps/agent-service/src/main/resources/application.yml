@@ -3,6 +3,27 @@ spring:
     timeout-per-shutdown-phase: 30s
   application:
     name: agent-service
+  # Only consulted when jarvis.agent.task-store=postgres re-imports DataSource/JPA/Flyway
+  # auto-configuration (see AgentServiceApplication + PostgresTaskStoreAutoConfiguration).
+  # Inert otherwise — the default in-memory store never touches a datasource.
+  datasource:
+    url: ${SWARM_DB_URL:}
+    username: ${SWARM_DB_USERNAME:}
+    password: ${SWARM_DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      initialization-fail-timeout: -1
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    schemas: public
+    clean-disabled: true
 
 server:
   port: ${JARVIS_AGENT_PORT:8090}
@@ -13,6 +34,9 @@ server:
     key-store-password: ${JARVIS_AGENT_KEYSTORE_PASSWORD:changeit}
     key-store-type: ${JARVIS_AGENT_KEYSTORE_TYPE:PKCS12}
 
+# jarvis.agent.task-store selects the AgentTaskStore implementation: "memory" (default,
+# ephemeral), "file" (JSON-per-task, survives a pod restart, no database), or "postgres"
+# (JPA + Flyway; also survives a pod restart and requires spring.datasource.* above).
 # Role-based agent swarm (House Party Protocol) — feature-flagged, safe-by-default.
 swarm:
   enabled: ${SWARM_ENABLED:true}

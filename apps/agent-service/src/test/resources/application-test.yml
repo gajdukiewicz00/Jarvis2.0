@@ -10,6 +10,24 @@ swarm:
   workspace:
     dir: ${java.io.tmpdir}/jarvis-agents-test
 
+# Only used by @DataJpaTest slices exercising the Postgres-backed AgentTaskStore
+# (org.jarvis.swarm.task.jpa) — an H2 database in PostgreSQL compatibility mode, schema
+# generated from the @Entity mapping (Flyway's Postgres-only SQL isn't H2-compatible).
+# AgentServiceApplication excludes JPA/DataSource auto-configuration unconditionally, so
+# this is inert for every other test (e.g. AgentServiceIntegrationTest).
+spring:
+  datasource:
+    url: jdbc:h2:mem:agent-service-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  flyway:
+    enabled: false
+
 logging:
   level:
     org.jarvis.swarm: INFO

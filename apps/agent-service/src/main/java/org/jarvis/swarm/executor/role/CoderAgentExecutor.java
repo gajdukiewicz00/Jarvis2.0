@@ -3,6 +3,7 @@ package org.jarvis.swarm.executor.role;
 import org.jarvis.swarm.executor.ExecutionContext;
 import org.jarvis.swarm.executor.RoleExecutor;
 import org.jarvis.swarm.executor.RoleResult;
+import org.jarvis.swarm.executor.role.coder.GitDiffReport;
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.sandbox.Sandbox;
 import org.jarvis.swarm.sandbox.SandboxManager;
@@ -13,10 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * CODER: turns a goal into a concrete implementation plan and proposes file changes. In
- * dryRun it returns the planned files/actions without touching disk. Otherwise it writes
- * the plan and stub files INTO ITS SANDBOX (safe by construction). Applying changes to
- * the real repository would require WRITE_FILES and is intentionally never done here.
+ * CODER: turns a goal into a concrete implementation plan and a unified-diff PATCH
+ * PROPOSAL for the files it would create. dryRun (the default) returns the plan and the
+ * patch text without touching disk. Applying — i.e. actually writing the plan, stub
+ * files, and the patch document — only happens when the task explicitly sets
+ * {@code dryRun=false}, and even then ONLY INTO ITS OWN SANDBOX (never the real
+ * repository, which would require WRITE_FILES and is intentionally never done here).
  */
 @Component
 public class CoderAgentExecutor implements RoleExecutor {
@@ -38,34 +41,46 @@ public class CoderAgentExecutor implements RoleExecutor {
         String goal = ctx.task().goal();
         List<String> steps = planSteps(goal);
         List<String> files = proposeFiles(goal);
+        String planText = renderPlan(goal, steps, files);
+
+        List<GitDiffReport.ProposedFile> proposedFiles = new ArrayList<>();
+        for (String file : files) {
+            proposedFiles.add(new GitDiffReport.ProposedFile("proposed/" + file, stubContent(goal)));
+        }
+        GitDiffReport diffReport = GitDiffReport.from(proposedFiles);
 
         List<String> proposed = new ArrayList<>();
         proposed.add("Implementation plan with " + steps.size() + " step(s)");
         files.forEach(f -> proposed.add("create " + f));
-        String planText = renderPlan(goal, steps, files);
+        proposed.add("patch proposal: " + diffReport.changedFiles().size() + " new file(s), +"
+                + diffReport.linesAdded() + " line(s)");
 
         List<String> next = List.of(
-                "Review the plan before applying",
+                "Review the patch proposal before applying",
                 "Applying to the real repository requires WRITE_FILES permission (not granted here)");
 
         if (ctx.dryRun() || ctx.sandbox() == null) {
+            String output = planText + "\n\n## Patch proposal\n\n" + diffReport.unifiedDiff();
             return RoleResult.success(
                     "CODER plan (dry-run): " + steps.size() + " steps, " + files.size() + " proposed files",
-                    planText, List.of(), proposed, List.of(), next);
+                    output, List.of(), proposed, List.of(), next);
         }
 
         Sandbox sb = ctx.sandbox();
         List<String> artifacts = new ArrayList<>();
         Path plan = sandbox.writeFile(sb, "PLAN.md", planText);
         artifacts.add(plan.toString());
-        for (String file : files) {
+        for (GitDiffReport.ProposedFile file : proposedFiles) {
             ctx.checkpoint();
-            Path stub = sandbox.writeFile(sb, "proposed/" + file,
-                    "// Proposed by CODER agent for goal:\n// " + goal + "\n// TODO: implement\n");
+            Path stub = sandbox.writeFile(sb, file.path(), file.content());
             artifacts.add(stub.toString());
         }
+        Path patch = sandbox.writeFile(sb, "DIFF.patch", diffReport.unifiedDiff());
+        artifacts.add(patch.toString());
+
         return RoleResult.success(
-                "CODER produced a plan and " + files.size() + " stub file(s) in sandbox",
+                "CODER applied a plan and " + files.size() + " stub file(s) in sandbox (+"
+                        + diffReport.linesAdded() + " lines, see DIFF.patch)",
                 planText, artifacts, proposed, List.of(), next);
     }
 
@@ -114,5 +129,9 @@ public class CoderAgentExecutor implements RoleExecutor {
         sb.append("\n## Proposed files\n");
         files.forEach(f -> sb.append("- ").append(f).append('\n'));
         return sb.toString();
+    }
+
+    private String stubContent(String goal) {
+        return "// Proposed by CODER agent for goal:\n// " + goal + "\n// TODO: implement\n";
     }
 }

@@ -82,7 +82,8 @@ class SwarmCoordinatorTest {
 
     @Test
     void submitRejectsRoleWithoutRegisteredExecutor() {
-        var sandboxManager = new org.jarvis.swarm.sandbox.SandboxManager(SwarmTestFactory.props(tmp));
+        var sandboxManager = new org.jarvis.swarm.sandbox.SandboxManager(
+                SwarmTestFactory.props(tmp), new org.jarvis.swarm.process.ProcessRunner());
         sandboxManager.init();
         var engine = SwarmTestFactory.engine(tmp, "READ_FILES", new org.jarvis.swarm.support.SameThreadExecutorService(),
                 List.of(new CoderAgentExecutor(sandboxManager)));

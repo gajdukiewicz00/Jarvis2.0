@@ -14,7 +14,11 @@ public record SwarmProperties(
         @DefaultValue Task task,
         @DefaultValue SwarmRun swarmRun) {
 
-    public record Workspace(@DefaultValue("/tmp/jarvis-agents") String dir) {}
+    public record Workspace(
+            @DefaultValue("/tmp/jarvis-agents") String dir,
+            // Git repository CODER/TESTER may branch a throwaway worktree from. Blank
+            // (default) disables SandboxManager#createGitWorktree entirely.
+            @DefaultValue("") String gitRepoDir) {}
 
     public record Queue(
             @DefaultValue("64") int capacity,

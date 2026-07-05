@@ -3,6 +3,19 @@ spring:
     timeout-per-shutdown-phase: 30s
   application:
     name: media-service
+  autoconfigure:
+    # This module ships spring-boot-starter-jdbc/flyway/postgresql purely so
+    # PostgresMediaJobStore (jarvis.media.job-store=postgres) CAN self-configure a
+    # DataSource + run its own Flyway migration by hand. Excluding Spring Boot's
+    # own auto-configuration keeps that opt-in: without this exclusion, merely
+    # having those jars on the classpath (plus test-scope H2) would make Boot try
+    # to stand up an embedded/default datasource and run Flyway against the
+    # default `db/migration` location on every boot, in-memory store or not.
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
+      - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
 
 server:
   port: ${JARVIS_MEDIA_PORT:8095}
@@ -37,8 +50,16 @@ media:
     timeout-seconds: ${MEDIA_FFMPEG_TIMEOUT:600}
   asr:
     mode: ${MEDIA_ASR_MODE:mock}
+    # whisper.cpp CLI binary + GGML model path, only read when mode=whisper. Falls
+    # back to the mock transcript (with a warning logged) if either is missing —
+    # see WhisperCppAsrProvider and docker/real-media-binaries/.
+    binary: ${MEDIA_ASR_BINARY:whisper-cli}
+    model-path: ${MEDIA_ASR_MODEL_PATH:}
+    timeout-seconds: ${MEDIA_ASR_TIMEOUT:120}
   translation:
     mode: ${MEDIA_TRANSLATION_MODE:mock}
+    # llm-service base URL, only read when mode=llm (LlmTranslationProvider).
+    llm-service-url: ${MEDIA_TRANSLATION_LLM_SERVICE_URL:http://llm-service:8091}
   tts:
     mode: ${MEDIA_TTS_MODE:mock}
     # USER_OWNED voice profiles require explicit consent; real-person cloning is never implemented.
@@ -47,6 +68,21 @@ media:
     # Quality-warning thresholds.
     max-segment-seconds: ${MEDIA_MAX_SEGMENT_SECONDS:7}
     min-confidence: ${MEDIA_MIN_CONFIDENCE:0.5}
+
+# Job store mode ('memory' default / 'file' / 'postgres') is intentionally not
+# declared here — it is read from JARVIS_MEDIA_JOB_STORE with no YAML default, the
+# same way it worked before this section existed (see
+# InMemoryMediaJobStore/FileBackedMediaJobStore/PostgresMediaJobStore
+# @ConditionalOnProperty("jarvis.media.job-store")). Declaring it as a scalar here
+# AND as a mapping for the settings below would be a YAML key conflict, so only
+# the file-/postgres-store-specific settings live in this file:
+jarvis:
+  media:
+    job-store:
+      dir: ${JARVIS_MEDIA_JOB_STORE_DIR:/tmp/jarvis-media-jobs}
+      jdbc-url: ${JARVIS_MEDIA_JOB_STORE_JDBC_URL:jdbc:postgresql://localhost:5432/media_jobs}
+      jdbc-username: ${JARVIS_MEDIA_JOB_STORE_JDBC_USERNAME:jarvis}
+      jdbc-password: ${JARVIS_MEDIA_JOB_STORE_JDBC_PASSWORD:}
 
 management:
   endpoints:

@@ -26,8 +26,8 @@ public final class MediaTestFactory {
                 new MediaProperties.Executor(2, 32),
                 new MediaProperties.Ffprobe("mock", "ffprobe", 30),
                 new MediaProperties.Ffmpeg("mock", "ffmpeg", 600),
-                new MediaProperties.Asr("mock"),
-                new MediaProperties.Translation("mock"),
+                new MediaProperties.Asr("mock", "whisper-cli", "", 120),
+                new MediaProperties.Translation("mock", "http://llm-service:8091"),
                 new MediaProperties.Tts("mock", allowUserVoice),
                 new MediaProperties.Subtitle(maxSegSeconds, minConf));
     }

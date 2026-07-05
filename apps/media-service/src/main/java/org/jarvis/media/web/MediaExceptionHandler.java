@@ -1,6 +1,7 @@
 package org.jarvis.media.web;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.media.job.ArtifactNotFoundException;
 import org.jarvis.media.job.JobNotFoundException;
 import org.jarvis.media.probe.ProbeException;
 import org.jarvis.media.workspace.PathValidationException;
@@ -32,6 +33,11 @@ public class MediaExceptionHandler {
 
     @ExceptionHandler(JobNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(JobNotFoundException e) {
+        return error(HttpStatus.NOT_FOUND, e.getMessage());
+    }
+
+    @ExceptionHandler(ArtifactNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleArtifactNotFound(ArtifactNotFoundException e) {
         return error(HttpStatus.NOT_FOUND, e.getMessage());
     }
 

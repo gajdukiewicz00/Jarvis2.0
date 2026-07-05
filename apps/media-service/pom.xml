@@ -53,6 +53,29 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Optional Postgres-backed job store (jarvis.media.job-store=postgres); the
+             in-memory store stays the default and these jars sit unused otherwise.
+             DataSourceAutoConfiguration/FlywayAutoConfiguration are excluded in
+             application.yml so merely adding these dependencies has no side effect. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- Utilities -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -71,6 +94,13 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Test-only: exercises PostgresMediaJobStore (real JDBC + Flyway migration)
+             against a Docker-free embedded database in PostgreSQL compatibility mode. -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -85,4 +115,58 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <!-- Opt-in profile: bundles real ffmpeg/ffprobe/whisper.cpp binaries (and a
+                 whisper GGML model) into the media-service image on top of the same
+                 eclipse-temurin base used everywhere else in this repo — no Dockerfile
+                 needed, since statically-linked ffmpeg/ffprobe/whisper-cli builds need
+                 no OS package manager. Off by default: a plain `jib:build` still ships
+                 the mock-only image with none of these binaries.
+
+                 Usage:
+                   1. Populate docker/real-media-binaries/bin/ with statically-linked
+                      ffmpeg + ffprobe (e.g. https://johnvansickle.com/ffmpeg/) and a
+                      whisper.cpp `whisper-cli` build; populate
+                      docker/real-media-binaries/models/ with a GGML model (e.g.
+                      ggml-base.bin from https://github.com/ggerganov/whisper.cpp).
+                   2. mvn -pl apps/media-service -am -DskipTests -Preal-media-image \
+                        clean install jib:build -Djib.image.tag=<tag>
+                   3. Deploy with MEDIA_FFMPEG_MODE=real MEDIA_FFPROBE_MODE=real
+                      MEDIA_ASR_MODE=whisper
+                      MEDIA_ASR_BINARY=/usr/local/bin/whisper-cli
+                      MEDIA_ASR_MODEL_PATH=/opt/whisper/models/ggml-base.bin
+                 See apps/media-service/docker/real-media-binaries/README.md. -->
+            <id>real-media-image</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>com.google.cloud.tools</groupId>
+                        <artifactId>jib-maven-plugin</artifactId>
+                        <configuration>
+                            <extraDirectories>
+                                <paths>
+                                    <path>
+                                        <from>${project.basedir}/docker/real-media-binaries/bin</from>
+                                        <into>/usr/local/bin</into>
+                                    </path>
+                                    <path>
+                                        <from>${project.basedir}/docker/real-media-binaries/models</from>
+                                        <into>/opt/whisper/models</into>
+                                    </path>
+                                </paths>
+                                <permissions>
+                                    <permission>
+                                        <file>/usr/local/bin/*</file>
+                                        <mode>755</mode>
+                                    </permission>
+                                </permissions>
+                            </extraDirectories>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

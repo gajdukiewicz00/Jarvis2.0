@@ -114,6 +114,24 @@ public class WorkspaceManager {
         throw new PathValidationException("Input path is outside allowed roots: " + rawPath);
     }
 
+    /**
+     * Re-validate a previously recorded artifact path before it is streamed back to
+     * a client (the media artifact download endpoint). Defense in depth: {@code
+     * JobArtifact.path()} is always workspace-internal when written by this
+     * service, but a persisted/restored job record (file- or Postgres-backed store)
+     * could in principle carry a tampered path, so downloads never trust the
+     * stored string blindly — it is re-normalized and re-checked against the
+     * workspace root exactly like a fresh input path would be.
+     */
+    public Path validateArtifactPath(String storedPath) {
+        String safe = requireSane(storedPath, "artifact path");
+        Path candidate = Path.of(safe).toAbsolutePath().normalize();
+        if (!isWithin(workspace, candidate)) {
+            throw new PathValidationException("Artifact path escapes workspace: " + storedPath);
+        }
+        return candidate;
+    }
+
     private String requireSane(String value, String label) {
         if (value == null || value.isBlank()) {
             throw new PathValidationException(label + " must not be blank");

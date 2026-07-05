@@ -133,6 +133,48 @@ class MediaServiceIntegrationTest {
 
     @Test
     @WithMockUser
+    void artifactDownloadServesTheProducedFileByteForByte() throws Exception {
+        Path movie = WORKSPACE.resolve("dl-movie.mkv");
+        Files.writeString(movie, "ORIGINAL-FOR-DOWNLOAD");
+
+        JsonNode extract = await(submit("/extract-audio",
+                "{\"inputFile\":\"" + json(movie) + "\",\"audioStreamIndex\":1}"));
+        assertThat(extract.get("status").asText()).isEqualTo("COMPLETED");
+        String jobId = extract.get("id").asText();
+        Path audioOnDisk = Path.of(artifact(extract, "audio"));
+
+        MvcResult download = mockMvc.perform(get("/api/v1/media/jobs/" + jobId + "/artifacts/0")
+                        .header("X-User-Id", "u1"))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        assertThat(download.getResponse().getContentAsByteArray())
+                .isEqualTo(Files.readAllBytes(audioOnDisk));
+        assertThat(download.getResponse().getHeader("Content-Disposition")).contains("attachment");
+    }
+
+    @Test
+    @WithMockUser
+    void artifactDownloadOutOfRangeIndexIs404() throws Exception {
+        Path movie = WORKSPACE.resolve("dl-movie-2.mkv");
+        Files.writeString(movie, "ORIGINAL-2");
+
+        JsonNode extract = await(submit("/extract-audio",
+                "{\"inputFile\":\"" + json(movie) + "\",\"audioStreamIndex\":1}"));
+        String jobId = extract.get("id").asText();
+
+        mockMvc.perform(get("/api/v1/media/jobs/" + jobId + "/artifacts/99").header("X-User-Id", "u1"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void artifactDownloadWithoutAuthenticationIsRejected() throws Exception {
+        mockMvc.perform(get("/api/v1/media/jobs/some-id/artifacts/0"))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @WithMockUser
     void promptInjectionInTranscriptIsTreatedAsDataOverHttp() throws Exception {
         Path transcriptFile = WORKSPACE.resolve("inject.json");
         new TranscriptCodec().write(transcriptFile, new Transcript("en", List.of(

@@ -38,9 +38,15 @@ public record MediaProperties(
             @DefaultValue("ffmpeg") String binary,
             @DefaultValue("600") int timeoutSeconds) {}
 
-    public record Asr(@DefaultValue("mock") String mode) {}
+    public record Asr(
+            @DefaultValue("mock") String mode,
+            @DefaultValue("whisper-cli") String binary,
+            @DefaultValue("") String modelPath,
+            @DefaultValue("120") int timeoutSeconds) {}
 
-    public record Translation(@DefaultValue("mock") String mode) {}
+    public record Translation(
+            @DefaultValue("mock") String mode,
+            @DefaultValue("http://llm-service:8091") String llmServiceUrl) {}
 
     public record Tts(
             @DefaultValue("mock") String mode,

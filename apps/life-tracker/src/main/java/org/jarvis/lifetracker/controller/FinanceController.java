@@ -119,6 +119,27 @@ public class FinanceController {
         return financeService.listRecurring(requireUserId(httpRequest));
     }
 
+    /**
+     * Recurring merchant + roughly-stable-amount + roughly-monthly-cadence patterns detected
+     * automatically from the user's transaction history (distinct from user-declared
+     * {@code /recurring} entries).
+     */
+    @GetMapping("/subscriptions")
+    public List<SubscriptionDTO> listSubscriptions(HttpServletRequest httpRequest) {
+        return financeService.detectSubscriptions(requireUserId(httpRequest));
+    }
+
+    /**
+     * "You're spending faster than budget" pace alerts for the given month: one entry per
+     * category budget, flagging both hard overspend and ahead-of-pace spending.
+     */
+    @GetMapping("/budget/alerts")
+    public List<BudgetAlertDTO> budgetAlerts(
+            @RequestParam String month,
+            HttpServletRequest httpRequest) {
+        return financeService.budgetAlerts(requireUserId(httpRequest), YearMonth.parse(month));
+    }
+
     @PostMapping("/expenses")
     public ExpenseDTO addExpense(
             @RequestBody ExpenseRequest request,

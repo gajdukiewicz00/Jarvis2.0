@@ -5,10 +5,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -123,5 +125,61 @@ class ExpenseRepositoryTest {
         expense.setUserId(USER_ID);
         expense.setOccurredAt(LocalDateTime.now());
         return expense;
+    }
+
+    private Expense createExpenseWithDedupKey(String userId, String dedupKey) {
+        Expense expense = createExpense(new BigDecimal("9.99"), "subscriptions");
+        expense.setUserId(userId);
+        expense.setDedupKey(dedupKey);
+        return expense;
+    }
+
+    @Test
+    void savingSecondExpenseWithSameUserAndDedupKeyThrowsConstraintViolation() {
+        expenseRepository.saveAndFlush(createExpenseWithDedupKey(USER_ID, "dedup-shared"));
+
+        Expense duplicate = createExpenseWithDedupKey(USER_ID, "dedup-shared");
+
+        assertThrows(DataIntegrityViolationException.class, () -> expenseRepository.saveAndFlush(duplicate));
+    }
+
+    @Test
+    void sameDedupKeyIsAllowedAcrossDifferentUsers() {
+        expenseRepository.saveAndFlush(createExpenseWithDedupKey("user-a", "dedup-shared-users"));
+
+        Expense otherUsersExpense = createExpenseWithDedupKey("user-b", "dedup-shared-users");
+
+        assertDoesNotThrow(() -> expenseRepository.saveAndFlush(otherUsersExpense));
+    }
+
+    @Test
+    void multipleNullDedupKeysAreAllowedForTheSameUser() {
+        Expense first = createExpense(new BigDecimal("10.00"), "Food");
+        Expense second = createExpense(new BigDecimal("20.00"), "Food");
+
+        assertDoesNotThrow(() -> {
+            expenseRepository.saveAndFlush(first);
+            expenseRepository.saveAndFlush(second);
+        });
+    }
+
+    @Test
+    void findByUserIdAndDedupKeyReturnsMatchingExpense() {
+        Expense saved = expenseRepository.saveAndFlush(createExpenseWithDedupKey(USER_ID, "dedup-lookup"));
+
+        Optional<Expense> found = expenseRepository.findByUserIdAndDedupKey(USER_ID, "dedup-lookup");
+
+        assertTrue(found.isPresent());
+        assertEquals(saved.getId(), found.get().getId());
+        assertFalse(expenseRepository.findByUserIdAndDedupKey(USER_ID, "does-not-exist").isPresent());
+    }
+
+    @Test
+    void existsByUserIdAndDedupKeyReflectsStoredState() {
+        assertFalse(expenseRepository.existsByUserIdAndDedupKey(USER_ID, "dedup-exists-check"));
+
+        expenseRepository.saveAndFlush(createExpenseWithDedupKey(USER_ID, "dedup-exists-check"));
+
+        assertTrue(expenseRepository.existsByUserIdAndDedupKey(USER_ID, "dedup-exists-check"));
     }
 }

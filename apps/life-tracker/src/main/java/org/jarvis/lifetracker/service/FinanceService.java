@@ -34,6 +34,12 @@ public class FinanceService {
     private final RecurringTransactionRepository recurringTransactionRepository;
     private final DTOMapper dtoMapper;
 
+    // Plain algorithm helpers, not Spring beans — owning an instance directly (rather than
+    // constructor-injecting them) keeps this class's public constructor stable for existing
+    // callers/tests. Each is unit-tested independently.
+    private final SubscriptionDetectionService subscriptionDetectionService = new SubscriptionDetectionService();
+    private final BudgetAlertService budgetAlertService = new BudgetAlertService();
+
     public List<ExpenseDTO> listTransactions(String userId, LocalDateTime from, LocalDateTime to,
             String category, TransactionType type) {
         List<Expense> expenses;
@@ -182,6 +188,28 @@ public class FinanceService {
         return recurringTransactionRepository.findByUserIdAndActiveTrue(userId).stream()
                 .map(this::toDto)
                 .toList();
+    }
+
+    /**
+     * Analyzes a user's expense history for recurring merchant + roughly-stable-amount +
+     * roughly-monthly-cadence patterns and flags them as likely subscriptions.
+     */
+    public List<SubscriptionDTO> detectSubscriptions(String userId) {
+        List<Expense> expenses = expenseRepository.findByUserIdAndType(userId, TransactionType.EXPENSE);
+        return subscriptionDetectionService.detect(expenses);
+    }
+
+    /**
+     * Computes, per category budget, whether the user is spending faster than the budget's pace
+     * for the given month (i.e. more of the budget consumed than the fraction of the month that
+     * has elapsed), in addition to a hard over-budget check.
+     */
+    public List<BudgetAlertDTO> budgetAlerts(String userId, YearMonth month) {
+        LocalDateTime from = month.atDay(1).atStartOfDay();
+        LocalDateTime to = month.atEndOfMonth().atTime(23, 59, 59);
+        List<Expense> expenses = expenseRepository.findByUserIdAndOccurredAtBetween(userId, from, to);
+        List<Budget> budgets = budgetRepository.findByUserId(userId);
+        return budgetAlertService.computeAlerts(month, budgets, expenses, LocalDate.now());
     }
 
     private BigDecimal sumAmount(List<Expense> expenses, TransactionType type) {

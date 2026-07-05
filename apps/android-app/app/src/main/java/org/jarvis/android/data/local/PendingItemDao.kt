@@ -26,4 +26,11 @@ interface PendingItemDao {
 
     @Query("DELETE FROM pending_items WHERE syncedAtEpochMs IS NOT NULL AND syncedAtEpochMs < :ts")
     suspend fun pruneSyncedBefore(ts: Long)
+
+    /** All items of a given [kind], synced or not — used by BankDraftPurgeWorker's retention sweep. */
+    @Query("SELECT * FROM pending_items WHERE kind = :kind")
+    suspend fun byKind(kind: String): List<PendingItem>
+
+    @Query("DELETE FROM pending_items WHERE id = :id")
+    suspend fun deleteById(id: String)
 }

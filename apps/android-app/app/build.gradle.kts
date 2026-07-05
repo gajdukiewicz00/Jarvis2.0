@@ -40,6 +40,10 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.8.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
 
+    // NotificationManagerCompat — used to check whether the user has granted the bank
+    // notification listener "Notification access" (Increment E, bank push -> finance draft)
+    implementation("androidx.core:core-ktx:1.13.1")
+
     // Room — offline-first storage of pending sync items + cached server state
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import org.jarvis.android.ui.commands.CommandScreen
 import org.jarvis.android.ui.finance.ManualFinanceScreen
 import org.jarvis.android.ui.health.HealthScreen
+import org.jarvis.android.ui.notifications.BankNotificationSettingsScreen
 import org.jarvis.android.ui.settings.SettingsScreen
 import org.jarvis.android.ui.statistics.StatisticsScreen
 
@@ -31,7 +32,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab { FINANCE, HEALTH, STATS, COMMANDS, SETTINGS }
+private enum class Tab { FINANCE, HEALTH, STATS, COMMANDS, BANK, SETTINGS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +62,11 @@ private fun JarvisHome() {
                     icon = {},
                     label = { Text("Commands") })
                 NavigationBarItem(
+                    selected = tab == Tab.BANK,
+                    onClick = { tab = Tab.BANK },
+                    icon = {},
+                    label = { Text("Bank") })
+                NavigationBarItem(
                     selected = tab == Tab.SETTINGS,
                     onClick = { tab = Tab.SETTINGS },
                     icon = {},
@@ -73,6 +79,7 @@ private fun JarvisHome() {
             Tab.HEALTH   -> HealthScreen(Modifier.padding(padding))
             Tab.STATS    -> StatisticsScreen(Modifier.padding(padding))
             Tab.COMMANDS -> CommandScreen(Modifier.padding(padding))
+            Tab.BANK     -> BankNotificationSettingsScreen(Modifier.padding(padding))
             Tab.SETTINGS -> SettingsScreen(Modifier.padding(padding))
         }
     }

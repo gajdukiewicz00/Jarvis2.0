@@ -26,6 +26,8 @@ class PendingItemDaoDefaultsTest {
         override suspend fun markSynced(id: String, ts: Long) {}
         override suspend fun markFailed(id: String, ts: Long, err: String) {}
         override suspend fun pruneSyncedBefore(ts: Long) {}
+        override suspend fun byKind(kind: String): List<PendingItem> = emptyList()
+        override suspend fun deleteById(id: String) {}
     }
 
     @Test

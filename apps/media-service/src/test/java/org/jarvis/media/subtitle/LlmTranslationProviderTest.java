@@ -24,13 +24,13 @@ class LlmTranslationProviderTest {
         MediaProperties.Translation translationProps = new MediaProperties.Translation("llm", "http://llm-service:8091");
         MediaProperties props = new MediaProperties(
                 true,
-                new MediaProperties.Workspace("/tmp/jarvis-media", ""),
+                new MediaProperties.Workspace("/tmp/jarvis-media", "", 24),
                 new MediaProperties.Executor(2, 32),
                 new MediaProperties.Ffprobe("mock", "ffprobe", 30),
                 new MediaProperties.Ffmpeg("mock", "ffmpeg", 600),
                 new MediaProperties.Asr("mock", "whisper-cli", "", 120),
                 translationProps,
-                new MediaProperties.Tts("mock", false),
+                new MediaProperties.Tts("mock", false, "piper", "", 60),
                 new MediaProperties.Subtitle(7, 0.5));
         return new LlmTranslationProvider(restTemplate, guard, props);
     }

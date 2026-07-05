@@ -22,15 +22,21 @@ public final class MediaTestFactory {
     }
 
     public static MediaProperties props(Path workspaceDir, boolean allowUserVoice, int maxSegSeconds, double minConf) {
+        return props(workspaceDir, 24, allowUserVoice, maxSegSeconds, minConf);
+    }
+
+    /** Overload allowing tests to control the workspace-artifact TTL (see {@code WorkspaceCleanupService}). */
+    public static MediaProperties props(Path workspaceDir, long artifactTtlHours,
+                                        boolean allowUserVoice, int maxSegSeconds, double minConf) {
         return new MediaProperties(
                 true,
-                new MediaProperties.Workspace(workspaceDir.toString(), ""),
+                new MediaProperties.Workspace(workspaceDir.toString(), "", artifactTtlHours),
                 new MediaProperties.Executor(2, 32),
                 new MediaProperties.Ffprobe("mock", "ffprobe", 30),
                 new MediaProperties.Ffmpeg("mock", "ffmpeg", 600),
                 new MediaProperties.Asr("mock", "whisper-cli", "", 120),
                 new MediaProperties.Translation("mock", "http://llm-service:8091"),
-                new MediaProperties.Tts("mock", allowUserVoice),
+                new MediaProperties.Tts("mock", allowUserVoice, "piper", "", 60),
                 new MediaProperties.Subtitle(maxSegSeconds, minConf));
     }
 

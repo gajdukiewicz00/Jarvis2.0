@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -24,11 +25,26 @@ public class ProcessRunner {
      * rest are literal arguments. No shell, no string concatenation, no glob expansion.
      */
     public ProcessResult run(List<String> command, int timeoutSeconds) throws IOException, InterruptedException {
+        return run(command, timeoutSeconds, null);
+    }
+
+    /**
+     * Same as {@link #run(List, int)}, but redirects the process's stdin from
+     * {@code stdinFile} (or leaves stdin untouched when {@code null}). Used by
+     * providers whose CLI reads input text from stdin instead of an argument
+     * (e.g. Piper TTS) — the file path itself is still passed as a plain OS-level
+     * redirect, never through a shell.
+     */
+    public ProcessResult run(List<String> command, int timeoutSeconds, Path stdinFile)
+            throws IOException, InterruptedException {
         if (command == null || command.isEmpty()) {
             throw new IllegalArgumentException("command must not be empty");
         }
         ProcessBuilder pb = new ProcessBuilder(List.copyOf(command));
         pb.redirectErrorStream(false);
+        if (stdinFile != null) {
+            pb.redirectInput(stdinFile.toFile());
+        }
         log.debug("Running process: {} (timeout {}s)", command.get(0), timeoutSeconds);
 
         Process process = pb.start();

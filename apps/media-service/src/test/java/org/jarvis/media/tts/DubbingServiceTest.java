@@ -30,7 +30,8 @@ class DubbingServiceTest {
         WorkspaceManager ws = MediaTestFactory.workspace(tmp);
         TranscriptCodec codec = new TranscriptCodec();
         VoiceProfileFactory voices = new VoiceProfileFactory(MediaTestFactory.props(tmp));
-        DubbingService service = new DubbingService(jobs, codec, new NeutralRussianTtsProvider(), voices, ws);
+        DubbingService service = new DubbingService(jobs, codec, new NeutralRussianTtsProvider(), voices, ws,
+                new SegmentTimingPlanner(), new MockDubAudioMerger(), new DubQualityChecker(), MediaTestFactory.props(tmp));
         return new Harness(service, jobs, codec);
     }
 

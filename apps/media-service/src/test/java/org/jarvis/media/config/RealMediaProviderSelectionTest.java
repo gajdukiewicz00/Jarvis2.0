@@ -10,6 +10,9 @@ import org.jarvis.media.subtitle.MediaTextGuard;
 import org.jarvis.media.subtitle.MockTranslationProvider;
 import org.jarvis.media.subtitle.TranslationProvider;
 import org.jarvis.media.support.MediaTestFactory;
+import org.jarvis.media.tts.NeutralRussianTtsProvider;
+import org.jarvis.media.tts.PiperTtsProvider;
+import org.jarvis.media.tts.TtsProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -37,12 +40,14 @@ class RealMediaProviderSelectionTest {
     @Configuration
     @ComponentScan(
             basePackageClasses = {MockAsrProvider.class, WhisperCppAsrProvider.class,
-                    MockTranslationProvider.class, LlmTranslationProvider.class},
+                    MockTranslationProvider.class, LlmTranslationProvider.class,
+                    NeutralRussianTtsProvider.class, PiperTtsProvider.class},
             useDefaultFilters = false,
             includeFilters = @ComponentScan.Filter(
                     type = FilterType.ASSIGNABLE_TYPE,
                     classes = {MockAsrProvider.class, WhisperCppAsrProvider.class,
-                            MockTranslationProvider.class, LlmTranslationProvider.class}
+                            MockTranslationProvider.class, LlmTranslationProvider.class,
+                            NeutralRussianTtsProvider.class, PiperTtsProvider.class}
             )
     )
     static class RealProviderScanConfig {
@@ -77,7 +82,7 @@ class RealMediaProviderSelectionTest {
             .withUserConfiguration(RealProviderScanConfig.class);
 
     @Test
-    @DisplayName("no property set -> mock ASR/translation remain the only beans (mock stays default)")
+    @DisplayName("no property set -> mock ASR/translation/TTS remain the only beans (mock stays default)")
     void defaultMode_stillActivatesOnlyMockProviders() {
         runner.run(context -> {
             assertThat(context).hasNotFailed();
@@ -85,6 +90,8 @@ class RealMediaProviderSelectionTest {
             assertThat(context.getBean(AsrProvider.class)).isInstanceOf(MockAsrProvider.class);
             assertThat(context.getBeansOfType(TranslationProvider.class)).hasSize(1);
             assertThat(context.getBean(TranslationProvider.class)).isInstanceOf(MockTranslationProvider.class);
+            assertThat(context.getBeansOfType(TtsProvider.class)).hasSize(1);
+            assertThat(context.getBean(TtsProvider.class)).isInstanceOf(NeutralRussianTtsProvider.class);
         });
     }
 
@@ -105,6 +112,16 @@ class RealMediaProviderSelectionTest {
             assertThat(context).hasNotFailed();
             assertThat(context.getBeansOfType(TranslationProvider.class)).hasSize(1);
             assertThat(context.getBean(TranslationProvider.class)).isInstanceOf(LlmTranslationProvider.class);
+        });
+    }
+
+    @Test
+    @DisplayName("media.tts.mode=real -> PiperTtsProvider is the sole TtsProvider bean")
+    void realMode_activatesPiperTtsProviderOnly() {
+        runner.withPropertyValues("media.tts.mode=real").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBeansOfType(TtsProvider.class)).hasSize(1);
+            assertThat(context.getBean(TtsProvider.class)).isInstanceOf(PiperTtsProvider.class);
         });
     }
 }

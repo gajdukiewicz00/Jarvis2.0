@@ -22,7 +22,8 @@ public record MediaProperties(
 
     public record Workspace(
             @DefaultValue("/tmp/jarvis-media") String dir,
-            @DefaultValue("") String inputRoots) {}
+            @DefaultValue("") String inputRoots,
+            @DefaultValue("24") long artifactTtlHours) {}
 
     public record Executor(
             @DefaultValue("2") int poolSize,
@@ -50,7 +51,10 @@ public record MediaProperties(
 
     public record Tts(
             @DefaultValue("mock") String mode,
-            @DefaultValue("false") boolean allowUserVoiceProfile) {}
+            @DefaultValue("false") boolean allowUserVoiceProfile,
+            @DefaultValue("piper") String binary,
+            @DefaultValue("") String voiceModelPath,
+            @DefaultValue("60") int timeoutSeconds) {}
 
     public record Subtitle(
             @DefaultValue("7") int maxSegmentSeconds,

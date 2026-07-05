@@ -7,22 +7,26 @@ mvn -pl apps/media-service -am -DskipTests jib:build
 ```
 
 ships the normal mock-only media-service image: no ffmpeg, no ffprobe, no
-whisper.cpp. That is intentional — see the module README's "Provider modes"
-section.
+whisper.cpp, no Piper. That is intentional — see the module README's "Provider
+modes" section.
 
 To build an image that can actually run `media.ffprobe.mode=real`,
-`media.ffmpeg.mode=real`, and `media.asr.mode=whisper`, drop statically-linked
-binaries and a whisper.cpp model here, then build with the `real-media-image`
-Maven profile:
+`media.ffmpeg.mode=real`, `media.asr.mode=whisper`, and `media.tts.mode=real`,
+drop statically-linked binaries, a whisper.cpp model, and a Piper voice model
+here, then build with the `real-media-image` Maven profile:
 
 ```
 docker/real-media-binaries/
 ├── bin/
 │   ├── ffmpeg        # statically-linked, e.g. https://johnvansickle.com/ffmpeg/
 │   ├── ffprobe        # ships in the same johnvansickle.com release tarball
-│   └── whisper-cli    # whisper.cpp CLI build, https://github.com/ggerganov/whisper.cpp
-└── models/
-    └── ggml-base.bin  # a whisper.cpp GGML model (base/small/medium — pick per node RAM)
+│   ├── whisper-cli    # whisper.cpp CLI build, https://github.com/ggerganov/whisper.cpp
+│   └── piper          # Piper TTS CLI build, https://github.com/rhasspy/piper
+├── models/
+│   └── ggml-base.bin  # a whisper.cpp GGML model (base/small/medium — pick per node RAM)
+└── voices/
+    ├── ru-neutral.onnx       # a Piper Russian voice model
+    └── ru-neutral.onnx.json  # its matching Piper config (required alongside the .onnx)
 ```
 
 No Dockerfile is needed: these are static, self-contained executables with no
@@ -51,6 +55,9 @@ MEDIA_FFMPEG_MODE=real
 MEDIA_ASR_MODE=whisper
 MEDIA_ASR_BINARY=/usr/local/bin/whisper-cli
 MEDIA_ASR_MODEL_PATH=/opt/whisper/models/ggml-base.bin
+MEDIA_TTS_MODE=real
+MEDIA_TTS_BINARY=/usr/local/bin/piper
+MEDIA_TTS_VOICE_MODEL_PATH=/opt/piper/voices/ru-neutral.onnx
 ```
 
 `media.translation.mode=llm` is independent of this image variant — it only

@@ -28,13 +28,13 @@ class WhisperCppAsrProviderTest {
     private WhisperCppAsrProvider provider(String binary, String modelPath, int timeoutSeconds) {
         MediaProperties props = new MediaProperties(
                 true,
-                new MediaProperties.Workspace(tmp.toString(), ""),
+                new MediaProperties.Workspace(tmp.toString(), "", 24),
                 new MediaProperties.Executor(2, 32),
                 new MediaProperties.Ffprobe("mock", "ffprobe", 30),
                 new MediaProperties.Ffmpeg("mock", "ffmpeg", 600),
                 new MediaProperties.Asr("whisper", binary, modelPath, timeoutSeconds),
                 new MediaProperties.Translation("mock", "http://llm-service:8091"),
-                new MediaProperties.Tts("mock", false),
+                new MediaProperties.Tts("mock", false, "piper", "", 60),
                 new MediaProperties.Subtitle(7, 0.5));
         return new WhisperCppAsrProvider(new ProcessRunner(), props, new WhisperJsonParser());
     }

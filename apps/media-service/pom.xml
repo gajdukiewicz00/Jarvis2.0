@@ -118,25 +118,31 @@
 
     <profiles>
         <profile>
-            <!-- Opt-in profile: bundles real ffmpeg/ffprobe/whisper.cpp binaries (and a
-                 whisper GGML model) into the media-service image on top of the same
-                 eclipse-temurin base used everywhere else in this repo — no Dockerfile
-                 needed, since statically-linked ffmpeg/ffprobe/whisper-cli builds need
-                 no OS package manager. Off by default: a plain `jib:build` still ships
-                 the mock-only image with none of these binaries.
+            <!-- Opt-in profile: bundles real ffmpeg/ffprobe/whisper.cpp/piper binaries
+                 (plus a whisper GGML model and a Piper Russian voice model) into the
+                 media-service image on top of the same eclipse-temurin base used
+                 everywhere else in this repo — no Dockerfile needed, since statically-
+                 linked ffmpeg/ffprobe/whisper-cli/piper builds need no OS package
+                 manager. Off by default: a plain `jib:build` still ships the mock-only
+                 image with none of these binaries.
 
                  Usage:
                    1. Populate docker/real-media-binaries/bin/ with statically-linked
-                      ffmpeg + ffprobe (e.g. https://johnvansickle.com/ffmpeg/) and a
-                      whisper.cpp `whisper-cli` build; populate
+                      ffmpeg + ffprobe (e.g. https://johnvansickle.com/ffmpeg/), a
+                      whisper.cpp `whisper-cli` build, and a `piper` CLI build
+                      (https://github.com/rhasspy/piper); populate
                       docker/real-media-binaries/models/ with a GGML model (e.g.
-                      ggml-base.bin from https://github.com/ggerganov/whisper.cpp).
+                      ggml-base.bin from https://github.com/ggerganov/whisper.cpp) and
+                      docker/real-media-binaries/voices/ with a Piper Russian voice
+                      (an .onnx + matching .onnx.json pair).
                    2. mvn -pl apps/media-service -am -DskipTests -Preal-media-image \
                         clean install jib:build -Djib.image.tag=<tag>
                    3. Deploy with MEDIA_FFMPEG_MODE=real MEDIA_FFPROBE_MODE=real
-                      MEDIA_ASR_MODE=whisper
+                      MEDIA_ASR_MODE=whisper MEDIA_TTS_MODE=real
                       MEDIA_ASR_BINARY=/usr/local/bin/whisper-cli
                       MEDIA_ASR_MODEL_PATH=/opt/whisper/models/ggml-base.bin
+                      MEDIA_TTS_BINARY=/usr/local/bin/piper
+                      MEDIA_TTS_VOICE_MODEL_PATH=/opt/piper/voices/ru-neutral.onnx
                  See apps/media-service/docker/real-media-binaries/README.md. -->
             <id>real-media-image</id>
             <build>
@@ -154,6 +160,10 @@
                                     <path>
                                         <from>${project.basedir}/docker/real-media-binaries/models</from>
                                         <into>/opt/whisper/models</into>
+                                    </path>
+                                    <path>
+                                        <from>${project.basedir}/docker/real-media-binaries/voices</from>
+                                        <into>/opt/piper/voices</into>
                                     </path>
                                 </paths>
                                 <permissions>

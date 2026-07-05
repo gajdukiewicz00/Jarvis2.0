@@ -35,6 +35,12 @@ media:
     dir: ${MEDIA_WORKSPACE_DIR:/tmp/jarvis-media}
     # Additional read-only roots from which input media may be read (colon-separated).
     input-roots: ${MEDIA_INPUT_ROOTS:}
+    # TTL for per-job workspace sub-directories; WorkspaceCleanupService deletes any
+    # first-level workspace directory whose newest file is older than this.
+    artifact-ttl-hours: ${MEDIA_WORKSPACE_ARTIFACT_TTL_HOURS:24}
+    # How often the cleanup sweep runs, and its initial delay (both milliseconds).
+    cleanup-interval-ms: ${MEDIA_WORKSPACE_CLEANUP_INTERVAL_MS:1800000}
+    cleanup-initial-delay-ms: ${MEDIA_WORKSPACE_CLEANUP_INITIAL_DELAY_MS:1800000}
   executor:
     pool-size: ${MEDIA_EXECUTOR_POOL_SIZE:2}
     queue-capacity: ${MEDIA_EXECUTOR_QUEUE_CAPACITY:32}
@@ -64,6 +70,12 @@ media:
     mode: ${MEDIA_TTS_MODE:mock}
     # USER_OWNED voice profiles require explicit consent; real-person cloning is never implemented.
     allow-user-voice-profile: ${MEDIA_ALLOW_USER_VOICE_PROFILE:false}
+    # Piper CLI binary + Russian neutral-voice ONNX model, only read when mode=real.
+    # Falls back to the neutral placeholder TTS (with a warning logged) if either is
+    # missing — see PiperTtsProvider and docker/real-media-binaries/.
+    binary: ${MEDIA_TTS_BINARY:piper}
+    voice-model-path: ${MEDIA_TTS_VOICE_MODEL_PATH:}
+    timeout-seconds: ${MEDIA_TTS_TIMEOUT:60}
   subtitle:
     # Quality-warning thresholds.
     max-segment-seconds: ${MEDIA_MAX_SEGMENT_SECONDS:7}

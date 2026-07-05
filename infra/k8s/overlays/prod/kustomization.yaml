@@ -67,31 +67,31 @@ configMapGenerator:
 images:
   - name: jarvis/api-gateway
     newName: localhost:5000/jarvis/api-gateway
-    newTag: movie7
+    newTag: w3
   - name: jarvis/security-service
     newName: localhost:5000/jarvis/security-service
-    newTag: movie1
+    newTag: w3
   - name: jarvis/life-tracker
     newName: localhost:5000/jarvis/life-tracker
-    newTag: movie9
+    newTag: w3
   - name: jarvis/analytics-service
     newName: localhost:5000/jarvis/analytics-service
-    newTag: movie3
+    newTag: w3
   - name: jarvis/voice-gateway
     newName: localhost:5000/jarvis/voice-gateway
-    newTag: movie6
+    newTag: w3
   - name: jarvis/pc-control
     newName: localhost:5000/jarvis/pc-control
-    newTag: local
+    newTag: w3
   - name: jarvis/smart-home-service
     newName: localhost:5000/jarvis/smart-home-service
-    newTag: movie3
+    newTag: w3
   - name: jarvis/media-service
     newName: localhost:5000/jarvis/media-service
-    newTag: movie1
+    newTag: w3
   - name: jarvis/agent-service
     newName: localhost:5000/jarvis/agent-service
-    newTag: movie1
+    newTag: w3
   - name: jarvis/nlp-service
     newName: localhost:5000/jarvis/nlp-service
     newTag: movie6
@@ -103,10 +103,10 @@ images:
     newTag: movie1
   - name: jarvis/planner-service
     newName: localhost:5000/jarvis/planner-service
-    newTag: movie4
+    newTag: w3
   - name: jarvis/sync-service
     newName: localhost:5000/jarvis/sync-service
-    newTag: movie2
+    newTag: w3
   - name: jarvis/llm-service
     newName: localhost:5000/jarvis/llm-service
     newTag: movie9
@@ -118,7 +118,7 @@ images:
     newTag: local
   - name: jarvis/memory-service
     newName: localhost:5000/jarvis/memory-service
-    newTag: movie18
+    newTag: w3
 
 patches:
   - path: ha-core-deployments.patch.yaml

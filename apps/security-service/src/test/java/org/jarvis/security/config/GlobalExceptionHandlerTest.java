@@ -2,6 +2,7 @@ package org.jarvis.security.config;
 
 import org.hibernate.exception.JDBCConnectionException;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
+import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.config.GlobalExceptionHandler.UserAlreadyExistsException;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.MethodParameter;
@@ -66,6 +67,27 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody()).containsEntry("message", "Invalid username or password");
         assertThat(response.getBody()).containsEntry("service", "security-service");
         assertThat(response.getBody()).containsEntry("path", "/auth/login");
+    }
+
+    @Test
+    void handlesAuthorizationExceptionAsForbidden() {
+        ResponseEntity<Map<String, Object>> response = handler.handleAuthorizationException(
+                new AuthorizationException("FORBIDDEN_ROLE", "This action requires the OWNER role"),
+                requestFor("/auth/revoke"));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).containsEntry("error", "FORBIDDEN_ROLE");
+        assertThat(response.getBody()).containsEntry("message", "This action requires the OWNER role");
+        assertThat(response.getBody()).containsEntry("service", "security-service");
+        assertThat(response.getBody()).containsEntry("path", "/auth/revoke");
+    }
+
+    @Test
+    void authorizationExceptionExposesErrorCode() {
+        AuthorizationException ex = new AuthorizationException("FORBIDDEN_ROLE", "Requires OWNER role");
+
+        assertThat(ex.getErrorCode()).isEqualTo("FORBIDDEN_ROLE");
+        assertThat(ex.getMessage()).isEqualTo("Requires OWNER role");
     }
 
     @Test

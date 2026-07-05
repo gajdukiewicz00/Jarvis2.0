@@ -8,6 +8,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
+import org.jarvis.security.repository.RevokedTokenRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -26,22 +27,31 @@ import java.util.UUID;
  *
  * <p>Rotation is single-key only. The implementation reads one active HMAC secret from
  * {@code jarvis.jwt.secret} and does not support {@code kid}, key rings, or multi-key validation.</p>
+ *
+ * <p>Every successfully-parsed token is additionally checked against the
+ * per-jti {@link RevokedTokenRepository}, so an explicitly revoked token is
+ * rejected even before its natural expiry.</p>
  */
 @Slf4j
 @Service
 public class JwtService {
 
+    private final RevokedTokenRepository revokedTokenRepository;
     private final SecretKey secretKey;
     private final JwtParser jwtParser;
     private final long accessExpirationMs;
     private final long refreshExpirationMs;
+    private final long absoluteSessionTtlMs;
     private final String issuer;
 
     public JwtService(
+            RevokedTokenRepository revokedTokenRepository,
             @Value("${jarvis.jwt.secret}") String secret,
             @Value("${jarvis.jwt.access-expiration}") long accessExpirationMs,
             @Value("${jarvis.jwt.refresh-expiration}") long refreshExpirationMs,
+            @Value("${jarvis.jwt.absolute-session-ttl:2592000000}") long absoluteSessionTtlMs,
             @Value("${jarvis.jwt.issuer}") String issuer) {
+        this.revokedTokenRepository = revokedTokenRepository;
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.jwtParser = Jwts.parser()
                 .verifyWith(secretKey)
@@ -49,6 +59,7 @@ public class JwtService {
                 .build();
         this.accessExpirationMs = accessExpirationMs;
         this.refreshExpirationMs = refreshExpirationMs;
+        this.absoluteSessionTtlMs = absoluteSessionTtlMs;
         this.issuer = issuer;
     }
 
@@ -124,15 +135,66 @@ public class JwtService {
         }
     }
 
-    private Claims parseClaims(String token) {
+    public Instant extractIssuedAt(Claims claims) {
+        Date issuedAt = claims.getIssuedAt();
+        return issuedAt == null ? null : issuedAt.toInstant();
+    }
+
+    /**
+     * Parses {@code token} as either an access or refresh token (whichever it
+     * validly is) strictly for the purpose of server-side revocation:
+     * resolves its {@code jti}, type, subject, and expiry so a caller can
+     * record it in the revoked-token store without needing to know in
+     * advance which kind of token it is.
+     */
+    public RevocationTarget prepareForRevocation(String token) {
+        Claims claims;
+        String tokenType;
         try {
-            return jwtParser.parseSignedClaims(token).getPayload();
+            claims = validateAccessToken(token);
+            tokenType = "access";
+        } catch (AuthenticationException accessValidationFailure) {
+            log.debug("Token failed access-token validation ({}), retrying as refresh token",
+                    accessValidationFailure.getMessage());
+            claims = validateRefreshToken(token);
+            tokenType = "refresh";
+        }
+
+        UUID jti = extractTokenId(claims);
+        if (jti == null) {
+            throw new AuthenticationException("INVALID_TOKEN", "Token has no server-trackable identifier");
+        }
+
+        Long userId;
+        try {
+            userId = Long.parseLong(extractUserId(claims));
+        } catch (NumberFormatException e) {
+            throw new AuthenticationException("INVALID_TOKEN", "Token subject is not a valid user id");
+        }
+
+        Instant expiresAt = claims.getExpiration() != null
+                ? claims.getExpiration().toInstant()
+                : Instant.now().plusMillis(Math.max(accessExpirationMs, refreshExpirationMs));
+
+        return new RevocationTarget(jti, tokenType, userId, expiresAt);
+    }
+
+    private Claims parseClaims(String token) {
+        Claims claims;
+        try {
+            claims = jwtParser.parseSignedClaims(token).getPayload();
         } catch (ExpiredJwtException e) {
             throw new AuthenticationException("TOKEN_EXPIRED", "Token has expired");
         } catch (JwtException e) {
             log.warn("JWT validation failed: {}", e.getMessage());
             throw new AuthenticationException("INVALID_TOKEN", "Invalid JWT token");
         }
+
+        UUID jti = extractTokenId(claims);
+        if (jti != null && revokedTokenRepository.existsById(jti)) {
+            throw new AuthenticationException("TOKEN_REVOKED", "Token has been revoked");
+        }
+        return claims;
     }
 
     private void ensureTokenType(Claims claims, String expectedType, String message) {
@@ -147,10 +209,22 @@ public class JwtService {
         return accessExpirationMs;
     }
 
+    public long getAbsoluteSessionTtlMs() {
+        return absoluteSessionTtlMs;
+    }
+
     public record IssuedRefreshToken(
             UUID tokenId,
             String token,
             Instant issuedAt,
+            Instant expiresAt) {
+    }
+
+    /** Resolved identity of a token being handed to {@code TokenRevocationService}. */
+    public record RevocationTarget(
+            UUID jti,
+            String tokenType,
+            Long userId,
             Instant expiresAt) {
     }
 }

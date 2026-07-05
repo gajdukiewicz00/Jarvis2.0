@@ -46,6 +46,23 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handle authorization failures (valid caller, wrong role).
+     */
+    @ExceptionHandler(AuthorizationException.class)
+    public ResponseEntity<Map<String, Object>> handleAuthorizationException(
+            AuthorizationException ex, WebRequest request) {
+
+        log.warn("Authorization failed: {}", ex.getMessage());
+
+        return buildErrorResponse(
+            HttpStatus.FORBIDDEN,
+            ex.getErrorCode(),
+            ex.getMessage(),
+            request
+        );
+    }
+
+    /**
      * Handle user already exists during registration.
      */
     @ExceptionHandler(UserAlreadyExistsException.class)
@@ -274,6 +291,24 @@ public class GlobalExceptionHandler {
     public static class UserAlreadyExistsException extends RuntimeException {
         public UserAlreadyExistsException(String message) {
             super(message);
+        }
+    }
+
+    /**
+     * Authorization failure: caller is authenticated (their token is valid)
+     * but does not hold the role required for the action. Kept distinct from
+     * {@link AuthenticationException} (401) since this is a 403 case.
+     */
+    public static class AuthorizationException extends RuntimeException {
+        private final String errorCode;
+
+        public AuthorizationException(String errorCode, String message) {
+            super(message);
+            this.errorCode = errorCode;
+        }
+
+        public String getErrorCode() {
+            return errorCode;
         }
     }
 }

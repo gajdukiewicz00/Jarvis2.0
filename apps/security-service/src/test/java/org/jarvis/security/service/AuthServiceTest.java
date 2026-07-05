@@ -2,6 +2,7 @@ package org.jarvis.security.service;
 
 import io.jsonwebtoken.Claims;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
+import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.dto.AuthResponse;
 import org.jarvis.security.dto.ChangePasswordRequest;
 import org.jarvis.security.dto.LoginRequest;
@@ -134,7 +135,7 @@ class AuthServiceTest {
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
-        assertThat(captor.getValue().getRole()).isEqualTo("ADMIN");
+        assertThat(captor.getValue().getRole()).isEqualTo("OWNER");
     }
 
     @Test
@@ -147,7 +148,7 @@ class AuthServiceTest {
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
-        assertThat(captor.getValue().getRole()).isEqualTo("ADMIN");
+        assertThat(captor.getValue().getRole()).isEqualTo("OWNER");
     }
 
     @Test
@@ -360,6 +361,80 @@ class AuthServiceTest {
         verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
     }
 
+    @Test
+    void refreshCarriesOverSessionStartedAtInsteadOfResettingItOnRotation() {
+        UUID tokenId = UUID.randomUUID();
+        refreshClaimsFor(1L, tokenId);
+        User user = enabledUser(1L, "USER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        Instant originalSessionStart = Instant.now().minusSeconds(3600);
+        RefreshToken stored = RefreshToken.builder()
+                .tokenId(tokenId)
+                .userId(1L)
+                .issuedAt(Instant.now().minusSeconds(60))
+                .expiresAt(Instant.now().plusSeconds(600))
+                .sessionStartedAt(originalSessionStart)
+                .build();
+        when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
+        stubSuccessfulTokenIssuance(user, "new-access-tok", UUID.randomUUID(), "new-refresh-tok");
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        authService.refresh("the-refresh-token");
+
+        ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
+        verify(refreshTokenRepository, times(2)).save(captor.capture());
+        RefreshToken persistedNewToken = captor.getAllValues().get(1);
+        assertThat(persistedNewToken.getSessionStartedAt()).isEqualTo(originalSessionStart);
+    }
+
+    @Test
+    void refreshThrowsSessionExpiredWhenAbsoluteSessionTtlExceeded() {
+        UUID tokenId = UUID.randomUUID();
+        refreshClaimsFor(1L, tokenId);
+        User user = enabledUser(1L, "USER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        Instant longAgo = Instant.now().minusSeconds(400_000);
+        RefreshToken stored = RefreshToken.builder()
+                .tokenId(tokenId)
+                .userId(1L)
+                .issuedAt(Instant.now().minusSeconds(60))
+                .expiresAt(Instant.now().plusSeconds(600))
+                .sessionStartedAt(longAgo)
+                .build();
+        when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
+        when(jwtService.getAbsoluteSessionTtlMs()).thenReturn(1_000L); // far shorter than "longAgo"
+
+        AuthenticationException ex = assertThrows(AuthenticationException.class,
+                () -> authService.refresh("the-refresh-token"));
+
+        assertThat(ex.getErrorCode()).isEqualTo("SESSION_EXPIRED");
+        verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
+                eq("SESSION_TIMEOUT"));
+        verify(jwtService, never()).generateRefreshToken(any());
+    }
+
+    @Test
+    void refreshDoesNotEnforceSessionTimeoutWhenAbsoluteSessionTtlDisabled() {
+        UUID tokenId = UUID.randomUUID();
+        refreshClaimsFor(1L, tokenId);
+        User user = enabledUser(1L, "USER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        RefreshToken stored = RefreshToken.builder()
+                .tokenId(tokenId)
+                .userId(1L)
+                .issuedAt(Instant.now().minusSeconds(60))
+                .expiresAt(Instant.now().plusSeconds(600))
+                .sessionStartedAt(Instant.now().minusSeconds(999_999_999))
+                .build();
+        when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
+        when(jwtService.getAbsoluteSessionTtlMs()).thenReturn(0L); // disabled
+        stubSuccessfulTokenIssuance(user, "new-access-tok", UUID.randomUUID(), "new-refresh-tok");
+
+        AuthResponse response = authService.refresh("the-refresh-token");
+
+        assertThat(response.accessToken()).isEqualTo("new-access-tok");
+    }
+
     // ------------------------------------------------------------------
     // getUserFromToken
     // ------------------------------------------------------------------
@@ -413,6 +488,91 @@ class AuthServiceTest {
                 () -> authService.getUserFromToken("garbage"));
 
         assertThat(ex.getErrorCode()).isEqualTo("INVALID_TOKEN");
+    }
+
+    @Test
+    void getUserFromTokenThrowsTokenRevokedWhenIssuedBeforeSessionFloor() {
+        Claims claims = mock(Claims.class);
+        when(jwtService.validateAccessToken("access-tok")).thenReturn(claims);
+        when(jwtService.extractUserId(claims)).thenReturn("1");
+        User user = enabledUser(1L, "USER");
+        Instant floor = Instant.now();
+        user.setTokensValidFrom(floor);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtService.extractIssuedAt(claims)).thenReturn(floor.minusSeconds(60));
+
+        AuthenticationException ex = assertThrows(AuthenticationException.class,
+                () -> authService.getUserFromToken("access-tok"));
+
+        assertThat(ex.getErrorCode()).isEqualTo("TOKEN_REVOKED");
+    }
+
+    @Test
+    void getUserFromTokenSucceedsWhenIssuedAfterSessionFloor() {
+        Claims claims = mock(Claims.class);
+        when(jwtService.validateAccessToken("access-tok")).thenReturn(claims);
+        when(jwtService.extractUserId(claims)).thenReturn("1");
+        User user = enabledUser(1L, "USER");
+        Instant floor = Instant.now();
+        user.setTokensValidFrom(floor);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtService.extractIssuedAt(claims)).thenReturn(floor.plusSeconds(60));
+
+        User result = authService.getUserFromToken("access-tok");
+
+        assertThat(result).isEqualTo(user);
+    }
+
+    @Test
+    void getUserFromTokenSucceedsWhenNoSessionFloorSet() {
+        Claims claims = mock(Claims.class);
+        when(jwtService.validateAccessToken("access-tok")).thenReturn(claims);
+        when(jwtService.extractUserId(claims)).thenReturn("1");
+        User user = enabledUser(1L, "USER"); // tokensValidFrom left null
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        User result = authService.getUserFromToken("access-tok");
+
+        assertThat(result).isEqualTo(user);
+    }
+
+    // ------------------------------------------------------------------
+    // requireRole
+    // ------------------------------------------------------------------
+
+    @Test
+    void requireRoleReturnsUserWhenRoleMatchesCaseInsensitively() {
+        Claims claims = mock(Claims.class);
+        when(jwtService.validateAccessToken("owner-tok")).thenReturn(claims);
+        when(jwtService.extractUserId(claims)).thenReturn("1");
+        User owner = enabledUser(1L, "OWNER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+
+        User result = authService.requireRole("owner-tok", "owner");
+
+        assertThat(result).isEqualTo(owner);
+    }
+
+    @Test
+    void requireRoleThrowsAuthorizationExceptionWhenRoleDoesNotMatch() {
+        Claims claims = mock(Claims.class);
+        when(jwtService.validateAccessToken("user-tok")).thenReturn(claims);
+        when(jwtService.extractUserId(claims)).thenReturn("1");
+        User user = enabledUser(1L, "USER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+
+        AuthorizationException ex = assertThrows(AuthorizationException.class,
+                () -> authService.requireRole("user-tok", "OWNER"));
+
+        assertThat(ex.getErrorCode()).isEqualTo("FORBIDDEN_ROLE");
+    }
+
+    @Test
+    void requireRolePropagatesAuthenticationExceptionForInvalidToken() {
+        when(jwtService.validateAccessToken("bad-tok"))
+                .thenThrow(new AuthenticationException("INVALID_TOKEN", "Invalid token"));
+
+        assertThrows(AuthenticationException.class, () -> authService.requireRole("bad-tok", "OWNER"));
     }
 
     // ------------------------------------------------------------------

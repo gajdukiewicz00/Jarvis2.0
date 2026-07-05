@@ -42,6 +42,16 @@ public class RefreshToken {
     @Column(name = "revoke_reason", length = 64)
     private String revokeReason;
 
+    /**
+     * When the overall session (rotation chain) started, independent of this
+     * particular token's own {@link #issuedAt}. Carried over unchanged across
+     * rotations so an absolute session TTL can be enforced even though each
+     * individual refresh token gets a fresh {@code issuedAt}/{@code expiresAt}
+     * on rotation.
+     */
+    @Column(name = "session_started_at", nullable = false)
+    private Instant sessionStartedAt;
+
     public boolean isActive(Instant now) {
         return revokedAt == null && expiresAt != null && expiresAt.isAfter(now);
     }

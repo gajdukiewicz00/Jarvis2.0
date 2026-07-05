@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import io.jsonwebtoken.Claims;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
+import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.dto.AuthResponse;
 import org.jarvis.security.dto.ChangePasswordRequest;
 import org.jarvis.security.dto.LoginRequest;
@@ -38,6 +39,7 @@ public class AuthService {
     private static final String REVOKE_REASON_REUSE = "REFRESH_REUSE_DETECTED";
     private static final String REVOKE_REASON_PASSWORD_CHANGED = "PASSWORD_CHANGED";
     private static final String REVOKE_REASON_ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
+    private static final String REVOKE_REASON_SESSION_TIMEOUT = "SESSION_TIMEOUT";
 
     /**
      * Check if username already exists.
@@ -87,7 +89,7 @@ public class AuthService {
         User user = User.builder()
                 .username(username)
                 .password(passwordEncoder.encode(rawPassword))
-                .role(role == null || role.isBlank() ? "ADMIN" : role.toUpperCase(Locale.ROOT))
+                .role(role == null || role.isBlank() ? "OWNER" : role.toUpperCase(Locale.ROOT))
                 .enabled(true)
                 .build();
 
@@ -170,12 +172,25 @@ public class AuthService {
             throw new AuthenticationException("TOKEN_EXPIRED", "Refresh token has expired");
         }
 
+        Instant sessionStartedAt = storedToken.getSessionStartedAt() != null
+                ? storedToken.getSessionStartedAt()
+                : storedToken.getIssuedAt();
+        long absoluteSessionTtlMs = jwtService.getAbsoluteSessionTtlMs();
+        if (sessionStartedAt != null && absoluteSessionTtlMs > 0
+                && now.isAfter(sessionStartedAt.plusMillis(absoluteSessionTtlMs))) {
+            revokeAllRefreshTokens(user.getId(), REVOKE_REASON_SESSION_TIMEOUT);
+            log.info("Session timeout for user {} (session started {})", user.getUsername(), sessionStartedAt);
+            throw new AuthenticationException("SESSION_EXPIRED",
+                    "Session has exceeded the maximum allowed duration; please log in again");
+        }
+
         JwtService.IssuedRefreshToken replacementToken = jwtService.generateRefreshToken(user.getId().toString());
         storedToken.setRevokedAt(now);
         storedToken.setReplacedByTokenId(replacementToken.tokenId());
         storedToken.setRevokeReason(REVOKE_REASON_ROTATED);
         refreshTokenRepository.save(storedToken);
-        persistRefreshToken(user.getId(), replacementToken);
+        persistRefreshToken(user.getId(), replacementToken,
+                sessionStartedAt != null ? sessionStartedAt : replacementToken.issuedAt());
 
         log.debug("Token refreshed for user: {}", user.getUsername());
         return buildAuthResponse(user, replacementToken.token());
@@ -198,6 +213,9 @@ public class AuthService {
             if (!user.isEnabled()) {
                 throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
             }
+            if (isBeforeSessionFloor(user, claims)) {
+                throw new AuthenticationException("TOKEN_REVOKED", "Token has been revoked");
+            }
             return user;
         } catch (AuthenticationException e) {
             throw e;
@@ -205,6 +223,38 @@ public class AuthService {
             log.warn("Failed to extract user from token: {}", e.getMessage());
             throw new AuthenticationException("INVALID_TOKEN", "Invalid token");
         }
+    }
+
+    /**
+     * Resolve the caller from an access token and enforce that their role
+     * matches {@code requiredRole} (case-insensitive). Used by OWNER-only
+     * admin endpoints ({@code AdminController}).
+     *
+     * @throws AuthenticationException if the token itself is invalid/expired/revoked
+     * @throws AuthorizationException  if the token is valid but the caller's role does not match
+     */
+    public User requireRole(String token, String requiredRole) {
+        User user = getUserFromToken(token);
+        if (!requiredRole.equalsIgnoreCase(user.getRole())) {
+            throw new AuthorizationException("FORBIDDEN_ROLE", "This action requires the " + requiredRole + " role");
+        }
+        return user;
+    }
+
+    /**
+     * True if the access token predates the user's revoke-all-sessions floor
+     * (set by {@code TokenRevocationService.revokeAllForUser}). Access tokens
+     * have no individual server-side record, so this cheap per-user cutoff is
+     * what makes "revoke all sessions" effective against already-issued
+     * access tokens.
+     */
+    private boolean isBeforeSessionFloor(User user, Claims claims) {
+        Instant floor = user.getTokensValidFrom();
+        if (floor == null) {
+            return false;
+        }
+        Instant issuedAt = jwtService.extractIssuedAt(claims);
+        return issuedAt == null || issuedAt.isBefore(floor);
     }
 
     @Transactional
@@ -250,7 +300,7 @@ public class AuthService {
      */
     private AuthResponse generateAuthResponse(User user) {
         JwtService.IssuedRefreshToken refreshToken = jwtService.generateRefreshToken(user.getId().toString());
-        persistRefreshToken(user.getId(), refreshToken);
+        persistRefreshToken(user.getId(), refreshToken, refreshToken.issuedAt());
         return buildAuthResponse(user, refreshToken.token());
     }
 
@@ -268,12 +318,14 @@ public class AuthService {
                 user.getRole());
     }
 
-    private void persistRefreshToken(Long userId, JwtService.IssuedRefreshToken refreshToken) {
+    private void persistRefreshToken(Long userId, JwtService.IssuedRefreshToken refreshToken,
+            Instant sessionStartedAt) {
         refreshTokenRepository.save(RefreshToken.builder()
                 .tokenId(refreshToken.tokenId())
                 .userId(userId)
                 .issuedAt(refreshToken.issuedAt())
                 .expiresAt(refreshToken.expiresAt())
+                .sessionStartedAt(sessionStartedAt)
                 .build());
     }
 

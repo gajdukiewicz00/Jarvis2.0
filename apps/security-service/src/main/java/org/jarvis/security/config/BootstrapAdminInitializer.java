@@ -33,7 +33,7 @@ public class BootstrapAdminInitializer implements ApplicationRunner {
     @Value("${jarvis.bootstrap-admin.password:}")
     private String password;
 
-    @Value("${jarvis.bootstrap-admin.role:ADMIN}")
+    @Value("${jarvis.bootstrap-admin.role:OWNER}")
     private String role;
 
     @Override

@@ -86,8 +86,11 @@ secrets*.yaml
 .jarvis/
 
 # Local runtime state
-data/
+/data/
 **/data/
+# ...but never ignore Kotlin/Java 'data' source packages (e.g. android-app data layer)
+!**/src/**/data/
+!**/src/**/data/**
 postgres/
 **/postgres/
 *postgres-backup*

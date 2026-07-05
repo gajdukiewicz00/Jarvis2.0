@@ -60,7 +60,7 @@ read_input() { # from --json or stdin
 # returns: SAFE | GUARDED | DANGEROUS | UNKNOWN
 classify_action() {
   case "${1^^}" in
-    OPEN_APP|OPEN_URL|FOCUS_WINDOW|NONE) echo SAFE ;;
+    OPEN_APP|OPEN_URL|FOCUS_WINDOW|SCREENSHOT|NONE) echo SAFE ;;
     TYPE_TEXT|HOTKEY)                    echo GUARDED ;;
     DELETE_FILE|SEND_MESSAGE|SEND_EMAIL|INSTALL_PACKAGE|RUN_ARBITRARY_COMMAND|RUN_SHELL|COMMIT_PUSH_CODE|MODIFY_SECURITY_SETTINGS|EXPOSE_SECRET|SHUTDOWN)
                                          echo DANGEROUS ;;
@@ -80,6 +80,7 @@ resolve_launch() { # type target -> launcher spec or "none"
         *) echo none ;;
       esac ;;
     FOCUS_WINDOW) command -v wmctrl >/dev/null && echo "focus:$2" || echo none ;;
+    SCREENSHOT) echo "shot:$WORK/bridge-action-shot.$$.png" ;;
     *) echo none ;;
   esac
 }
@@ -166,8 +167,18 @@ cmd_action() {
         url:*) setsid xdg-open "${plan#url:}" >/dev/null 2>&1 & executed=true; detail="${plan#url:}" ;;
         cmd:*) setsid "${plan#cmd:}" >/dev/null 2>&1 & executed=true; detail="${plan#cmd:}" ;;
         focus:*) wmctrl -a "${plan#focus:}" >/dev/null 2>&1 && executed=true; detail="${plan#focus:}" ;;
+        shot:*)
+          local shotpath="${plan#shot:}"
+          if command -v gnome-screenshot >/dev/null 2>&1; then
+            gnome-screenshot -f "$shotpath" >/dev/null 2>&1 && executed=true
+          elif command -v scrot >/dev/null 2>&1; then
+            scrot "$shotpath" >/dev/null 2>&1 && executed=true
+          fi
+          if [[ "$executed" == true ]]; then detail="$shotpath"
+          else refused=true; reason="no screenshot tool available (gnome-screenshot/scrot)"; fi
+          ;;
       esac
-      reason="executed"
+      [[ "$refused" == true ]] || reason="executed"
     fi
   fi
   python3 -c 'import json,sys

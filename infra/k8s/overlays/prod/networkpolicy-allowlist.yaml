@@ -700,6 +700,34 @@ spec:
         - protocol: TCP
           port: 8094
 ---
+# host-pc-control is a selectorless Service whose Endpoints object is patched
+# at deploy time to the workstation host IP running scripts/jarvis-pc-control-up.sh
+# (see infra/k8s/overlays/prod/host-pc-control.yaml). NetworkPolicy cannot
+# select a host endpoint by pod label, so api-gateway egress is constrained to
+# port 8084 only — same pattern as the host-model-daemon / vision-security
+# bridges above. This lets the official /api/v1/pc/desktop/** executor route
+# (org.jarvis.apigateway.pccontrol.PcDesktopController) and the generic
+# /api/v1/pc/** proxy reach the real, non-stub pc-control process once
+# PC_CONTROL_URL is repointed at host-pc-control.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-egress-pc-control-host-bridge
+  namespace: jarvis-prod
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 8084
+---
 # media-service's LlmTranslationProvider calls llm-service directly (subtitle
 # translation) when jarvis.media.translation.mode=llm — see MediaProperties /
 # RestClientConfig, default services.llm-service-url=http://llm-service:8091.

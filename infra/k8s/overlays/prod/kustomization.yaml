@@ -39,6 +39,11 @@ resources:
   # Model storage (PVC)
   - pvc-vosk-models.yaml
   - pdb-core-services.yaml
+
+  # Host pc-control bridge (Roadmap #1.8/#8) — selectorless Service +
+  # Endpoints pointing at the real (non-stub) pc-control process on the
+  # workstation host. See host-pc-control.yaml for the full wiring steps.
+  - host-pc-control.yaml
   # LLM/Memory stack. llm-service points at the in-cluster llm-server by
   # default; operators wanting to use a host-side llama.cpp can override
   # LLM_SERVER_URL to host-model-daemon.jarvis-prod.svc.cluster.local:18080

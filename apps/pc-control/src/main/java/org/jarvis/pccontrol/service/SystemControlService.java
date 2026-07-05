@@ -33,6 +33,13 @@ public interface SystemControlService {
 
     void executeHotkey(String keyCombination) throws IOException, InterruptedException;
 
+    /**
+     * Type literal free-form text into the focused window (e.g. "open app and
+     * type this sentence"). Distinct from {@link #executeHotkey(String)},
+     * which sends key combinations rather than literal characters.
+     */
+    void typeText(String text) throws IOException, InterruptedException;
+
     void focusWindow(String title) throws IOException, InterruptedException;
 
     void closeWindow(String title) throws IOException, InterruptedException;

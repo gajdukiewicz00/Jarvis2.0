@@ -42,6 +42,8 @@ class StubSystemControlServiceTest {
         assertDoesNotThrow(() -> service.openApp("code"));
         assertDoesNotThrow(() -> service.openUrl("https://example.com"));
         assertDoesNotThrow(() -> service.executeHotkey("Alt+Tab"));
+        assertDoesNotThrow(() -> service.typeText("hello jarvis"));
+        assertDoesNotThrow(() -> service.typeText(null));
     }
 
     @Test

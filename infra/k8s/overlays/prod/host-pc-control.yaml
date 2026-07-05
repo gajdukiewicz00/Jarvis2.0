@@ -1,0 +1,75 @@
+# =============================================================================
+# host-pc-control — selectorless Service + Endpoints bridging the cluster to
+# the REAL pc-control process running on the workstation host (Roadmap #1.8/#8).
+# =============================================================================
+# In-cluster `pc-control` (infra/k8s/base/pc-control/deployment.yaml) always
+# runs with PC_CONTROL_STUB_MODE=true — pods have no X11/PulseAudio/DBus
+# access, so desktop actions there are simulated only (see
+# StubSystemControlService / StubDesktopControlService).
+#
+# Real execution happens on the host via scripts/jarvis-pc-control-up.sh,
+# which launches the SAME pc-control jar with PC_CONTROL_STUB_MODE=false and
+# a real DISPLAY/DBUS session, listening on port 8084 (JARVIS_PC_CONTROL_PORT).
+#
+# This Service has NO selector on purpose — same pattern as
+# infra/k8s/base/host-model-daemon and infra/k8s/base/vision-security-service.
+# The matching Endpoints object below carries the host's node IP and is
+# patched at deploy time (e.g. `kubectl patch endpoints host-pc-control -n
+# jarvis-prod --type=merge -p '{"subsets":[{"addresses":[{"ip":"<node-ip>"}],
+# "ports":[{"name":"http","port":8084,"protocol":"TCP"}]}]}'`), mirroring
+# infra/scripts/microk8s/apply-host-endpoints.sh for host-model-daemon.
+#
+# DNS: host-pc-control.jarvis-prod.svc.cluster.local:8084
+#
+# Wiring this bridge in:
+#   1. Run scripts/jarvis-pc-control-up.sh on the host (real, non-stub pc-control).
+#   2. Patch this Endpoints object with the host's node IP (see above).
+#   3. Point api-gateway at it: PC_CONTROL_URL=http://host-pc-control.jarvis-prod.svc.cluster.local:8084
+#      and PC_CONTROL_LOCAL_BRIDGE=true (see services.pc-control.* in
+#      apps/api-gateway/src/main/resources/application.yaml) so
+#      GatewayCapabilityService.requireDirectPcControlSupport allows both the
+#      generic /api/v1/pc/** proxy and the official /api/v1/pc/desktop/**
+#      executor route (org.jarvis.apigateway.pccontrol.PcDesktopController)
+#      through even while running in k8s runtime mode.
+#
+# Until patched, the placeholder IP below (RFC 5737 TEST-NET-1) makes traffic
+# fail fast instead of silently hitting nothing — the operator must apply the
+# patch consciously, same as the other host bridges.
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: host-pc-control
+  namespace: jarvis-prod
+  labels:
+    app: host-pc-control
+    app.kubernetes.io/name: host-pc-control
+    app.kubernetes.io/component: pc-control-host-bridge
+    app.kubernetes.io/part-of: jarvis
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8084
+      targetPort: 8084
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: host-pc-control
+  namespace: jarvis-prod
+  labels:
+    app: host-pc-control
+    app.kubernetes.io/name: host-pc-control
+    app.kubernetes.io/component: pc-control-host-bridge
+    app.kubernetes.io/part-of: jarvis
+subsets:
+  - addresses:
+      # RFC 5737 TEST-NET-1 placeholder; replaced at deploy time with the
+      # workstation's node IP once scripts/jarvis-pc-control-up.sh is running.
+      - ip: 192.0.2.1
+    ports:
+      - name: http
+        port: 8084
+        protocol: TCP

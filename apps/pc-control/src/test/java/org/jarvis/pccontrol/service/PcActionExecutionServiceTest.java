@@ -69,6 +69,8 @@ class PcActionExecutionServiceTest {
                 "OPEN_APP",
                 "OPEN_URL",
                 "HOTKEY",
+                "TYPE_TEXT",
+                "WINDOW_FOCUS",
                 "NOTIFY",
                 "SCREENSHOT",
                 "LOCK_SCREEN",
@@ -332,6 +334,54 @@ class PcActionExecutionServiceTest {
 
         assertFalse(result.success());
         assertTrue(result.message().contains("keyCombination"));
+    }
+
+    // --- TYPE_TEXT ---
+
+    @Test
+    void typeTextReturnsSuccessWithTextParameter() throws Exception {
+        PcActionResult result = service.execute(new PcActionRequest("TYPE_TEXT", Map.of("text", "hello jarvis")));
+
+        assertTrue(result.success());
+        assertEquals("TYPE_TEXT", result.actionType());
+        // The literal text must never be echoed back — only its length.
+        assertEquals("hello jarvis".length(), result.details().get("textLength"));
+        verify(systemControlService).typeText("hello jarvis");
+    }
+
+    @Test
+    void typeTextAcceptsContentAlias() throws Exception {
+        PcActionResult result = service.execute(new PcActionRequest("TYPE_TEXT", Map.of("content", "aliased")));
+
+        assertTrue(result.success());
+        verify(systemControlService).typeText("aliased");
+    }
+
+    @Test
+    void typeTextRejectedWhenTextParameterMissing() {
+        PcActionResult result = service.execute(new PcActionRequest("TYPE_TEXT", Map.of()));
+
+        assertFalse(result.success());
+        assertTrue(result.message().contains("text"));
+    }
+
+    // --- WINDOW_FOCUS ---
+
+    @Test
+    void windowFocusReturnsSuccessWithTitleParameter() throws Exception {
+        PcActionResult result = service.execute(new PcActionRequest("WINDOW_FOCUS", Map.of("title", "Firefox")));
+
+        assertTrue(result.success());
+        assertEquals("WINDOW_FOCUS", result.actionType());
+        verify(systemControlService).focusWindow("Firefox");
+    }
+
+    @Test
+    void windowFocusRejectedWhenTitleMissing() {
+        PcActionResult result = service.execute(new PcActionRequest("WINDOW_FOCUS", Map.of()));
+
+        assertFalse(result.success());
+        assertTrue(result.message().contains("title"));
     }
 
     // --- NOTIFY / SCREENSHOT / LOCK_SCREEN ---

@@ -50,7 +50,11 @@ public class PcControlController {
                         "OPEN_APP",
                         "OPEN_URL",
                         "HOTKEY",
+                        "TYPE_TEXT",
+                        "WINDOW_FOCUS",
                         "NOTIFY",
+                        "SCREENSHOT",
+                        "LOCK_SCREEN",
                         "SYSTEM_COMMAND",
                         "SCENARIO"),
                 "supportedScenarios", scenarioRegistry.all()));

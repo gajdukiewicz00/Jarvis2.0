@@ -118,6 +118,27 @@ class LinuxSystemControlServiceTest {
     }
 
     @Test
+    void typeTextRejectsNullText() {
+        assertThrows(IllegalArgumentException.class, () -> service.typeText(null));
+    }
+
+    @Test
+    void typeTextRejectsEmptyText() {
+        assertThrows(IllegalArgumentException.class, () -> service.typeText(""));
+    }
+
+    @Test
+    void typeTextRejectsTextExceedingMaxLength() {
+        String tooLong = "a".repeat(501);
+        assertThrows(IllegalArgumentException.class, () -> service.typeText(tooLong));
+    }
+
+    @Test
+    void typeTextRejectsTextWithControlCharacters() {
+        assertThrows(IllegalArgumentException.class, () -> service.typeText("hello\nworld"));
+    }
+
+    @Test
     void beepNeverThrowsEvenWhenSoundToolsAreMissing() {
         // beep() swallows IOException/InterruptedException internally and falls back
         // to a terminal bell, so it must never propagate an exception to the caller.

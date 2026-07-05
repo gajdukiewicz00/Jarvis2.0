@@ -116,6 +116,26 @@ public class GatewayCapabilityService {
         }
     }
 
+    /**
+     * Real-vs-stub status for the official desktop-action route
+     * ({@code /api/v1/pc/desktop/**}, Roadmap #1.8/#8). "Real control" means
+     * pc-control is not running in stub mode AND (we are outside k8s, or the
+     * host-pc-control selectorless-Service bridge has been wired and flagged
+     * via {@code PC_CONTROL_LOCAL_BRIDGE=true}).
+     */
+    public Map<String, Object> describeDesktopControlStatus() {
+        RuntimeMode runtimeMode = runtimeModeResolver.currentMode();
+        boolean realControlActive = !pcControlStubMode && (runtimeMode != RuntimeMode.K8S || pcControlLocalBridge);
+
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("realControlActive", realControlActive);
+        status.put("stubMode", pcControlStubMode);
+        status.put("runtimeMode", runtimeMode.id());
+        status.put("localBridge", pcControlLocalBridge);
+        status.put("executor", realControlActive ? "host-pc-control" : "stub");
+        return status;
+    }
+
     public Map<String, Object> describeCapabilities() {
         RuntimeMode runtimeMode = runtimeModeResolver.currentMode();
 

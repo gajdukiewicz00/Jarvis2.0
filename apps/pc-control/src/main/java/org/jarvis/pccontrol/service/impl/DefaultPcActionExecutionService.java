@@ -68,6 +68,8 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
             case "OPEN_APP" -> executeSingleStep(actionType, primitiveStep("open-app", actionType, parameters));
             case "OPEN_URL" -> executeSingleStep(actionType, primitiveStep("open-url", actionType, parameters));
             case "HOTKEY" -> executeSingleStep(actionType, primitiveStep("hotkey", actionType, parameters));
+            case "TYPE_TEXT" -> executeSingleStep(actionType, primitiveStep("type-text", actionType, parameters));
+            case "WINDOW_FOCUS" -> executeSingleStep(actionType, primitiveStep("window-focus", actionType, parameters));
             case "NOTIFY" -> executeSingleStep(actionType, primitiveStep("notify", actionType, parameters));
             case "SCREENSHOT" -> executeSingleStep(actionType, primitiveStep("screenshot", actionType, parameters));
             case "LOCK_SCREEN" -> executeSingleStep(actionType, primitiveStep("lock-screen", actionType, parameters));
@@ -275,6 +277,16 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
                 }
                 yield executeStep(stepId, "HOTKEY", parameters, () -> systemControlService.executeHotkey(hotkey),
                         "Hotkey executed", Map.of("keyCombination", hotkey));
+            }
+            case "TYPE_TEXT" -> {
+                String text = firstNonBlank(parameters, "text", "content");
+                if (text == null) {
+                    yield rejectedStep(stepId, "TYPE_TEXT", "Parameter 'text' is required");
+                }
+                // Never surface the literal text in details/logs — it may contain
+                // sensitive content the user is typing (see security.md redaction rule).
+                yield executeStep(stepId, "TYPE_TEXT", parameters, () -> systemControlService.typeText(text),
+                        "Text typed", Map.of("textLength", text.length()));
             }
             case "WAIT" -> {
                 int millis = boundedInt(parameters.getOrDefault("millis", parameters.getOrDefault("ms", "0")),

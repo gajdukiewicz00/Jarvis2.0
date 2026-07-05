@@ -27,6 +27,10 @@ import java.util.regex.Pattern;
 public class LinuxSystemControlService implements SystemControlService {
 
     private static final Pattern HOTKEY_PATTERN = Pattern.compile("^[A-Za-z0-9+_\\-]{1,64}$");
+    private static final int MAX_TYPE_TEXT_LENGTH = 500;
+    // Disallow ASCII control characters (newlines, escapes, etc.) so xdotool
+    // never receives anything that could be interpreted as extra key events.
+    private static final Pattern UNSAFE_TEXT_CONTROL_CHARS = Pattern.compile("[\\x00-\\x1F\\x7F]");
 
     private static final Map<String, List<String>> APP_COMMANDS = Map.ofEntries(
             Map.entry("browser", List.of("xdg-open", "https://google.com")),
@@ -135,6 +139,15 @@ public class LinuxSystemControlService implements SystemControlService {
         List<String> cmd = List.of("xdotool", "key", keyCombination);
         log.info("⌨️ Executing hotkey: {}", keyCombination);
         execWithFallback(cmd, "Hotkey");
+    }
+
+    @Override
+    public void typeText(String text) throws IOException, InterruptedException {
+        // e.g. "Hello, Jarvis!" — literal characters, not a key combination.
+        validateTypeText(text);
+        List<String> cmd = List.of("xdotool", "type", "--", text);
+        log.info("⌨️ Typing text (length={})", text.length());
+        execWithFallback(cmd, "TypeText");
     }
 
     @Override
@@ -344,6 +357,19 @@ public class LinuxSystemControlService implements SystemControlService {
         }
         if (!HOTKEY_PATTERN.matcher(keyCombination).matches()) {
             throw new IllegalArgumentException("Invalid hotkey format");
+        }
+    }
+
+    private static void validateTypeText(String text) {
+        if (text == null || text.isEmpty()) {
+            throw new IllegalArgumentException("Text is required");
+        }
+        if (text.length() > MAX_TYPE_TEXT_LENGTH) {
+            throw new IllegalArgumentException(
+                    "Text exceeds maximum length of " + MAX_TYPE_TEXT_LENGTH);
+        }
+        if (UNSAFE_TEXT_CONTROL_CHARS.matcher(text).find()) {
+            throw new IllegalArgumentException("Text contains unsafe control characters");
         }
     }
 

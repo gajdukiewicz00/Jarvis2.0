@@ -88,6 +88,13 @@ public class StubSystemControlService implements SystemControlService {
     }
 
     @Override
+    public void typeText(String text) throws IOException, InterruptedException {
+        // Never log the literal text — it may contain sensitive content typed by the user.
+        int length = text == null ? 0 : text.length();
+        log.info("⌨️ [STUB] Type text requested (length={})", length);
+    }
+
+    @Override
     public void focusWindow(String title) throws IOException, InterruptedException {
         log.info("🪟 [STUB] Focus window requested: {}", title);
     }

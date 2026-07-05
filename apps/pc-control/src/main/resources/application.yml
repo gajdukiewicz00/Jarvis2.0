@@ -65,7 +65,11 @@ pc-control:
     amixer-control: ${PC_CONTROL_AMIXER_CONTROL:Master}
 
 security:
-  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:MEDIA_CONTROL,VOLUME_UP,VOLUME_DOWN,SET_VOLUME,VOLUME_SET,MUTE,UNMUTE,PLAY_PAUSE,PAUSE,NEXT,PREV,OPEN_APP,OPEN_URL,HOTKEY,NOTIFY,SCREENSHOT,LOCK_SCREEN,SYSTEM_COMMAND,SCENARIO}
+  # NOTE: WINDOW_FOCUS and TYPE_TEXT were added alongside the api-gateway
+  # /api/v1/pc/desktop/** official desktop-action route (Roadmap #1.8/#8) so
+  # that "focus window" and "type text" actually reach DefaultPcActionExecutionService
+  # instead of being blocked here even though the executor supports them.
+  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:MEDIA_CONTROL,VOLUME_UP,VOLUME_DOWN,SET_VOLUME,VOLUME_SET,MUTE,UNMUTE,PLAY_PAUSE,PAUSE,NEXT,PREV,OPEN_APP,OPEN_URL,HOTKEY,TYPE_TEXT,WINDOW_FOCUS,NOTIFY,SCREENSHOT,LOCK_SCREEN,SYSTEM_COMMAND,SCENARIO}
 
 management:
   endpoints:

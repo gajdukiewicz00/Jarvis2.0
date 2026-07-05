@@ -118,6 +118,9 @@ public class StatefulSmartHomeService implements SmartHomeService {
             case LIGHT -> applyLightAction(state, action, payload);
             case THERMOSTAT -> applyThermostatAction(state, action, payload);
             case LOCK -> applyLockAction(state, action);
+            case SWITCH -> applySwitchAction(state, action);
+            case TEMPERATURE_SENSOR, HUMIDITY_SENSOR, MOTION_SENSOR, DOOR_SENSOR -> throw new SmartHomeValidationException(
+                    "Sensors are read-only; report readings via the sensor-ingestion endpoint instead of an action");
         }
     }
 
@@ -172,6 +175,16 @@ public class StatefulSmartHomeService implements SmartHomeService {
             case "LOCK" -> state.put("locked", true);
             case "UNLOCK" -> state.put("locked", false);
             default -> throw new SmartHomeValidationException("Unsupported lock action: " + action);
+        }
+    }
+
+    private void applySwitchAction(Map<String, Object> state, String action) {
+        boolean currentPower = (Boolean) state.getOrDefault("power", false);
+        switch (action) {
+            case "TURN_ON" -> state.put("power", true);
+            case "TURN_OFF" -> state.put("power", false);
+            case "TOGGLE" -> state.put("power", !currentPower);
+            default -> throw new SmartHomeValidationException("Unsupported switch action: " + action);
         }
     }
 

@@ -3,6 +3,7 @@ package org.jarvis.smarthome.service;
 import org.jarvis.smarthome.model.SmartHomeActionRequest;
 import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
+import org.jarvis.smarthome.model.SmartHomeDeviceType;
 import org.jarvis.smarthome.model.SmartHomeDeviceView;
 import org.jarvis.smarthome.security.ActionValidator;
 import org.jarvis.smarthome.service.impl.StatefulSmartHomeService;
@@ -14,7 +15,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -313,6 +316,49 @@ class StatefulSmartHomeServiceTest {
     @Test
     void supportedActionsDelegatesToCatalog() {
         assertEquals(catalog.supportedActions(), service.supportedActions());
+    }
+
+    @Test
+    void executeActionTurnsSwitchOnAndOff() {
+        registerSwitchDevice();
+
+        SmartHomeActionResult on = service.executeAction(
+                "user-a", "hall_switch", new SmartHomeActionRequest("TURN_ON", null));
+        assertTrue((Boolean) on.device().state().get("power"));
+
+        SmartHomeActionResult off = service.executeAction(
+                "user-a", "hall_switch", new SmartHomeActionRequest("TURN_OFF", null));
+        assertFalse((Boolean) off.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionTogglesSwitch() {
+        registerSwitchDevice();
+
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "hall_switch", new SmartHomeActionRequest("TOGGLE", null));
+
+        assertTrue((Boolean) result.device().state().get("power"));
+    }
+
+    @Test
+    void executeActionRejectsUnsupportedSensorAction() {
+        SmartHomeDeviceDefinition sensor = new SmartHomeDeviceDefinition(
+                "hall_motion_sensor", "Hall Motion Sensor", "Hallway", SmartHomeDeviceType.MOTION_SENSOR,
+                List.of("TURN_ON"), new LinkedHashMap<>(Map.of()));
+        catalog.register(sensor);
+
+        SmartHomeValidationException exception = assertThrows(SmartHomeValidationException.class,
+                () -> service.executeAction("user-a", "hall_motion_sensor", new SmartHomeActionRequest("TURN_ON", null)));
+
+        assertTrue(exception.getMessage().contains("read-only"));
+    }
+
+    private void registerSwitchDevice() {
+        SmartHomeDeviceDefinition switchDevice = new SmartHomeDeviceDefinition(
+                "hall_switch", "Hall Switch", "Hallway", SmartHomeDeviceType.SWITCH,
+                List.of("TURN_ON", "TURN_OFF", "TOGGLE"), new LinkedHashMap<>(Map.of("power", false)));
+        catalog.register(switchDevice);
     }
 
     private static ActionValidator validatorWithDefaults() {

@@ -24,9 +24,12 @@ import org.jarvis.desktop.features.security.SecurityView
 import org.jarvis.desktop.features.settings.SettingsView
 import org.jarvis.desktop.features.smarthome.ScenesView
 import org.jarvis.desktop.features.smarthome.SmartHomeView
+import org.jarvis.desktop.features.status.ServiceStatusView
 import org.jarvis.desktop.features.sync.SyncPairingView
 import org.jarvis.desktop.features.vision.VisionSecurityView
 import org.jarvis.desktop.features.voice.VoiceHelpView
+import org.jarvis.desktop.onboarding.OnboardingWizardView
+import org.jarvis.desktop.palette.CommandPaletteOverlay
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
 import org.jarvis.desktop.shell.ShellNavPane
 import org.jarvis.desktop.shell.ShellNavigator
@@ -153,6 +156,27 @@ class HeadlessViewConstructionSmokeTest {
     fun `AiView constructs with its default read model`() {
         onFxThread {
             assertNotNull(AiView())
+        }
+    }
+
+    @Test
+    fun `ServiceStatusView constructs with its default read model`() {
+        onFxThread {
+            assertNotNull(ServiceStatusView())
+        }
+    }
+
+    @Test
+    fun `OnboardingWizardView constructs without throwing`() {
+        onFxThread {
+            assertNotNull(OnboardingWizardView(onFinish = {}, onSkip = {}))
+        }
+    }
+
+    @Test
+    fun `CommandPaletteOverlay constructs with an empty entry list`() {
+        onFxThread {
+            assertNotNull(CommandPaletteOverlay(entries = emptyList(), onClose = {}))
         }
     }
 

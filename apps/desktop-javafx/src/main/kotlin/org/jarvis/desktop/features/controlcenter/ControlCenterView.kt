@@ -243,6 +243,7 @@ class ControlCenterView(
             Feature("Sync / Pairing", "Android companion pairing.", ShellRoute.SYNC, ACCENT_BLUE),
             Feature("Diagnostics", "Status report + host health.", ShellRoute.DIAGNOSTICS, ACCENT_GREEN),
             Feature("AI Runtime", "LLM/GPU lifecycle and status.", ShellRoute.AI, ACCENT_PURPLE),
+            Feature("Service Status", "Model/service health + repair, update, rollback ops.", ShellRoute.SERVICE_STATUS, ACCENT_GREEN),
             Feature("Settings", "Endpoint, locale, session.", ShellRoute.SETTINGS, ACCENT_BLUE)
         )
 

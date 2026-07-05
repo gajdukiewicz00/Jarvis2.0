@@ -23,6 +23,7 @@ import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.i18n.I18n
 import org.jarvis.desktop.service.DesktopServiceHealthChecker
 import org.jarvis.desktop.shell.ShellRouteContent
+import org.jarvis.desktop.theme.ThemePreference
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -59,6 +60,7 @@ class SettingsView(
     private val manualOverrideCheckBox = CheckBox("Pin API Gateway URL manually")
     private val gatewayUrlField = TextField()
     private val languageCombo = ComboBox<LocaleOption>()
+    private val starkLabThemeCheckBox = CheckBox("Enable \"Stark Lab\" accent theme")
 
     private val selectionModeLabel = valueLabel()
     private val sourceLabel = codeValueLabel()
@@ -106,6 +108,7 @@ class SettingsView(
         manualOverrideCheckBox.setOnAction {
             gatewayUrlField.isDisable = !manualOverrideCheckBox.isSelected
         }
+        starkLabThemeCheckBox.setOnAction { ThemePreference.setEnabled(starkLabThemeCheckBox.isSelected) }
         saveButton.setOnAction { saveSettings() }
         recheckButton.setOnAction { checkServices() }
         logoutButton.setOnAction { logout() }
@@ -117,6 +120,7 @@ class SettingsView(
         syncCurrentConfig()
         renderSessionDetails()
         renderBuildInfo()
+        starkLabThemeCheckBox.isSelected = ThemePreference.isEnabled()
         if (serviceChecksContainer.children.isEmpty()) {
             checkServices()
         }
@@ -230,11 +234,14 @@ class SettingsView(
             add(effectiveLocaleLabel, 1, 1)
             add(settingLabel("Theme"), 0, 2)
             add(themeLabel, 1, 2)
+            add(settingLabel("Stark Lab accent"), 0, 3)
+            add(starkLabThemeCheckBox, 1, 3)
         }
 
         return sectionCard(
             title = "General settings",
-            subtitle = "Locale is configurable. Theme is fixed to the unified shell dark direction in this product line.",
+            subtitle = "Locale is configurable. The base unified shell theme stays dark; \"Stark Lab\" layers a " +
+                "cinematic HUD accent skin on top and takes effect immediately.",
             body = grid
         )
     }

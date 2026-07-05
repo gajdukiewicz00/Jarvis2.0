@@ -635,3 +635,80 @@
 .ai-action-grid {
     -fx-pref-wrap-length: 900px;
 }
+
+.shell-service-status-view {
+    -fx-background-color: transparent;
+}
+
+/* ---- onboarding wizard overlay -------------------------------------- */
+
+.onboarding-scrim {
+    -fx-background-color: rgba(4, 7, 11, 0.72);
+}
+
+.onboarding-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 16px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 16px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 32, 0.2, 0, 12);
+}
+
+.onboarding-progress {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.onboarding-step-title {
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.onboarding-step-body {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 14px;
+}
+
+/* ---- command palette overlay ---------------------------------------- */
+
+.command-palette-scrim {
+    -fx-background-color: rgba(4, 7, 11, 0.6);
+}
+
+.command-palette-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 28, 0.2, 0, 10);
+}
+
+.command-palette-field {
+    -fx-font-size: 16px;
+}
+
+.command-palette-list {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.command-palette-cell {
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-size: 13px;
+}
+
+/* ---- top bar: panic + services indicator ------------------------------ */
+
+.shell-panic-button {
+    -fx-background-radius: 999px;
+    -fx-padding: 8px 14px;
+    -fx-font-weight: bold;
+}
+
+.shell-services-pill {
+    -fx-cursor: hand;
+}

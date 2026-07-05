@@ -1,0 +1,64 @@
+/*
+ * "Stark Lab" accent theme — an optional cinematic HUD skin layered on top
+ * of shell.css. It is added to the Scene's stylesheets *in addition to*
+ * shell.css (never replacing it), so JavaFX's "last stylesheet wins" rule
+ * lets these overrides win for anything they touch while everything else
+ * still falls back to the base dark theme. Toggled from Settings via
+ * org.jarvis.desktop.theme.ThemePreference.
+ */
+
+.root {
+    -jarvis-bg: #05070C;
+    -jarvis-surface: #0E1420;
+    -jarvis-surface-elevated: #121A2A;
+    -jarvis-outline: #1F3A52;
+    -jarvis-primary: #4FE0FF;
+    -jarvis-secondary: #FFB454;
+    -jarvis-success: #38F2A6;
+    -jarvis-warning: #FFC84F;
+    -jarvis-error: #FF5C7A;
+    -jarvis-text-primary: #EAF6FF;
+    -jarvis-text-secondary: #7FA6C4;
+}
+
+.shell-top-bar {
+    -fx-background-color: linear-gradient(to bottom, #0F1B2E, #0A121D);
+    -fx-border-color: transparent transparent -jarvis-primary transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.shell-app-title {
+    -fx-text-fill: -jarvis-primary;
+    -fx-effect: dropshadow(gaussian, rgba(79, 224, 255, 0.55), 12, 0.3, 0, 0);
+}
+
+.shell-nav {
+    -fx-background-color: linear-gradient(to bottom, #0B1220, #060A11);
+    -fx-border-color: transparent -jarvis-primary transparent transparent;
+    -fx-border-width: 0 1px 0 0;
+}
+
+.shell-section-card,
+.onboarding-card,
+.command-palette-card {
+    -fx-border-color: rgba(79, 224, 255, 0.35);
+    -fx-effect: dropshadow(gaussian, rgba(79, 224, 255, 0.18), 22, 0.2, 0, 0);
+}
+
+.shell-status-pill {
+    -fx-border-color: rgba(79, 224, 255, 0.3);
+    -fx-border-radius: 999px;
+    -fx-border-width: 1px;
+}
+
+.shell-action-button {
+    -fx-background-color: rgba(79, 224, 255, 0.14);
+    -fx-text-fill: -jarvis-primary;
+    -fx-border-color: rgba(79, 224, 255, 0.4);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+.shell-action-button:hover {
+    -fx-background-color: rgba(79, 224, 255, 0.26);
+}

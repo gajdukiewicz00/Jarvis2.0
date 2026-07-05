@@ -27,6 +27,7 @@ enum class ShellRoute(
     SYNC("Sync / Pairing", "Sync / Pairing"),
     DIAGNOSTICS("Diagnostics", "Diagnostics"),
     AI("AI Runtime", "AI"),
+    SERVICE_STATUS("Service Status", "Service Status"),
     SETTINGS("Settings", "Settings");
 
     companion object {

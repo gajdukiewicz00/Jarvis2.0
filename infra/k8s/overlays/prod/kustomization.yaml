@@ -107,7 +107,7 @@ images:
     newTag: movie9
   - name: jarvis/llm-server
     newName: localhost:5000/jarvis/llm-server
-    newTag: movie9
+    newTag: local
   - name: jarvis/embedding-service
     newName: localhost:5000/jarvis/embedding-service
     newTag: local

@@ -113,6 +113,18 @@
             <version>4.12.0</version>
             <scope>test</scope>
         </dependency>
+        <!--
+            Best-effort headless JavaFX toolkit for unit tests (see
+            HeadlessJavaFxSmokeTest). Monocle provides a software Glass/Prism
+            implementation that does not require a real X11/Wayland display.
+            Test-scope only; never shipped in the application jar.
+        -->
+        <dependency>
+            <groupId>org.testfx</groupId>
+            <artifactId>openjfx-monocle</artifactId>
+            <version>21.0.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

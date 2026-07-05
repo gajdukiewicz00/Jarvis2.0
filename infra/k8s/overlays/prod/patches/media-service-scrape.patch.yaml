@@ -1,0 +1,14 @@
+# Expose media-service to Prometheus (jarvis-actuator pod-annotation discovery).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-service
+  namespace: jarvis-prod
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8095"
+        prometheus.io/scheme: http

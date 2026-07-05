@@ -119,3 +119,6 @@ patches:
   - path: ha-core-deployments.patch.yaml
   - path: patches/local-prod-replicas.yaml
   - path: patches/runtime-dependencies.yaml
+  - path: patches/agent-service-scrape.patch.yaml
+  - path: patches/media-service-scrape.patch.yaml
+  - path: patches/sync-service-scrape.patch.yaml

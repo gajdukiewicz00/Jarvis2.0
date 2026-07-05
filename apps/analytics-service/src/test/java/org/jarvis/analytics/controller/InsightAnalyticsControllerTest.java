@@ -7,6 +7,7 @@ import org.jarvis.analytics.service.ChangeAnalysisService;
 import org.jarvis.analytics.service.ConsistencyService;
 import org.jarvis.analytics.service.CorrelationService;
 import org.jarvis.analytics.service.HabitStreakService;
+import org.jarvis.analytics.service.MonthlyReportExportService;
 import org.jarvis.analytics.service.MonthlyReportService;
 import org.jarvis.analytics.service.NlAnalyticsService;
 import org.junit.jupiter.api.Test;
@@ -19,12 +20,15 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,6 +46,9 @@ class InsightAnalyticsControllerTest {
 
     @MockBean
     private MonthlyReportService monthlyReportService;
+
+    @MockBean
+    private MonthlyReportExportService monthlyReportExportService;
 
     @MockBean
     private CorrelationService correlationService;
@@ -68,6 +75,27 @@ class InsightAnalyticsControllerTest {
         mockMvc.perform(get("/api/v1/analytics/insights/monthly-report").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.month", is("2026-03")));
+    }
+
+    @Test
+    void exportMonthlyReportDefaultsToJsonDelegatingToExportService() throws Exception {
+        when(monthlyReportExportService.exportJson()).thenReturn(Map.of("month", "2026-03"));
+
+        mockMvc.perform(get("/api/v1/analytics/insights/monthly-report/export").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.month", is("2026-03")));
+    }
+
+    @Test
+    void exportMonthlyReportCsvReturnsCsvContentTypeAndAttachmentHeader() throws Exception {
+        when(monthlyReportExportService.exportCsv()).thenReturn("field,value\r\nmonth,2026-03\r\n");
+
+        mockMvc.perform(get("/api/v1/analytics/insights/monthly-report/export")
+                        .param("format", "csv"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", containsString("monthly-report.csv")))
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andExpect(content().string("field,value\r\nmonth,2026-03\r\n"));
     }
 
     @Test

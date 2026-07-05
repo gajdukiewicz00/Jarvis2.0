@@ -11,8 +11,12 @@ import org.jarvis.analytics.service.ChangeAnalysisService;
 import org.jarvis.analytics.service.ConsistencyService;
 import org.jarvis.analytics.service.CorrelationService;
 import org.jarvis.analytics.service.HabitStreakService;
+import org.jarvis.analytics.service.MonthlyReportExportService;
 import org.jarvis.analytics.service.MonthlyReportService;
 import org.jarvis.analytics.service.NlAnalyticsService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,6 +41,7 @@ import java.util.Map;
 public class InsightAnalyticsController {
 
     private final MonthlyReportService monthlyReportService;
+    private final MonthlyReportExportService monthlyReportExportService;
     private final CorrelationService correlationService;
     private final ConsistencyService consistencyService;
     private final HabitStreakService habitStreakService;
@@ -47,6 +52,19 @@ public class InsightAnalyticsController {
     @GetMapping("/monthly-report")
     public Map<String, Object> monthlyReport() {
         return monthlyReportService.monthlyReport();
+    }
+
+    /** Monthly report export. {@code format=json} (default) returns the report as-is; {@code format=csv} returns a flattened CSV download. */
+    @GetMapping("/monthly-report/export")
+    public ResponseEntity<?> exportMonthlyReport(@RequestParam(defaultValue = "json") String format) {
+        if ("csv".equalsIgnoreCase(format)) {
+            String csv = monthlyReportExportService.exportCsv();
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"monthly-report.csv\"")
+                    .contentType(MediaType.parseMediaType("text/csv"))
+                    .body(csv);
+        }
+        return ResponseEntity.ok(monthlyReportExportService.exportJson());
     }
 
     @GetMapping("/forecast/refined")

@@ -54,6 +54,14 @@ analytics:
   nl:
     llm:
       enabled: ${ANALYTICS_NL_LLM_ENABLED:false}
+  llm:
+    provider:
+      # Privacy guard (LlmPrivacyGuard): analytics-service cannot see which concrete
+      # backend answers behind llm-service's HTTP API, so it defaults to treating it
+      # as NOT local/NOT cleared for sensitive data — only aggregates are ever sent.
+      # Only flip these if the llm-service deployment is verified on-device/trusted.
+      local: ${ANALYTICS_LLM_PROVIDER_LOCAL:false}
+      allow-sensitive-data: ${ANALYTICS_LLM_PROVIDER_ALLOW_SENSITIVE_DATA:false}
 
 # Actuator & Observability
 management:

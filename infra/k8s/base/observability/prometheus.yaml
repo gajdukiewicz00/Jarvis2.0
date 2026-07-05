@@ -183,6 +183,132 @@ data:
               severity: warning
             annotations:
               summary: "LLM inference timeouts increasing"
+
+      # --- Wave-1 subsystem alerts (agent/media/sync/analytics/memory/planner/
+      # security). Documented + mirrored copy: observability/prometheus/wave1-alerts.yml
+      # (keep both in sync). Rules marked PROPOSED reference metric names that
+      # are not emitted yet — see observability/README.md for the follow-up list.
+      - name: jarvis_media
+        rules:
+          # PROPOSED: requires media_jobs_total{status,type} (Counter media.jobs) in MediaJobService.
+          - alert: MediaJobFailureRateHigh
+            expr: |
+              (
+                sum(rate(media_jobs_total{status="FAILED"}[10m]))
+                /
+                clamp_min(sum(rate(media_jobs_total[10m])), 0.001)
+              ) > 0.25
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: ">25% of media jobs failing (10m window)"
+              description: "media-service job failure ratio is {{ $value | humanizePercentage }}."
+
+      - name: jarvis_agent_swarm
+        rules:
+          # REAL: swarm_tasks_total already implemented (SwarmMetrics.java). Backlog-growth
+          # is the practical proxy for "task stuck" (no per-task in-flight age gauge exists).
+          - alert: AgentSwarmTaskBacklogGrowing
+            expr: |
+              clamp_min(
+                sum(increase(swarm_tasks_total{state="created"}[30m]))
+                -
+                sum(increase(swarm_tasks_total{state=~"completed|failed|cancelled"}[30m])),
+              0) > 5
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Agent swarm task backlog is growing ({{ $value }} unfinished over 30m)"
+              description: "created-but-not-terminal swarm tasks are outpacing completions/failures/cancellations."
+
+          # REAL: swarm_task_duration_seconds_max already implemented, but only records
+          # COMPLETED task durations, not in-flight age.
+          - alert: AgentSwarmCompletedTaskDurationHigh
+            expr: swarm_task_duration_seconds_max > 900
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "A completed swarm task took over 15 minutes"
+
+      - name: jarvis_llm_brain
+        rules:
+          # REAL: llm_fallback_used_total already implemented (LlmMetrics.java). Elevated
+          # fallback usage correlates with host-model-daemon being unreachable (see the
+          # recurring Endpoints/EndpointSlice placeholder-IP regression in docs/COMPONENT_STATUS.md).
+          - alert: LlmBrainLikelyUnreachable
+            expr: rate(llm_fallback_used_total[5m]) > 0.1
+            for: 3m
+            labels:
+              severity: critical
+            annotations:
+              summary: "LLM deterministic-fallback rate elevated — brain likely unreachable"
+              description: "Known cause: host-model-daemon Endpoints reset to 192.0.2.1. Run ./scripts/jarvis-host-endpoint-check.sh --fix."
+
+          # PROPOSED: requires a periodic-health-check gauge, e.g. llm_brain_reachable (0/1).
+          - alert: LlmBrainUnreachable
+            expr: llm_brain_reachable == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "LLM brain (host-model-daemon) reports unreachable"
+              description: "llm_brain_reachable is PROPOSED — not emitted yet; until it exists, rely on LlmBrainLikelyUnreachable."
+
+      - name: jarvis_memory
+        rules:
+          # REAL: standard Micrometer/HikariCP binder metric.
+          - alert: MemoryDbConnectionPressure
+            expr: hikaricp_connections_pending{application="memory-service"} > 5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "memory-service DB connection pool under pressure"
+
+          # PROPOSED: requires memory_db_errors_total{operation} (Counter memory.db.errors).
+          - alert: MemoryDbErrorsElevated
+            expr: increase(memory_db_errors_total[10m]) > 5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "memory-service DB error count elevated"
+              description: "memory_db_errors_total is PROPOSED — not emitted yet; use the memory-DB-errors Loki query as the real signal today."
+
+      - name: jarvis_gateway
+        rules:
+          # REAL: http_server_requests_seconds_count already implemented on every Actuator
+          # service. Same shape as JarvisHigh5xxRate above, scoped + escalated for the gateway.
+          - alert: JarvisGatewayHigh5xxRate
+            expr: |
+              (
+                sum(rate(http_server_requests_seconds_count{status=~"5..",job="jarvis-actuator",application="api-gateway"}[5m]))
+                /
+                clamp_min(sum(rate(http_server_requests_seconds_count{job="jarvis-actuator",application="api-gateway"}[5m])), 1)
+              ) > 0.05
+            for: 3m
+            labels:
+              severity: critical
+            annotations:
+              summary: ">5% 5xx on api-gateway"
+              description: "api-gateway is the single front door for all downstream services."
+
+      - name: jarvis_kubernetes
+        rules:
+          # PROPOSED (infra prerequisite): requires kube-state-metrics to be deployed and
+          # scraped — not currently part of this stack. Standard, DRY way to catch
+          # Pending/CrashLoopBackOff/NotReady pods across every workload.
+          - alert: JarvisPodNotReady
+            expr: kube_pod_status_ready{namespace="jarvis-prod", condition="true"} == 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.pod }} has not been Ready for 5m"
+              description: "Requires kube-state-metrics deployment + a Prometheus scrape job for it."
 ---
 apiVersion: v1
 kind: ServiceAccount

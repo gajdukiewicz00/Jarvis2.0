@@ -1,0 +1,167 @@
+# Jarvis 2.0 — Wave-1 subsystem alert rules (agent-service, media-service,
+# sync-service, analytics-service, memory-service, planner-service,
+# security-service, api-gateway).
+#
+# This file is a documentation/review copy. The rules that are actually
+# evaluated live inline in the `alerts.yml` key of the `prometheus-config`
+# ConfigMap in:
+#   - k8s/base/observability/prometheus.yaml
+#   - infra/k8s/base/observability/prometheus.yaml
+# (Prometheus loads a single `rule_files: [/etc/prometheus/alerts.yml]`; there
+# is no rules-directory glob in this stack, so every group below has been
+# appended into both ConfigMaps' embedded blocks — keep this file and those
+# two ConfigMaps in sync if you edit either one.)
+#
+# Groups follow the naming/style already used by the existing
+# jarvis_availability / jarvis_http / jarvis_jvm / jarvis_llm groups in
+# k8s/base/observability/prometheus.yaml.
+#
+# Metric-status legend (see observability/README.md for the full table):
+#   REAL     — metric is already emitted today, alert is actionable now.
+#   PROPOSED — metric name does not exist yet; alert will show "no data"
+#              until the corresponding Micrometer instrumentation ships.
+groups:
+  # --- media-service ---------------------------------------------------
+  - name: jarvis_media
+    rules:
+      # PROPOSED: requires media_jobs_total{status,type} (Counter media.jobs)
+      # in MediaJobService — see observability/README.md follow-up list.
+      - alert: MediaJobFailureRateHigh
+        expr: |
+          (
+            sum(rate(media_jobs_total{status="FAILED"}[10m]))
+            /
+            clamp_min(sum(rate(media_jobs_total[10m])), 0.001)
+          ) > 0.25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: ">25% of media jobs failing (10m window)"
+          description: "media-service job failure ratio is {{ $value | humanizePercentage }}. Check /actuator/prometheus media_jobs_total and media-service logs (see observability/loki/wave1-log-queries.md)."
+
+  # --- agent-service (swarm.tasks / swarm.task.duration already REAL) --
+  - name: jarvis_agent_swarm
+    rules:
+      # REAL: swarm_tasks_total already implemented (SwarmMetrics.java).
+      # Practical proxy for "task stuck" — unfinished-task backlog growing
+      # rather than draining, since there is no per-task in-flight age gauge.
+      - alert: AgentSwarmTaskBacklogGrowing
+        expr: |
+          clamp_min(
+            sum(increase(swarm_tasks_total{state="created"}[30m]))
+            -
+            sum(increase(swarm_tasks_total{state=~"completed|failed|cancelled"}[30m])),
+          0) > 5
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent swarm task backlog is growing ({{ $value }} unfinished over 30m)"
+          description: "created-but-not-terminal swarm tasks are outpacing completions/failures/cancellations — likely one or more stuck tasks. Inspect agent-service logs / AgentTaskService."
+
+      # REAL: swarm_task_duration_seconds_max already implemented, but only
+      # records COMPLETED task durations (after the fact), not in-flight age.
+      - alert: AgentSwarmCompletedTaskDurationHigh
+        expr: swarm_task_duration_seconds_max > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A completed swarm task took over 15 minutes"
+          description: "swarm_task_duration_seconds_max = {{ $value }}s. Consider adding a running-task-age gauge (see follow-up list) for true in-flight 'stuck' detection."
+
+  # --- llm-service (brain reachability) --------------------------------
+  - name: jarvis_llm_brain
+    rules:
+      # REAL: llm_fallback_used_total already implemented (LlmMetrics.java).
+      # Elevated fallback usage strongly correlates with the host-model-daemon
+      # being unreachable (see IntentClassifier "daemon-unreachable" fallback
+      # path, and the documented recurring host-model-daemon Endpoints/
+      # EndpointSlice reset regression in docs/COMPONENT_STATUS.md).
+      - alert: LlmBrainLikelyUnreachable
+        expr: rate(llm_fallback_used_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM deterministic-fallback rate elevated — brain likely unreachable"
+          description: "rate(llm_fallback_used_total[5m]) = {{ $value }}/s. Known cause: host-model-daemon Endpoints/EndpointSlice reset to the placeholder IP 192.0.2.1. Run `./scripts/jarvis-host-endpoint-check.sh --fix` (see docs/COMPONENT_STATUS.md / docs/DEPLOYMENT_CANONICAL.md)."
+
+      # PROPOSED: requires a periodic-health-check gauge, e.g.
+      # llm_brain_reachable (0/1), set from LlmClient's existing host-daemon
+      # health check (see "LLM host daemon health check failed" log line).
+      - alert: LlmBrainUnreachable
+        expr: llm_brain_reachable == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "LLM brain (host-model-daemon) reports unreachable"
+          description: "llm_brain_reachable gauge is 0. This metric is PROPOSED — not emitted yet; until it exists, rely on LlmBrainLikelyUnreachable above and the k3s-endpoint-mismatch Loki query."
+
+  # --- memory-service ----------------------------------------------------
+  - name: jarvis_memory
+    rules:
+      # REAL: standard Micrometer/HikariCP binder metric, already exposed by
+      # any Spring service with a JDBC datasource (memory-service included).
+      - alert: MemoryDbConnectionPressure
+        expr: hikaricp_connections_pending{application="memory-service"} > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "memory-service DB connection pool under pressure"
+          description: "hikaricp_connections_pending = {{ $value }} for memory-service. Possible DB slowness/outage; cross-check the memory-DB-errors Loki query."
+
+      # PROPOSED: requires memory_db_errors_total{operation} (Counter
+      # memory.db.errors) — explicit exception counting is not implemented.
+      - alert: MemoryDbErrorsElevated
+        expr: increase(memory_db_errors_total[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "memory-service DB error count elevated"
+          description: "increase(memory_db_errors_total[10m]) = {{ $value }}. This metric is PROPOSED — not emitted yet; until it exists, use the memory-DB-errors Loki query as the real signal."
+
+  # --- api-gateway (front door) ------------------------------------------
+  - name: jarvis_gateway
+    rules:
+      # REAL: http_server_requests_seconds_count already implemented (every
+      # Spring Boot Actuator service exposes this). Same shape as the
+      # existing generic JarvisHigh5xxRate but scoped + escalated for the
+      # gateway specifically, since it is the single front door.
+      - alert: JarvisGatewayHigh5xxRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{status=~"5..",job="jarvis-actuator",application="api-gateway"}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_seconds_count{job="jarvis-actuator",application="api-gateway"}[5m])), 1)
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: ">5% 5xx on api-gateway"
+          description: "api-gateway 5xx ratio is {{ $value | humanizePercentage }} over 5m — the front door is degraded for all downstream services."
+
+  # --- cluster / pod lifecycle --------------------------------------------
+  - name: jarvis_kubernetes
+    rules:
+      # PROPOSED (infra prerequisite, not app code): requires kube-state-metrics
+      # to be deployed and scraped — it is NOT currently part of this stack
+      # (only prom/prometheus + the jarvis-actuator pod-role scrape exist).
+      # kube_pod_status_ready is the standard, generic, DRY way to catch
+      # Pending/CrashLoopBackOff/NotReady pods across every workload without
+      # one alert per app. Until kube-state-metrics ships, JarvisServiceDown
+      # (jarvis_availability group) covers pods that are Running but failing
+      # their scrape/health check.
+      - alert: JarvisPodNotReady
+        expr: kube_pod_status_ready{namespace="jarvis-prod", condition="true"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.pod }} has not been Ready for 5m"
+          description: "kube_pod_status_ready==0 for {{ $labels.pod }}. Requires kube-state-metrics deployment + Prometheus scrape job (not yet present in k8s/base/observability/prometheus.yaml)."

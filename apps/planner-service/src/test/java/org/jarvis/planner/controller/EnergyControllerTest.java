@@ -6,6 +6,7 @@ import org.jarvis.planner.model.TaskPriority;
 import org.jarvis.planner.repository.TaskRepository;
 import org.jarvis.planner.service.EnergyAwareRanker;
 import org.jarvis.planner.service.EnergyStateService;
+import org.jarvis.planner.service.RescheduleService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,7 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -43,6 +45,9 @@ class EnergyControllerTest {
 
     @MockBean
     private TaskRepository taskRepository;
+
+    @MockBean
+    private RescheduleService rescheduleService;
 
     private TestingAuthenticationToken authenticatedUser(String userId) {
         return new TestingAuthenticationToken(userId, "n/a", "ROLE_USER");
@@ -203,5 +208,53 @@ class EnergyControllerTest {
                 .andExpect(jsonPath("$.tasks[0].taskId").value(9))
                 .andExpect(jsonPath("$.tasks[0].title").value("Write report"))
                 .andExpect(jsonPath("$.explanation").value("take it easy"));
+    }
+
+    @Test
+    @DisplayName("GET /next-task includes deadline pressure alongside the estimated duration")
+    void nextTaskIncludesDeadlinePressureLabel() throws Exception {
+        Task top = task(5L, "Deploy release", TaskPriority.HIGH);
+        List<Task> active = List.of(top);
+        when(energyStateService.get("user-1")).thenReturn(EnergyLevel.NORMAL);
+        when(taskRepository.findActiveTasks("user-1")).thenReturn(active);
+        when(ranker.rank(active, EnergyLevel.NORMAL, false)).thenReturn(List.of(top));
+        when(ranker.explain(top, EnergyLevel.NORMAL)).thenReturn("explanation");
+        when(ranker.deadlineLabel(top)).thenReturn("DUE_TODAY");
+
+        mockMvc.perform(get("/api/v1/planner/next-task").principal(authenticatedUser("user-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deadlinePressure").value("DUE_TODAY"));
+    }
+
+    @Test
+    @DisplayName("POST /reschedule-when-tired forwards to RescheduleService and returns its result")
+    void rescheduleWhenTiredForwardsToService() throws Exception {
+        when(rescheduleService.rescheduleWhenTired("user-1", false)).thenReturn(Map.of(
+                "energy", "EXHAUSTED",
+                "rescheduled", true,
+                "deferredCount", 2,
+                "message", "Перенёс на завтра 2 тяжёлые задачи, сэр."));
+
+        mockMvc.perform(post("/api/v1/planner/reschedule-when-tired").principal(authenticatedUser("user-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rescheduled").value(true))
+                .andExpect(jsonPath("$.deferredCount").value(2));
+
+        verify(rescheduleService).rescheduleWhenTired("user-1", false);
+    }
+
+    @Test
+    @DisplayName("POST /reschedule-when-tired?force=true forwards the force flag")
+    void rescheduleWhenTiredForwardsForceFlag() throws Exception {
+        when(rescheduleService.rescheduleWhenTired("user-1", true)).thenReturn(Map.of(
+                "energy", "NORMAL", "rescheduled", true, "deferredCount", 1));
+
+        mockMvc.perform(post("/api/v1/planner/reschedule-when-tired")
+                        .principal(authenticatedUser("user-1"))
+                        .param("force", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deferredCount").value(1));
+
+        verify(rescheduleService).rescheduleWhenTired("user-1", true);
     }
 }

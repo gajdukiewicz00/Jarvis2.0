@@ -26,6 +26,7 @@ public class DailyPlanGenerator {
     private final DailyPlanRepository dailyPlanRepository;
     private final UserProfileClient userProfileClient;
     private final ObjectMapper objectMapper;
+    private final RecurringTaskGenerator recurringTaskGenerator;
     
     public DailyPlanDto generatePlan(String userId, LocalDate date) {
         log.info("Generating daily plan for user {} on {}", userId, date);
@@ -69,6 +70,9 @@ public class DailyPlanGenerator {
         workActivities.add("Операционный блок 11:30-17:00");
         plan.addBlock("work", workActivities);
         
+        // Generate today's recurring task occurrences (RRULE-lite) before gathering active tasks
+        recurringTaskGenerator.generateOccurrencesForDate(userId, date);
+
         // Get active tasks
         List<Task> activeTasks = taskRepository.findActiveTasks(userId);
         List<TaskDto> topTasks = activeTasks.stream()

@@ -37,7 +37,10 @@ class DailyPlanGeneratorTest {
     
     @Mock
     private ObjectMapper objectMapper;
-    
+
+    @Mock
+    private RecurringTaskGenerator recurringTaskGenerator;
+
     @InjectMocks
     private DailyPlanGenerator generator;
     
@@ -75,6 +78,23 @@ class DailyPlanGeneratorTest {
         
         verify(taskRepository).findActiveTasks(userId);
         verify(userProfileClient).getPlanningContext(userId);
+        verify(recurringTaskGenerator).generateOccurrencesForDate(userId, date);
+    }
+
+    @Test
+    void testGeneratePlanTriggersRecurringOccurrenceGenerationBeforeGatheringActiveTasks() {
+        // Given
+        String userId = "recurringUser";
+        LocalDate date = LocalDate.now();
+
+        when(taskRepository.findActiveTasks(userId)).thenReturn(new ArrayList<>());
+        when(userProfileClient.getPlanningContext(userId)).thenReturn(UserProfileClient.PlanningContext.empty());
+
+        // When
+        generator.generatePlan(userId, date);
+
+        // Then
+        verify(recurringTaskGenerator).generateOccurrencesForDate(userId, date);
     }
 
     @Test

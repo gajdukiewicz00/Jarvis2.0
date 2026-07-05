@@ -44,7 +44,12 @@ public class TaskService {
         task.setSource(dto.getSource() != null ? dto.getSource() : TaskSource.MANUAL);
         task.setCreatedBy(dto.getCreatedBy() != null ? dto.getCreatedBy() : dto.getUserId());
         task.setUpdatedBy(dto.getUpdatedBy() != null ? dto.getUpdatedBy() : dto.getUserId());
-        
+        if (dto.getRecurrenceRule() != null) {
+            task.setRecurrenceRule(dto.getRecurrenceRule());
+        }
+        task.setRecurrenceIntervalDays(dto.getRecurrenceIntervalDays());
+        task.setRecurrenceAnchorDate(dto.getRecurrenceAnchorDate());
+
         Task saved = taskRepository.save(task);
         log.info("Created task: {} for user: {}", saved.getId(), dto.getUserId());
         return toDto(saved);
@@ -83,6 +88,15 @@ public class TaskService {
             task.setUpdatedBy(dto.getUpdatedBy());
         } else {
             task.setUpdatedBy(userId);
+        }
+        if (dto.getRecurrenceRule() != null) {
+            task.setRecurrenceRule(dto.getRecurrenceRule());
+        }
+        if (dto.getRecurrenceIntervalDays() != null) {
+            task.setRecurrenceIntervalDays(dto.getRecurrenceIntervalDays());
+        }
+        if (dto.getRecurrenceAnchorDate() != null) {
+            task.setRecurrenceAnchorDate(dto.getRecurrenceAnchorDate());
         }
 
         if (dto.getStatus() == TaskStatus.DONE && task.getCompletedAt() == null) {
@@ -134,6 +148,11 @@ public class TaskService {
         dto.setCreatedAt(task.getCreatedAt());
         dto.setUpdatedAt(task.getUpdatedAt());
         dto.setCompletedAt(task.getCompletedAt());
+        dto.setRecurrenceRule(task.getRecurrenceRule());
+        dto.setRecurrenceIntervalDays(task.getRecurrenceIntervalDays());
+        dto.setRecurrenceAnchorDate(task.getRecurrenceAnchorDate());
+        dto.setRecurrenceSourceTaskId(task.getRecurrenceSourceTaskId());
+        dto.setLastGeneratedDate(task.getLastGeneratedDate());
         return dto;
     }
 }

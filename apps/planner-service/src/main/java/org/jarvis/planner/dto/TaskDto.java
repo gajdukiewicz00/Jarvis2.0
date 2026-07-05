@@ -3,12 +3,14 @@ package org.jarvis.planner.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.TaskCategory;
 import org.jarvis.planner.model.TaskPriority;
 import org.jarvis.planner.model.TaskSource;
 import org.jarvis.planner.model.TaskStatus;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -31,4 +33,11 @@ public class TaskDto {
     private Instant createdAt;
     private Instant updatedAt;
     private Instant completedAt;
+
+    // Recurring tasks (RRULE-lite)
+    private RecurrenceRule recurrenceRule;
+    private Integer recurrenceIntervalDays;
+    private LocalDate recurrenceAnchorDate;
+    private Long recurrenceSourceTaskId;
+    private LocalDate lastGeneratedDate;
 }

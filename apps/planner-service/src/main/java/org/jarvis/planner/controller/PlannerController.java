@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,19 @@ public class PlannerController {
         return ResponseEntity.ok(plan);
     }
     
+    /**
+     * Tomorrow's plan — same generator as /daily, defaulted to tomorrow's date.
+     */
+    @GetMapping("/tomorrow")
+    public ResponseEntity<DailyPlanDto> getTomorrowPlan(Authentication authentication) {
+        String userId = authentication.getName();
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+        log.info("GET tomorrow plan for user: {} on {}", userId, tomorrow);
+
+        DailyPlanDto plan = dailyPlanGenerator.generatePlan(userId, tomorrow);
+        return ResponseEntity.ok(plan);
+    }
+
     /**
      * Get weekly plan
      */
@@ -115,6 +129,33 @@ public class PlannerController {
         out.put("message", overdue > 0
                 ? "Вечерний обзор, сэр: просрочено " + overdue + ", открыто " + active.size() + "."
                 : "Вечерний обзор, сэр: открыто " + active.size() + " задач, просрочек нет.");
+        return ResponseEntity.ok(out);
+    }
+
+    /**
+     * Weekly review — what got completed in the last 7 days vs. what's still
+     * open/overdue. Complements /evening-review (daily) at a week's cadence.
+     */
+    @GetMapping("/weekly-review")
+    public ResponseEntity<Map<String, Object>> weeklyReview(Authentication authentication) {
+        String userId = authentication.getName();
+        Instant weekAgo = Instant.now().minus(7, ChronoUnit.DAYS);
+        List<Task> completed = taskRepository.findByUserIdAndStatusAndCompletedAtAfter(userId, TaskStatus.DONE, weekAgo);
+        List<Task> active = taskRepository.findActiveTasks(userId);
+        Instant now = Instant.now();
+        long overdue = active.stream()
+                .filter(t -> t.getDueDate() != null && t.getDueDate().isBefore(now))
+                .count();
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("weekStart", LocalDate.now().minusDays(7));
+        out.put("weekEnd", LocalDate.now());
+        out.put("completedCount", completed.size());
+        out.put("completedTitles", completed.stream().map(Task::getTitle).limit(10).toList());
+        out.put("stillOpen", active.size());
+        out.put("overdue", overdue);
+        out.put("message", "Обзор недели, сэр: выполнено " + completed.size() + ", открыто " + active.size()
+                + (overdue > 0 ? ", просрочено " + overdue + "." : ", просрочек нет."));
         return ResponseEntity.ok(out);
     }
 

@@ -6,6 +6,7 @@ import org.jarvis.planner.model.Task;
 import org.jarvis.planner.repository.TaskRepository;
 import org.jarvis.planner.service.EnergyAwareRanker;
 import org.jarvis.planner.service.EnergyStateService;
+import org.jarvis.planner.service.RescheduleService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +32,7 @@ public class EnergyController {
     private final EnergyStateService energyStateService;
     private final EnergyAwareRanker ranker;
     private final TaskRepository taskRepository;
+    private final RescheduleService rescheduleService;
 
     @PostMapping("/energy")
     public ResponseEntity<Map<String, Object>> setEnergy(Authentication authentication,
@@ -69,6 +71,8 @@ public class EnergyController {
         out.put("title", top.getTitle());
         out.put("priority", top.getPriority());
         out.put("estimatedDuration", top.getEstimatedDuration());
+        out.put("dueDate", top.getDueDate());
+        out.put("deadlinePressure", ranker.deadlineLabel(top));
         out.put("explanation", ranker.explain(top, energy));
         out.put("openTasks", ranked.size());
         return ResponseEntity.ok(out);
@@ -87,6 +91,8 @@ public class EnergyController {
             m.put("title", t.getTitle());
             m.put("priority", t.getPriority());
             m.put("estimatedDuration", t.getEstimatedDuration());
+            m.put("dueDate", t.getDueDate());
+            m.put("deadlinePressure", ranker.deadlineLabel(t));
             return m;
         }).toList();
 
@@ -94,6 +100,18 @@ public class EnergyController {
         out.put("energy", energy.name());
         out.put("tasks", tasks);
         out.put("explanation", ranked.isEmpty() ? "Задач нет, сэр." : ranker.explain(ranked.get(0), energy));
+        return ResponseEntity.ok(out);
+    }
+
+    /**
+     * Reschedule-when-tired: while EXHAUSTED, push hard/deep-work tasks out by
+     * a day and explain the decision. Urgent/overdue tasks are never deferred.
+     */
+    @PostMapping("/reschedule-when-tired")
+    public ResponseEntity<Map<String, Object>> rescheduleWhenTired(Authentication authentication,
+            @RequestParam(defaultValue = "false") boolean force) {
+        String userId = authentication.getName();
+        Map<String, Object> out = rescheduleService.rescheduleWhenTired(userId, force);
         return ResponseEntity.ok(out);
     }
 

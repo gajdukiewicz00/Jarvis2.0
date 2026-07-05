@@ -5,6 +5,8 @@ import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskPriority;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -75,5 +77,60 @@ class EnergyAwareRankerTest {
         assertThat(EnergyLevel.fromText("полон сил")).isEqualTo(EnergyLevel.HIGH);
         assertThat(EnergyLevel.fromText("у меня норм")).isEqualTo(EnergyLevel.NORMAL);
         assertThat(EnergyLevel.fromText(null)).isEqualTo(EnergyLevel.NORMAL);
+    }
+
+    @Test
+    void nearerDeadlineOutranksSamePriorityTaskWithLaterDeadline() {
+        Task dueSoon = task("Report due soon", TaskPriority.MEDIUM, 30);
+        dueSoon.setDueDate(Instant.now().plus(2, ChronoUnit.HOURS));
+        Task dueLater = task("Report due later", TaskPriority.MEDIUM, 30);
+        dueLater.setDueDate(Instant.now().plus(20, ChronoUnit.DAYS));
+
+        List<Task> ranked = ranker.rank(List.of(dueLater, dueSoon), EnergyLevel.NORMAL, false);
+
+        assertThat(ranked.get(0)).isEqualTo(dueSoon);
+    }
+
+    @Test
+    void overdueTaskOutranksHigherPriorityTaskWithNoDeadline() {
+        Task overdueMedium = task("Overdue medium", TaskPriority.MEDIUM, 30);
+        overdueMedium.setDueDate(Instant.now().minus(1, ChronoUnit.HOURS));
+        Task urgentNoDeadline = task("Urgent, no deadline", TaskPriority.URGENT, 30);
+
+        List<Task> ranked = ranker.rank(List.of(urgentNoDeadline, overdueMedium), EnergyLevel.NORMAL, false);
+
+        assertThat(ranked.get(0)).isEqualTo(overdueMedium);
+    }
+
+    @Test
+    void deadlinePressureIsZeroWhenNoDueDate() {
+        Task noDeadline = task("No deadline", TaskPriority.LOW, 30);
+        assertThat(ranker.deadlinePressure(noDeadline)).isZero();
+    }
+
+    @Test
+    void deadlineLabelClassifiesByProximity() {
+        Task noDeadline = task("x", TaskPriority.LOW, 10);
+        assertThat(ranker.deadlineLabel(noDeadline)).isEqualTo("NONE");
+
+        Task overdue = task("x", TaskPriority.LOW, 10);
+        overdue.setDueDate(Instant.now().minus(1, ChronoUnit.HOURS));
+        assertThat(ranker.deadlineLabel(overdue)).isEqualTo("OVERDUE");
+
+        Task dueToday = task("x", TaskPriority.LOW, 10);
+        dueToday.setDueDate(Instant.now().plus(2, ChronoUnit.HOURS));
+        assertThat(ranker.deadlineLabel(dueToday)).isEqualTo("DUE_TODAY");
+
+        Task dueSoon = task("x", TaskPriority.LOW, 10);
+        dueSoon.setDueDate(Instant.now().plus(48, ChronoUnit.HOURS));
+        assertThat(ranker.deadlineLabel(dueSoon)).isEqualTo("DUE_SOON");
+
+        Task dueThisWeek = task("x", TaskPriority.LOW, 10);
+        dueThisWeek.setDueDate(Instant.now().plus(5, ChronoUnit.DAYS));
+        assertThat(ranker.deadlineLabel(dueThisWeek)).isEqualTo("DUE_THIS_WEEK");
+
+        Task later = task("x", TaskPriority.LOW, 10);
+        later.setDueDate(Instant.now().plus(30, ChronoUnit.DAYS));
+        assertThat(ranker.deadlineLabel(later)).isEqualTo("LATER");
     }
 }

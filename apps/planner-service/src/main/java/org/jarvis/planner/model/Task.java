@@ -8,6 +8,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -73,4 +74,24 @@ public class Task {
     
     @Column(name = "completed_at")
     private Instant completedAt;
+
+    // Recurring tasks (RRULE-lite): DAILY / WEEKLY / INTERVAL templates.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "recurrence_rule", length = 20, nullable = false)
+    private RecurrenceRule recurrenceRule = RecurrenceRule.NONE;
+
+    @Column(name = "recurrence_interval_days")
+    private Integer recurrenceIntervalDays;
+
+    /** Pattern anchor: day-of-week for WEEKLY, start date for INTERVAL. */
+    @Column(name = "recurrence_anchor_date")
+    private LocalDate recurrenceAnchorDate;
+
+    /** Set on a generated occurrence, pointing back at its recurring template task. */
+    @Column(name = "recurrence_source_task_id")
+    private Long recurrenceSourceTaskId;
+
+    /** Last date an occurrence was generated for this recurring template (dedup guard). */
+    @Column(name = "last_generated_date")
+    private LocalDate lastGeneratedDate;
 }

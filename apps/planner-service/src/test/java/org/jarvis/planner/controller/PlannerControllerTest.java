@@ -98,6 +98,23 @@ class PlannerControllerTest {
     }
 
     @Test
+    @DisplayName("GET /tomorrow forwards tomorrow's date to the daily plan generator")
+    void getTomorrowPlanForwardsTomorrowsDate() throws Exception {
+        LocalDate tomorrow = LocalDate.now().plusDays(1);
+        DailyPlanDto plan = new DailyPlanDto();
+        plan.setUserId("user-1");
+        plan.setDate(tomorrow);
+        when(dailyPlanGenerator.generatePlan("user-1", tomorrow)).thenReturn(plan);
+
+        mockMvc.perform(get("/api/v1/planner/tomorrow").principal(authenticatedUser("user-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value("user-1"))
+                .andExpect(jsonPath("$.date").value(tomorrow.toString()));
+
+        verify(dailyPlanGenerator).generatePlan("user-1", tomorrow);
+    }
+
+    @Test
     @DisplayName("GET /weekly returns the weekly plan for the authenticated user")
     void getWeeklyPlanReturnsPlan() throws Exception {
         when(weeklyPlanGenerator.generateWeeklyPlan("user-1"))
@@ -172,6 +189,37 @@ class PlannerControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.overdue").value(0))
                 .andExpect(jsonPath("$.message").value("Вечерний обзор, сэр: открыто 1 задач, просрочек нет."));
+    }
+
+    @Test
+    @DisplayName("GET /weekly-review reports completed, still-open, and overdue counts")
+    void weeklyReviewReportsCompletedOpenAndOverdueCounts() throws Exception {
+        Task completedTask = task(10L, "Shipped feature", null);
+        Task overdueTask = task(11L, "Late task", Instant.now().minus(1, ChronoUnit.DAYS));
+        when(taskRepository.findByUserIdAndStatusAndCompletedAtAfter(eq("user-1"), eq(TaskStatus.DONE), any(Instant.class)))
+                .thenReturn(List.of(completedTask));
+        when(taskRepository.findActiveTasks("user-1")).thenReturn(List.of(overdueTask));
+
+        mockMvc.perform(get("/api/v1/planner/weekly-review").principal(authenticatedUser("user-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completedCount").value(1))
+                .andExpect(jsonPath("$.completedTitles[0]").value("Shipped feature"))
+                .andExpect(jsonPath("$.stillOpen").value(1))
+                .andExpect(jsonPath("$.overdue").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /weekly-review with nothing overdue reports a clean review")
+    void weeklyReviewWithNothingOverdueReportsCleanReview() throws Exception {
+        when(taskRepository.findByUserIdAndStatusAndCompletedAtAfter(eq("user-1"), eq(TaskStatus.DONE), any(Instant.class)))
+                .thenReturn(List.of());
+        when(taskRepository.findActiveTasks("user-1")).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/planner/weekly-review").principal(authenticatedUser("user-1")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.completedCount").value(0))
+                .andExpect(jsonPath("$.overdue").value(0))
+                .andExpect(jsonPath("$.message").value("Обзор недели, сэр: выполнено 0, открыто 0, просрочек нет."));
     }
 
     @Test

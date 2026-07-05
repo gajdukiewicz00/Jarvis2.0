@@ -2,6 +2,7 @@ package org.jarvis.planner.service;
 
 import org.jarvis.planner.dto.TaskDto;
 import org.jarvis.planner.exception.TaskNotFoundException;
+import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskCategory;
 import org.jarvis.planner.model.TaskPriority;
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -243,5 +245,75 @@ class TaskServiceTest {
 
         // When / Then
         assertThrows(TaskNotFoundException.class, () -> taskService.deleteTask(1L, "otherUser"));
+    }
+
+    @Test
+    void testCreateTask_PassesThroughRecurrenceFields() {
+        // Given
+        TaskDto dto = new TaskDto();
+        dto.setUserId("testUser");
+        dto.setTitle("Daily standup");
+        dto.setRecurrenceRule(RecurrenceRule.DAILY);
+        dto.setRecurrenceIntervalDays(2);
+        dto.setRecurrenceAnchorDate(LocalDate.of(2026, 7, 1));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        TaskDto result = taskService.createTask(dto);
+
+        // Then
+        assertEquals(RecurrenceRule.DAILY, result.getRecurrenceRule());
+        assertEquals(2, result.getRecurrenceIntervalDays());
+        assertEquals(LocalDate.of(2026, 7, 1), result.getRecurrenceAnchorDate());
+    }
+
+    @Test
+    void testCreateTask_DefaultsRecurrenceRuleToNoneWhenNotProvided() {
+        // Given
+        TaskDto dto = new TaskDto();
+        dto.setUserId("testUser");
+        dto.setTitle("One-off task");
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // When
+        TaskDto result = taskService.createTask(dto);
+
+        // Then
+        assertEquals(RecurrenceRule.NONE, result.getRecurrenceRule());
+    }
+
+    @Test
+    void testUpdateTask_UpdatesRecurrenceRuleWhenProvided() {
+        // Given
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskDto dto = new TaskDto();
+        dto.setRecurrenceRule(RecurrenceRule.WEEKLY);
+        dto.setRecurrenceIntervalDays(3);
+
+        // When
+        TaskDto result = taskService.updateTask(1L, "testUser", dto);
+
+        // Then
+        assertEquals(RecurrenceRule.WEEKLY, result.getRecurrenceRule());
+        assertEquals(3, result.getRecurrenceIntervalDays());
+    }
+
+    @Test
+    void testUpdateTask_LeavesRecurrenceRuleUntouchedWhenNotProvided() {
+        // Given
+        testTask.setRecurrenceRule(RecurrenceRule.DAILY);
+        when(taskRepository.findByIdAndUserId(1L, "testUser")).thenReturn(Optional.of(testTask));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskDto dto = new TaskDto();
+        dto.setTitle("Only title changes");
+
+        // When
+        TaskDto result = taskService.updateTask(1L, "testUser", dto);
+
+        // Then
+        assertEquals(RecurrenceRule.DAILY, result.getRecurrenceRule());
     }
 }

@@ -1,5 +1,6 @@
 package org.jarvis.planner.repository;
 
+import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -30,4 +31,10 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     List<Task> findTasksWithDeadlineBetween(String userId, Instant start, Instant end);
     
     long countByUserIdAndStatus(String userId, TaskStatus status);
+
+    /** Tasks completed on/after {@code after} — used for the weekly review. */
+    List<Task> findByUserIdAndStatusAndCompletedAtAfter(String userId, TaskStatus status, Instant after);
+
+    /** Recurring task templates (RRULE-lite) for a user, excluding one-off tasks. */
+    List<Task> findByUserIdAndRecurrenceRuleNot(String userId, RecurrenceRule recurrenceRule);
 }

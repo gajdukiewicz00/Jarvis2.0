@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
@@ -270,8 +271,16 @@ public class AuthService {
         if (floor == null) {
             return false;
         }
+        // JWT `iat` (NumericDate) is serialized at whole-second resolution, while the
+        // revoke-all floor is captured at millisecond precision. Comparing them directly
+        // would falsely reject an access token minted in the *same second* as the floor
+        // (its iat=floor-truncated-to-second is < the millisecond floor) — e.g. a user
+        // who revokes all sessions and immediately logs back in. Align the floor to the
+        // same second granularity so tokens issued at or after the revoke second are
+        // honoured; tokens from strictly earlier seconds are still rejected.
+        Instant floorSecond = floor.truncatedTo(ChronoUnit.SECONDS);
         Instant issuedAt = jwtService.extractIssuedAt(claims);
-        return issuedAt == null || issuedAt.isBefore(floor);
+        return issuedAt == null || issuedAt.isBefore(floorSecond);
     }
 
     @Transactional

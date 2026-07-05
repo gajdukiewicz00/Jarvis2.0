@@ -52,12 +52,21 @@ public class MemoryNoteService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private MemoryReviewProperties reviewProperties;
 
+    // Roadmap #16 — same optional field-injection pattern as dedupProperties/reviewProperties
+    // above, so the existing 5-positional-arg test call sites stay unaffected.
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private MemoryMetrics metrics;
+
     private MemoryDedupProperties effectiveDedupProperties() {
         return dedupProperties != null ? dedupProperties : new MemoryDedupProperties();
     }
 
     private MemoryReviewProperties effectiveReviewProperties() {
         return reviewProperties != null ? reviewProperties : new MemoryReviewProperties();
+    }
+
+    private MemoryMetrics effectiveMetrics() {
+        return metrics != null ? metrics : new MemoryMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     }
 
     private static String str(Object o) {
@@ -126,6 +135,7 @@ public class MemoryNoteService {
                     .orElse(null);
             if (duplicate != null) {
                 if (dedup.getStrategy() == MemoryDedupProperties.DedupStrategy.REJECT) {
+                    effectiveMetrics().dedupRejected();
                     throw new DuplicateMemoryException(duplicate.getMemoryId());
                 }
                 return new WriteOutcome(mergeDuplicate(duplicate, request), true);

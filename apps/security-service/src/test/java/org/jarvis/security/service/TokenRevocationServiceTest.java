@@ -1,5 +1,7 @@
 package org.jarvis.security.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.jarvis.security.metrics.SecurityMetrics;
 import org.jarvis.security.model.RefreshToken;
 import org.jarvis.security.model.RevokedToken;
 import org.jarvis.security.model.User;
@@ -42,12 +44,15 @@ class TokenRevocationServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    private SimpleMeterRegistry meterRegistry;
     private TokenRevocationService tokenRevocationService;
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
         tokenRevocationService = new TokenRevocationService(
-                jwtService, revokedTokenRepository, refreshTokenRepository, userRepository);
+                jwtService, revokedTokenRepository, refreshTokenRepository, userRepository,
+                new SecurityMetrics(meterRegistry));
     }
 
     // ------------------------------------------------------------------
@@ -75,6 +80,10 @@ class TokenRevocationServiceTest {
         assertThat(captor.getValue().getRevokeReason()).isEqualTo("SUSPICIOUS_ACTIVITY");
         assertThat(captor.getValue().getRevokedBy()).isEqualTo(1L);
         verify(refreshTokenRepository, never()).findById(any());
+        assertThat(meterRegistry
+                .counter("security.token.revocations", "scope", "single", "reason", "SUSPICIOUS_ACTIVITY")
+                .count()).isEqualTo(1.0);
+        assertThat(meterRegistry.counter("security.audit.events", "type", "TOKEN_REVOKED").count()).isEqualTo(1.0);
     }
 
     @Test
@@ -154,6 +163,11 @@ class TokenRevocationServiceTest {
         assertThat(revoked).isEqualTo(3);
         assertThat(user.getTokensValidFrom()).isNotNull();
         verify(userRepository).save(user);
+        assertThat(meterRegistry
+                .counter("security.token.revocations", "scope", "all", "reason", "ADMIN_REVOKED_ALL")
+                .count()).isEqualTo(3.0);
+        assertThat(meterRegistry.counter("security.audit.events", "type", "TOKEN_REVOKED_ALL").count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -177,5 +191,10 @@ class TokenRevocationServiceTest {
 
         assertThat(revoked).isEqualTo(0);
         verify(userRepository, never()).save(any());
+        assertThat(meterRegistry
+                .counter("security.token.revocations", "scope", "all", "reason", "ADMIN_REVOKED_ALL")
+                .count()).isEqualTo(0.0);
+        assertThat(meterRegistry.counter("security.audit.events", "type", "TOKEN_REVOKED_ALL").count())
+                .isEqualTo(1.0);
     }
 }

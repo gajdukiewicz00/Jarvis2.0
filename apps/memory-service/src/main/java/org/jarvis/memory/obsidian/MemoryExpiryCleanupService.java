@@ -5,6 +5,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -23,15 +25,18 @@ public class MemoryExpiryCleanupService {
     private final MemoryForgetService forgetService;
     private final MemoryExpiryProperties properties;
     private final Clock clock;
+    private final MemoryMetrics metrics;
 
     public MemoryExpiryCleanupService(MemoryNoteRepository repository,
                                       MemoryForgetService forgetService,
                                       MemoryExpiryProperties properties,
-                                      Clock clock) {
+                                      Clock clock,
+                                      MemoryMetrics metrics) {
         this.repository = repository;
         this.forgetService = forgetService;
         this.properties = properties;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     /** Scheduled sweep — delay configured via {@code jarvis.memory.expiry.cleanup-interval-ms}. */
@@ -54,10 +59,20 @@ public class MemoryExpiryCleanupService {
      * @return the number of notes forgotten
      */
     public int cleanupExpiredNotes() {
-        List<MemoryNoteEntity> expired = repository.findByStatusAndExpiresAtBefore("ACTIVE", clock.instant());
-        for (MemoryNoteEntity note : expired) {
-            forgetService.forget(note.getMemoryId(), "system", "ttl-expired");
+        Instant start = clock.instant();
+        try {
+            List<MemoryNoteEntity> expired = repository.findByStatusAndExpiresAtBefore("ACTIVE", clock.instant());
+            for (MemoryNoteEntity note : expired) {
+                forgetService.forget(note.getMemoryId(), "system", "ttl-expired");
+            }
+            metrics.cleanupRun("success");
+            metrics.cleanupExpired(expired.size());
+            return expired.size();
+        } catch (RuntimeException e) {
+            metrics.cleanupRun("failure");
+            throw e;
+        } finally {
+            metrics.recordCleanupDuration(Duration.between(start, clock.instant()));
         }
-        return expired.size();
     }
 }

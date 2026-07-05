@@ -1,5 +1,6 @@
 package org.jarvis.syncservice;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.common.eventbus.AuditPublisher;
 import org.jarvis.events.AuditEventType;
 import org.jarvis.sync.PairingResponse;
@@ -16,6 +17,7 @@ import org.jarvis.syncservice.service.BlobInboxService;
 import org.jarvis.syncservice.service.PairingNonceStore;
 import org.jarvis.syncservice.service.PairingService;
 import org.jarvis.syncservice.service.ReplayCache;
+import org.jarvis.syncservice.service.SyncMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -74,7 +76,8 @@ class BlobInboxServiceAuditAndEdgeCasesTest {
         when(liveAudit.getIfAvailable()).thenReturn(auditPublisher);
 
         dispatch = new RecordingDispatch();
-        inbox = new BlobInboxService(crypto, pairings, new ReplayCache(props), dispatch, liveAudit);
+        inbox = new BlobInboxService(crypto, pairings, new ReplayCache(props), dispatch, liveAudit,
+                new SyncMetrics(new SimpleMeterRegistry()));
     }
 
     @Test

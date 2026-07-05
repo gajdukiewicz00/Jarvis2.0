@@ -2,6 +2,7 @@ package org.jarvis.planner.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.planner.metrics.PlannerMetrics;
 import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskStatus;
@@ -32,6 +33,7 @@ public class RecurringTaskGenerator {
     private static final LocalTime DEFAULT_OCCURRENCE_TIME = LocalTime.of(23, 59);
 
     private final TaskRepository taskRepository;
+    private final PlannerMetrics plannerMetrics;
 
     /**
      * Generate any recurring occurrences due for {@code date}, for templates
@@ -48,6 +50,7 @@ public class RecurringTaskGenerator {
             }
             Task occurrence = taskRepository.save(buildOccurrence(template, date));
             generated.add(occurrence);
+            plannerMetrics.recurringTaskGenerated(template.getRecurrenceRule().name());
 
             template.setLastGeneratedDate(date);
             taskRepository.save(template);

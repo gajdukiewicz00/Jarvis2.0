@@ -1,11 +1,13 @@
 package org.jarvis.analytics.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.analytics.client.LifeTrackerClient;
 import org.jarvis.analytics.dto.DayScoreDTO;
 import org.jarvis.analytics.dto.ExpenseDTO;
 import org.jarvis.analytics.dto.InsightDTO;
 import org.jarvis.analytics.dto.OvertimeSummaryDTO;
 import org.jarvis.analytics.dto.SleepSummaryDTO;
+import org.jarvis.analytics.metrics.AnalyticsMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,11 +37,13 @@ class InsightServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-03-13T12:00:00Z"), ZoneOffset.UTC);
 
+    private SimpleMeterRegistry meterRegistry;
     private InsightService insightService;
 
     @BeforeEach
     void setUp() {
-        insightService = new InsightService(lifeTrackerClient, analyticsService, clock);
+        meterRegistry = new SimpleMeterRegistry();
+        insightService = new InsightService(lifeTrackerClient, analyticsService, clock, new AnalyticsMetrics(meterRegistry));
     }
 
     @Test
@@ -169,6 +173,31 @@ class InsightServiceTest {
         // Verify getSleepSummary(7) / getOvertimeSummary(7, 8) are the same
         // aggregates dailyReport() relies on for its own insights + score.
         assertEquals(insightService.dailyReport().get("insights"), insights);
+    }
+
+    @Test
+    void autoInsightsRecordsSuccessJobMetric() {
+        when(analyticsService.getSleepSummary(7)).thenReturn(sleepSummary(8.0, 7));
+        when(analyticsService.getOvertimeSummary(7, 8)).thenReturn(overtimeSummary(0, 30.0));
+
+        insightService.autoInsights();
+
+        assertEquals(1.0, meterRegistry
+                .counter("analytics.jobs", "type", "auto_insights", "status", "success").count());
+        assertEquals(1L, meterRegistry.find("analytics.job.duration").timer().count());
+    }
+
+    @Test
+    void dayScoreRecordsSuccessJobMetricSeparatelyFromAutoInsights() {
+        when(analyticsService.getSleepSummary(7)).thenReturn(sleepSummary(8.0, 7));
+        when(analyticsService.getOvertimeSummary(7, 8)).thenReturn(overtimeSummary(0, 30.0));
+
+        insightService.dayScore();
+
+        assertEquals(1.0, meterRegistry
+                .counter("analytics.jobs", "type", "day_score", "status", "success").count());
+        assertEquals(0.0, meterRegistry
+                .counter("analytics.jobs", "type", "auto_insights", "status", "success").count());
     }
 
     private SleepSummaryDTO sleepSummary(double averageHours, int daysSampled) {

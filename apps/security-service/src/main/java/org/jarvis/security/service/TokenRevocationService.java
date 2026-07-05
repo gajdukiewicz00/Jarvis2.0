@@ -2,6 +2,7 @@ package org.jarvis.security.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.security.metrics.SecurityMetrics;
 import org.jarvis.security.model.RevokedToken;
 import org.jarvis.security.repository.RefreshTokenRepository;
 import org.jarvis.security.repository.RevokedTokenRepository;
@@ -31,6 +32,7 @@ public class TokenRevocationService {
     private final RevokedTokenRepository revokedTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
+    private final SecurityMetrics securityMetrics;
 
     /**
      * Revoke a single token by parsing it (accepting either an access or a
@@ -69,6 +71,8 @@ public class TokenRevocationService {
 
         log.info("Token revoked: jti={} type={} userId={} revokedBy={}",
                 target.jti(), target.tokenType(), target.userId(), revokedByUserId);
+        securityMetrics.tokenRevoked("single", normalizedReason);
+        securityMetrics.auditEvent("TOKEN_REVOKED");
         return new RevokedTokenInfo(target.jti(), target.tokenType());
     }
 
@@ -91,6 +95,8 @@ public class TokenRevocationService {
         });
 
         log.info("Revoked all sessions for user {} ({} active refresh tokens)", userId, revokedRefreshTokens);
+        securityMetrics.tokenRevoked("all", normalizedReason, revokedRefreshTokens);
+        securityMetrics.auditEvent("TOKEN_REVOKED_ALL");
         return revokedRefreshTokens;
     }
 

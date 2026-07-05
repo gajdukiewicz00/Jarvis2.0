@@ -7,6 +7,7 @@ import org.jarvis.common.eventbus.AuditPublisher;
 import org.jarvis.events.AuditEventType;
 import org.jarvis.sync.SyncEnvelope;
 import org.jarvis.sync.SyncPayload;
+import org.jarvis.sync.SyncPayloadKind;
 import org.jarvis.sync.crypto.SyncCrypto;
 import org.jarvis.syncservice.dispatch.DispatchClient;
 import org.jarvis.syncservice.dispatch.DispatchClient.DispatchResult;
@@ -46,33 +47,36 @@ public class BlobInboxService {
     private final ReplayCache replayCache;
     private final DispatchClient dispatch;
     private final ObjectProvider<AuditPublisher> auditProvider;
+    private final SyncMetrics metrics;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     public BlobInboxService(SyncCrypto crypto,
                             PairingStore pairingStore,
                             ReplayCache replayCache,
                             DispatchClient dispatch,
-                            ObjectProvider<AuditPublisher> auditProvider) {
+                            ObjectProvider<AuditPublisher> auditProvider,
+                            SyncMetrics metrics) {
         this.crypto = crypto;
         this.pairingStore = pairingStore;
         this.replayCache = replayCache;
         this.dispatch = dispatch;
         this.auditProvider = auditProvider;
+        this.metrics = metrics;
     }
 
     public InboxResult ingest(SyncEnvelope env) {
         PairedDevice device = pairingStore.findByDeviceId(env.getSenderDeviceId()).orElse(null);
         if (device == null) {
             audit(AuditEventType.SYNC_BLOB_TAMPER_REJECTED, env, Map.of("reason", "unknown_device"));
-            return new InboxResult(Status.UNKNOWN_DEVICE, "device not paired");
+            return result(Status.UNKNOWN_DEVICE, "device not paired");
         }
         if (!device.routingId().equals(env.getRoutingId())) {
             audit(AuditEventType.SYNC_BLOB_TAMPER_REJECTED, env, Map.of("reason", "routing_mismatch"));
-            return new InboxResult(Status.ROUTING_MISMATCH, "routingId does not match pairing");
+            return result(Status.ROUTING_MISMATCH, "routingId does not match pairing");
         }
         if (!replayCache.recordIfUnseen(device.deviceId(), env.getNonceB64())) {
             audit(AuditEventType.SYNC_BLOB_REPLAY_REJECTED, env, Map.of("reason", "nonce_seen"));
-            return new InboxResult(Status.REPLAY, "nonce previously seen");
+            return result(Status.REPLAY, "nonce previously seen");
         }
 
         byte[] nonce = SyncCrypto.unb64(env.getNonceB64());
@@ -83,7 +87,7 @@ public class BlobInboxService {
             plaintext = crypto.open(device.sessionKey(), nonce, aad, ciphertext);
         } catch (SyncCrypto.AeadAuthException e) {
             audit(AuditEventType.SYNC_BLOB_TAMPER_REJECTED, env, Map.of("reason", "aead_tag"));
-            return new InboxResult(Status.TAMPERED, "AEAD authentication failed");
+            return result(Status.TAMPERED, "AEAD authentication failed");
         }
 
         SyncPayload payload;
@@ -91,7 +95,7 @@ public class BlobInboxService {
             payload = mapper.readValue(plaintext, SyncPayload.class);
         } catch (Exception e) {
             audit(AuditEventType.SYNC_BLOB_TAMPER_REJECTED, env, Map.of("reason", "payload_parse"));
-            return new InboxResult(Status.TAMPERED, "payload JSON malformed");
+            return result(Status.TAMPERED, "payload JSON malformed");
         }
 
         device.touch();
@@ -104,14 +108,30 @@ public class BlobInboxService {
             case DEVICE_HEARTBEAT -> DispatchResult.success();
             case UNKNOWN -> DispatchResult.failure("unknown_kind");
         };
+        if (payload.getKind() == SyncPayloadKind.FINANCE_ENTRY) {
+            metrics.recordBankDraft(confidenceOf(payload), dr.ok());
+        }
         if (!dr.ok()) {
             audit(AuditEventType.SYNC_DISPATCH_FAILED, env,
                     Map.of("kind", payload.getKind().name(), "detail", dr.detail()));
-            Status s = payload.getKind() == org.jarvis.sync.SyncPayloadKind.UNKNOWN
+            Status s = payload.getKind() == SyncPayloadKind.UNKNOWN
                     ? Status.UNSUPPORTED_KIND : Status.DISPATCH_FAILED;
-            return new InboxResult(s, dr.detail());
+            return result(s, dr.detail());
         }
-        return new InboxResult(Status.ACCEPTED, null);
+        return result(Status.ACCEPTED, null);
+    }
+
+    /** Builds the result and records the {@code sync.events} counter for its outcome in one place. */
+    private InboxResult result(Status status, String detail) {
+        metrics.recordEvent(status.name().toLowerCase(java.util.Locale.ROOT));
+        return new InboxResult(status, detail);
+    }
+
+    /** Opportunistically reads a client-supplied confidence tag off a FINANCE_ENTRY payload;
+     * the actual HIGH/MEDIUM/LOW scoring happens downstream in life-tracker. */
+    private static String confidenceOf(SyncPayload payload) {
+        Object raw = payload.getData().get("confidence");
+        return raw == null ? "unknown" : raw.toString();
     }
 
     /**

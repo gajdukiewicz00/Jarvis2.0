@@ -1,12 +1,14 @@
 package org.jarvis.security.service;
 
 import io.jsonwebtoken.Claims;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.dto.AuthResponse;
 import org.jarvis.security.dto.ChangePasswordRequest;
 import org.jarvis.security.dto.LoginRequest;
 import org.jarvis.security.dto.RegisterRequest;
+import org.jarvis.security.metrics.SecurityMetrics;
 import org.jarvis.security.model.RefreshToken;
 import org.jarvis.security.model.User;
 import org.jarvis.security.repository.RefreshTokenRepository;
@@ -51,11 +53,14 @@ class AuthServiceTest {
     @Mock
     private JwtService jwtService;
 
+    private SimpleMeterRegistry meterRegistry;
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
-        authService = new AuthService(userRepository, refreshTokenRepository, passwordEncoder, jwtService);
+        meterRegistry = new SimpleMeterRegistry();
+        authService = new AuthService(userRepository, refreshTokenRepository, passwordEncoder, jwtService,
+                new SecurityMetrics(meterRegistry));
     }
 
     private User enabledUser(long id, String role) {
@@ -110,6 +115,8 @@ class AuthServiceTest {
         assertThat(response.username()).isEqualTo("alice");
         assertThat(response.role()).isEqualTo("USER");
         verify(refreshTokenRepository).save(any(RefreshToken.class));
+        assertThat(meterRegistry.counter("security.audit.events", "type", "USER_REGISTERED").count())
+                .isEqualTo(1.0);
     }
 
     // ------------------------------------------------------------------
@@ -176,6 +183,9 @@ class AuthServiceTest {
                 () -> authService.login(new LoginRequest("ghost", "whatever")));
 
         assertThat(ex.getErrorCode()).isEqualTo("INVALID_CREDENTIALS");
+        assertThat(meterRegistry.counter("security.login.failures", "reason", "INVALID_CREDENTIALS").count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry.counter("security.audit.events", "type", "LOGIN_FAILURE").count()).isEqualTo(1.0);
     }
 
     @Test
@@ -188,6 +198,8 @@ class AuthServiceTest {
                 () -> authService.login(new LoginRequest("alice", "wrong")));
 
         assertThat(ex.getErrorCode()).isEqualTo("INVALID_CREDENTIALS");
+        assertThat(meterRegistry.counter("security.login.failures", "reason", "INVALID_CREDENTIALS").count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -201,6 +213,8 @@ class AuthServiceTest {
                 () -> authService.login(new LoginRequest("alice", "password123")));
 
         assertThat(ex.getErrorCode()).isEqualTo("ACCOUNT_DISABLED");
+        assertThat(meterRegistry.counter("security.login.failures", "reason", "ACCOUNT_DISABLED").count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -214,6 +228,9 @@ class AuthServiceTest {
 
         assertThat(response.accessToken()).isEqualTo("access-tok");
         assertThat(response.username()).isEqualTo("alice");
+        assertThat(meterRegistry.counter("security.audit.events", "type", "LOGIN_SUCCESS").count()).isEqualTo(1.0);
+        assertThat(meterRegistry.counter("security.login.failures", "reason", "INVALID_CREDENTIALS").count())
+                .isEqualTo(0.0);
     }
 
     // ------------------------------------------------------------------
@@ -252,6 +269,8 @@ class AuthServiceTest {
         assertThat(ex.getErrorCode()).isEqualTo("ACCOUNT_DISABLED");
         verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
                 eq("ACCOUNT_DISABLED"));
+        assertThat(meterRegistry.counter("security.audit.events", "type", "ACCOUNT_DISABLED_TOKENS_REVOKED").count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -297,6 +316,8 @@ class AuthServiceTest {
         assertThat(ex.getErrorCode()).isEqualTo("TOKEN_REUSED");
         verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
                 eq("REFRESH_REUSE_DETECTED"));
+        assertThat(meterRegistry.counter("security.audit.events", "type", "REFRESH_REUSE_DETECTED").count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -359,6 +380,8 @@ class AuthServiceTest {
         assertThat(stored.getReplacedByTokenId()).isEqualTo(newTokenId);
         assertThat(stored.getRevokeReason()).isEqualTo("REFRESH_ROTATED");
         verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+        assertThat(meterRegistry.counter("security.token.revocations", "scope", "single", "reason", "REFRESH_ROTATED")
+                .count()).isEqualTo(1.0);
     }
 
     @Test
@@ -411,6 +434,8 @@ class AuthServiceTest {
         verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
                 eq("SESSION_TIMEOUT"));
         verify(jwtService, never()).generateRefreshToken(any());
+        assertThat(meterRegistry.counter("security.audit.events", "type", "SESSION_TIMEOUT").count())
+                .isEqualTo(1.0);
     }
 
     @Test
@@ -620,6 +645,7 @@ class AuthServiceTest {
         authService.logout("tok");
 
         verify(refreshTokenRepository, never()).save(any());
+        assertThat(meterRegistry.counter("security.audit.events", "type", "LOGOUT").count()).isEqualTo(0.0);
     }
 
     @Test
@@ -639,6 +665,9 @@ class AuthServiceTest {
         assertThat(stored.getRevokedAt()).isNotNull();
         assertThat(stored.getRevokeReason()).isEqualTo("USER_LOGOUT");
         verify(refreshTokenRepository).save(stored);
+        assertThat(meterRegistry.counter("security.token.revocations", "scope", "single", "reason", "USER_LOGOUT")
+                .count()).isEqualTo(1.0);
+        assertThat(meterRegistry.counter("security.audit.events", "type", "LOGOUT").count()).isEqualTo(1.0);
     }
 
     // ------------------------------------------------------------------
@@ -699,5 +728,7 @@ class AuthServiceTest {
         verify(userRepository).save(user);
         verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
                 eq("PASSWORD_CHANGED"));
+        assertThat(meterRegistry.counter("security.audit.events", "type", "PASSWORD_CHANGED").count())
+                .isEqualTo(1.0);
     }
 }

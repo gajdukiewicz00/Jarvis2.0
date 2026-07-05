@@ -1,7 +1,9 @@
 package org.jarvis.media.support;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.media.config.MediaProperties;
 import org.jarvis.media.job.InMemoryMediaJobStore;
+import org.jarvis.media.job.MediaJobMetrics;
 import org.jarvis.media.job.MediaJobService;
 import org.jarvis.media.job.MediaJobStore;
 import org.jarvis.media.workspace.WorkspaceManager;
@@ -40,10 +42,14 @@ public final class MediaTestFactory {
 
     /** A MediaJobService whose executor runs work inline (jobs reach terminal state synchronously). */
     public static MediaJobService syncJobService(MediaJobStore store) {
-        return new MediaJobService(store, new SameThreadExecutorService(), Clock.systemUTC());
+        return new MediaJobService(store, new SameThreadExecutorService(), Clock.systemUTC(), metrics());
     }
 
     public static MediaJobStore store() {
         return new InMemoryMediaJobStore();
+    }
+
+    public static MediaJobMetrics metrics() {
+        return new MediaJobMetrics(new SimpleMeterRegistry());
     }
 }

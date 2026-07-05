@@ -1,5 +1,6 @@
 package org.jarvis.planner.service;
 
+import org.jarvis.planner.metrics.PlannerMetrics;
 import org.jarvis.planner.model.EnergyLevel;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskPriority;
@@ -16,6 +17,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,6 +33,9 @@ class RescheduleServiceTest {
 
     @Mock
     private EnergyStateService energyStateService;
+
+    @Mock
+    private PlannerMetrics plannerMetrics;
 
     @InjectMocks
     private RescheduleService rescheduleService;
@@ -62,6 +67,8 @@ class RescheduleServiceTest {
         assertThat(hard.getDueDate()).isEqualTo(originalDue.plus(1, ChronoUnit.DAYS));
         verify(taskRepository).save(hard);
         verify(taskRepository, never()).save(light);
+        verify(plannerMetrics).reschedule("exhausted");
+        verify(plannerMetrics).deferredTasks(1);
     }
 
     @Test
@@ -102,6 +109,8 @@ class RescheduleServiceTest {
         assertThat(result.get("deferredCount")).isEqualTo(0);
         verify(taskRepository, never()).findActiveTasks(any());
         verify(taskRepository, never()).save(any(Task.class));
+        verify(plannerMetrics, never()).reschedule(any());
+        verify(plannerMetrics, never()).deferredTasks(anyInt());
     }
 
     @Test
@@ -117,6 +126,8 @@ class RescheduleServiceTest {
 
         assertThat(result.get("rescheduled")).isEqualTo(true);
         assertThat(result.get("deferredCount")).isEqualTo(1);
+        verify(plannerMetrics).reschedule("forced");
+        verify(plannerMetrics).deferredTasks(1);
     }
 
     @Test
@@ -130,5 +141,7 @@ class RescheduleServiceTest {
 
         assertThat(result.get("deferredCount")).isEqualTo(0);
         assertThat(result.get("message")).isEqualTo("Тяжёлых задач для переноса не нашлось, сэр. Можно спокойно отдыхать.");
+        verify(plannerMetrics).reschedule("exhausted");
+        verify(plannerMetrics).deferredTasks(0);
     }
 }

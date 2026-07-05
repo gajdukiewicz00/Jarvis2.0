@@ -1,6 +1,8 @@
 package org.jarvis.media.job;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.media.support.MediaTestFactory;
+import org.jarvis.media.support.SameThreadExecutorService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -82,7 +84,7 @@ class MediaJobServiceTest {
     void cancelStopsRunningJobAndMarksCancelled() throws Exception {
         MediaJobStore store = MediaTestFactory.store();
         ExecutorService executor = Executors.newSingleThreadExecutor();
-        MediaJobService service = new MediaJobService(store, executor, Clock.systemUTC());
+        MediaJobService service = new MediaJobService(store, executor, Clock.systemUTC(), MediaTestFactory.metrics());
 
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -106,6 +108,83 @@ class MediaJobServiceTest {
         MediaJob result = awaitTerminal(service, created.id());
         assertThat(result.status()).isEqualTo(JobStatus.CANCELLED);
         executor.shutdownNow();
+    }
+
+    @Test
+    void completedJobRecordsCreatedRunningCompletedCountersAndDuration() {
+        MediaJobStore store = MediaTestFactory.store();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MediaJobMetrics metrics = new MediaJobMetrics(registry);
+        MediaJobService service = new MediaJobService(store, new SameThreadExecutorService(), Clock.systemUTC(), metrics);
+
+        service.submit(JobType.EXTRACT_AUDIO, "u1", "in.mkv", token -> JobOutcome.of(List.of(), Map.of()));
+
+        assertThat(counter(registry, "EXTRACT_AUDIO", "created")).isEqualTo(1.0);
+        assertThat(counter(registry, "EXTRACT_AUDIO", "running")).isEqualTo(1.0);
+        assertThat(counter(registry, "EXTRACT_AUDIO", "completed")).isEqualTo(1.0);
+        assertThat(registry.get("media.job.duration").tag("type", "EXTRACT_AUDIO").timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void failingWorkRecordsFailedCounterAndDuration() {
+        MediaJobStore store = MediaTestFactory.store();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MediaJobMetrics metrics = new MediaJobMetrics(registry);
+        MediaJobService service = new MediaJobService(store, new SameThreadExecutorService(), Clock.systemUTC(), metrics);
+
+        service.submit(JobType.TRANSCRIBE, "u1", "a.wav", token -> {
+            throw new IllegalStateException("decode failed");
+        });
+
+        assertThat(counter(registry, "TRANSCRIBE", "failed")).isEqualTo(1.0);
+        assertThat(registry.get("media.job.duration").tag("type", "TRANSCRIBE").timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void cancelRecordsCancelledCounter() throws Exception {
+        MediaJobStore store = MediaTestFactory.store();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MediaJobMetrics metrics = new MediaJobMetrics(registry);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        MediaJobService service = new MediaJobService(store, executor, Clock.systemUTC(), metrics);
+
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        MediaJob created = service.submit(JobType.MUX, "u1", "v.mkv", token -> {
+            started.countDown();
+            for (int i = 0; i < 200; i++) {
+                token.throwIfCancelled();
+                release.await(20, TimeUnit.MILLISECONDS);
+            }
+            return JobOutcome.of(List.of(), Map.of());
+        });
+
+        assertThat(started.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(service.cancel(created.id(), "u1")).isTrue();
+        release.countDown();
+        awaitTerminal(service, created.id());
+        executor.shutdownNow();
+
+        assertThat(counter(registry, "MUX", "cancelled")).isEqualTo(1.0);
+    }
+
+    @Test
+    void cancelOnAlreadyTerminalJobDoesNotDoubleCount() {
+        MediaJobStore store = MediaTestFactory.store();
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MediaJobMetrics metrics = new MediaJobMetrics(registry);
+        MediaJobService service = new MediaJobService(store, new SameThreadExecutorService(), Clock.systemUTC(), metrics);
+
+        MediaJob created = service.submit(JobType.MUX, "u1", "v.mkv", token -> JobOutcome.of(List.of(), Map.of()));
+
+        assertThat(service.cancel(created.id(), "u1")).isFalse();
+        assertThat(counter(registry, "MUX", "completed")).isEqualTo(1.0);
+        assertThat(registry.find("media.jobs").tag("type", "MUX").tag("status", "cancelled").counter()).isNull();
+    }
+
+    private double counter(SimpleMeterRegistry registry, String type, String status) {
+        return registry.get("media.jobs").tag("type", type).tag("status", status).counter().count();
     }
 
     private MediaJob awaitTerminal(MediaJobService service, String id) throws InterruptedException {

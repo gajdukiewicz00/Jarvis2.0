@@ -2,6 +2,7 @@ package org.jarvis.planner.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.planner.metrics.PlannerMetrics;
 import org.jarvis.planner.model.EnergyLevel;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskPriority;
@@ -33,6 +34,7 @@ public class RescheduleService {
     private final TaskRepository taskRepository;
     private final EnergyAwareRanker ranker;
     private final EnergyStateService energyStateService;
+    private final PlannerMetrics plannerMetrics;
 
     @Transactional
     public Map<String, Object> rescheduleWhenTired(String userId, boolean force) {
@@ -50,7 +52,9 @@ public class RescheduleService {
             return out;
         }
 
+        plannerMetrics.reschedule(force ? "forced" : "exhausted");
         List<Task> deferred = deferHardTasks(userId);
+        plannerMetrics.deferredTasks(deferred.size());
 
         out.put("rescheduled", true);
         out.put("deferredCount", deferred.size());

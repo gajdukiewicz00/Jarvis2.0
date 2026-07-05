@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -13,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 /**
@@ -31,16 +33,19 @@ public class MediaJobService {
     private final MediaJobStore store;
     private final ExecutorService executor;
     private final Clock clock;
+    private final MediaJobMetrics metrics;
 
     private final ConcurrentHashMap<String, CancellationToken> tokens = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Future<?>> futures = new ConcurrentHashMap<>();
 
     public MediaJobService(MediaJobStore store,
                            @Qualifier(AsyncConfig.MEDIA_JOB_EXECUTOR) ExecutorService executor,
-                           Clock clock) {
+                           Clock clock,
+                           MediaJobMetrics metrics) {
         this.store = store;
         this.executor = executor;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     /** Create a job and schedule its work. Returns immediately with the CREATED job. */
@@ -59,6 +64,7 @@ public class MediaJobService {
             store.save(job.failed("media executor saturated; retry later", clock.instant()));
             throw rejected;
         }
+        metrics.created(type);
         return job;
     }
 
@@ -91,11 +97,7 @@ public class MediaJobService {
         if (future != null) {
             future.cancel(true);
         }
-        store.findById(id).ifPresent(latest -> {
-            if (!latest.status().isTerminal()) {
-                store.save(latest.cancelled(clock.instant()));
-            }
-        });
+        transition(id, latest -> latest.status().isTerminal() ? latest : latest.cancelled(clock.instant()));
         log.info("Media job {} cancelled by user", id);
         return true;
     }
@@ -132,7 +134,31 @@ public class MediaJobService {
     }
 
     private void transition(String id, UnaryOperator<MediaJob> fn) {
-        store.findById(id).ifPresent(current -> store.save(fn.apply(current)));
+        store.findById(id).ifPresent(current -> {
+            MediaJob updated = fn.apply(current);
+            store.save(updated);
+            recordMetrics(current, updated);
+        });
+    }
+
+    /** Emits lifecycle metrics for a genuine status change (no-op transitions, e.g. cancelling an
+     * already-terminal job, leave {@code before} and {@code after} with the same status). */
+    private void recordMetrics(MediaJob before, MediaJob after) {
+        if (before.status() == after.status()) {
+            return;
+        }
+        switch (after.status()) {
+            case RUNNING -> metrics.running(after.type());
+            case COMPLETED -> recordTerminal(after, metrics::completed);
+            case FAILED -> recordTerminal(after, metrics::failed);
+            case CANCELLED -> recordTerminal(after, metrics::cancelled);
+            default -> { }
+        }
+    }
+
+    private void recordTerminal(MediaJob job, Consumer<JobType> counter) {
+        counter.accept(job.type());
+        metrics.recordDuration(job.type(), Duration.between(job.createdAt(), job.updatedAt()));
     }
 
     private boolean ownedBy(MediaJob job, String userId) {

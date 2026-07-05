@@ -1,5 +1,6 @@
 package org.jarvis.memory.obsidian;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.jarvis.memory.exception.DuplicateMemoryException;
@@ -37,6 +38,7 @@ class MemoryNoteDedupTtlScopeTest {
     private ObsidianMarkdownRenderer renderer;
     private MemoryEmbeddingClient embeddingClient;
     private MemoryNoteService service;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
@@ -47,6 +49,8 @@ class MemoryNoteDedupTtlScopeTest {
         ObjectProvider<org.jarvis.common.eventbus.AuditPublisher> noopProvider = mock(ObjectProvider.class);
         when(noopProvider.getIfAvailable()).thenReturn(null);
         service = new MemoryNoteService(repository, vaultWriter, renderer, embeddingClient, noopProvider);
+        meterRegistry = new SimpleMeterRegistry();
+        ReflectionTestUtils.setField(service, "metrics", new MemoryMetrics(meterRegistry));
         when(repository.save(any(MemoryNoteEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -98,6 +102,7 @@ class MemoryNoteDedupTtlScopeTest {
         verify(vaultWriter, never()).write(any());
         verify(embeddingClient, never()).embed(any());
         verify(repository, times(1)).save(existing);
+        assertThat(meterRegistry.find("memory.dedup.rejected").counter()).isNull();
     }
 
     @Test
@@ -136,6 +141,7 @@ class MemoryNoteDedupTtlScopeTest {
                 .isInstanceOf(DuplicateMemoryException.class)
                 .hasMessageContaining("mem-dup");
         verify(repository, never()).save(any());
+        assertThat(meterRegistry.get("memory.dedup.rejected").counter().count()).isEqualTo(1.0);
     }
 
     @Test

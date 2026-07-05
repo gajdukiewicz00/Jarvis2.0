@@ -1,5 +1,6 @@
 package org.jarvis.analytics.service;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.analytics.client.LifeTrackerClient;
 import org.jarvis.analytics.dto.CalendarEventDTO;
 import org.jarvis.analytics.dto.CalendarStatisticsDTO;
@@ -11,6 +12,7 @@ import org.jarvis.analytics.dto.SleepSummaryDTO;
 import org.jarvis.analytics.dto.TimeRecordDTO;
 import org.jarvis.analytics.dto.TimeStatisticsDTO;
 import org.jarvis.analytics.dto.WellnessLogDTO;
+import org.jarvis.analytics.metrics.AnalyticsMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,11 +42,13 @@ class AnalyticsServiceTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-03-13T12:00:00Z"), ZoneOffset.UTC);
 
+    private SimpleMeterRegistry meterRegistry;
     private AnalyticsService analyticsService;
 
     @BeforeEach
     void setUp() {
-        analyticsService = new AnalyticsService(lifeTrackerClient, clock);
+        meterRegistry = new SimpleMeterRegistry();
+        analyticsService = new AnalyticsService(lifeTrackerClient, clock, new AnalyticsMetrics(meterRegistry));
     }
 
     @Test
@@ -339,6 +343,27 @@ class AnalyticsServiceTest {
 
         assertEquals(0, result.getDaysSampled());
         assertFalse(result.getTotalSleepHours() > 0);
+    }
+
+    @Test
+    void getSleepSummaryRecordsSuccessJobMetricAndDuration() {
+        when(lifeTrackerClient.getTimeRecords()).thenReturn(List.of());
+
+        analyticsService.getSleepSummary(7);
+
+        assertEquals(1.0, meterRegistry
+                .counter("analytics.jobs", "type", "sleep_summary", "status", "success").count());
+        assertEquals(1L, meterRegistry.find("analytics.job.duration").timer().count());
+    }
+
+    @Test
+    void getSleepSummaryRecordsErrorJobMetricWhenValidationFails() {
+        assertThrows(IllegalArgumentException.class, () -> analyticsService.getSleepSummary(0));
+
+        assertEquals(1.0, meterRegistry
+                .counter("analytics.jobs", "type", "sleep_summary", "status", "error").count());
+        assertEquals(0.0, meterRegistry
+                .counter("analytics.jobs", "type", "sleep_summary", "status", "success").count());
     }
 
     private ExpenseDTO expense(String amount, String currency, String category, String type, LocalDateTime occurredAt) {

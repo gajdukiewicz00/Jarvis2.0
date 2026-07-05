@@ -1,5 +1,6 @@
 package org.jarvis.syncservice;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.sync.PairingResponse;
 import org.jarvis.sync.SyncEnvelope;
 import org.jarvis.sync.SyncPayload;
@@ -14,6 +15,7 @@ import org.jarvis.syncservice.service.BlobInboxService;
 import org.jarvis.syncservice.service.PairingNonceStore;
 import org.jarvis.syncservice.service.PairingService;
 import org.jarvis.syncservice.service.ReplayCache;
+import org.jarvis.syncservice.service.SyncMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
@@ -34,6 +36,7 @@ class BlobInboxServiceTest {
     private BlobInboxService inbox;
     private RecordingDispatch dispatch;
     private PairingResponse pairing;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
@@ -54,7 +57,9 @@ class BlobInboxServiceTest {
         device.rememberPairingResponse(pairing.getRoutingId(), pairing.getSenderDeviceId());
 
         dispatch = new RecordingDispatch();
-        inbox = new BlobInboxService(crypto, pairings, new ReplayCache(props), dispatch, audit);
+        meterRegistry = new SimpleMeterRegistry();
+        inbox = new BlobInboxService(crypto, pairings, new ReplayCache(props), dispatch, audit,
+                new SyncMetrics(meterRegistry));
     }
 
     @Test
@@ -70,6 +75,21 @@ class BlobInboxServiceTest {
         assertThat(dispatch.lastFinance.get()).isNotNull();
         assertThat(dispatch.lastFinance.get().getKind()).isEqualTo(SyncPayloadKind.FINANCE_ENTRY);
         assertThat(dispatch.lastFinance.get().getData()).containsEntry("currency", "EUR");
+        assertThat(meterRegistry.get("sync.events").tag("status", "accepted").counter().count()).isEqualTo(1.0);
+        assertThat(meterRegistry.get("sync.bank.drafts")
+                .tag("confidence", "unknown").tag("stored", "true").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void financeEntryWithConfidenceTagRecordsBankDraftMetric() throws Exception {
+        SyncPayload payload = new SyncPayload(SyncPayloadKind.FINANCE_ENTRY, "n-conf",
+                Instant.now(), Map.of("amount", 9.0, "confidence", "HIGH"));
+        SyncEnvelope env = device.sealEnvelope(payload);
+
+        assertThat(inbox.ingest(env).ok()).isTrue();
+
+        assertThat(meterRegistry.get("sync.bank.drafts")
+                .tag("confidence", "HIGH").tag("stored", "true").counter().count()).isEqualTo(1.0);
     }
 
     @Test
@@ -141,6 +161,10 @@ class BlobInboxServiceTest {
         var r = inbox.ingest(env);
         assertThat(r.status()).isEqualTo(BlobInboxService.Status.DISPATCH_FAILED);
         assertThat(r.detail()).contains("life-tracker down");
+        assertThat(meterRegistry.get("sync.events").tag("status", "dispatch_failed").counter().count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry.get("sync.bank.drafts")
+                .tag("confidence", "unknown").tag("stored", "false").counter().count()).isEqualTo(1.0);
     }
 
     @Test

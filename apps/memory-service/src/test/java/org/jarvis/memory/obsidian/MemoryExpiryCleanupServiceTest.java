@@ -1,5 +1,6 @@
 package org.jarvis.memory.obsidian;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,7 @@ class MemoryExpiryCleanupServiceTest {
     private MemoryForgetService forgetService;
     private MemoryExpiryProperties properties;
     private MemoryExpiryCleanupService service;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void setUp() {
@@ -32,7 +34,9 @@ class MemoryExpiryCleanupServiceTest {
         forgetService = mock(MemoryForgetService.class);
         properties = new MemoryExpiryProperties();
         Clock fixedClock = Clock.fixed(FIXED_NOW, ZoneOffset.UTC);
-        service = new MemoryExpiryCleanupService(repository, forgetService, properties, fixedClock);
+        meterRegistry = new SimpleMeterRegistry();
+        service = new MemoryExpiryCleanupService(repository, forgetService, properties, fixedClock,
+                new MemoryMetrics(meterRegistry));
     }
 
     private MemoryNoteEntity expiredNote(String memoryId) {
@@ -54,6 +58,10 @@ class MemoryExpiryCleanupServiceTest {
         assertThat(removed).isEqualTo(2);
         verify(forgetService).forget(eq("mem-1"), eq("system"), eq("ttl-expired"));
         verify(forgetService).forget(eq("mem-2"), eq("system"), eq("ttl-expired"));
+        assertThat(meterRegistry.get("memory.cleanup.runs").tag("status", "success").counter().count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry.get("memory.cleanup.expired").counter().count()).isEqualTo(2.0);
+        assertThat(meterRegistry.get("memory.cleanup.duration").timer().count()).isEqualTo(1);
     }
 
     @Test
@@ -64,6 +72,25 @@ class MemoryExpiryCleanupServiceTest {
 
         assertThat(removed).isZero();
         verify(forgetService, never()).forget(any(), any(), any());
+        assertThat(meterRegistry.get("memory.cleanup.runs").tag("status", "success").counter().count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry.find("memory.cleanup.expired").counter()).isNull();
+    }
+
+    @Test
+    void cleanupExpiredNotesRecordsFailureStatusAndRethrowsOnRepositoryError() {
+        when(repository.findByStatusAndExpiresAtBefore("ACTIVE", FIXED_NOW))
+                .thenThrow(new IllegalStateException("db unavailable"));
+
+        try {
+            service.cleanupExpiredNotes();
+        } catch (IllegalStateException expected) {
+            // rethrown as-is — cleanupExpiredNotes never swallows errors
+        }
+
+        assertThat(meterRegistry.get("memory.cleanup.runs").tag("status", "failure").counter().count())
+                .isEqualTo(1.0);
+        assertThat(meterRegistry.get("memory.cleanup.duration").timer().count()).isEqualTo(1);
     }
 
     @Test

@@ -9,6 +9,7 @@ import org.jarvis.security.dto.AuthResponse;
 import org.jarvis.security.dto.ChangePasswordRequest;
 import org.jarvis.security.dto.LoginRequest;
 import org.jarvis.security.dto.RegisterRequest;
+import org.jarvis.security.metrics.SecurityMetrics;
 import org.jarvis.security.model.RefreshToken;
 import org.jarvis.security.model.User;
 import org.jarvis.security.repository.RefreshTokenRepository;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -33,6 +35,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final SecurityMetrics securityMetrics;
 
     private static final String REVOKE_REASON_ROTATED = "REFRESH_ROTATED";
     private static final String REVOKE_REASON_LOGOUT = "USER_LOGOUT";
@@ -72,6 +75,7 @@ public class AuthService {
 
         user = userRepository.save(user);
         log.info("User registered: {}", user.getUsername());
+        securityMetrics.auditEvent("USER_REGISTERED");
 
         return generateAuthResponse(user);
     }
@@ -107,23 +111,32 @@ public class AuthService {
     @Transactional
     public AuthResponse login(LoginRequest request) {
         // Find user by username
-        User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new AuthenticationException(
-                    "INVALID_CREDENTIALS", "Invalid username or password"));
+        Optional<User> maybeUser = userRepository.findByUsername(request.username());
+        if (maybeUser.isEmpty()) {
+            securityMetrics.loginFailure("INVALID_CREDENTIALS");
+            securityMetrics.auditEvent("LOGIN_FAILURE");
+            throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid username or password");
+        }
+        User user = maybeUser.get();
 
         // Verify password
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {
             log.warn("Failed login attempt for user: {}", request.username());
+            securityMetrics.loginFailure("INVALID_CREDENTIALS");
+            securityMetrics.auditEvent("LOGIN_FAILURE");
             throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid username or password");
         }
 
         // Check if user is enabled
         if (!user.isEnabled()) {
             log.warn("Login attempt for disabled user: {}", request.username());
+            securityMetrics.loginFailure("ACCOUNT_DISABLED");
+            securityMetrics.auditEvent("LOGIN_FAILURE");
             throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
         }
 
         log.info("User logged in: {}", user.getUsername());
+        securityMetrics.auditEvent("LOGIN_SUCCESS");
         return generateAuthResponse(user);
     }
 
@@ -146,6 +159,7 @@ public class AuthService {
         // Check if user is still enabled
         if (!user.isEnabled()) {
             revokeAllRefreshTokens(user.getId(), REVOKE_REASON_ACCOUNT_DISABLED);
+            securityMetrics.auditEvent("ACCOUNT_DISABLED_TOKENS_REVOKED");
             throw new AuthenticationException("ACCOUNT_DISABLED", "User account is disabled");
         }
 
@@ -161,6 +175,7 @@ public class AuthService {
         if (storedToken.getRevokedAt() != null) {
             if (storedToken.getReplacedByTokenId() != null) {
                 revokeAllRefreshTokens(user.getId(), REVOKE_REASON_REUSE);
+                securityMetrics.auditEvent("REFRESH_REUSE_DETECTED");
                 log.warn("Refresh token reuse detected for user {}", user.getUsername());
                 throw new AuthenticationException("TOKEN_REUSED",
                         "Refresh token reuse detected; all active sessions were revoked");
@@ -179,6 +194,7 @@ public class AuthService {
         if (sessionStartedAt != null && absoluteSessionTtlMs > 0
                 && now.isAfter(sessionStartedAt.plusMillis(absoluteSessionTtlMs))) {
             revokeAllRefreshTokens(user.getId(), REVOKE_REASON_SESSION_TIMEOUT);
+            securityMetrics.auditEvent("SESSION_TIMEOUT");
             log.info("Session timeout for user {} (session started {})", user.getUsername(), sessionStartedAt);
             throw new AuthenticationException("SESSION_EXPIRED",
                     "Session has exceeded the maximum allowed duration; please log in again");
@@ -189,6 +205,7 @@ public class AuthService {
         storedToken.setReplacedByTokenId(replacementToken.tokenId());
         storedToken.setRevokeReason(REVOKE_REASON_ROTATED);
         refreshTokenRepository.save(storedToken);
+        securityMetrics.tokenRevoked("single", REVOKE_REASON_ROTATED);
         persistRefreshToken(user.getId(), replacementToken,
                 sessionStartedAt != null ? sessionStartedAt : replacementToken.issuedAt());
 
@@ -271,6 +288,8 @@ public class AuthService {
                 storedToken.setRevokedAt(Instant.now());
                 storedToken.setRevokeReason(REVOKE_REASON_LOGOUT);
                 refreshTokenRepository.save(storedToken);
+                securityMetrics.tokenRevoked("single", REVOKE_REASON_LOGOUT);
+                securityMetrics.auditEvent("LOGOUT");
             }
         });
     }
@@ -290,6 +309,7 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
         revokeAllRefreshTokens(user.getId(), REVOKE_REASON_PASSWORD_CHANGED);
+        securityMetrics.auditEvent("PASSWORD_CHANGED");
 
         log.info("Password changed for user {}", user.getUsername());
         return generateAuthResponse(user);
@@ -330,6 +350,7 @@ public class AuthService {
     }
 
     private void revokeAllRefreshTokens(Long userId, String reason) {
-        refreshTokenRepository.revokeAllActiveTokensForUser(userId, Instant.now(), reason);
+        int revokedCount = refreshTokenRepository.revokeAllActiveTokensForUser(userId, Instant.now(), reason);
+        securityMetrics.tokenRevoked("all", reason, revokedCount);
     }
 }

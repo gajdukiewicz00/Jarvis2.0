@@ -1,5 +1,6 @@
 package org.jarvis.planner.service;
 
+import org.jarvis.planner.metrics.PlannerMetrics;
 import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.Task;
 import org.jarvis.planner.model.TaskPriority;
@@ -27,6 +28,9 @@ class RecurringTaskGeneratorTest {
 
     @Mock
     private TaskRepository taskRepository;
+
+    @Mock
+    private PlannerMetrics plannerMetrics;
 
     @InjectMocks
     private RecurringTaskGenerator generator;
@@ -107,6 +111,7 @@ class RecurringTaskGeneratorTest {
         assertThat(occurrence.getTags()).containsExactly("focus");
         assertThat(daily.getLastGeneratedDate()).isEqualTo(date);
         verify(taskRepository, times(2)).save(any(Task.class)); // occurrence + template stamp
+        verify(plannerMetrics).recurringTaskGenerated("DAILY");
     }
 
     @Test
@@ -121,6 +126,7 @@ class RecurringTaskGeneratorTest {
 
         assertThat(generated).isEmpty();
         verify(taskRepository, never()).save(any(Task.class));
+        verify(plannerMetrics, never()).recurringTaskGenerated(any());
     }
 
     @Test
@@ -161,5 +167,22 @@ class RecurringTaskGeneratorTest {
 
         Task savedOccurrence = captor.getAllValues().get(0);
         assertThat(savedOccurrence.getDueDate()).isEqualTo(java.time.Instant.parse("2026-06-01T08:30:00Z"));
+    }
+
+    @Test
+    void generateOccurrencesForDateRecordsOneMetricPerGeneratedOccurrenceTaggedByRule() {
+        LocalDate date = LocalDate.of(2026, 6, 1);
+        Task daily = template(RecurrenceRule.DAILY, date);
+        Task weekly = template(RecurrenceRule.WEEKLY, date);
+        weekly.setId(2L);
+        when(taskRepository.findByUserIdAndRecurrenceRuleNot("user-1", RecurrenceRule.NONE))
+                .thenReturn(List.of(daily, weekly));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Task> generated = generator.generateOccurrencesForDate("user-1", date);
+
+        assertThat(generated).hasSize(2);
+        verify(plannerMetrics).recurringTaskGenerated("DAILY");
+        verify(plannerMetrics).recurringTaskGenerated("WEEKLY");
     }
 }

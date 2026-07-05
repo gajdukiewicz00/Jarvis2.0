@@ -2,6 +2,7 @@ package org.jarvis.planner.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.planner.exception.TaskNotFoundException;
 import org.jarvis.planner.metrics.PlannerMetrics;
 import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.Task;
@@ -32,6 +33,12 @@ public class RecurringTaskGenerator {
 
     private static final LocalTime DEFAULT_OCCURRENCE_TIME = LocalTime.of(23, 59);
 
+    /** Upper bound on how many occurrences a single generate-next-occurrences call may materialize. */
+    static final int MAX_GENERATE_NEXT_COUNT = 60;
+
+    /** Safety cap on how many calendar days to scan looking for due dates (guards against a runaway loop). */
+    private static final int MAX_SCAN_DAYS = 3660;
+
     private final TaskRepository taskRepository;
     private final PlannerMetrics plannerMetrics;
 
@@ -57,6 +64,50 @@ public class RecurringTaskGenerator {
         }
 
         log.info("Generated {} recurring task occurrence(s) for user {} on {}", generated.size(), userId, date);
+        return generated;
+    }
+
+    /**
+     * Materialize the next {@code count} due occurrences of a single recurring
+     * template into concrete tasks, scanning forward from the day after its
+     * {@code lastGeneratedDate} (or its anchor date, if none generated yet).
+     * Advances the template's {@code lastGeneratedDate} as it goes, so a
+     * subsequent daily {@link #generateOccurrencesForDate} pass never
+     * double-books a date this call already materialized.
+     */
+    @Transactional
+    public List<Task> generateNextOccurrences(String userId, Long templateId, int count) {
+        if (count <= 0) {
+            throw new IllegalArgumentException("count must be positive");
+        }
+        if (count > MAX_GENERATE_NEXT_COUNT) {
+            throw new IllegalArgumentException("count must not exceed " + MAX_GENERATE_NEXT_COUNT);
+        }
+        Task template = taskRepository.findByIdAndUserId(templateId, userId)
+                .orElseThrow(() -> new TaskNotFoundException(templateId, userId));
+        if (template.getRecurrenceRule() == RecurrenceRule.NONE) {
+            throw new IllegalArgumentException("Task " + templateId + " is not a recurring template");
+        }
+
+        List<Task> generated = new ArrayList<>();
+        LocalDate cursor = template.getLastGeneratedDate() != null
+                ? template.getLastGeneratedDate().plusDays(1)
+                : anchorDate(template, LocalDate.now());
+
+        int scanned = 0;
+        while (generated.size() < count && scanned < MAX_SCAN_DAYS) {
+            if (isDue(template, cursor)) {
+                Task occurrence = taskRepository.save(buildOccurrence(template, cursor));
+                generated.add(occurrence);
+                plannerMetrics.recurringTaskGenerated(template.getRecurrenceRule().name());
+                template.setLastGeneratedDate(cursor);
+            }
+            cursor = cursor.plusDays(1);
+            scanned++;
+        }
+        taskRepository.save(template);
+
+        log.info("Generated next {} occurrence(s) for template {} (user {})", generated.size(), templateId, userId);
         return generated;
     }
 

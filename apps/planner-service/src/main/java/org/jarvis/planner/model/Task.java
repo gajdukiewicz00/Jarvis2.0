@@ -94,4 +94,12 @@ public class Task {
     /** Last date an occurrence was generated for this recurring template (dedup guard). */
     @Column(name = "last_generated_date")
     private LocalDate lastGeneratedDate;
+
+    /**
+     * Set when this occurrence is explicitly skipped ({@link TaskStatus#SKIPPED})
+     * without ending the recurring series — the template keeps generating
+     * future occurrences independently of this one's state.
+     */
+    @Column(name = "skipped_at")
+    private Instant skippedAt;
 }

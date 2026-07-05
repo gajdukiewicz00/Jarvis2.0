@@ -1,7 +1,10 @@
 package org.jarvis.planner.service;
 
 import org.jarvis.planner.model.EnergyLevel;
+import org.jarvis.planner.model.PlanMode;
 import org.jarvis.planner.model.Task;
+import org.jarvis.planner.model.TaskCategory;
+import org.jarvis.planner.model.TaskPriority;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -50,6 +53,51 @@ public class EnergyAwareRanker {
             case NORMAL -> 0;
         };
         return base + adjustment;
+    }
+
+    /**
+     * Energy-aware ranking additionally steered by a persisted
+     * {@link PlanMode} selection (P1 — plan-mode-aware ranking). {@code mode}
+     * adjusts the score on top of the energy adjustment; {@code force} still
+     * suppresses both.
+     */
+    public List<Task> rank(List<Task> tasks, EnergyLevel energy, boolean force, PlanMode mode) {
+        if (tasks == null || tasks.isEmpty()) {
+            return List.of();
+        }
+        return tasks.stream()
+                .sorted(Comparator.comparingInt((Task t) -> score(t, energy, force, mode)).reversed())
+                .toList();
+    }
+
+    /** Higher score = recommended sooner, also accounting for the selected {@link PlanMode}. */
+    public int score(Task task, EnergyLevel energy, boolean force, PlanMode mode) {
+        int base = score(task, energy, force);
+        if (force || mode == null) {
+            return base;
+        }
+        return base + planModeAdjustment(task, mode);
+    }
+
+    private int planModeAdjustment(Task task, PlanMode mode) {
+        boolean hard = isHard(task);
+        boolean light = isLight(task);
+        return switch (mode) {
+            case DEEP_WORK -> hard ? 100 : (light ? -20 : 0);
+            case RECOVERY -> light ? 100 : (hard ? -250 : -40);
+            case STUDY -> task.getCategory() == TaskCategory.STUDY ? 80 : 0;
+            case MINIMUM_VIABLE_DAY -> isEssential(task) ? 150 : -60;
+            case NORMAL -> 0;
+        };
+    }
+
+    /** Urgent or already-overdue — mirrors {@code PlanModeService#isEssential}. */
+    private boolean isEssential(Task task) {
+        if (task.getPriority() == TaskPriority.URGENT) {
+            return true;
+        }
+        Instant due = task.getDueDate();
+        return due != null && due.isBefore(Instant.now());
     }
 
     /**

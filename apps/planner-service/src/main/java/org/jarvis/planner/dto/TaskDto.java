@@ -40,4 +40,7 @@ public class TaskDto {
     private LocalDate recurrenceAnchorDate;
     private Long recurrenceSourceTaskId;
     private LocalDate lastGeneratedDate;
+
+    /** Set when this occurrence was explicitly skipped without ending the series. */
+    private Instant skippedAt;
 }

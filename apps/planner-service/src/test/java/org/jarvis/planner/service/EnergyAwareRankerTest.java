@@ -1,7 +1,9 @@
 package org.jarvis.planner.service;
 
 import org.jarvis.planner.model.EnergyLevel;
+import org.jarvis.planner.model.PlanMode;
 import org.jarvis.planner.model.Task;
+import org.jarvis.planner.model.TaskCategory;
 import org.jarvis.planner.model.TaskPriority;
 import org.junit.jupiter.api.Test;
 
@@ -106,6 +108,69 @@ class EnergyAwareRankerTest {
     void deadlinePressureIsZeroWhenNoDueDate() {
         Task noDeadline = task("No deadline", TaskPriority.LOW, 30);
         assertThat(ranker.deadlinePressure(noDeadline)).isZero();
+    }
+
+    @Test
+    void deepWorkPlanModeRanksHardTaskFirstEvenAtNormalEnergy() {
+        Task hard = task("Big refactor", TaskPriority.MEDIUM, 120);
+        Task light = task("Reply email", TaskPriority.MEDIUM, 10);
+
+        List<Task> ranked = ranker.rank(List.of(light, hard), EnergyLevel.NORMAL, false, PlanMode.DEEP_WORK);
+
+        assertThat(ranked.get(0)).isEqualTo(hard);
+    }
+
+    @Test
+    void recoveryPlanModeRanksLightTaskFirstEvenIfLowerPriority() {
+        Task hard = task("Big refactor", TaskPriority.HIGH, 120);
+        Task light = task("Reply email", TaskPriority.LOW, 10);
+
+        List<Task> ranked = ranker.rank(List.of(hard, light), EnergyLevel.NORMAL, false, PlanMode.RECOVERY);
+
+        assertThat(ranked.get(0)).isEqualTo(light);
+    }
+
+    @Test
+    void studyPlanModeFavoursStudyCategoryTasks() {
+        Task study = task("Finish course module", TaskPriority.MEDIUM, 45);
+        study.setCategory(TaskCategory.STUDY);
+        Task work = task("Reply to email", TaskPriority.MEDIUM, 45);
+        work.setCategory(TaskCategory.WORK);
+
+        List<Task> ranked = ranker.rank(List.of(work, study), EnergyLevel.NORMAL, false, PlanMode.STUDY);
+
+        assertThat(ranked.get(0)).isEqualTo(study);
+    }
+
+    @Test
+    void minimumViableDayPlanModeFavoursEssentialTasksOverRoutineOnes() {
+        Task urgent = task("Fix outage", TaskPriority.URGENT, 30);
+        Task routine = task("Read newsletter", TaskPriority.HIGH, 10);
+
+        List<Task> ranked = ranker.rank(List.of(routine, urgent), EnergyLevel.NORMAL, false,
+                PlanMode.MINIMUM_VIABLE_DAY);
+
+        assertThat(ranked.get(0)).isEqualTo(urgent);
+    }
+
+    @Test
+    void normalPlanModeAddsNoAdjustmentOnTopOfEnergy() {
+        Task urgent = task("Urgent big", TaskPriority.URGENT, 120);
+        Task minor = task("Minor quick", TaskPriority.LOW, 10);
+
+        List<Task> ranked = ranker.rank(List.of(minor, urgent), EnergyLevel.NORMAL, false, PlanMode.NORMAL);
+
+        assertThat(ranked.get(0)).isEqualTo(urgent);
+    }
+
+    @Test
+    void forceOverridesPlanModeAdjustmentJustLikeEnergy() {
+        Task hard = task("Big refactor", TaskPriority.URGENT, 120);
+        Task light = task("Reply email", TaskPriority.LOW, 10);
+
+        List<Task> ranked = ranker.rank(List.of(light, hard), EnergyLevel.NORMAL, true, PlanMode.RECOVERY);
+
+        assertThat(ranked.get(0)).isEqualTo(hard); // forced -> priority wins despite recovery mode
     }
 
     @Test

@@ -1,5 +1,6 @@
 package org.jarvis.planner.service;
 
+import org.jarvis.planner.exception.TaskNotFoundException;
 import org.jarvis.planner.metrics.PlannerMetrics;
 import org.jarvis.planner.model.RecurrenceRule;
 import org.jarvis.planner.model.Task;
@@ -14,9 +15,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -184,5 +189,83 @@ class RecurringTaskGeneratorTest {
         assertThat(generated).hasSize(2);
         verify(plannerMetrics).recurringTaskGenerated("DAILY");
         verify(plannerMetrics).recurringTaskGenerated("WEEKLY");
+    }
+
+    @Test
+    void generateNextOccurrencesMaterializesCountOccurrencesStartingAtAnchorWhenNeverGenerated() {
+        Task daily = template(RecurrenceRule.DAILY, LocalDate.of(2026, 6, 1));
+        when(taskRepository.findByIdAndUserId(1L, "user-1")).thenReturn(Optional.of(daily));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Task> generated = generator.generateNextOccurrences("user-1", 1L, 3);
+
+        assertThat(generated).hasSize(3);
+        assertThat(generated).extracting(t -> t.getDueDate().atZone(ZoneOffset.UTC).toLocalDate())
+                .containsExactly(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 2), LocalDate.of(2026, 6, 3));
+        assertThat(daily.getLastGeneratedDate()).isEqualTo(LocalDate.of(2026, 6, 3));
+        generated.forEach(occurrence -> assertThat(occurrence.getRecurrenceSourceTaskId()).isEqualTo(1L));
+    }
+
+    @Test
+    void generateNextOccurrencesContinuesFromTheDayAfterLastGeneratedDate() {
+        Task daily = template(RecurrenceRule.DAILY, LocalDate.of(2026, 6, 1));
+        daily.setLastGeneratedDate(LocalDate.of(2026, 6, 5));
+        when(taskRepository.findByIdAndUserId(1L, "user-1")).thenReturn(Optional.of(daily));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Task> generated = generator.generateNextOccurrences("user-1", 1L, 2);
+
+        assertThat(generated).extracting(t -> t.getDueDate().atZone(ZoneOffset.UTC).toLocalDate())
+                .containsExactly(LocalDate.of(2026, 6, 6), LocalDate.of(2026, 6, 7));
+    }
+
+    @Test
+    void generateNextOccurrencesSkipsNonDueDatesForWeeklyTemplates() {
+        Task weekly = template(RecurrenceRule.WEEKLY, LocalDate.of(2026, 6, 1)); // Monday
+        when(taskRepository.findByIdAndUserId(1L, "user-1")).thenReturn(Optional.of(weekly));
+        when(taskRepository.save(any(Task.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        List<Task> generated = generator.generateNextOccurrences("user-1", 1L, 2);
+
+        List<LocalDate> dates = generated.stream()
+                .map(t -> t.getDueDate().atZone(ZoneOffset.UTC).toLocalDate())
+                .toList();
+        assertThat(dates).containsExactly(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 8));
+        assertThat(ChronoUnit.DAYS.between(dates.get(0), dates.get(1))).isEqualTo(7);
+    }
+
+    @Test
+    void generateNextOccurrencesThrowsWhenTaskIsNotARecurringTemplate() {
+        Task oneOff = template(RecurrenceRule.NONE, LocalDate.of(2026, 6, 1));
+        when(taskRepository.findByIdAndUserId(1L, "user-1")).thenReturn(Optional.of(oneOff));
+
+        assertThatThrownBy(() -> generator.generateNextOccurrences("user-1", 1L, 3))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not a recurring template");
+        verify(taskRepository, never()).save(any(Task.class));
+    }
+
+    @Test
+    void generateNextOccurrencesThrowsWhenTemplateNotFound() {
+        when(taskRepository.findByIdAndUserId(99L, "user-1")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> generator.generateNextOccurrences("user-1", 99L, 3))
+                .isInstanceOf(TaskNotFoundException.class);
+    }
+
+    @Test
+    void generateNextOccurrencesRejectsNonPositiveCount() {
+        assertThatThrownBy(() -> generator.generateNextOccurrences("user-1", 1L, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("positive");
+        verify(taskRepository, never()).findByIdAndUserId(any(), any());
+    }
+
+    @Test
+    void generateNextOccurrencesRejectsCountAboveTheMaximum() {
+        assertThatThrownBy(() -> generator.generateNextOccurrences("user-1", 1L, RecurringTaskGenerator.MAX_GENERATE_NEXT_COUNT + 1))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must not exceed");
+        verify(taskRepository, never()).findByIdAndUserId(any(), any());
     }
 }

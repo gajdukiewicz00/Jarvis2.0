@@ -23,7 +23,7 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     long deleteByIdAndUserId(Long id, String userId);
     
     @Query("SELECT t FROM Task t WHERE t.userId = :userId AND t.status != 'DONE' AND t.status != 'CANCELLED' " +
-           "ORDER BY t.priority DESC, t.dueDate ASC NULLS LAST")
+           "AND t.status != 'SKIPPED' ORDER BY t.priority DESC, t.dueDate ASC NULLS LAST")
     List<Task> findActiveTasks(String userId);
     
     @Query("SELECT t FROM Task t WHERE t.userId = :userId AND t.dueDate BETWEEN :start AND :end " +

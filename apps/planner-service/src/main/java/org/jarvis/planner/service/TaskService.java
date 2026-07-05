@@ -130,7 +130,8 @@ public class TaskService {
         return toDto(saved);
     }
     
-    private TaskDto toDto(Task task) {
+    /** Public: also used by {@code org.jarvis.planner.controller.RecurringTaskController} to map generated/updated occurrences. */
+    public TaskDto toDto(Task task) {
         TaskDto dto = new TaskDto();
         dto.setId(task.getId());
         dto.setUserId(task.getUserId());
@@ -153,6 +154,7 @@ public class TaskService {
         dto.setRecurrenceAnchorDate(task.getRecurrenceAnchorDate());
         dto.setRecurrenceSourceTaskId(task.getRecurrenceSourceTaskId());
         dto.setLastGeneratedDate(task.getLastGeneratedDate());
+        dto.setSkippedAt(task.getSkippedAt());
         return dto;
     }
 }

@@ -87,10 +87,26 @@ if ! reach_cluster 15; then
   reach_cluster 60 || fail "k3s API не отвечает даже после перезапуска."
 fi
 
-# ---- 2. host brain + endpoint ----
+# ---- 2. host brain + host-model-daemon endpoint (k3s-native) ----
 step "Мозг и голос (Qwen/Piper)…"
 systemctl --user start "jarvis-llm@18080.service" >>"$LOG" 2>&1 || true
-[ -f scripts/jarvis-host-endpoint-check.sh ] && bash scripts/jarvis-host-endpoint-check.sh --fix >>"$LOG" 2>&1 || true
+# The selectorless host-model-daemon Service/Endpoints point cluster pods at the host
+# brain (:18080). If the node IP changed, that endpoint goes stale and llm-service can't
+# reach the brain (→ api-gateway/orchestrator init-waits hang). Repoint it, k3s-native.
+NODE_IP="$($K get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null | awk '{print $1}')"
+if [ -n "$NODE_IP" ]; then
+  EP_IP="$($K get endpoints host-model-daemon -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)"
+  if [ -n "$EP_IP" ] && [ "$EP_IP" != "$NODE_IP" ]; then
+    step "Обновляю endpoint мозга (${EP_IP}→${NODE_IP})…"
+    log "patch host-model-daemon endpoint ${EP_IP} -> ${NODE_IP}"
+    $K patch endpoints host-model-daemon --type=json \
+      -p="[{\"op\":\"replace\",\"path\":\"/subsets/0/addresses/0/ip\",\"value\":\"${NODE_IP}\"}]" >>"$LOG" 2>&1 || true
+    SLICE="$($K get endpointslice -l kubernetes.io/service-name=host-model-daemon -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+    [ -n "$SLICE" ] && $K patch endpointslice "$SLICE" --type=json \
+      -p="[{\"op\":\"replace\",\"path\":\"/endpoints/0/addresses/0\",\"value\":\"${NODE_IP}\"}]" >>"$LOG" 2>&1 || true
+    $K rollout restart deploy/llm-service >>"$LOG" 2>&1 || true
+  fi
+fi
 
 # ---- 3. recover pods if the gateway is not Ready ----
 ready="$($K get deploy api-gateway -o jsonpath='{.status.readyReplicas}' 2>/dev/null || true)"

@@ -101,6 +101,49 @@ class MemoryReadModelTest {
     }
 
     @Test
+    fun `recentNotes appends the scope query parameter when a scope is given`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("[]")
+        )
+
+        try {
+            server.start()
+            modelFor(server).recentNotes(limit = 5, scope = "FINANCE")
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/memory/notes"))
+            assertTrue(request.path!!.contains("limit=5"))
+            assertTrue(request.path!!.contains("scope=FINANCE"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `recentNotes omits the scope query parameter when scope is null or blank`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("[]")
+        )
+
+        try {
+            server.start()
+            modelFor(server).recentNotes(limit = 5, scope = "  ")
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("limit=5"))
+            assertFalse(request.path!!.contains("scope="))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `parseItems returns empty list when no known container is present`() {
         val server = MockWebServer()
         server.enqueue(

@@ -7,6 +7,7 @@ import javafx.scene.Node
 import javafx.scene.control.Button
 import javafx.scene.control.ButtonBar
 import javafx.scene.control.ButtonType
+import javafx.scene.control.ComboBox
 import javafx.scene.control.Dialog
 import javafx.scene.control.Label
 import javafx.scene.control.ScrollPane
@@ -59,6 +60,12 @@ class MemoryView(
         styleClass += "shell-action-button"
         setOnAction { loadRecent() }
     }
+    private val scopeFilter = ComboBox<String>().apply {
+        items.add("All scopes")
+        items.addAll(MemoryReadModel.SCOPES)
+        value = "All scopes"
+        setOnAction { loadRecent() }
+    }
 
     private val resultsContainer = VBox(12.0)
 
@@ -106,7 +113,7 @@ class MemoryView(
                 alignment = Pos.CENTER_LEFT
                 HBox.setHgrow(queryField, Priority.ALWAYS)
                 queryField.maxWidth = Double.MAX_VALUE
-                children.addAll(queryField, searchButton, recentButton)
+                children.addAll(queryField, searchButton, recentButton, scopeFilter)
             }
         }
 
@@ -134,7 +141,8 @@ class MemoryView(
     }
 
     private fun loadRecent() {
-        run("Loading recent notes…") { readModel.recentNotes() }
+        val scope = scopeFilter.value?.takeIf { it != "All scopes" }
+        run("Loading recent notes…") { readModel.recentNotes(scope = scope) }
     }
 
     private fun run(progress: String, fetch: () -> List<MemoryReadModel.MemoryItem>) {

@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets
  *
  * Wires:
  *  - unified search  -> POST   /api/v1/memory/search/unified
- *  - recent notes    -> GET    /api/v1/memory/notes
+ *  - recent notes    -> GET    /api/v1/memory/notes?scope=&limit=
  *  - edit note       -> PUT    /api/v1/memory/notes/{memoryId}
  *  - forget note      -> DELETE /api/v1/memory/notes/{memoryId}?actor=&reason=
  *
@@ -23,6 +23,11 @@ class MemoryReadModel(
     private val apiClient: ApiClient
 ) {
     private val objectMapper = jacksonObjectMapper()
+
+    /** Mirrors `org.jarvis.memory.obsidian.MemoryScope` on the memory-service side. */
+    companion object {
+        val SCOPES: List<String> = listOf("USER_PROFILE", "PROJECT", "SESSION", "FINANCE", "HEALTH", "TEMPORARY")
+    }
 
     data class MemoryItem(
         val memoryId: String?,
@@ -49,8 +54,13 @@ class MemoryReadModel(
         return parseItems(objectMapper.readTree(response))
     }
 
-    fun recentNotes(limit: Int = 15): List<MemoryItem> {
-        val response = apiClient.get("/memory/notes?limit=$limit")
+    /** [scope] filters to one of [SCOPES] (e.g. "FINANCE"); null/blank means all scopes. */
+    fun recentNotes(limit: Int = 15, scope: String? = null): List<MemoryItem> {
+        val query = buildString {
+            append("/memory/notes?limit=").append(limit)
+            scope?.trim()?.takeIf { it.isNotEmpty() }?.let { append("&scope=").append(encode(it)) }
+        }
+        val response = apiClient.get(query)
         return parseItems(objectMapper.readTree(response))
     }
 

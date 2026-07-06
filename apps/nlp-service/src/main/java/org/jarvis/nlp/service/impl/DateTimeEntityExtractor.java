@@ -35,7 +35,7 @@ final class DateTimeEntityExtractor {
 
     private static final Pattern DAY_PART = Pattern.compile("(?:^|\\b)(утром|днем|вечером|ночью)\\b", RXF);
 
-    private static final Map<String, String> WEEKDAY_STEMS = buildWeekdayStems();
+    private static final Map<Pattern, String> WEEKDAY_STEMS = buildWeekdayStems();
 
     /**
      * Extracts relative-date, weekday, and clock-time hints from normalized text.
@@ -76,8 +76,8 @@ final class DateTimeEntityExtractor {
         if (TODAY.matcher(text).find()) {
             return "today";
         }
-        for (Map.Entry<String, String> entry : WEEKDAY_STEMS.entrySet()) {
-            if (text.contains(entry.getKey())) {
+        for (Map.Entry<Pattern, String> entry : WEEKDAY_STEMS.entrySet()) {
+            if (entry.getKey().matcher(text).find()) {
                 return entry.getValue();
             }
         }
@@ -115,8 +115,13 @@ final class DateTimeEntityExtractor {
             return hour;
         }
         String q = qualifier.toLowerCase(Locale.ROOT).replace('ё', 'е');
-        boolean isAfternoonOrEvening = "дня".equals(q) || "вечера".equals(q);
-        return isAfternoonOrEvening && hour < 12 ? hour + 12 : hour;
+        if ("ночи".equals(q) || "утра".equals(q)) {
+            return hour == 12 ? 0 : hour;
+        }
+        if ("дня".equals(q) || "вечера".equals(q)) {
+            return hour < 12 ? hour + 12 : hour;
+        }
+        return hour;
     }
 
     private static String normalizeDayPart(String token) {
@@ -130,17 +135,30 @@ final class DateTimeEntityExtractor {
         };
     }
 
-    private static Map<String, String> buildWeekdayStems() {
-        // LinkedHashMap: order matters only for readability here, lookups are contains()-based.
-        Map<String, String> m = new LinkedHashMap<>();
-        m.put("понедельник", "MONDAY");
-        m.put("вторник", "TUESDAY");
-        m.put("сред", "WEDNESDAY"); // среда/среду/средам
-        m.put("четверг", "THURSDAY");
-        m.put("пятниц", "FRIDAY"); // пятница/пятницу
-        m.put("суббот", "SATURDAY"); // суббота/субботу
-        m.put("воскресень", "SUNDAY"); // воскресенье/воскресенья
+    private static Map<Pattern, String> buildWeekdayStems() {
+        // LinkedHashMap: order matters only for readability here, lookups are find()-based.
+        // Each stem is compiled as a word-boundary-anchored pattern (stem + trailing Cyrillic
+        // letters) so short stems like "сред"/"суббот" only match actual weekday inflections
+        // (среда/среду/средам, суббота/субботу) and not unrelated words that merely contain
+        // the stem as a substring (средство, субботник).
+        Map<Pattern, String> m = new LinkedHashMap<>();
+        m.put(weekdayPattern("понедельник"), "MONDAY");
+        m.put(weekdayPattern("вторник"), "TUESDAY");
+        m.put(weekdayPattern("сред"), "WEDNESDAY"); // среда/среду/средам
+        m.put(weekdayPattern("четверг"), "THURSDAY");
+        m.put(weekdayPattern("пятниц"), "FRIDAY"); // пятница/пятницу
+        m.put(weekdayPattern("суббот"), "SATURDAY"); // суббота/субботу
+        m.put(weekdayPattern("воскресень"), "SUNDAY"); // воскресенье/воскресенья
         return m;
+    }
+
+    private static Pattern weekdayPattern(String stem) {
+        // Cap the trailing-letters run at 2 so real inflected endings still match
+        // (среду/средам/субботу/субботам use 1-2 letter case endings), while an
+        // unbounded [а-я]* would keep consuming letters right past those endings and
+        // still match unrelated longer words like "средство"/"субботник" that merely
+        // start with the same stem.
+        return Pattern.compile("\\b" + stem + "[а-я]{0,2}\\b", RXF);
     }
 
     /** Known weekday token values, exposed for tests. */

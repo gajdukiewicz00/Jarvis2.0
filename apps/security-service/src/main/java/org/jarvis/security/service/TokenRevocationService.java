@@ -2,6 +2,7 @@ package org.jarvis.security.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.metrics.SecurityMetrics;
 import org.jarvis.security.model.RevokedToken;
 import org.jarvis.security.repository.RefreshTokenRepository;
@@ -18,7 +19,8 @@ import java.util.UUID;
  * OWNER-triggered token revocation: revoking a single token by its jti, or
  * revoking every outstanding session for a user. Complements the automatic
  * revocation paths already in {@link AuthService} (logout, password change,
- * refresh rotation/reuse detection).
+ * refresh rotation/reuse detection), plus {@link #revokeOwnSession}, which is
+ * reachable by any authenticated user for their own current session only.
  */
 @Slf4j
 @Service
@@ -27,12 +29,14 @@ public class TokenRevocationService {
 
     private static final String DEFAULT_SINGLE_REVOKE_REASON = "ADMIN_REVOKED";
     private static final String DEFAULT_REVOKE_ALL_REASON = "ADMIN_REVOKED_ALL";
+    private static final String SELF_SESSION_REVOKE_REASON = "USER_SESSION_REVOKED";
 
     private final JwtService jwtService;
     private final RevokedTokenRepository revokedTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final SecurityMetrics securityMetrics;
+    private final AuditService auditService;
 
     /**
      * Revoke a single token by parsing it (accepting either an access or a
@@ -73,6 +77,7 @@ public class TokenRevocationService {
                 target.jti(), target.tokenType(), target.userId(), revokedByUserId);
         securityMetrics.tokenRevoked("single", normalizedReason);
         securityMetrics.auditEvent("TOKEN_REVOKED");
+        auditService.recordEvent("TOKEN_REVOKED", target.userId(), normalizedReason);
         return new RevokedTokenInfo(target.jti(), target.tokenType());
     }
 
@@ -97,7 +102,37 @@ public class TokenRevocationService {
         log.info("Revoked all sessions for user {} ({} active refresh tokens)", userId, revokedRefreshTokens);
         securityMetrics.tokenRevoked("all", normalizedReason, revokedRefreshTokens);
         securityMetrics.auditEvent("TOKEN_REVOKED_ALL");
+        auditService.recordEvent("TOKEN_REVOKED_ALL", userId, normalizedReason);
         return revokedRefreshTokens;
+    }
+
+    /**
+     * User-triggered revocation of their own current session: blacklists
+     * both the presented access token and refresh token by jti (see {@link
+     * #revokeToken}). Unlike the OWNER-only revocation paths above, this is
+     * reachable by any authenticated user, so the refresh token's embedded
+     * owner is checked against {@code callerId} before anything is revoked -
+     * a caller may only revoke their own tokens this way.
+     *
+     * @throws AuthorizationException if the refresh token belongs to a
+     *         different user than {@code callerId}
+     */
+    @Transactional
+    public RevokedSessionInfo revokeOwnSession(String accessToken, String refreshToken, Long callerId) {
+        JwtService.RevocationTarget refreshTarget = jwtService.prepareForRevocation(refreshToken);
+        if (!refreshTarget.userId().equals(callerId)) {
+            throw new AuthorizationException("SESSION_MISMATCH",
+                    "Refresh token does not belong to the current session");
+        }
+
+        RevokedTokenInfo accessInfo = revokeToken(accessToken, SELF_SESSION_REVOKE_REASON, callerId);
+        RevokedTokenInfo refreshInfo = revokeToken(refreshToken, SELF_SESSION_REVOKE_REASON, callerId);
+
+        log.info("User {} revoked their own current session (access jti={}, refresh jti={})",
+                callerId, accessInfo.jti(), refreshInfo.jti());
+        securityMetrics.auditEvent("SESSION_REVOKED_SELF");
+        auditService.recordEvent("SESSION_REVOKED_SELF", callerId, SELF_SESSION_REVOKE_REASON);
+        return new RevokedSessionInfo(accessInfo.jti(), refreshInfo.jti());
     }
 
     private String normalizeReason(String reason, String fallback) {
@@ -105,5 +140,9 @@ public class TokenRevocationService {
     }
 
     public record RevokedTokenInfo(UUID jti, String tokenType) {
+    }
+
+    /** jti pair identifying the two tokens blacklisted by {@link #revokeOwnSession}. */
+    public record RevokedSessionInfo(UUID accessJti, UUID refreshJti) {
     }
 }

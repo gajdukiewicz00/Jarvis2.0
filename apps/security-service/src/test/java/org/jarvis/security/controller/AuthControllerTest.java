@@ -1,6 +1,7 @@
 package org.jarvis.security.controller;
 
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
+import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.config.GlobalExceptionHandler.UserAlreadyExistsException;
 import org.jarvis.security.dto.AuthResponse;
 import org.jarvis.security.dto.ChangePasswordRequest;
@@ -9,11 +10,13 @@ import org.jarvis.security.dto.RefreshRequest;
 import org.jarvis.security.dto.RegisterRequest;
 import org.jarvis.security.model.User;
 import org.jarvis.security.service.AuthService;
+import org.jarvis.security.service.TokenRevocationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.util.Map;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,7 +34,8 @@ import static org.mockito.Mockito.when;
 class AuthControllerTest {
 
     private final AuthService authService = mock(AuthService.class);
-    private final AuthController controller = new AuthController(authService);
+    private final TokenRevocationService tokenRevocationService = mock(TokenRevocationService.class);
+    private final AuthController controller = new AuthController(authService, tokenRevocationService);
 
     @Test
     void registerThrowsUserAlreadyExistsWhenUsernameTaken() {
@@ -87,6 +91,48 @@ class AuthControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
         verify(authService).logout("refresh-token");
+    }
+
+    @Test
+    void revokeCurrentSessionThrowsMissingTokenWhenHeaderAbsent() {
+        RefreshRequest request = new RefreshRequest("refresh-token");
+
+        AuthenticationException ex = assertThrows(AuthenticationException.class,
+                () -> controller.revokeCurrentSession(null, request));
+
+        assertThat(ex.getErrorCode()).isEqualTo("MISSING_TOKEN");
+        verify(authService, never()).getUserFromToken(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void revokeCurrentSessionPropagatesMismatchFromTokenRevocationService() {
+        RefreshRequest request = new RefreshRequest("someone-elses-refresh-token");
+        User caller = User.builder().id(1L).username("alice").role("USER").enabled(true).build();
+        when(authService.getUserFromToken("caller-access-tok")).thenReturn(caller);
+        when(tokenRevocationService.revokeOwnSession("caller-access-tok", "someone-elses-refresh-token", 1L))
+                .thenThrow(new AuthorizationException("SESSION_MISMATCH", "Refresh token does not belong"));
+
+        assertThrows(AuthorizationException.class,
+                () -> controller.revokeCurrentSession("Bearer caller-access-tok", request));
+    }
+
+    @Test
+    void revokeCurrentSessionDelegatesAndReturnsBothJtis() {
+        RefreshRequest request = new RefreshRequest("caller-refresh-tok");
+        User caller = User.builder().id(1L).username("alice").role("USER").enabled(true).build();
+        when(authService.getUserFromToken("caller-access-tok")).thenReturn(caller);
+        UUID accessJti = UUID.randomUUID();
+        UUID refreshJti = UUID.randomUUID();
+        when(tokenRevocationService.revokeOwnSession("caller-access-tok", "caller-refresh-tok", 1L))
+                .thenReturn(new TokenRevocationService.RevokedSessionInfo(accessJti, refreshJti));
+
+        ResponseEntity<Map<String, Object>> response =
+                controller.revokeCurrentSession("Bearer caller-access-tok", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsEntry("revoked", true);
+        assertThat(response.getBody()).containsEntry("accessJti", accessJti.toString());
+        assertThat(response.getBody()).containsEntry("refreshJti", refreshJti.toString());
     }
 
     @Test

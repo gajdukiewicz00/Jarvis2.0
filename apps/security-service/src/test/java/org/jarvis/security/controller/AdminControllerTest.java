@@ -2,6 +2,7 @@ package org.jarvis.security.controller;
 
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
+import org.jarvis.security.dto.AuditEventPage;
 import org.jarvis.security.dto.AuditEventView;
 import org.jarvis.security.dto.RevokeRequest;
 import org.jarvis.security.model.User;
@@ -19,6 +20,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -120,5 +123,31 @@ class AdminControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).containsExactly(event);
+    }
+
+    @Test
+    void auditEventsThrowsForbiddenWhenCallerIsNotOwner() {
+        when(authService.requireRole("caller-tok", "OWNER"))
+                .thenThrow(new AuthorizationException("FORBIDDEN_ROLE", "Requires OWNER"));
+
+        assertThrows(AuthorizationException.class,
+                () -> controller.auditEvents("Bearer caller-tok", 2L, "TOKEN_REVOKED", null, null, 0, 25));
+        verify(auditService, never()).listEvents(any(), any(), any(), any(), anyInt(), anyInt());
+    }
+
+    @Test
+    void auditEventsDelegatesToAuditServiceWithFiltersForOwner() {
+        when(authService.requireRole("caller-tok", "OWNER")).thenReturn(owner(1L));
+        AuditEventView event = new AuditEventView("TOKEN_REVOKED", 2L, "42", Instant.now(), "ADMIN_REVOKED");
+        AuditEventPage page = new AuditEventPage(List.of(event), 0, 25, 1, 1);
+        Instant from = Instant.now().minusSeconds(3600);
+        Instant to = Instant.now();
+        when(auditService.listEvents(2L, "TOKEN_REVOKED", from, to, 0, 25)).thenReturn(page);
+
+        ResponseEntity<AuditEventPage> response =
+                controller.auditEvents("Bearer caller-tok", 2L, "TOKEN_REVOKED", from, to, 0, 25);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(page);
     }
 }

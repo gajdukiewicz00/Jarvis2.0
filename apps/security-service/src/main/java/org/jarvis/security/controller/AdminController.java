@@ -3,6 +3,7 @@ package org.jarvis.security.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.security.dto.AuditEventPage;
 import org.jarvis.security.dto.AuditEventView;
 import org.jarvis.security.dto.RevokeRequest;
 import org.jarvis.security.model.Role;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +39,9 @@ import java.util.Map;
  * <ul>
  *   <li>POST /auth/revoke - revoke a single access or refresh token by value (OWNER)</li>
  *   <li>POST /auth/revoke-all/{userId} - revoke every session for a user (OWNER)</li>
- *   <li>GET  /auth/audit - list recent revocation/security events (OWNER)</li>
+ *   <li>GET  /auth/audit - list recent revocation/security events, limit only (OWNER)</li>
+ *   <li>GET  /auth/audit/events - page/filter the persisted audit-event store by
+ *       user/type/time-range (OWNER)</li>
  * </ul>
  */
 @Slf4j
@@ -92,6 +96,26 @@ public class AdminController {
 
         requireOwner(authHeader);
         return ResponseEntity.ok(auditService.listRecentEvents(limit));
+    }
+
+    /**
+     * Page/filter the dedicated audit-event store (see {@link
+     * AuditService#listEvents}). {@code from}/{@code to} accept ISO-8601
+     * instants (e.g. {@code 2026-07-01T00:00:00Z}); any filter parameter may
+     * be omitted.
+     */
+    @GetMapping("/audit/events")
+    public ResponseEntity<AuditEventPage> auditEvents(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        requireOwner(authHeader);
+        return ResponseEntity.ok(auditService.listEvents(userId, eventType, from, to, page, size));
     }
 
     private User requireOwner(String authHeader) {

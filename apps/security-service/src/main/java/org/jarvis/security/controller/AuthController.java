@@ -12,6 +12,8 @@ import org.jarvis.security.dto.RefreshRequest;
 import org.jarvis.security.dto.RegisterRequest;
 import org.jarvis.security.model.User;
 import org.jarvis.security.service.AuthService;
+import org.jarvis.security.service.TokenRevocationService;
+import org.jarvis.security.util.BearerTokenExtractor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,12 +23,13 @@ import java.util.Map;
 
 /**
  * Authentication controller for user registration, login, and token management.
- * 
+ *
  * All endpoints are public and handle:
  * - POST /auth/register - Register new user
- * - POST /auth/login - Login and get JWT tokens  
+ * - POST /auth/login - Login and get JWT tokens
  * - POST /auth/refresh - Refresh access token
  * - POST /auth/logout - Revoke current refresh token
+ * - POST /auth/revoke-current - Revoke the caller's own current session (access + refresh)
  * - POST /auth/password/change - Change password and revoke prior refresh tokens
  * - GET /auth/me - Get current user info
  */
@@ -37,6 +40,7 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final TokenRevocationService tokenRevocationService;
 
     /**
      * Register a new user.
@@ -98,6 +102,35 @@ public class AuthController {
     public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
         authService.logout(request.refreshToken());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Revoke the caller's own current session: unlike {@link #logout} (which
+     * only marks the presented refresh token revoked), this blacklists the
+     * jti of both the presented access token (Authorization header) and the
+     * presented refresh token (request body), so the access token is
+     * rejected immediately rather than only once naturally expired. Distinct
+     * from the OWNER-only {@code AdminController#revokeAll} - a caller may
+     * only revoke their own session this way.
+     */
+    @PostMapping("/revoke-current")
+    public ResponseEntity<Map<String, Object>> revokeCurrentSession(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @Valid @RequestBody RefreshRequest request) {
+
+        String accessToken = BearerTokenExtractor.extract(authHeader);
+        User caller = authService.getUserFromToken(accessToken);
+
+        TokenRevocationService.RevokedSessionInfo info =
+                tokenRevocationService.revokeOwnSession(accessToken, request.refreshToken(), caller.getId());
+
+        log.info("User '{}' revoked their own current session", caller.getUsername());
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("revoked", true);
+        body.put("accessJti", info.accessJti().toString());
+        body.put("refreshJti", info.refreshJti().toString());
+        return ResponseEntity.ok(body);
     }
 
     /**

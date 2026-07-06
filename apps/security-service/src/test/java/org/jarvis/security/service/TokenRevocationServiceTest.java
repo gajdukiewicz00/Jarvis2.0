@@ -1,6 +1,7 @@
 package org.jarvis.security.service;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.jarvis.security.config.GlobalExceptionHandler.AuthorizationException;
 import org.jarvis.security.metrics.SecurityMetrics;
 import org.jarvis.security.model.RefreshToken;
 import org.jarvis.security.model.RevokedToken;
@@ -20,17 +21,21 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for OWNER-triggered revocation: single jti revocation
  * (recorded in the revoked-token store, plus the known refresh-token record
- * if applicable) and revoke-all-for-user (revokes stored refresh tokens and
- * bumps the user's access-token validity floor).
+ * if applicable), revoke-all-for-user (revokes stored refresh tokens and
+ * bumps the user's access-token validity floor), and the self-service
+ * {@link TokenRevocationService#revokeOwnSession}.
  */
 @ExtendWith(MockitoExtension.class)
 class TokenRevocationServiceTest {
@@ -43,6 +48,8 @@ class TokenRevocationServiceTest {
     private RefreshTokenRepository refreshTokenRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private AuditService auditService;
 
     private SimpleMeterRegistry meterRegistry;
     private TokenRevocationService tokenRevocationService;
@@ -52,7 +59,7 @@ class TokenRevocationServiceTest {
         meterRegistry = new SimpleMeterRegistry();
         tokenRevocationService = new TokenRevocationService(
                 jwtService, revokedTokenRepository, refreshTokenRepository, userRepository,
-                new SecurityMetrics(meterRegistry));
+                new SecurityMetrics(meterRegistry), auditService);
     }
 
     // ------------------------------------------------------------------
@@ -84,6 +91,7 @@ class TokenRevocationServiceTest {
                 .counter("security.token.revocations", "scope", "single", "reason", "SUSPICIOUS_ACTIVITY")
                 .count()).isEqualTo(1.0);
         assertThat(meterRegistry.counter("security.audit.events", "type", "TOKEN_REVOKED").count()).isEqualTo(1.0);
+        verify(auditService).recordEvent("TOKEN_REVOKED", 7L, "SUSPICIOUS_ACTIVITY");
     }
 
     @Test
@@ -168,6 +176,7 @@ class TokenRevocationServiceTest {
                 .count()).isEqualTo(3.0);
         assertThat(meterRegistry.counter("security.audit.events", "type", "TOKEN_REVOKED_ALL").count())
                 .isEqualTo(1.0);
+        verify(auditService).recordEvent("TOKEN_REVOKED_ALL", 7L, "ADMIN_REVOKED_ALL");
     }
 
     @Test
@@ -196,5 +205,45 @@ class TokenRevocationServiceTest {
                 .count()).isEqualTo(0.0);
         assertThat(meterRegistry.counter("security.audit.events", "type", "TOKEN_REVOKED_ALL").count())
                 .isEqualTo(1.0);
+    }
+
+    // ------------------------------------------------------------------
+    // revokeOwnSession
+    // ------------------------------------------------------------------
+
+    @Test
+    void revokeOwnSessionRevokesBothPresentedTokensWhenOwnedByCaller() {
+        UUID accessJti = UUID.randomUUID();
+        UUID refreshJti = UUID.randomUUID();
+        Instant expiresAt = Instant.now().plusSeconds(3600);
+        when(jwtService.prepareForRevocation("refresh-tok"))
+                .thenReturn(new JwtService.RevocationTarget(refreshJti, "refresh", 7L, expiresAt));
+        when(jwtService.prepareForRevocation("access-tok"))
+                .thenReturn(new JwtService.RevocationTarget(accessJti, "access", 7L, expiresAt));
+
+        TokenRevocationService.RevokedSessionInfo info =
+                tokenRevocationService.revokeOwnSession("access-tok", "refresh-tok", 7L);
+
+        assertThat(info.accessJti()).isEqualTo(accessJti);
+        assertThat(info.refreshJti()).isEqualTo(refreshJti);
+        verify(revokedTokenRepository, times(2)).save(any(RevokedToken.class));
+        assertThat(meterRegistry.counter("security.audit.events", "type", "SESSION_REVOKED_SELF").count())
+                .isEqualTo(1.0);
+        verify(auditService).recordEvent("SESSION_REVOKED_SELF", 7L, "USER_SESSION_REVOKED");
+        verify(auditService, times(2)).recordEvent("TOKEN_REVOKED", 7L, "USER_SESSION_REVOKED");
+    }
+
+    @Test
+    void revokeOwnSessionThrowsWhenRefreshTokenBelongsToDifferentUser() {
+        Instant expiresAt = Instant.now().plusSeconds(3600);
+        when(jwtService.prepareForRevocation("refresh-tok"))
+                .thenReturn(new JwtService.RevocationTarget(UUID.randomUUID(), "refresh", 99L, expiresAt));
+
+        AuthorizationException ex = assertThrows(AuthorizationException.class,
+                () -> tokenRevocationService.revokeOwnSession("access-tok", "refresh-tok", 7L));
+
+        assertThat(ex.getErrorCode()).isEqualTo("SESSION_MISMATCH");
+        verify(revokedTokenRepository, never()).save(any());
+        verifyNoInteractions(auditService);
     }
 }

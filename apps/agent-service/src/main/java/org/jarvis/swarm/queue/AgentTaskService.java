@@ -9,6 +9,9 @@ import org.jarvis.swarm.config.SwarmProperties;
 import org.jarvis.swarm.executor.ExecutionContext;
 import org.jarvis.swarm.executor.RoleExecutorRegistry;
 import org.jarvis.swarm.executor.RoleResult;
+import org.jarvis.swarm.executor.role.coder.CoderPatchApplier;
+import org.jarvis.swarm.executor.role.coder.PatchProposal;
+import org.jarvis.swarm.executor.role.coder.PendingPatchStore;
 import org.jarvis.swarm.permission.AgentActionGuard;
 import org.jarvis.swarm.permission.AgentPermissionResolver;
 import org.jarvis.swarm.permission.PanicEngagedException;
@@ -16,14 +19,18 @@ import org.jarvis.swarm.permission.PermissionDeniedException;
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.role.RoleDefinition;
 import org.jarvis.swarm.sandbox.Sandbox;
+import org.jarvis.swarm.sandbox.SandboxException;
 import org.jarvis.swarm.sandbox.SandboxManager;
 import org.jarvis.swarm.role.RoleCatalog;
 import org.jarvis.swarm.task.AgentTask;
+import org.jarvis.swarm.task.AgentTaskStatus;
 import org.jarvis.swarm.task.AgentTaskStore;
+import org.jarvis.swarm.task.InvalidTransitionException;
 import org.jarvis.swarm.task.TaskNotFoundException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -57,18 +64,22 @@ public class AgentTaskService {
     private final RoleExecutorRegistry executors;
     private final AgentAudit audit;
     private final SwarmMetrics metrics;
+    private final PendingPatchStore pendingPatches;
 
     private final ConcurrentHashMap<String, CancellationToken> tokens = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, PauseControl> pauses = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Future<?>> futures = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, RoleResult> results = new ConcurrentHashMap<>();
+    // Tasks submitted with the CODER approval gate enabled; consulted once at run() start
+    // and cleared in the worker's finally — see #submit(..., approvalRequired) and #approve/#reject.
+    private final Set<String> approvalGateTasks = ConcurrentHashMap.newKeySet();
 
     public AgentTaskService(AgentTaskStore store,
                             @Qualifier(AsyncConfig.AGENT_TASK_EXECUTOR) ExecutorService executor,
                             Clock clock, RoleCatalog catalog, AgentPermissionResolver resolver,
                             SandboxManager sandboxManager, AgentActionGuard guard,
                             RoleExecutorRegistry executors, AgentAudit audit, SwarmMetrics metrics,
-                            SwarmProperties props) {
+                            SwarmProperties props, PendingPatchStore pendingPatches) {
         this.store = store;
         this.executor = executor;
         this.clock = clock;
@@ -79,6 +90,7 @@ public class AgentTaskService {
         this.executors = executors;
         this.audit = audit;
         this.metrics = metrics;
+        this.pendingPatches = pendingPatches;
     }
 
     /** Create + queue a task. Returns immediately with the QUEUED task. */
@@ -97,6 +109,20 @@ public class AgentTaskService {
      */
     public AgentTask submit(String userId, AgentRole role, String goal, Set<ToolPermission> requested,
                             boolean dryRun, String swarmId, String correlationId, String idempotencyKey) {
+        return submit(userId, role, goal, requested, dryRun, swarmId, correlationId, idempotencyKey, false);
+    }
+
+    /**
+     * Widest submit overload: additionally supports the CODER approval gate. When
+     * {@code approvalRequired} is true and the role executor builds an appliable proposal
+     * (currently only CODER's patch — see {@code RoleResult#awaitingApproval}), the task
+     * stops at AWAITING_APPROVAL instead of completing, until an explicit {@link #approve}
+     * or {@link #reject}. Ignored (no behavior change) for any executor that never signals
+     * {@code awaitingApproval}.
+     */
+    public AgentTask submit(String userId, AgentRole role, String goal, Set<ToolPermission> requested,
+                            boolean dryRun, String swarmId, String correlationId, String idempotencyKey,
+                            boolean approvalRequired) {
         if (goal == null || goal.isBlank()) {
             throw new IllegalArgumentException("goal is required");
         }
@@ -125,12 +151,16 @@ public class AgentTaskService {
 
         tokens.put(taskId, new CancellationToken());
         pauses.put(taskId, new PauseControl());
+        if (approvalRequired) {
+            approvalGateTasks.add(taskId);
+        }
         try {
             Future<?> future = executor.submit(() -> run(taskId));
             futures.put(taskId, future);
         } catch (RejectedExecutionException rejected) {
             tokens.remove(taskId);
             pauses.remove(taskId);
+            approvalGateTasks.remove(taskId);
             store.save(task.failed("agent queue saturated; retry later", clock.instant()));
             throw rejected;
         }
@@ -208,6 +238,64 @@ public class AgentTaskService {
         return resumed;
     }
 
+    /**
+     * Approve a pending CODER patch proposal: snapshots the sandbox (for {@link
+     * #rollback}), applies the staged {@link PatchProposal} (writes PLAN.md, the proposed
+     * stub files, and DIFF.patch), and completes the task. Only legal from
+     * AWAITING_APPROVAL; throws {@link InvalidTransitionException} otherwise.
+     */
+    public AgentTask approve(String id, String userId) {
+        AgentTask task = getTask(id, userId);
+        if (task.status() != AgentTaskStatus.AWAITING_APPROVAL) {
+            throw new InvalidTransitionException(task.status(), AgentTaskStatus.COMPLETED);
+        }
+        PatchProposal proposal = pendingPatches.take(id)
+                .orElseThrow(() -> new IllegalStateException("no pending patch proposal for task: " + id));
+        Sandbox sandbox = new Sandbox(id, Path.of(task.sandboxPath()));
+        List<String> artifacts = CoderPatchApplier.apply(sandboxManager, sandbox, proposal);
+        AgentTask approved = task.approved(
+                "CODER patch approved and applied (" + artifacts.size() + " artifact(s))",
+                artifacts, task.risks(), clock.instant());
+        store.save(approved);
+        results.put(id, RoleResult.success(approved.resultSummary(), null, artifacts, List.of(), task.risks(), List.of()));
+        metrics.completed();
+        audit.lifecycle(id, task.correlationId(), task.role().name(), "APPROVED");
+        return approved;
+    }
+
+    /**
+     * Reject a pending CODER patch proposal: discards it (nothing was ever written to the
+     * sandbox) and cancels the task. Only legal from AWAITING_APPROVAL.
+     */
+    public AgentTask reject(String id, String userId) {
+        AgentTask task = getTask(id, userId);
+        if (task.status() != AgentTaskStatus.AWAITING_APPROVAL) {
+            throw new InvalidTransitionException(task.status(), AgentTaskStatus.CANCELLED);
+        }
+        pendingPatches.discard(id);
+        AgentTask rejected = task.rejected(clock.instant());
+        store.save(rejected);
+        metrics.cancelled();
+        audit.lifecycle(id, task.correlationId(), task.role().name(), "REJECTED");
+        return rejected;
+    }
+
+    /**
+     * Revert an applied CODER patch: restores the task's sandbox to its pre-apply
+     * snapshot (taken by {@link CoderPatchApplier#apply} right before writing). Throws
+     * {@link SandboxException} if the task never had a sandbox or no snapshot exists.
+     */
+    public AgentTask rollback(String id, String userId) {
+        AgentTask task = getTask(id, userId);
+        if (task.sandboxPath() == null) {
+            throw new SandboxException("task has no sandbox to roll back: " + id);
+        }
+        Sandbox sandbox = new Sandbox(id, Path.of(task.sandboxPath()));
+        sandboxManager.restore(sandbox);
+        audit.lifecycle(id, task.correlationId(), task.role().name(), "ROLLED_BACK");
+        return task;
+    }
+
     // --- worker ---
 
     private void run(String taskId) {
@@ -244,12 +332,17 @@ public class AgentTaskService {
             metrics.running();
             audit.lifecycle(taskId, runningTask.correlationId(), runningTask.role().name(), "RUNNING");
 
-            ExecutionContext ctx = new ExecutionContext(runningTask, sandbox, guard, token, pause);
+            boolean approvalRequired = approvalGateTasks.contains(taskId);
+            ExecutionContext ctx = new ExecutionContext(runningTask, sandbox, guard, token, pause,
+                    approvalRequired, pendingPatches);
             RoleResult result = runWithRetries(ctx, def.maxRetries());
             results.put(taskId, result);
 
             AgentTask current = reload(taskId);
-            if (result.success()) {
+            if (result.awaitingApproval()) {
+                store.save(current.awaitingApproval(clock.instant()));
+                audit.lifecycle(taskId, current.correlationId(), current.role().name(), "AWAITING_APPROVAL");
+            } else if (result.success()) {
                 store.save(current.completed(result.summary(), result.artifacts(), result.risks(), clock.instant()));
                 metrics.completed();
                 audit.lifecycle(taskId, current.correlationId(), current.role().name(), "COMPLETED");
@@ -272,6 +365,7 @@ public class AgentTaskService {
             tokens.remove(taskId);
             pauses.remove(taskId);
             futures.remove(taskId);
+            approvalGateTasks.remove(taskId);
         }
     }
 

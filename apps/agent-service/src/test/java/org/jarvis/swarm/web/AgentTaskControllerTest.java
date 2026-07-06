@@ -4,6 +4,7 @@ import org.jarvis.common.safety.ToolPermission;
 import org.jarvis.swarm.executor.RoleResult;
 import org.jarvis.swarm.queue.AgentTaskService;
 import org.jarvis.swarm.role.AgentRole;
+import org.jarvis.swarm.sandbox.SandboxManager;
 import org.jarvis.swarm.support.SwarmTestFactory;
 import org.jarvis.swarm.task.AgentTask;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +33,8 @@ class AgentTaskControllerTest {
 
     private final AgentTaskService taskService = mock(AgentTaskService.class);
     private final SwarmFeatureGate gate = mock(SwarmFeatureGate.class);
-    private final AgentTaskController controller = new AgentTaskController(taskService, gate);
+    private final SandboxManager sandboxManager = mock(SandboxManager.class);
+    private final AgentTaskController controller = new AgentTaskController(taskService, gate, sandboxManager);
 
     private AgentTask sampleTask;
 
@@ -53,7 +55,7 @@ class AgentTaskControllerTest {
     @Test
     void createSubmitsTaskAndReturnsAccepted() {
         when(taskService.submit(eq("u1"), eq(AgentRole.CODER), eq("build a thing"),
-                anySet(), eq(true), isNull(), isNull(), isNull())).thenReturn(sampleTask);
+                anySet(), eq(true), isNull(), isNull(), isNull(), eq(false))).thenReturn(sampleTask);
         when(taskService.resultOf(sampleTask.taskId())).thenReturn(null);
         CreateTaskRequest request = new CreateTaskRequest("CODER", "build a thing",
                 List.of("WRITE_FILES"), true);
@@ -68,7 +70,7 @@ class AgentTaskControllerTest {
     @Test
     void createForwardsClientIdempotencyKeyToTaskService() {
         when(taskService.submit(eq("u1"), eq(AgentRole.CODER), eq("build a thing"),
-                anySet(), eq(true), isNull(), isNull(), eq("client-key-1"))).thenReturn(sampleTask);
+                anySet(), eq(true), isNull(), isNull(), eq("client-key-1"), eq(false))).thenReturn(sampleTask);
         when(taskService.resultOf(sampleTask.taskId())).thenReturn(null);
         CreateTaskRequest request = new CreateTaskRequest("CODER", "build a thing",
                 List.of("WRITE_FILES"), true, "client-key-1");
@@ -77,7 +79,7 @@ class AgentTaskControllerTest {
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         verify(taskService).submit(eq("u1"), eq(AgentRole.CODER), eq("build a thing"),
-                anySet(), eq(true), isNull(), isNull(), eq("client-key-1"));
+                anySet(), eq(true), isNull(), isNull(), eq("client-key-1"), eq(false));
     }
 
     @Test

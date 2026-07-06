@@ -3,13 +3,14 @@ package org.jarvis.swarm.executor.role;
 import org.jarvis.swarm.executor.ExecutionContext;
 import org.jarvis.swarm.executor.RoleExecutor;
 import org.jarvis.swarm.executor.RoleResult;
+import org.jarvis.swarm.executor.role.coder.CoderPatchApplier;
 import org.jarvis.swarm.executor.role.coder.GitDiffReport;
+import org.jarvis.swarm.executor.role.coder.PatchProposal;
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.sandbox.Sandbox;
 import org.jarvis.swarm.sandbox.SandboxManager;
 import org.springframework.stereotype.Component;
 
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -66,17 +67,22 @@ public class CoderAgentExecutor implements RoleExecutor {
                     output, List.of(), proposed, List.of(), next);
         }
 
-        Sandbox sb = ctx.sandbox();
-        List<String> artifacts = new ArrayList<>();
-        Path plan = sandbox.writeFile(sb, "PLAN.md", planText);
-        artifacts.add(plan.toString());
-        for (GitDiffReport.ProposedFile file : proposedFiles) {
-            ctx.checkpoint();
-            Path stub = sandbox.writeFile(sb, file.path(), file.content());
-            artifacts.add(stub.toString());
+        PatchProposal proposal = new PatchProposal(planText, proposedFiles, diffReport);
+
+        if (ctx.approvalRequired()) {
+            ctx.pendingPatches().stage(ctx.task().taskId(), proposal);
+            String output = planText + "\n\n## Patch proposal (awaiting approval)\n\n" + diffReport.unifiedDiff();
+            return RoleResult.awaitingApproval(
+                    "CODER proposed a patch (" + files.size() + " file(s), +" + diffReport.linesAdded()
+                            + " line(s)) — awaiting approval before applying to the sandbox",
+                    output, proposed,
+                    List.of("Nothing has been written to the sandbox yet"),
+                    List.of("Approve the task to apply the patch to the sandbox",
+                            "Reject the task to discard it"));
         }
-        Path patch = sandbox.writeFile(sb, "DIFF.patch", diffReport.unifiedDiff());
-        artifacts.add(patch.toString());
+
+        ctx.checkpoint();
+        List<String> artifacts = CoderPatchApplier.apply(sandbox, ctx.sandbox(), proposal);
 
         return RoleResult.success(
                 "CODER applied a plan and " + files.size() + " stub file(s) in sandbox (+"

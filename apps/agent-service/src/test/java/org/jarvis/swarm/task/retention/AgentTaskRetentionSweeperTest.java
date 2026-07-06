@@ -83,6 +83,7 @@ class AgentTaskRetentionSweeperTest {
                 new SwarmProperties.Queue(64, 3),
                 new SwarmProperties.Task(120, 1),
                 new SwarmProperties.SwarmRun(10, 7),
-                retention);
+                retention,
+                new SwarmProperties.Process(30));
     }
 }

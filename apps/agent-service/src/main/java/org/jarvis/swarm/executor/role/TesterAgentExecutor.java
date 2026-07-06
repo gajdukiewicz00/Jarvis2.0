@@ -2,13 +2,16 @@ package org.jarvis.swarm.executor.role;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.safety.ToolPermission;
+import org.jarvis.swarm.config.SwarmProperties;
 import org.jarvis.swarm.executor.ExecutionContext;
 import org.jarvis.swarm.executor.RoleExecutor;
 import org.jarvis.swarm.executor.RoleResult;
+import org.jarvis.swarm.process.MavenFailureParser;
 import org.jarvis.swarm.process.OutputSanitizer;
 import org.jarvis.swarm.process.ProcessResult;
 import org.jarvis.swarm.process.ProcessRunner;
 import org.jarvis.swarm.process.TestCommandAllowlist;
+import org.jarvis.swarm.process.TestFailure;
 import org.jarvis.swarm.process.TestOutputSummarizer;
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.task.AgentTask;
@@ -22,25 +25,28 @@ import java.util.List;
 /**
  * TESTER: proposes a test command, and RUNS it only when RUN_SHELL is effectively granted
  * (role ∩ user ∩ system policy). Even then, only a {@link TestCommandAllowlist}-approved
- * command is executed inside the sandbox, with a timeout, and the output is
- * secret-redacted and truncated. Without the grant it proposes the command but never
- * executes — and if the task explicitly REQUESTED RUN_SHELL without an effective grant,
- * the action is rejected. Real test-runner invocations (mvn/gradle/npm/pytest) are
- * validated argument-by-argument, and their output is scanned for a recognizable
- * pass/fail summary line (Surefire, Gradle, Jest, pytest formats).
+ * command is executed inside the sandbox, with a configurable, hard kill-on-overrun
+ * timeout ({@code swarm.process.test-command-timeout-seconds}, see {@link ProcessRunner}),
+ * and the output is secret-redacted and truncated. Without the grant it proposes the
+ * command but never executes — and if the task explicitly REQUESTED RUN_SHELL without an
+ * effective grant, the action is rejected. Real test-runner invocations
+ * (mvn/gradle/npm/pytest) are validated argument-by-argument; their output is scanned for
+ * a recognizable pass/fail summary line (Surefire, Gradle, Jest, pytest formats) and, for
+ * Maven/Surefire, individual failures are parsed into structured {@link TestFailure}
+ * entries (class#method + message) instead of dumping the raw log into risks.
  */
 @Slf4j
 @Component
 public class TesterAgentExecutor implements RoleExecutor {
 
-    private static final int PROCESS_TIMEOUT_SECONDS = 30;
-
     private final ProcessRunner runner;
     private final OutputSanitizer sanitizer;
+    private final int timeoutSeconds;
 
-    public TesterAgentExecutor(ProcessRunner runner, OutputSanitizer sanitizer) {
+    public TesterAgentExecutor(ProcessRunner runner, OutputSanitizer sanitizer, SwarmProperties props) {
         this.runner = runner;
         this.sanitizer = sanitizer;
+        this.timeoutSeconds = props.process().testCommandTimeoutSeconds();
     }
 
     @Override
@@ -79,7 +85,7 @@ public class TesterAgentExecutor implements RoleExecutor {
 
         try {
             Path cwd = ctx.sandbox() == null ? null : ctx.sandbox().dir();
-            ProcessResult result = runner.run(command, cwd, PROCESS_TIMEOUT_SECONDS);
+            ProcessResult result = runner.run(command, cwd, timeoutSeconds);
             String output = sanitizer.sanitize(result.output());
             String testSummary = TestOutputSummarizer.summarize(output);
             if (result.isSuccess()) {
@@ -88,8 +94,15 @@ public class TesterAgentExecutor implements RoleExecutor {
                 return RoleResult.success(summary, output, List.of(), proposed, List.of(), List.of());
             }
             List<String> risks = new ArrayList<>();
-            risks.add("Test command exited non-zero");
-            risks.add(summarizeFailure(output));
+            risks.add(result.timedOut()
+                    ? "Test command timed out after " + timeoutSeconds + "s and was killed"
+                    : "Test command exited non-zero");
+            List<TestFailure> failures = MavenFailureParser.parse(output);
+            if (!failures.isEmpty()) {
+                failures.forEach(f -> risks.add("FAILED " + f.describe()));
+            } else {
+                risks.add(summarizeFailure(output));
+            }
             if (!testSummary.isEmpty()) {
                 risks.add(testSummary);
             }

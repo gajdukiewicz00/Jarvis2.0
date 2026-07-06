@@ -1,6 +1,7 @@
 package org.jarvis.swarm.executor.role;
 
 import org.jarvis.common.safety.ToolPermission;
+import org.jarvis.swarm.config.SwarmProperties;
 import org.jarvis.swarm.executor.ExecutionContext;
 import org.jarvis.swarm.executor.RoleResult;
 import org.jarvis.swarm.permission.PermissionDeniedException;
@@ -24,7 +25,14 @@ class TesterAgentExecutorTest {
     @TempDir
     Path tmp;
 
-    private final TesterAgentExecutor tester = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer());
+    private static final SwarmProperties TEST_PROPS = new SwarmProperties(true,
+            new SwarmProperties.Workspace("/tmp/tester-agent-executor-test", ""),
+            new SwarmProperties.Queue(64, 3), new SwarmProperties.Task(120, 1),
+            new SwarmProperties.SwarmRun(10, 7), new SwarmProperties.Retention(true, 30, 50, 3_600_000L),
+            new SwarmProperties.Process(30));
+
+    private final TesterAgentExecutor tester =
+            new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer(), TEST_PROPS);
 
     private ExecutionContext ctx(String policyCsv, String goal, Set<ToolPermission> requested, Set<ToolPermission> granted) {
         var engine = SwarmTestFactory.engine(tmp, policyCsv);

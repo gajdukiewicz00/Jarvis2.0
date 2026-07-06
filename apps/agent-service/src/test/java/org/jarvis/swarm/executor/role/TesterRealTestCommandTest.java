@@ -41,7 +41,8 @@ class TesterRealTestCommandTest {
                 Set.of(ToolPermission.RUN_SHELL), Set.of(ToolPermission.RUN_SHELL), false);
         ExecutionContext ctx = SwarmTestFactory.context(task, sb, engine.guard());
 
-        RoleResult result = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer()).execute(ctx);
+        RoleResult result = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer(),
+                SwarmTestFactory.props(tmp)).execute(ctx);
 
         assertThat(result.success()).isTrue();
         assertThat(result.summary()).contains("Tests run: 3, Failures: 0, Errors: 0, Skipped: 0");
@@ -56,7 +57,8 @@ class TesterRealTestCommandTest {
                 Set.of(ToolPermission.RUN_SHELL), Set.of(ToolPermission.RUN_SHELL), false);
         ExecutionContext ctx = SwarmTestFactory.context(task, sb, engine.guard());
 
-        RoleResult result = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer()).execute(ctx);
+        RoleResult result = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer(),
+                SwarmTestFactory.props(tmp)).execute(ctx);
 
         assertThat(result.success()).isTrue(); // proposes only — never executes a disallowed shape
         assertThat(result.summary()).contains("not allowlisted");
@@ -71,7 +73,8 @@ class TesterRealTestCommandTest {
                 Set.of(ToolPermission.RUN_SHELL), Set.of(ToolPermission.RUN_SHELL), false);
         ExecutionContext ctx = SwarmTestFactory.context(task, sb, engine.guard());
 
-        RoleResult result = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer()).execute(ctx);
+        RoleResult result = new TesterAgentExecutor(new ProcessRunner(), new OutputSanitizer(),
+                SwarmTestFactory.props(tmp)).execute(ctx);
 
         assertThat(result.summary()).contains("not allowlisted");
         assertThat(result.output()).isNull();

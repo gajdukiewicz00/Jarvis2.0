@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -34,12 +35,14 @@ public class SandboxManager {
 
     private final Path root;
     private final Path worktreeRoot;
+    private final Path snapshotRoot;
     private final Path repoDir;
     private final ProcessRunner processRunner;
 
     public SandboxManager(SwarmProperties props, ProcessRunner processRunner) {
         this.root = Path.of(props.workspace().dir()).toAbsolutePath().normalize();
         this.worktreeRoot = root.resolve("worktrees");
+        this.snapshotRoot = root.resolve("snapshots");
         String configuredRepo = props.workspace().gitRepoDir();
         this.repoDir = (configuredRepo == null || configuredRepo.isBlank())
                 ? null
@@ -182,6 +185,78 @@ public class SandboxManager {
     }
 
     /**
+     * Snapshot the CURRENT contents of a sandbox so {@link #restore} can revert to this
+     * exact state later. Overwrites any previous snapshot for this task (only the most
+     * recent pre-apply state is kept — one apply cycle at a time). Never touches the
+     * sandbox itself, only a sibling copy under {@code root/snapshots/<taskId>}.
+     */
+    public void snapshot(Sandbox sandbox) {
+        Path dest = snapshotDir(sandbox.taskId());
+        try {
+            if (Files.exists(dest)) {
+                deleteRecursively(dest);
+            }
+            Files.createDirectories(dest);
+            if (Files.exists(sandbox.dir())) {
+                copyRecursively(sandbox.dir(), dest);
+            }
+        } catch (IOException e) {
+            throw new SandboxException("cannot snapshot sandbox: " + e.getMessage());
+        }
+    }
+
+    /** Whether a pre-apply snapshot exists for this task's sandbox. */
+    public boolean hasSnapshot(Sandbox sandbox) {
+        return Files.isDirectory(snapshotDir(sandbox.taskId()));
+    }
+
+    /**
+     * Restore a sandbox to its last {@link #snapshot}: wipes the current sandbox contents
+     * and replaces them with the snapshot's. Throws {@link SandboxException} if no
+     * snapshot was ever taken for this task.
+     */
+    public void restore(Sandbox sandbox) {
+        Path src = snapshotDir(sandbox.taskId());
+        if (!Files.isDirectory(src)) {
+            throw new SandboxException("no snapshot available for task: " + sandbox.taskId());
+        }
+        Path dir = sandbox.dir().toAbsolutePath().normalize();
+        if (!dir.startsWith(root) || dir.equals(root)) {
+            throw new SandboxException("refusing to restore path outside sandbox root: " + dir);
+        }
+        try {
+            if (Files.exists(dir)) {
+                deleteRecursively(dir);
+            }
+            Files.createDirectories(dir);
+            copyRecursively(src, dir);
+        } catch (IOException e) {
+            throw new SandboxException("cannot restore sandbox: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Re-validate a previously recorded ABSOLUTE artifact path before serving it back to a
+     * client (agent-task artifact download). Defense in depth: a persisted task's artifact
+     * string is never trusted blindly — re-normalized and re-checked against ITS OWN
+     * sandbox directory, exactly like a fresh {@link #resolve} would be.
+     */
+    public Path validateArtifactPath(Sandbox sandbox, String storedPath) {
+        if (storedPath == null || storedPath.isBlank()) {
+            throw new SandboxException("artifact path must not be blank");
+        }
+        if (storedPath.indexOf('\0') >= 0) {
+            throw new SandboxException("artifact path contains a null byte");
+        }
+        Path candidate = Path.of(storedPath).toAbsolutePath().normalize();
+        Path dir = sandbox.dir().toAbsolutePath().normalize();
+        if (!candidate.equals(dir) && !candidate.startsWith(dir)) {
+            throw new SandboxException("artifact path escapes sandbox: " + storedPath);
+        }
+        return candidate;
+    }
+
+    /**
      * Safe explicit cleanup: deletes the sandbox directory and its contents, but ONLY
      * if it is genuinely inside the sandbox root. Never touches anything outside.
      */
@@ -199,6 +274,25 @@ public class SandboxManager {
     private void requireValidTaskId(String taskId) {
         if (taskId == null || taskId.isBlank() || taskId.contains("..") || taskId.contains("/")) {
             throw new SandboxException("invalid task id for sandbox: " + taskId);
+        }
+    }
+
+    private Path snapshotDir(String taskId) {
+        requireValidTaskId(taskId);
+        return snapshotRoot.resolve(taskId).toAbsolutePath().normalize();
+    }
+
+    private void copyRecursively(Path src, Path dest) throws IOException {
+        try (Stream<Path> walk = Files.walk(src)) {
+            for (Path path : (Iterable<Path>) walk::iterator) {
+                Path target = dest.resolve(src.relativize(path));
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(target);
+                } else {
+                    Files.createDirectories(target.getParent());
+                    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
         }
     }
 

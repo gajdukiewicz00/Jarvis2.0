@@ -5,6 +5,7 @@ import org.jarvis.swarm.permission.PanicEngagedException;
 import org.jarvis.swarm.permission.PermissionDeniedException;
 import org.jarvis.swarm.run.SwarmNotFoundException;
 import org.jarvis.swarm.sandbox.SandboxException;
+import org.jarvis.swarm.task.ArtifactNotFoundException;
 import org.jarvis.swarm.task.InvalidTransitionException;
 import org.jarvis.swarm.task.TaskNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -35,6 +36,11 @@ public class SwarmExceptionHandler {
 
     @ExceptionHandler(TaskNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(TaskNotFoundException e) {
+        return error(HttpStatus.NOT_FOUND, e.getMessage());
+    }
+
+    @ExceptionHandler(ArtifactNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleArtifactNotFound(ArtifactNotFoundException e) {
         return error(HttpStatus.NOT_FOUND, e.getMessage());
     }
 

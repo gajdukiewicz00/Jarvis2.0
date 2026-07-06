@@ -15,6 +15,7 @@ import org.jarvis.swarm.executor.role.MediaAgentExecutor;
 import org.jarvis.swarm.executor.role.ResearchAgentExecutor;
 import org.jarvis.swarm.executor.role.SecurityAgentExecutor;
 import org.jarvis.swarm.executor.role.TesterAgentExecutor;
+import org.jarvis.swarm.executor.role.coder.PendingPatchStore;
 import org.jarvis.swarm.permission.AgentActionGuard;
 import org.jarvis.swarm.permission.AgentPermissionResolver;
 import org.jarvis.swarm.process.OutputSanitizer;
@@ -83,7 +84,8 @@ public final class SwarmTestFactory {
                 new SwarmProperties.Queue(64, 3),
                 new SwarmProperties.Task(120, 1),
                 new SwarmProperties.SwarmRun(10, 7),
-                new SwarmProperties.Retention(true, 30, 50, 3_600_000L));
+                new SwarmProperties.Retention(true, 30, 50, 3_600_000L),
+                new SwarmProperties.Process(30));
     }
 
     /** Build an engine. {@code grantedCsv} is the system ToolPermissionPolicy grant set. */
@@ -114,7 +116,7 @@ public final class SwarmTestFactory {
         OutputSanitizer sanitizer = new OutputSanitizer();
         List<RoleExecutor> roleExecutors = executorsOverride != null ? executorsOverride : List.of(
                 new CoderAgentExecutor(sandbox),
-                new TesterAgentExecutor(runner, sanitizer),
+                new TesterAgentExecutor(runner, sanitizer, props),
                 new DocsAgentExecutor(sandbox),
                 new ResearchAgentExecutor(sandbox),
                 new SecurityAgentExecutor(sandbox, sanitizer),
@@ -124,7 +126,7 @@ public final class SwarmTestFactory {
 
         AgentTaskStore store = new InMemoryAgentTaskStore();
         AgentTaskService taskService = new AgentTaskService(store, executor, Clock.systemUTC(), catalog,
-                resolver, sandbox, guard, registry, audit, metrics, props);
+                resolver, sandbox, guard, registry, audit, metrics, props, new PendingPatchStore());
         SwarmCoordinator coordinator = new SwarmCoordinator(taskService, store, registry, props);
 
         return new Engine(taskService, store, panic, sandbox, catalog, resolver, guard, coordinator, props);

@@ -60,6 +60,9 @@ swarm:
     max-age-days: ${SWARM_RETENTION_MAX_AGE_DAYS:30}
     keep-per-user: ${SWARM_RETENTION_KEEP_PER_USER:50}
     sweep-interval-ms: ${SWARM_RETENTION_SWEEP_INTERVAL_MS:3600000}
+  process:
+    # Hard kill-on-overrun timeout (seconds) for a single TESTER test-runner invocation.
+    test-command-timeout-seconds: ${SWARM_TEST_COMMAND_TIMEOUT:30}
 
 # Reuse the shared safety policy. Conservative defaults: dangerous perms NOT granted.
 jarvis:

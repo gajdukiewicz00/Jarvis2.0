@@ -13,7 +13,8 @@ public record SwarmProperties(
         @DefaultValue Queue queue,
         @DefaultValue Task task,
         @DefaultValue SwarmRun swarmRun,
-        @DefaultValue Retention retention) {
+        @DefaultValue Retention retention,
+        @DefaultValue Process process) {
 
     public record Workspace(
             @DefaultValue("/tmp/jarvis-agents") String dir,
@@ -41,4 +42,10 @@ public record SwarmProperties(
             // Always kept per user regardless of age, so a quiet user never loses all history.
             @DefaultValue("50") int keepPerUser,
             @DefaultValue("3600000") long sweepIntervalMs) {}
+
+    /** TESTER role external test-runner process limits. */
+    public record Process(
+            // Hard kill-on-overrun timeout for a single allowlisted test-runner invocation
+            // (mvn/gradle/npm/pytest test); see ProcessRunner#run.
+            @DefaultValue("30") int testCommandTimeoutSeconds) {}
 }

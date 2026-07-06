@@ -82,6 +82,29 @@ public record AgentTask(
         return to(target, now);
     }
 
+    /** CODER proposed an appliable patch; stops here until {@link #approved} or {@link #rejected}. */
+    public AgentTask awaitingApproval(Instant now) {
+        return to(AgentTaskStatus.AWAITING_APPROVAL, now);
+    }
+
+    /** Approve a pending patch proposal: it has just been applied to the sandbox. */
+    public AgentTask approved(String summary, List<String> artifacts, List<String> risks, Instant now) {
+        AgentTask t = to(AgentTaskStatus.COMPLETED, now);
+        return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,
+                t.permissionsGranted, t.sandboxPath, t.dryRun, t.attempt, t.maxRetries,
+                t.createdAt, now, t.startedAt, now, null, summary, artifacts, risks, t.correlationId,
+                t.swarmId, t.idempotencyKey);
+    }
+
+    /** Reject a pending patch proposal: discarded, nothing was ever written to the sandbox. */
+    public AgentTask rejected(Instant now) {
+        AgentTask t = to(AgentTaskStatus.CANCELLED, now);
+        return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,
+                t.permissionsGranted, t.sandboxPath, t.dryRun, t.attempt, t.maxRetries,
+                t.createdAt, now, t.startedAt, now, "rejected_by_user", t.resultSummary, t.artifacts, t.risks,
+                t.correlationId, t.swarmId, t.idempotencyKey);
+    }
+
     public AgentTask completed(String summary, List<String> artifacts, List<String> risks, Instant now) {
         AgentTask t = to(AgentTaskStatus.COMPLETED, now);
         return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,

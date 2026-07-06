@@ -66,7 +66,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/v1/security/auth/login",
             "/api/v1/security/auth/register",
             "/api/v1/security/auth/logout",
-            "/api/v1/security/auth/refresh");
+            "/api/v1/security/auth/refresh",
+            // springdoc/swagger-ui: read-only API documentation, mirrors the permitAll()
+            // matchers in SecurityConfig — this filter runs before those authorization
+            // rules, so it needs its own allowlist entry too.
+            "/v3/api-docs",
+            "/swagger-ui");
 
     public JwtAuthFilter(JwtUtil jwtUtil) {
         this.jwtUtil = jwtUtil;

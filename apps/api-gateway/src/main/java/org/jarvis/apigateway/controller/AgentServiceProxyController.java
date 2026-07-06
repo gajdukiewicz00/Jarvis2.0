@@ -1,5 +1,7 @@
 package org.jarvis.apigateway.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.jarvis.apigateway.proxy.DownstreamProxyService;
@@ -23,6 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
  * panic, execute) — a wildcard proxy at the singular prefix would ambiguously overlap
  * those existing {@code @RequestMapping}s.
  */
+@Tag(name = "Agent Service Proxy",
+        description = "Proxies /api/v1/agents/** to agent-service: role catalog, agent task lifecycle, "
+                + "and swarm runs. Requires an authenticated gateway user; the internal X-Service-Token "
+                + "is attached automatically before forwarding.")
 @RestController
 @RequestMapping("/api/v1/agents")
 @RequiredArgsConstructor
@@ -33,6 +39,9 @@ public class AgentServiceProxyController {
     @Value("${services.agent-service.url}")
     private String agentServiceUrl;
 
+    @Operation(summary = "Forward request to agent-service",
+            description = "Wildcard proxy for GET/POST/PUT/PATCH/DELETE under /api/v1/agents/**, including "
+                    + "roles, tasks/**, and swarm/**.")
     @RequestMapping(value = {"", "/**"},
             method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE})
     public ResponseEntity<byte[]> proxy(HttpServletRequest request) {

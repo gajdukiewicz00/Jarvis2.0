@@ -2,6 +2,7 @@ package org.jarvis.apigateway.integration;
 
 import org.jarvis.apigateway.ApiGatewayApplication;
 import org.jarvis.apigateway.proxy.ProxyTimeoutPolicy;
+import org.jarvis.apigateway.proxy.ProxyTimeoutProperties;
 import org.jarvis.apigateway.support.RecordingHttpServer;
 import org.jarvis.apigateway.websocket.PcControlWebSocketHandler;
 import org.jarvis.apigateway.websocket.VoiceWebSocketProxyHandler;
@@ -90,7 +91,7 @@ class GatewayIngressTimeoutIntegrationTest {
         @Bean
         @Primary
         ProxyTimeoutPolicy proxyTimeoutPolicy() {
-            return new ProxyTimeoutPolicy() {
+            return new ProxyTimeoutPolicy(new ProxyTimeoutProperties()) {
                 @Override
                 public Duration connectTimeout(String downstreamService) {
                     return Duration.ofMillis(100);

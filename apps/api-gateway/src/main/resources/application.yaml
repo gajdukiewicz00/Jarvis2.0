@@ -112,6 +112,24 @@ services:
   media-service:
     url: ${MEDIA_SERVICE_URL:http://media-service:8095}
 
+# Per-downstream-service proxy timeouts (api-gateway hardening #8). Overrides here take
+# precedence over ProxyTimeoutPolicy's hardcoded fallbacks; any service key omitted keeps
+# using those code defaults. Keys must match the downstreamService identifier passed to
+# DownstreamProxyService#forward (e.g. "agent-service", "media-service").
+gateway:
+  proxy:
+    timeout:
+      connect-ms-by-service:
+        agent-service: ${AGENT_SERVICE_CONNECT_TIMEOUT_MS:5000}
+        media-service: ${MEDIA_SERVICE_CONNECT_TIMEOUT_MS:5000}
+      read-ms-by-service:
+        # Matches ProxyTimeoutPolicy.LLM_READ_TIMEOUT: swarm runs with awaitCompletion=true can
+        # block up to swarm.swarm-run.wait-timeout-seconds (default 60s).
+        agent-service: ${AGENT_SERVICE_READ_TIMEOUT_MS:60000}
+        # Matches ProxyTimeoutPolicy.EXTENDED_READ_TIMEOUT: the synchronous ffprobe endpoint can
+        # exceed the default 10s on larger source files.
+        media-service: ${MEDIA_SERVICE_READ_TIMEOUT_MS:30000}
+
 # Circuit Breaker
 resilience4j:
   circuitbreaker:
@@ -192,6 +210,9 @@ cors:
   allowed-origins:
     - https://api.jarvis.local
     - https://voice.jarvis.local
+    # desktop-javafx (ARCHITECTURE.md "Native Desktop Agent") — config-driven, override via
+    # env for local/dev origins. Never widen this list to "*".
+    - ${JARVIS_DESKTOP_APP_ORIGIN:https://desktop.jarvis.local}
   allowed-methods:
     - GET
     - POST

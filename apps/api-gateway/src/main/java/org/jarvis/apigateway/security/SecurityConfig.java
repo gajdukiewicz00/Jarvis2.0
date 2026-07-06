@@ -46,6 +46,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/security/auth/login", "/api/v1/security/auth/register",
                                 "/api/v1/security/auth/logout", "/api/v1/security/auth/refresh").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/prometheus").permitAll()
+                        // springdoc/swagger-ui: read-only API documentation, no upstream calls involved.
+                        .requestMatchers("/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**")
+                        .permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(serviceJwtFilter, JwtAuthFilter.class);

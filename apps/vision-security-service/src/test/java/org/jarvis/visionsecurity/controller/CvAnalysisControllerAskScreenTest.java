@@ -1,5 +1,6 @@
 package org.jarvis.visionsecurity.controller;
 
+import org.jarvis.visionsecurity.config.VisionSecurityProperties;
 import org.jarvis.visionsecurity.model.AskScreenResult;
 import org.jarvis.visionsecurity.service.LocalCvService;
 import org.jarvis.visionsecurity.service.cv.AskScreenCvService;
@@ -22,7 +23,8 @@ class CvAnalysisControllerAskScreenTest {
 
     private final AskScreenCvService askService = mock(AskScreenCvService.class);
     private final CvAnalysisController controller = new CvAnalysisController(
-            mock(LocalCvService.class), mock(ScreenContextCvService.class), askService);
+            mock(LocalCvService.class), mock(ScreenContextCvService.class), askService,
+            new VisionSecurityProperties());
 
     private AskScreenResult ok() {
         return new AskScreenResult("q", null, null,

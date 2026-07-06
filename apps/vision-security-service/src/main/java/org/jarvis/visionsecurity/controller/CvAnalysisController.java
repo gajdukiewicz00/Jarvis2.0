@@ -1,6 +1,7 @@
 package org.jarvis.visionsecurity.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.jarvis.visionsecurity.config.VisionSecurityProperties;
 import org.jarvis.visionsecurity.model.AskScreenResult;
 import org.jarvis.visionsecurity.model.CvAnalysisResult;
 import org.jarvis.visionsecurity.model.ScreenContextResult;
@@ -14,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -34,6 +37,7 @@ public class CvAnalysisController {
     private final LocalCvService cvService;
     private final ScreenContextCvService screenContextCvService;
     private final AskScreenCvService askScreenCvService;
+    private final VisionSecurityProperties properties;
 
     @PostMapping("/analyze")
     public ResponseEntity<CvAnalysisResult> analyze(@RequestBody(required = false) AnalyzeRequest request) {
@@ -41,14 +45,60 @@ public class CvAnalysisController {
                 : LocalCvService.normalizeSource(request.source());
         if (LocalCvService.SOURCE_SCREENSHOT.equals(source)) {
             Path target = request != null && request.imagePath() != null && !request.imagePath().isBlank()
-                    ? Path.of(request.imagePath())
+                    ? resolveWithinAllowedBase(request.imagePath())
                     : null;
             return ResponseEntity.ok(cvService.analyzeScreenshot(target));
         }
         if (request == null || request.imagePath() == null || request.imagePath().isBlank()) {
             throw new IllegalArgumentException("imagePath is required when source=file");
         }
-        return ResponseEntity.ok(cvService.analyzeFile(Path.of(request.imagePath())));
+        return ResponseEntity.ok(cvService.analyzeFile(resolveWithinAllowedBase(request.imagePath())));
+    }
+
+    /**
+     * Confines a client-supplied {@code imagePath} to the vision-security storage
+     * root before it reaches either the screenshot writer or the OCR reader.
+     * <p>
+     * Without this check a client could pass an arbitrary absolute path (or a
+     * {@code ../}-relative traversal) and cause an arbitrary-path PNG write
+     * (screenshot capture sink) or an arbitrary-file read (OCR sink). The path
+     * is resolved against the allowed base directory, normalized, and then its
+     * nearest existing ancestor is canonicalized with {@link Path#toRealPath}
+     * to also reject symlink escapes. Any escape attempt is rejected with a
+     * 400 via {@link IllegalArgumentException}.
+     */
+    private Path resolveWithinAllowedBase(String rawPath) {
+        Path base = Path.of(properties.getStorage().getRoot()).toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(base);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Unable to prepare vision-security storage directory: "
+                    + ex.getMessage());
+        }
+
+        Path candidate = base.resolve(rawPath).normalize();
+        if (!candidate.equals(base) && !candidate.startsWith(base)) {
+            throw new IllegalArgumentException("imagePath must resolve within the allowed storage directory");
+        }
+
+        Path existingAncestor = candidate;
+        while (!Files.exists(existingAncestor)) {
+            Path parent = existingAncestor.getParent();
+            if (parent == null) {
+                break;
+            }
+            existingAncestor = parent;
+        }
+        try {
+            Path realAncestor = existingAncestor.toRealPath();
+            Path realBase = base.toRealPath();
+            if (!realAncestor.equals(realBase) && !realAncestor.startsWith(realBase)) {
+                throw new IllegalArgumentException("imagePath escapes the allowed storage directory");
+            }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Unable to verify imagePath: " + ex.getMessage());
+        }
+        return candidate;
     }
 
     @PostMapping("/screen-context")

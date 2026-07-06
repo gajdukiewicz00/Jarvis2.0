@@ -1,0 +1,17 @@
+# Persistent data volumes for services with file-backed durable stores
+# (sync-service pairing+replay, agent-service task store, media-service job store).
+# k3s local-path provisioner -> survives pod restart on the single node.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: sync-service-data, namespace: jarvis-prod, labels: {app: sync-service, app.kubernetes.io/part-of: jarvis}}
+spec: {accessModes: [ReadWriteOnce], storageClassName: local-path, resources: {requests: {storage: 1Gi}}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: agent-service-data, namespace: jarvis-prod, labels: {app: agent-service, app.kubernetes.io/part-of: jarvis}}
+spec: {accessModes: [ReadWriteOnce], storageClassName: local-path, resources: {requests: {storage: 1Gi}}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: media-service-data, namespace: jarvis-prod, labels: {app: media-service, app.kubernetes.io/part-of: jarvis}}
+spec: {accessModes: [ReadWriteOnce], storageClassName: local-path, resources: {requests: {storage: 1Gi}}}

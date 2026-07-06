@@ -1,0 +1,50 @@
+# Mount the per-service data PVC at /data and point the file-backed stores there,
+# so pairing/replay/tasks/jobs survive pod restarts (P0/P1 #5,#6,#7,#8).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: sync-service, namespace: jarvis-prod}
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: sync-service-data}
+      containers:
+        - name: sync-service
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          env:
+            - {name: JARVIS_SYNC_PAIRED_DEVICES_PATH, value: /data/paired-devices.json}
+            - {name: JARVIS_SYNC_REPLAY_CACHE_STORE_PATH, value: /data/replay.json}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: agent-service, namespace: jarvis-prod}
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: agent-service-data}
+      containers:
+        - name: agent-service
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          env:
+            - {name: JARVIS_AGENT_TASK_STORE_DIR, value: /data/agent-tasks}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: media-service, namespace: jarvis-prod}
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: media-service-data}
+      containers:
+        - name: media-service
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          env:
+            - {name: JARVIS_MEDIA_JOB_STORE_DIR, value: /data/media-jobs}

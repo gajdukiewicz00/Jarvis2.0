@@ -39,6 +39,7 @@ resources:
   # Model storage (PVC)
   - pvc-vosk-models.yaml
   - pdb-core-services.yaml
+  - pvc-service-data.yaml
 
   # Host pc-control bridge (Roadmap #1.8/#8) — selectorless Service +
   # Endpoints pointing at the real (non-stub) pc-control process on the
@@ -127,3 +128,4 @@ patches:
   - path: patches/agent-service-scrape.patch.yaml
   - path: patches/media-service-scrape.patch.yaml
   - path: patches/sync-service-scrape.patch.yaml
+  - path: patches/persistent-stores.patch.yaml

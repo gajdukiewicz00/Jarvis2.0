@@ -370,16 +370,19 @@ class AuthServiceTest {
         when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
         UUID newTokenId = UUID.randomUUID();
         stubSuccessfulTokenIssuance(user, "new-access-tok", newTokenId, "new-refresh-tok");
+        when(refreshTokenRepository.rotateIfActive(eq(tokenId), any(Instant.class), eq(newTokenId),
+                eq("REFRESH_ROTATED"))).thenReturn(1);
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
         AuthResponse response = authService.refresh("the-refresh-token");
 
         assertThat(response.accessToken()).isEqualTo("new-access-tok");
         assertThat(response.refreshToken()).isEqualTo("new-refresh-tok");
-        assertThat(stored.getRevokedAt()).isNotNull();
-        assertThat(stored.getReplacedByTokenId()).isEqualTo(newTokenId);
-        assertThat(stored.getRevokeReason()).isEqualTo("REFRESH_ROTATED");
-        verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+        verify(refreshTokenRepository).rotateIfActive(eq(tokenId), any(Instant.class), eq(newTokenId),
+                eq("REFRESH_ROTATED"));
+        // Only the new replacement token is persisted via save(); the original
+        // token's revocation now goes through the atomic rotateIfActive() update.
+        verify(refreshTokenRepository, times(1)).save(any(RefreshToken.class));
         assertThat(meterRegistry.counter("security.token.revocations", "scope", "single", "reason", "REFRESH_ROTATED")
                 .count()).isEqualTo(1.0);
     }
@@ -399,14 +402,17 @@ class AuthServiceTest {
                 .sessionStartedAt(originalSessionStart)
                 .build();
         when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
-        stubSuccessfulTokenIssuance(user, "new-access-tok", UUID.randomUUID(), "new-refresh-tok");
+        UUID newTokenId = UUID.randomUUID();
+        stubSuccessfulTokenIssuance(user, "new-access-tok", newTokenId, "new-refresh-tok");
+        when(refreshTokenRepository.rotateIfActive(eq(tokenId), any(Instant.class), eq(newTokenId),
+                eq("REFRESH_ROTATED"))).thenReturn(1);
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
 
         authService.refresh("the-refresh-token");
 
         ArgumentCaptor<RefreshToken> captor = ArgumentCaptor.forClass(RefreshToken.class);
-        verify(refreshTokenRepository, times(2)).save(captor.capture());
-        RefreshToken persistedNewToken = captor.getAllValues().get(1);
+        verify(refreshTokenRepository, times(1)).save(captor.capture());
+        RefreshToken persistedNewToken = captor.getValue();
         assertThat(persistedNewToken.getSessionStartedAt()).isEqualTo(originalSessionStart);
     }
 
@@ -453,11 +459,55 @@ class AuthServiceTest {
                 .build();
         when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
         when(jwtService.getAbsoluteSessionTtlMs()).thenReturn(0L); // disabled
-        stubSuccessfulTokenIssuance(user, "new-access-tok", UUID.randomUUID(), "new-refresh-tok");
+        UUID newTokenId = UUID.randomUUID();
+        stubSuccessfulTokenIssuance(user, "new-access-tok", newTokenId, "new-refresh-tok");
+        when(refreshTokenRepository.rotateIfActive(eq(tokenId), any(Instant.class), eq(newTokenId),
+                eq("REFRESH_ROTATED"))).thenReturn(1);
 
         AuthResponse response = authService.refresh("the-refresh-token");
 
         assertThat(response.accessToken()).isEqualTo("new-access-tok");
+    }
+
+    @Test
+    void refreshDetectsConcurrentRotationRaceAndRevokesAllSessions() {
+        // Simulates the losing side of two concurrent refresh() calls racing on the
+        // same still-valid refresh token: both read the row with revokedAt == null
+        // (line 172-189 checks pass for both), but the atomic conditional UPDATE
+        // (rotateIfActive) can only let one of them actually flip revokedAt. The
+        // loser must see affectedRows == 0 and treat it as reuse/replay - never
+        // silently succeed and mint a second live child token from one rotation.
+        UUID tokenId = UUID.randomUUID();
+        refreshClaimsFor(1L, tokenId);
+        User user = enabledUser(1L, "USER");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        RefreshToken stored = RefreshToken.builder()
+                .tokenId(tokenId)
+                .userId(1L)
+                .expiresAt(Instant.now().plusSeconds(600))
+                .build();
+        when(refreshTokenRepository.findById(tokenId)).thenReturn(Optional.of(stored));
+        // Only stub the refresh-token issuance step reached before rotateIfActive();
+        // buildAuthResponse() is never reached on the losing path, so access-token
+        // generation is intentionally left unstubbed.
+        when(jwtService.generateRefreshToken(user.getId().toString())).thenReturn(
+                new JwtService.IssuedRefreshToken(UUID.randomUUID(), "new-refresh-tok", Instant.now(),
+                        Instant.now().plusSeconds(600)));
+        // A concurrent winner already revoked the row between our read above and
+        // this conditional UPDATE, so the WHERE clause matches zero rows.
+        when(refreshTokenRepository.rotateIfActive(eq(tokenId), any(Instant.class), any(UUID.class),
+                eq("REFRESH_ROTATED"))).thenReturn(0);
+
+        AuthenticationException ex = assertThrows(AuthenticationException.class,
+                () -> authService.refresh("the-refresh-token"));
+
+        assertThat(ex.getErrorCode()).isEqualTo("TOKEN_REUSED");
+        verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
+                eq("REFRESH_REUSE_DETECTED"));
+        // The loser must not persist a replacement token for a rotation it never won.
+        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        assertThat(meterRegistry.counter("security.audit.events", "type", "REFRESH_REUSE_DETECTED").count())
+                .isEqualTo(1.0);
     }
 
     // ------------------------------------------------------------------

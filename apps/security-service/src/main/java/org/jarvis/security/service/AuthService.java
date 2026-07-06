@@ -202,10 +202,22 @@ public class AuthService {
         }
 
         JwtService.IssuedRefreshToken replacementToken = jwtService.generateRefreshToken(user.getId().toString());
-        storedToken.setRevokedAt(now);
-        storedToken.setReplacedByTokenId(replacementToken.tokenId());
-        storedToken.setRevokeReason(REVOKE_REASON_ROTATED);
-        refreshTokenRepository.save(storedToken);
+
+        // Atomic conditional UPDATE instead of a read-then-save check-then-act: the
+        // WHERE clause re-checks revokedAt IS NULL at the moment of the write, so a
+        // concurrent rotation of the same token can affect at most one row overall.
+        int rotated = refreshTokenRepository.rotateIfActive(
+                tokenId, now, replacementToken.tokenId(), REVOKE_REASON_ROTATED);
+        if (rotated == 0) {
+            // Lost the race: another request rotated/revoked this token between our
+            // read above and this update. Treat exactly like detected token reuse.
+            revokeAllRefreshTokens(user.getId(), REVOKE_REASON_REUSE);
+            securityMetrics.auditEvent("REFRESH_REUSE_DETECTED");
+            log.warn("Concurrent refresh-token rotation detected for user {}", user.getUsername());
+            throw new AuthenticationException("TOKEN_REUSED",
+                    "Refresh token reuse detected; all active sessions were revoked");
+        }
+
         securityMetrics.tokenRevoked("single", REVOKE_REASON_ROTATED);
         persistRefreshToken(user.getId(), replacementToken,
                 sessionStartedAt != null ? sessionStartedAt : replacementToken.issuedAt());

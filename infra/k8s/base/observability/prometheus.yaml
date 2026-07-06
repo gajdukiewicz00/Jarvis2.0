@@ -110,6 +110,29 @@ data:
             annotations:
               summary: "{{ $labels.app }} restarted recently"
 
+          # REAL: process_start_time_seconds is a standard Micrometer process metric
+          # (same family as process_uptime_seconds above); it only changes when the JVM
+          # process actually restarts, so counting changes over a window catches repeated
+          # restarts ("storms" / crash-loops), which JarvisHighRestartRate's single-recent-
+          # restart check does not. Added for media/sync/memory/analytics/planner/security
+          # (and applies to every jarvis-actuator service, same as the other availability
+          # rules) — documented copy: observability/prometheus/red-service-alerts.yml.
+          - alert: JarvisPodRestartStorm
+            expr: changes(process_start_time_seconds{job="jarvis-actuator"}[15m]) > 2
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "{{ $labels.app }} has restarted more than twice in 15m — restart storm"
+              description: "changes(process_start_time_seconds[15m]) = {{ $value }} for {{ $labels.app }} (pod {{ $labels.pod }}). Likely CrashLoopBackOff or an OOM/liveness-probe loop."
+
+      # NOTE: JarvisHigh5xxRate/JarvisHighLatencyP99 below and JarvisServiceDown
+      # above already aggregate `by (app)` / `by (app, le)` across every
+      # job="jarvis-actuator" target, so media-service, sync-service,
+      # memory-service, analytics-service, planner-service, and
+      # security-service are already covered by these three once scraped —
+      # no per-service duplicate rules were added for them (see
+      # observability/prometheus/red-service-alerts.yml for the full note).
       - name: jarvis_http
         rules:
           - alert: JarvisHigh5xxRate

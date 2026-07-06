@@ -1,0 +1,62 @@
+# Jarvis 2.0 — RED (Rate/Errors/Duration) alert coverage for the six services
+# whose Micrometer instrumentation just shipped: media-service, sync-service,
+# memory-service, analytics-service, planner-service, security-service.
+#
+# This file is a documentation/review copy. The rule that is actually
+# evaluated lives inline in the `alerts.yml` key of the `prometheus-config`
+# ConfigMap in infra/k8s/base/observability/prometheus.yaml (the canonical,
+# non-frozen Kubernetes tree — see docs/DEPLOYMENT_CANONICAL.md). Keep this
+# file and that ConfigMap in sync if you edit either one.
+#
+# NOTE: k8s/base/observability/prometheus.yaml (the legacy tree) is
+# intentionally NOT touched by this change — it is frozen by convention and
+# enforced by scripts/guards/reject-legacy-k8s-edits.sh.
+#
+# The task asked for four alert categories for these six services: high 5xx
+# rate, high p99 latency, pod restart storms, and a service being down
+# (up==0). Three of the four are ALREADY satisfied for every job="jarvis-actuator"
+# service — including all six of these, once scraped — by the existing generic
+# rules in prometheus.yaml, because those rules aggregate `by (app)` /
+# `by (app, le)` rather than filtering to one service:
+#   - "high 5xx rate"     -> jarvis_http / JarvisHigh5xxRate
+#   - "high p99 latency"  -> jarvis_http / JarvisHighLatencyP99
+#   - "service down"      -> jarvis_availability / JarvisServiceDown (up==0)
+# Duplicating those per-service here would just be copy-paste drift (the repo's
+# own coding-style guidance calls this out under DRY), so this file adds only
+# the one rule that was a genuine gap: a "restart storm" (repeated restarts in
+# a short window), which is distinct from the existing JarvisHighRestartRate
+# (fires on a single recent restart, not a repeating crash-loop pattern).
+#
+# Metric-status legend:
+#   REAL — metric is already emitted today (process_start_time_seconds is a
+#          standard Micrometer process metric on every Spring Boot Actuator
+#          service, same family as process_uptime_seconds already used by
+#          JarvisHighRestartRate).
+groups:
+  - name: jarvis_availability
+    rules:
+      # REAL: process_start_time_seconds is a standard Micrometer process
+      # metric; it changes only when the JVM process actually restarts, so
+      # counting *changes* over a window catches repeated restarts
+      # (crash-loop-style "storms"), which JarvisHighRestartRate's
+      # single-restart check does not.
+      - alert: JarvisPodRestartStorm
+        expr: changes(process_start_time_seconds{job="jarvis-actuator"}[15m]) > 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.app }} has restarted more than twice in 15m — restart storm"
+          description: "changes(process_start_time_seconds[15m]) = {{ $value }} for {{ $labels.app }} (pod {{ $labels.pod }}). Likely CrashLoopBackOff or an OOM/liveness-probe loop; check pod events and recent logs before assuming a transient blip."
+
+# --- Known gap found while grounding this file (not fixed here — out of this
+# task's write scope, apps/sync-service is outside infra/k8s/base/observability): ---
+# sync-service's application.yml does not include `prometheus` in
+# `management.endpoints.web.exposure.include` (only health,info,metrics) and
+# does not set `management.metrics.tags.application`, unlike media-service,
+# memory-service, analytics-service, planner-service, and security-service.
+# Until that's fixed, Prometheus's scrape of sync-service's /actuator/prometheus
+# 404s, so up{app="sync-service"} == 0 permanently and JarvisServiceDown fires
+# as a standing false positive for sync-service specifically — see
+# observability/dashboards/red-sync-service.json's status panel for the same
+# note.

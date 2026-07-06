@@ -186,6 +186,57 @@ touched here):
    host-daemon health check in `LlmClient` (`"LLM host daemon health check
    failed"` log path), to back the `LlmBrainUnreachable` alert.
 
+## RED (Rate/Errors/Duration) dashboards and alert (added after wave-1 metrics shipped)
+
+Once the wave-1 PROPOSED metrics above actually shipped in code (`MediaJobMetrics`,
+`SyncMetrics`, `MemoryMetrics`, `AnalyticsMetrics`, `PlannerMetrics`,
+`SecurityMetrics` — all REAL now), a second pass added one **RED-framed**
+Grafana dashboard per service plus the missing "restart storm" alert:
+
+| Dashboard (uid) | Notes |
+|---|---|
+| `jarvis-red-media-service` | `dashboards/red-media-service.json` |
+| `jarvis-red-sync-service` | `dashboards/red-sync-service.json` — flags a real scrape gap, see below |
+| `jarvis-red-memory-service` | `dashboards/red-memory-service.json` |
+| `jarvis-red-analytics-service` | `dashboards/red-analytics-service.json` |
+| `jarvis-red-planner-service` | `dashboards/red-planner-service.json` — no domain Timer/error counter; Errors row uses deferred-tasks as a backlog proxy |
+| `jarvis-red-security-service` | `dashboards/red-security-service.json` — `security_login_failures_total` is the real domain Errors signal |
+
+Each dashboard has a Rate row (HTTP request rate + the service's domain event
+counter), an Errors row (HTTP 5xx rate + the service's domain failure/error
+tag where one exists), and a Duration row (HTTP latency avg + the service's
+domain Timer where one exists — media-service, memory-service, and
+analytics-service have one; sync-service, planner-service, and
+security-service only have Counters today, so their Duration row falls back
+to HTTP latency with a text panel noting the gap).
+
+The task also asked for alert rules covering: high 5xx rate, high p99
+latency, pod restart storms, and a service being down (`up==0`). Three of
+those four are **already satisfied** for these six services by the existing
+generic `JarvisHigh5xxRate`, `JarvisHighLatencyP99`, and `JarvisServiceDown`
+rules (they aggregate `by (app)` / `by (app, le)` across every
+`job="jarvis-actuator"` target, not one service, so duplicating them
+per-service would just be copy-paste drift). The one genuine gap — repeated
+restarts ("storms"), as opposed to the existing single-recent-restart check —
+is filled by a new `JarvisPodRestartStorm` rule in the `jarvis_availability`
+group. Documented/reviewable at
+[`prometheus/red-service-alerts.yml`](prometheus/red-service-alerts.yml);
+mirrored into the live ConfigMap at
+`infra/k8s/base/observability/prometheus.yaml` only (the canonical,
+non-frozen tree — see `docs/DEPLOYMENT_CANONICAL.md`). `k8s/base/observability/prometheus.yaml`
+is intentionally left untouched: it's frozen by convention and enforced by
+`scripts/guards/reject-legacy-k8s-edits.sh`.
+
+**Known gap found while building the sync-service dashboard**:
+`apps/sync-service/src/main/resources/application.yml` does not include
+`prometheus` in `management.endpoints.web.exposure.include` (only
+`health,info,metrics`) and does not set `management.metrics.tags.application`,
+unlike the other five services here. Until that's fixed (out of this task's
+write scope — it's an `apps/sync-service` config change, not observability),
+Prometheus's scrape of sync-service's `/actuator/prometheus` 404s,
+`up{app="sync-service"}` reads 0 permanently, and `JarvisServiceDown` fires as
+a standing false positive for sync-service specifically.
+
 ## Known gaps found during this work (not fixed here — out of write-scope)
 
 These were discovered while grounding the dashboards/alerts in the real

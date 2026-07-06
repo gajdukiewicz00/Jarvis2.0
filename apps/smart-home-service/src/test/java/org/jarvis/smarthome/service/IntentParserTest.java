@@ -50,6 +50,15 @@ class IntentParserTest {
     }
 
     @Test
+    void parsesNumericPayloadAfterTriggerWhenAnUnrelatedNumberPrecedesTheTriggerWord() {
+        ParsedIntent result = parser.parse("set thermostat 2 temperature to 22 degrees");
+
+        assertEquals(IntentMatchStatus.RESOLVED, result.status());
+        assertEquals("SET_TEMPERATURE", result.action());
+        assertEquals("22", result.payload());
+    }
+
+    @Test
     void parsesEnglishSetColorWithWordPayload() {
         ParsedIntent result = parser.parse("set the desk lamp color to blue");
 

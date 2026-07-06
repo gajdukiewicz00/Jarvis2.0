@@ -392,7 +392,7 @@ class SmartHomeControllerTest {
 
     @Test
     void activateSceneRejectsMissingDelegatedUserContext() {
-        ResponseEntity<?> response = controller.activateScene(" ", "movie_night");
+        ResponseEntity<?> response = controller.activateScene(" ", "movie_night", false);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("MISSING_USER_CONTEXT", ((Map<?, ?>) response.getBody()).get("error"));
@@ -402,7 +402,7 @@ class SmartHomeControllerTest {
     void activateSceneReturnsNotFoundForUnknownScene() {
         when(sceneService.find("missing")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = controller.activateScene("user-1", "missing");
+        ResponseEntity<?> response = controller.activateScene("user-1", "missing", false);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals("SCENE_NOT_FOUND", ((Map<?, ?>) response.getBody()).get("error"));
@@ -417,12 +417,12 @@ class SmartHomeControllerTest {
 
         SmartHomeActionResult okResult = new SmartHomeActionResult(
                 true, "user-1", "TURN_OFF", "ok", deviceView(), Instant.now(), false);
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null)))
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null), false))
                 .thenReturn(okResult);
-        when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null)))
+        when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), false))
                 .thenThrow(new SmartHomeValidationException("Action LOCK is not supported for device front_door_lock"));
 
-        ResponseEntity<?> response = controller.activateScene("user-1", "night");
+        ResponseEntity<?> response = controller.activateScene("user-1", "night", false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<?, ?> body = (Map<?, ?>) response.getBody();
@@ -436,14 +436,35 @@ class SmartHomeControllerTest {
     }
 
     @Test
+    void activateSceneThreadsConfirmFlagThroughToEachStepSoLockStepsCanBeConfirmed() {
+        SmartHomeScene.SceneStep lockStep = new SmartHomeScene.SceneStep("front_door_lock", "LOCK", null);
+        SmartHomeScene scene = new SmartHomeScene("evening_lockup", List.of(lockStep));
+        when(sceneService.find("evening_lockup")).thenReturn(Optional.of(scene));
+
+        SmartHomeActionResult confirmedResult = new SmartHomeActionResult(
+                true, "user-1", "LOCK", "ok", deviceView(), Instant.now(), false);
+        when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true))
+                .thenReturn(confirmedResult);
+
+        ResponseEntity<?> response = controller.activateScene("user-1", "evening_lockup", true);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+        List<?> results = (List<?>) body.get("results");
+        assertEquals(confirmedResult, results.get(0));
+        verify(smartHomeService).executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true);
+        verify(smartHomeService, never()).executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), false);
+    }
+
+    @Test
     void activateSceneFallsBackToExceptionClassNameWhenMessageIsNull() {
         SmartHomeScene.SceneStep step = new SmartHomeScene.SceneStep("kitchen_light", "TURN_ON", null);
         SmartHomeScene scene = new SmartHomeScene("scene2", List.of(step));
         when(sceneService.find("scene2")).thenReturn(Optional.of(scene));
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null)))
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null), false))
                 .thenThrow(new RuntimeException());
 
-        ResponseEntity<?> response = controller.activateScene("user-1", "scene2");
+        ResponseEntity<?> response = controller.activateScene("user-1", "scene2", false);
 
         Map<?, ?> body = (Map<?, ?>) response.getBody();
         List<?> results = (List<?>) body.get("results");
@@ -457,7 +478,7 @@ class SmartHomeControllerTest {
         SmartHomeScene scene = new SmartHomeScene("empty_scene", null);
         when(sceneService.find("empty_scene")).thenReturn(Optional.of(scene));
 
-        ResponseEntity<?> response = controller.activateScene("user-1", "empty_scene");
+        ResponseEntity<?> response = controller.activateScene("user-1", "empty_scene", false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<?, ?> body = (Map<?, ?>) response.getBody();
@@ -470,11 +491,11 @@ class SmartHomeControllerTest {
         SmartHomeScene.SceneStep step = new SmartHomeScene.SceneStep("kitchen_light", "TURN_ON", null);
         SmartHomeScene scene = new SmartHomeScene("night", List.of(step));
         when(sceneService.find("night")).thenReturn(Optional.of(scene));
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null)))
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null), false))
                 .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_ON", "ok", deviceView(), Instant.now(), false));
         when(clock.instant()).thenReturn(Instant.parse("2026-03-14T10:30:00Z"));
 
-        controller.activateScene("user-1", "night");
+        controller.activateScene("user-1", "night", false);
 
         ArgumentCaptor<SmartHomeSceneActivation> captor = ArgumentCaptor.forClass(SmartHomeSceneActivation.class);
         verify(sceneHistoryService).record(captor.capture());
@@ -544,12 +565,12 @@ class SmartHomeControllerTest {
     void actOnGroupAppliesActionToEveryMemberDevice() {
         SmartHomeGroup group = new SmartHomeGroup("lights", "Lights", List.of("kitchen_light", "desk_lamp"));
         when(groupService.find("lights")).thenReturn(Optional.of(group));
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null)))
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null), false))
                 .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_OFF", "ok", deviceView(), Instant.now(), false));
-        when(smartHomeService.executeAction("user-1", "desk_lamp", new SmartHomeActionRequest("TURN_OFF", null)))
+        when(smartHomeService.executeAction("user-1", "desk_lamp", new SmartHomeActionRequest("TURN_OFF", null), false))
                 .thenThrow(new SmartHomeValidationException("boom"));
 
-        ResponseEntity<?> response = controller.actOnGroup("user-1", "lights", new SmartHomeActionRequest("TURN_OFF", null));
+        ResponseEntity<?> response = controller.actOnGroup("user-1", "lights", new SmartHomeActionRequest("TURN_OFF", null), false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<?, ?> body = (Map<?, ?>) response.getBody();
@@ -561,17 +582,37 @@ class SmartHomeControllerTest {
     }
 
     @Test
+    void actOnGroupThreadsConfirmFlagThroughToEachMemberDeviceSoLockDevicesCanBeConfirmed() {
+        SmartHomeGroup group = new SmartHomeGroup("locks", "Locks", List.of("front_door_lock"));
+        when(groupService.find("locks")).thenReturn(Optional.of(group));
+        SmartHomeActionResult confirmedResult = new SmartHomeActionResult(
+                true, "user-1", "LOCK", "ok", deviceView(), Instant.now(), false);
+        when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true))
+                .thenReturn(confirmedResult);
+
+        ResponseEntity<?> response =
+                controller.actOnGroup("user-1", "locks", new SmartHomeActionRequest("LOCK", null), true);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+        List<?> results = (List<?>) body.get("results");
+        assertEquals(confirmedResult, results.get(0));
+        verify(smartHomeService).executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true);
+        verify(smartHomeService, never()).executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), false);
+    }
+
+    @Test
     void actOnGroupReturnsNotFoundForUnknownGroup() {
         when(groupService.find("missing")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = controller.actOnGroup("user-1", "missing", new SmartHomeActionRequest("TURN_OFF", null));
+        ResponseEntity<?> response = controller.actOnGroup("user-1", "missing", new SmartHomeActionRequest("TURN_OFF", null), false);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
     @Test
     void actOnGroupRejectsMissingDelegatedUserContext() {
-        ResponseEntity<?> response = controller.actOnGroup(" ", "lights", new SmartHomeActionRequest("TURN_OFF", null));
+        ResponseEntity<?> response = controller.actOnGroup(" ", "lights", new SmartHomeActionRequest("TURN_OFF", null), false);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("MISSING_USER_CONTEXT", ((Map<?, ?>) response.getBody()).get("error"));
@@ -628,10 +669,10 @@ class SmartHomeControllerTest {
     void actOnRoomAppliesActionToEveryAssignedDevice() {
         SmartHomeRoom room = new SmartHomeRoom("kitchen", "Kitchen", List.of("kitchen_light"));
         when(roomService.find("kitchen")).thenReturn(Optional.of(room));
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null)))
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null), false))
                 .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_ON", "ok", deviceView(), Instant.now(), false));
 
-        ResponseEntity<?> response = controller.actOnRoom("user-1", "kitchen", new SmartHomeActionRequest("TURN_ON", null));
+        ResponseEntity<?> response = controller.actOnRoom("user-1", "kitchen", new SmartHomeActionRequest("TURN_ON", null), false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<?, ?> body = (Map<?, ?>) response.getBody();
@@ -639,10 +680,30 @@ class SmartHomeControllerTest {
     }
 
     @Test
+    void actOnRoomThreadsConfirmFlagThroughToEachAssignedDeviceSoLockDevicesCanBeConfirmed() {
+        SmartHomeRoom room = new SmartHomeRoom("entrance", "Entrance", List.of("front_door_lock"));
+        when(roomService.find("entrance")).thenReturn(Optional.of(room));
+        SmartHomeActionResult confirmedResult = new SmartHomeActionResult(
+                true, "user-1", "LOCK", "ok", deviceView(), Instant.now(), false);
+        when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true))
+                .thenReturn(confirmedResult);
+
+        ResponseEntity<?> response =
+                controller.actOnRoom("user-1", "entrance", new SmartHomeActionRequest("LOCK", null), true);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+        List<?> results = (List<?>) body.get("results");
+        assertEquals(confirmedResult, results.get(0));
+        verify(smartHomeService).executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true);
+        verify(smartHomeService, never()).executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null), false);
+    }
+
+    @Test
     void actOnRoomReturnsNotFoundForUnknownRoom() {
         when(roomService.find("missing")).thenReturn(Optional.empty());
 
-        ResponseEntity<?> response = controller.actOnRoom("user-1", "missing", new SmartHomeActionRequest("TURN_ON", null));
+        ResponseEntity<?> response = controller.actOnRoom("user-1", "missing", new SmartHomeActionRequest("TURN_ON", null), false);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }

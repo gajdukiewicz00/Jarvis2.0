@@ -136,11 +136,7 @@ public class IntentParser {
 
     private PayloadResult extractPayload(String action, String normalizedUtterance, List<String> tokens, Set<Integer> consumed) {
         if (NUMERIC_PAYLOAD_ACTIONS.contains(action)) {
-            Matcher matcher = NUMBER_PATTERN.matcher(normalizedUtterance);
-            if (matcher.find()) {
-                return new PayloadResult(matcher.group().replace(',', '.'), -1);
-            }
-            return new PayloadResult(null, -1);
+            return extractNumberNearestTrigger(normalizedUtterance, consumed);
         }
         if ("SET_COLOR".equals(action)) {
             int afterTrigger = consumed.isEmpty() ? -1 : Collections.max(consumed) + 1;
@@ -154,6 +150,48 @@ public class IntentParser {
             return new PayloadResult(null, -1);
         }
         return new PayloadResult(null, -1);
+    }
+
+    /**
+     * Among every numeric match in {@code normalizedUtterance}, returns the one whose character span
+     * is closest to the trigger token span (e.g. "degrees"/"градуса"), rather than simply the first
+     * number occurring anywhere in the string. This matters because the numeric value conventionally
+     * sits immediately next to its unit word (e.g. "22 degrees") while an unrelated earlier digit
+     * (e.g. a room/device number) can otherwise be mistaken for the payload.
+     */
+    private PayloadResult extractNumberNearestTrigger(String normalizedUtterance, Set<Integer> consumed) {
+        List<int[]> spans = tokenSpans(normalizedUtterance);
+        if (consumed.isEmpty()) {
+            return new PayloadResult(null, -1);
+        }
+        int triggerStart = spans.get(Collections.min(consumed))[0];
+        int triggerEnd = spans.get(Collections.max(consumed))[1];
+
+        Matcher matcher = NUMBER_PATTERN.matcher(normalizedUtterance);
+        String best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        while (matcher.find()) {
+            int candidateStart = matcher.start();
+            int candidateEnd = matcher.end();
+            int distance = candidateStart >= triggerEnd
+                    ? candidateStart - triggerEnd
+                    : triggerStart - candidateEnd;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = matcher.group();
+            }
+        }
+        return best == null ? new PayloadResult(null, -1) : new PayloadResult(best.replace(',', '.'), -1);
+    }
+
+    /** Character [start, end) span of every token in {@code text}, in the same order as {@link #tokenize}. */
+    private static List<int[]> tokenSpans(String text) {
+        List<int[]> spans = new ArrayList<>();
+        Matcher matcher = TOKEN_PATTERN.matcher(text);
+        while (matcher.find()) {
+            spans.add(new int[] {matcher.start(), matcher.end()});
+        }
+        return spans;
     }
 
     private String buildDeviceQuery(List<String> tokens, Set<Integer> consumed) {

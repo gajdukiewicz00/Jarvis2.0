@@ -268,7 +268,8 @@ public class SmartHomeController {
     @PostMapping("/scenes/{name}/activate")
     public ResponseEntity<?> activateScene(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
-            @PathVariable String name) {
+            @PathVariable String name,
+            @RequestParam(defaultValue = "false") boolean confirm) {
         try {
             String uid = requireUserId(userId);
             SmartHomeScene scene = sceneService.find(name).orElse(null);
@@ -280,7 +281,7 @@ public class SmartHomeController {
             for (SmartHomeScene.SceneStep step : steps) {
                 try {
                     results.add(smartHomeService.executeAction(uid, step.deviceId(),
-                            new SmartHomeActionRequest(step.action(), step.payload())));
+                            new SmartHomeActionRequest(step.action(), step.payload()), confirm));
                 } catch (RuntimeException e) {
                     // Map.of rejects nulls — guard both the device id and the message.
                     String dev = step.deviceId() != null ? step.deviceId() : "";
@@ -355,14 +356,15 @@ public class SmartHomeController {
     public ResponseEntity<?> actOnGroup(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @PathVariable String groupId,
-            @RequestBody SmartHomeActionRequest request) {
+            @RequestBody SmartHomeActionRequest request,
+            @RequestParam(defaultValue = "false") boolean confirm) {
         try {
             String uid = requireUserId(userId);
             SmartHomeGroup group = groupService.find(groupId).orElse(null);
             if (group == null) {
                 return ResponseEntity.status(404).body(error("GROUP_NOT_FOUND", groupId));
             }
-            List<Object> results = applyActionToDevices(uid, group.deviceIds(), request);
+            List<Object> results = applyActionToDevices(uid, group.deviceIds(), request, confirm);
             return ResponseEntity.ok(Map.of("group", groupId, "applied", results.size(), "results", results));
         } catch (SmartHomeValidationException e) {
             return ResponseEntity.badRequest().body(error("MISSING_USER_CONTEXT", e.getMessage()));
@@ -414,25 +416,27 @@ public class SmartHomeController {
     public ResponseEntity<?> actOnRoom(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @PathVariable String roomId,
-            @RequestBody SmartHomeActionRequest request) {
+            @RequestBody SmartHomeActionRequest request,
+            @RequestParam(defaultValue = "false") boolean confirm) {
         try {
             String uid = requireUserId(userId);
             SmartHomeRoom room = roomService.find(roomId).orElse(null);
             if (room == null) {
                 return ResponseEntity.status(404).body(error("ROOM_NOT_FOUND", roomId));
             }
-            List<Object> results = applyActionToDevices(uid, room.deviceIds(), request);
+            List<Object> results = applyActionToDevices(uid, room.deviceIds(), request, confirm);
             return ResponseEntity.ok(Map.of("room", roomId, "applied", results.size(), "results", results));
         } catch (SmartHomeValidationException e) {
             return ResponseEntity.badRequest().body(error("MISSING_USER_CONTEXT", e.getMessage()));
         }
     }
 
-    private List<Object> applyActionToDevices(String userId, List<String> deviceIds, SmartHomeActionRequest request) {
+    private List<Object> applyActionToDevices(
+            String userId, List<String> deviceIds, SmartHomeActionRequest request, boolean confirmed) {
         List<Object> results = new ArrayList<>();
         for (String deviceId : deviceIds) {
             try {
-                results.add(smartHomeService.executeAction(userId, deviceId, request));
+                results.add(smartHomeService.executeAction(userId, deviceId, request, confirmed));
             } catch (RuntimeException e) {
                 String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                 results.add(Map.of("deviceId", deviceId, "error", msg));

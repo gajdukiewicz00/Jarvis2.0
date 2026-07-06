@@ -5,6 +5,7 @@ Supports: transformers (GPU/CPU), llama.cpp (GGUF, GPU)
 import asyncio
 import logging
 import subprocess
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -54,6 +55,15 @@ def detect_gpu_status() -> tuple[bool, Optional[str], Optional[str]]:
 
 # Thread pool for blocking operations
 executor = ThreadPoolExecutor(max_workers=config.CHAT_WORKERS)
+
+# Bounds how many non-streaming chat generations may be running on the
+# shared executor at once (mirrors executor's worker count). asyncio.wait_for
+# can only abandon the *awaiting* coroutine on timeout - it cannot cancel or
+# interrupt work already running in a worker thread - so with CHAT_WORKERS
+# defaulting to 1, a single stuck/slow generation would otherwise silently
+# tie up the sole worker thread and every subsequent request would queue
+# behind it indefinitely instead of failing fast. See Finding #35.
+_chat_worker_slots = threading.Semaphore(config.CHAT_WORKERS)
 
 
 # Request/Response models
@@ -213,22 +223,50 @@ async def chat(
     
     try:
         start_time = time.time()
-        
+
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
-        
+
+        # Fail fast instead of silently queuing behind a stuck/slow
+        # generation: once every worker thread is genuinely busy, tell the
+        # caller now rather than have them wait (and eventually time out
+        # anyway) behind a call this server can never cancel once started.
+        if not _chat_worker_slots.acquire(blocking=False):
+            logger.error(f"[{correlation_id}] Chat worker pool saturated (CHAT_WORKERS={config.CHAT_WORKERS})")
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": "Server busy",
+                    "correlation_id": correlation_id,
+                    "detail": "All chat workers are currently busy processing other requests"
+                }
+            )
+
+        def _run_chat():
+            try:
+                return chat_handler.process_chat(
+                    messages=messages,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature
+                )
+            finally:
+                # Released only when the worker thread actually finishes
+                # running this call - not when the asyncio.wait_for below
+                # gives up - so the slot keeps accurately reflecting real
+                # worker occupancy even after a client-facing timeout.
+                _chat_worker_slots.release()
+
         # Run generation in thread pool with timeout
         loop = asyncio.get_event_loop()
-        
+
+        try:
+            future = loop.run_in_executor(executor, _run_chat)
+        except Exception:
+            _chat_worker_slots.release()
+            raise
+
         try:
             result = await asyncio.wait_for(
-                loop.run_in_executor(
-                    executor,
-                    lambda: chat_handler.process_chat(
-                        messages=messages,
-                        max_tokens=request.max_tokens,
-                        temperature=request.temperature
-                    )
-                ),
+                future,
                 timeout=config.MAX_GENERATION_SECONDS
             )
         except asyncio.TimeoutError:
@@ -269,7 +307,7 @@ async def chat(
 _STREAM_EXHAUSTED = object()
 
 
-async def _bridge_blocking_stream(loop: asyncio.AbstractEventLoop, sync_iterator):
+async def _bridge_blocking_stream(loop: asyncio.AbstractEventLoop, sync_iterator, deadline: Optional[float] = None):
     """
     Bridge a blocking (thread-blocking) synchronous token generator to an
     async generator.
@@ -280,6 +318,14 @@ async def _bridge_blocking_stream(loop: asyncio.AbstractEventLoop, sync_iterator
     request (including /health) until the stream ends. Instead, each
     `next()` call is executed in the shared thread-pool executor and
     awaited, so the event loop stays free between tokens.
+
+    `deadline`, if given, is an absolute `loop.time()` value. The endpoint
+    docstring promises MAX_GENERATION_SECONDS applies to the whole request,
+    but without this the streaming path never enforced any cutoff (Finding
+    #34): a stuck or abnormally slow backend would stream forever. Each
+    wait for the next token is bounded by the remaining time until the
+    deadline, and a `TimeoutError` is raised once it's exceeded so the
+    caller can end the response instead of hanging indefinitely.
     """
     def _advance():
         try:
@@ -288,7 +334,17 @@ async def _bridge_blocking_stream(loop: asyncio.AbstractEventLoop, sync_iterator
             return _STREAM_EXHAUSTED
 
     while True:
-        token = await loop.run_in_executor(executor, _advance)
+        if deadline is not None:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise TimeoutError(
+                    "Streaming generation exceeded MAX_GENERATION_SECONDS"
+                )
+            token = await asyncio.wait_for(
+                loop.run_in_executor(executor, _advance), timeout=remaining
+            )
+        else:
+            token = await loop.run_in_executor(executor, _advance)
         if token is _STREAM_EXHAUSTED:
             return
         yield token
@@ -328,9 +384,12 @@ async def _handle_streaming_chat(request: ChatRequest, correlation_id: str):
                 )
             )
             loop = asyncio.get_event_loop()
+            # Enforce the same MAX_GENERATION_SECONDS cutoff the endpoint
+            # docstring promises for the non-streaming path (Finding #34).
+            deadline = loop.time() + config.MAX_GENERATION_SECONDS
             # Yield SSE events without blocking the event loop: each token
             # is generated in the thread-pool executor.
-            async for token in _bridge_blocking_stream(loop, stream):
+            async for token in _bridge_blocking_stream(loop, stream, deadline=deadline):
                 total_tokens += 1
                 # SSE format: data: {json}\n\n
                 yield f"data: {token}\n\n"

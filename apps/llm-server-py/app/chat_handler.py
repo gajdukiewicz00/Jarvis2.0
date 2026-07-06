@@ -84,7 +84,13 @@ class ChatHandler:
             # Keep system message if present, then trim oldest messages
             system_msgs = [m for m in messages if m["role"] == "system"]
             other_msgs = [m for m in messages if m["role"] != "system"]
-            messages = system_msgs + other_msgs[-(config.MAX_HISTORY_LENGTH - len(system_msgs)):]
+            keep = config.MAX_HISTORY_LENGTH - len(system_msgs)
+            # Guard the zero/negative case explicitly: `other_msgs[-0:]` is
+            # `other_msgs[0:]` (the whole list) in Python, which would
+            # silently defeat this trim entirely when len(system_msgs) ==
+            # MAX_HISTORY_LENGTH (or leave nothing trimmed at all if system
+            # messages alone already exceed the limit).
+            messages = system_msgs + (other_msgs[-keep:] if keep > 0 else [])
         
         # Use defaults if not provided
         max_tokens = max_tokens or config.MAX_TOKENS

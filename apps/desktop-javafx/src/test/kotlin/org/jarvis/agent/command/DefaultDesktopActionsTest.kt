@@ -168,13 +168,52 @@ class DefaultDesktopActionsTest {
     }
 
     @Test
-    fun `createLocalNote uses caller-supplied directory when provided`(@TempDir notes: Path,
-                                                                      @TempDir custom: Path) {
+    fun `createLocalNote uses caller-supplied directory when it is inside the notes root`(@TempDir notes: Path) {
+        val custom = notes.resolve("projectA").resolve("subdir")
         val res = DefaultDesktopActions(notesRoot = notes, processRunner = StubRunner())
             .createLocalNote("Custom", "body", directory = custom)
         assertTrue(res.ok)
         val path = Path.of(res.output["path"] as String)
         assertTrue(path.startsWith(custom.toAbsolutePath()))
+    }
+
+    @Test
+    fun `createLocalNote rejects a relative directory that traverses outside the notes root`(@TempDir notes: Path) {
+        // A relative "directory" is resolved against notesRoot, never the
+        // process cwd — "../../evil" must still be rejected as an escape.
+        val escaping = Path.of("..", "..", "evil-sibling")
+        val res = DefaultDesktopActions(notesRoot = notes, processRunner = StubRunner())
+            .createLocalNote("Evil", "body", directory = escaping)
+        assertFalse(res.ok)
+        assertTrue(res.errorReason!!.contains("escapes the allowed notes root"))
+        assertFalse(
+            Files.exists(notes.toAbsolutePath().parent.parent.resolve("evil-sibling")),
+            "must not have written outside the notes root"
+        )
+    }
+
+    @Test
+    fun `createLocalNote rejects an absolute directory outside the notes root`(@TempDir notes: Path,
+                                                                                @TempDir outside: Path) {
+        val res = DefaultDesktopActions(notesRoot = notes, processRunner = StubRunner())
+            .createLocalNote("Evil", "body", directory = outside)
+        assertFalse(res.ok)
+        assertTrue(res.errorReason!!.contains("escapes the allowed notes root"))
+        assertTrue(Files.list(outside).use { it.count() } == 0L, "must not have written into the escaped directory")
+    }
+
+    @Test
+    fun `createLocalNote rejects a symlink inside the notes root that escapes to another directory`(
+        @TempDir notes: Path,
+        @TempDir outside: Path
+    ) {
+        val link = notes.resolve("escape-link")
+        java.nio.file.Files.createSymbolicLink(link, outside)
+        val res = DefaultDesktopActions(notesRoot = notes, processRunner = StubRunner())
+            .createLocalNote("Evil", "body", directory = link)
+        assertFalse(res.ok)
+        assertTrue(res.errorReason!!.contains("escapes the allowed notes root"))
+        assertTrue(Files.list(outside).use { it.count() } == 0L, "must not have written through the symlink")
     }
 
     @Test

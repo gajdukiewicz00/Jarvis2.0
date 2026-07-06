@@ -23,6 +23,7 @@ import org.jarvis.desktop.features.smarthome.SmartHomeView
 import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty
 import java.awt.image.BufferedImage
 import java.io.File
 import java.util.Locale
@@ -39,6 +40,12 @@ import javax.imageio.ImageIO
  * Not a behavioural test — it only proves the screens render to a real raster;
  * it is skipped gracefully if the headless toolkit can't start.
  */
+@EnabledIfSystemProperty(
+    named = "jarvis.snapshot.dir",
+    matches = ".+",
+    disabledReason = "Diagnostic-only: run explicitly with -Djarvis.snapshot.dir=<dir>; " +
+        "kept out of the normal suite so its Stage lifecycle can't disturb the shared headless toolkit."
+)
 class ScreenSnapshotTest {
 
     companion object {

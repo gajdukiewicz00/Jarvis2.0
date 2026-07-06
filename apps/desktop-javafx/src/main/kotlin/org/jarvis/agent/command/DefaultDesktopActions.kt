@@ -135,7 +135,8 @@ class DefaultDesktopActions(
         if (title.isBlank()) {
             return ActionResult.fail("createLocalNote: 'title' is required")
         }
-        val target = (directory ?: notesRoot).toAbsolutePath()
+        val target = confineToNotesRoot(directory)
+            ?: return ActionResult.fail("createLocalNote: 'directory' escapes the allowed notes root")
         return runCatching {
             Files.createDirectories(target)
             val safeTitle = title.replace(SAFE_FILE_RE, "-").trim('-').take(80).ifEmpty { "note" }
@@ -191,6 +192,62 @@ class DefaultDesktopActions(
         return ActionResult.fail(
             "getActiveWindow: xdotool exit=${xd.exitCode} (stderr='${xd.stderr.trim()}'); wmctrl exit=${wm.exitCode}"
         )
+    }
+
+    /**
+     * Confines a caller/command-supplied notes [directory] to [notesRoot].
+     *
+     * `directory` on {@code CREATE_LOCAL_NOTE} can arrive verbatim from a
+     * RabbitMQ-delivered command payload (see
+     * {@code NativeDesktopCommandExecutor}), so it must never be trusted as
+     * a raw filesystem path. This:
+     *  - resolves a relative `directory` against [notesRoot] (never the
+     *    process's working directory),
+     *  - normalizes `.`/`..` segments and rejects anything that lexically
+     *    escapes [notesRoot] (covers `../..` traversal and absolute-path
+     *    escapes such as `/etc`), and
+     *  - canonicalizes the deepest *existing* ancestor of the resolved path
+     *    and rejects it if a symlink resolves outside [notesRoot] (covers
+     *    symlink escape for directories that already exist on disk).
+     *
+     * Returns `null` when the directory is not confined to [notesRoot];
+     * otherwise returns the normalized absolute target path.
+     */
+    private fun confineToNotesRoot(directory: Path?): Path? {
+        val base = notesRoot.toAbsolutePath().normalize()
+        // notesRoot is a trusted, locally-configured path (never attacker
+        // controlled) — create it eagerly so it can be canonicalized below,
+        // even on a brand-new machine where it doesn't exist yet.
+        val realBase = runCatching {
+            Files.createDirectories(base)
+            base.toRealPath()
+        }.getOrElse { return null }
+
+        if (directory == null) return base
+
+        val requested = if (directory.isAbsolute) {
+            directory.normalize()
+        } else {
+            base.resolve(directory).normalize()
+        }
+        if (!requested.startsWith(base)) {
+            return null
+        }
+
+        // Walk up to the nearest existing ancestor and canonicalize it so a
+        // symlink planted inside notesRoot cannot redirect the write
+        // elsewhere on disk.
+        var existingAncestor: Path? = requested
+        while (existingAncestor != null && !Files.exists(existingAncestor)) {
+            existingAncestor = existingAncestor.parent
+        }
+        val realAncestor = existingAncestor?.let { anc ->
+            runCatching { anc.toRealPath() }.getOrElse { return null }
+        } ?: realBase
+        if (!realAncestor.startsWith(realBase)) {
+            return null
+        }
+        return requested
     }
 
     private fun typeChar(robot: Robot, ch: Char) {

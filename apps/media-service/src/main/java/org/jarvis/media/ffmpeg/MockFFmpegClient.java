@@ -26,7 +26,8 @@ public class MockFFmpegClient implements FFmpegClient {
     }
 
     @Override
-    public void mux(Path originalVideo, Path russianSubtitle, Path russianAudio, Path output) {
+    public void mux(Path originalVideo, Path russianSubtitle, Path russianAudio,
+                     int originalAudioStreamCount, int originalSubtitleStreamCount, Path output) {
         writePlaceholder(output, "MOCK-MUX base=" + originalVideo.getFileName()
                 + " sub=" + (russianSubtitle != null) + " audio=" + (russianAudio != null));
         log.debug("Mock muxed -> {}", output.getFileName());

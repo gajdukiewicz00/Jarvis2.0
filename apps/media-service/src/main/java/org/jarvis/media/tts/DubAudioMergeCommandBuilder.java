@@ -57,8 +57,12 @@ public class DubAudioMergeCommandBuilder {
             labels.add("[" + label + "]");
         }
         labels.forEach(graph::append);
+        // normalize=0: segments are delayed into disjoint time slots and never overlap
+        // (see class javadoc), so ffmpeg's default per-input 1/N amplitude scaling must
+        // be disabled — otherwise the merged track gets progressively quieter as segment
+        // count grows even though no two segments are ever concurrently audible.
         graph.append("amix=inputs=").append(segments.size())
-                .append(":duration=longest:dropout_transition=0[aout]");
+                .append(":duration=longest:dropout_transition=0:normalize=0[aout]");
         return graph.toString();
     }
 

@@ -6,12 +6,15 @@ import org.jarvis.media.support.SameThreadExecutorService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -181,6 +184,61 @@ class MediaJobServiceTest {
         assertThat(service.cancel(created.id(), "u1")).isFalse();
         assertThat(counter(registry, "MUX", "completed")).isEqualTo(1.0);
         assertThat(registry.find("media.jobs").tag("type", "MUX").tag("status", "cancelled").counter()).isNull();
+    }
+
+    /**
+     * Reproduces the race from finding #18: a cancel() call lands in the window between
+     * the worker's {@code token.isCancelled()} check (false) and its subsequent
+     * {@code transition(id, j -> j.completed(...))} call. {@link RaceInjectingStore}
+     * simulates that concurrent write deterministically by flipping the job to CANCELLED
+     * the moment runJob() re-reads the RUNNING job to build the completed transition —
+     * exactly the store state a real racing cancel() would have produced.
+     */
+    @Test
+    void completedTransitionDoesNotResurrectAConcurrentlyCancelledJob() {
+        RaceInjectingStore store = new RaceInjectingStore(new InMemoryMediaJobStore());
+        MediaJobService service = new MediaJobService(
+                store, new SameThreadExecutorService(), Clock.systemUTC(), MediaTestFactory.metrics());
+
+        MediaJob created = service.submit(JobType.MUX, "u1", "v.mkv",
+                token -> JobOutcome.of(
+                        List.of(JobArtifact.of("video", "/w/out.mkv", "video/x-matroska", 10)),
+                        Map.of("ok", true)));
+
+        MediaJob finished = service.getJob(created.id(), "u1");
+        assertThat(finished.status()).isEqualTo(JobStatus.CANCELLED);
+    }
+
+    /** Test double that simulates a concurrent cancel() racing in right before the
+     * worker's completed-transition read, without needing real thread timing. */
+    private static final class RaceInjectingStore implements MediaJobStore {
+        private final MediaJobStore delegate;
+        private final AtomicBoolean injected = new AtomicBoolean(false);
+
+        RaceInjectingStore(MediaJobStore delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public MediaJob save(MediaJob job) {
+            return delegate.save(job);
+        }
+
+        @Override
+        public Optional<MediaJob> findById(String id) {
+            Optional<MediaJob> current = delegate.findById(id);
+            if (current.isPresent() && current.get().status() == JobStatus.RUNNING
+                    && injected.compareAndSet(false, true)) {
+                MediaJob racedCancel = delegate.save(current.get().cancelled(Instant.now()));
+                return Optional.of(racedCancel);
+            }
+            return current;
+        }
+
+        @Override
+        public List<MediaJob> findByUser(String userId) {
+            return delegate.findByUser(userId);
+        }
     }
 
     private double counter(SimpleMeterRegistry registry, String type, String status) {

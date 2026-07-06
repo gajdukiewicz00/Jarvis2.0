@@ -6,6 +6,9 @@ import org.jarvis.media.job.JobOutcome;
 import org.jarvis.media.job.JobType;
 import org.jarvis.media.job.MediaJob;
 import org.jarvis.media.job.MediaJobService;
+import org.jarvis.media.probe.ProbeRequest;
+import org.jarvis.media.probe.ProbeResult;
+import org.jarvis.media.probe.ProbeService;
 import org.jarvis.media.workspace.WorkspaceManager;
 import org.springframework.stereotype.Service;
 
@@ -23,11 +26,14 @@ import java.util.Map;
 public class MuxService {
 
     private final MediaJobService jobService;
+    private final ProbeService probeService;
     private final FFmpegClient ffmpeg;
     private final WorkspaceManager workspace;
 
-    public MuxService(MediaJobService jobService, FFmpegClient ffmpeg, WorkspaceManager workspace) {
+    public MuxService(MediaJobService jobService, ProbeService probeService,
+                      FFmpegClient ffmpeg, WorkspaceManager workspace) {
         this.jobService = jobService;
+        this.probeService = probeService;
         this.ffmpeg = ffmpeg;
         this.workspace = workspace;
     }
@@ -42,6 +48,15 @@ public class MuxService {
             throw new IllegalArgumentException("At least one of subtitleFile or dubAudioFile must be provided");
         }
 
+        // -metadata:s:a:N / -metadata:s:s:N are relative to the *output's* type-ordering;
+        // since -map 0 copies every original stream before the new Russian track(s) are
+        // appended, the real output index for the new track is the original's per-type
+        // stream count, not a fixed assumed index. Probe synchronously so a bad input
+        // fails fast, matching AudioExtractionService's fail-fast-on-the-caller-thread style.
+        ProbeResult probe = probeService.probe(new ProbeRequest(request.originalFile(), null, null));
+        int originalAudioStreamCount = probe.audio().size();
+        int originalSubtitleStreamCount = probe.subtitle().size();
+
         String workId = workspace.newWorkId();
         String outputName = (request.outputName() == null || request.outputName().isBlank())
                 ? "output.mkv" : request.outputName();
@@ -49,7 +64,7 @@ public class MuxService {
 
         return jobService.submit(JobType.MUX, userId, request.originalFile(), token -> {
             token.throwIfCancelled();
-            ffmpeg.mux(original, subtitle, dubAudio, output);
+            ffmpeg.mux(original, subtitle, dubAudio, originalAudioStreamCount, originalSubtitleStreamCount, output);
             JobArtifact artifact = JobArtifact.of("video", output.toString(),
                     "video/x-matroska", workspace.sizeOrZero(output));
             return JobOutcome.of(List.of(artifact), Map.of(

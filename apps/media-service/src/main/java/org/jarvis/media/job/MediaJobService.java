@@ -114,7 +114,8 @@ public class MediaJobService {
                 finishCancelled(id);
                 return;
             }
-            transition(id, j -> j.completed(outcome.artifacts(), outcome.details(), clock.instant()));
+            transition(id, j -> j.status().isTerminal() ? j
+                    : j.completed(outcome.artifacts(), outcome.details(), clock.instant()));
         } catch (JobCancelledException cancelled) {
             finishCancelled(id);
         } catch (InterruptedException interrupted) {
@@ -122,7 +123,7 @@ public class MediaJobService {
             finishCancelled(id);
         } catch (Exception e) {
             log.warn("Media job {} failed: {}", id, e.toString());
-            transition(id, j -> j.failed(safeMessage(e), clock.instant()));
+            transition(id, j -> j.status().isTerminal() ? j : j.failed(safeMessage(e), clock.instant()));
         } finally {
             futures.remove(id);
             tokens.remove(id);

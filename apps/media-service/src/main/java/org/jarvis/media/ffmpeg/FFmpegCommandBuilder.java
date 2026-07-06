@@ -43,8 +43,24 @@ public class FFmpegCommandBuilder {
      * Mux a Russian subtitle track and/or a Russian audio track into a COPY of the
      * original, copying every original stream so nothing is lost or re-encoded. The
      * original file is an input only; the output is a new file.
+     *
+     * <p>{@code -metadata:s:a:N} / {@code -metadata:s:s:N} specifiers are relative to the
+     * *output's* type-ordering, not the input's absolute stream index. Since {@code -map 0}
+     * copies every original stream first and the new Russian track(s) are appended after,
+     * the new audio track lands at output index {@code originalAudioStreamCount} (not a
+     * fixed {@code 1}) and the new subtitle track lands at {@code originalSubtitleStreamCount}
+     * (not a fixed {@code 0}). Callers must pass the original file's actual per-type stream
+     * counts (e.g. via a prior FFprobe call) rather than assuming exactly one pre-existing
+     * audio stream and zero pre-existing subtitle streams.
      */
-    public List<String> mux(String binary, Path originalVideo, Path russianSubtitle, Path russianAudio, Path output) {
+    public List<String> mux(String binary, Path originalVideo, Path russianSubtitle, Path russianAudio,
+                             int originalAudioStreamCount, int originalSubtitleStreamCount, Path output) {
+        if (originalAudioStreamCount < 0) {
+            throw new IllegalArgumentException("originalAudioStreamCount must be >= 0");
+        }
+        if (originalSubtitleStreamCount < 0) {
+            throw new IllegalArgumentException("originalSubtitleStreamCount must be >= 0");
+        }
         List<String> args = new ArrayList<>();
         args.add(binary);
         args.add("-hide_banner");
@@ -81,13 +97,14 @@ public class FFmpegCommandBuilder {
         args.add("-c");
         args.add("copy");
         if (audioInput != null) {
-            args.add("-metadata:s:a:1");
+            String audioSpecifier = "-metadata:s:a:" + originalAudioStreamCount;
+            args.add(audioSpecifier);
             args.add("language=rus");
-            args.add("-metadata:s:a:1");
+            args.add(audioSpecifier);
             args.add("title=Russian (neutral TTS)");
         }
         if (subInput != null) {
-            args.add("-metadata:s:s:0");
+            args.add("-metadata:s:s:" + originalSubtitleStreamCount);
             args.add("language=rus");
         }
         args.add(output.toString());

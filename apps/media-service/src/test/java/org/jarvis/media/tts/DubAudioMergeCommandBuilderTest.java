@@ -71,6 +71,22 @@ class DubAudioMergeCommandBuilderTest {
     }
 
     @Test
+    void filterGraphDisablesAmixNormalizeSinceSegmentsNeverOverlap() {
+        Path seg0 = tmp.resolve("s0.wav");
+        Path seg1 = tmp.resolve("s1.wav");
+        List<DubSegmentAudio> segments = List.of(
+                new DubSegmentAudio(seg0, new SegmentTimingPlan(0, 0, 1000, 900, 1.0, 100, 0)),
+                new DubSegmentAudio(seg1, new SegmentTimingPlan(1, 1000, 1000, 1000, 1.0, 0, 0)));
+
+        List<String> command = builder.merge("ffmpeg", segments, tmp.resolve("out.wav"));
+        String graph = command.get(command.indexOf("-filter_complex") + 1);
+
+        // without normalize=0, ffmpeg's amix default applies a static 1/N volume scale
+        // to every input regardless of overlap, quietening the dub as segments grow
+        assertThat(graph).contains("amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]");
+    }
+
+    @Test
     void clampKeepsFactorWithinFfmpegSingleStageAtempoRange() {
         assertThat(DubAudioMergeCommandBuilder.clampToFfmpegAtempoRange(3.0)).isEqualTo(2.0);
         assertThat(DubAudioMergeCommandBuilder.clampToFfmpegAtempoRange(0.1)).isEqualTo(0.5);

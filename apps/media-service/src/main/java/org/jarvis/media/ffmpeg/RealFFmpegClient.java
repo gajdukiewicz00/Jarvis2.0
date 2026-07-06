@@ -38,9 +38,11 @@ public class RealFFmpegClient implements FFmpegClient {
     }
 
     @Override
-    public void mux(Path originalVideo, Path russianSubtitle, Path russianAudio, Path output) {
+    public void mux(Path originalVideo, Path russianSubtitle, Path russianAudio,
+                     int originalAudioStreamCount, int originalSubtitleStreamCount, Path output) {
         requireInput(originalVideo);
-        List<String> command = builder.mux(props.ffmpeg().binary(), originalVideo, russianSubtitle, russianAudio, output);
+        List<String> command = builder.mux(props.ffmpeg().binary(), originalVideo, russianSubtitle, russianAudio,
+                originalAudioStreamCount, originalSubtitleStreamCount, output);
         execute(command, "mux", output);
     }
 

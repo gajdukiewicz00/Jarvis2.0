@@ -86,7 +86,7 @@ images:
     newTag: w7
   - name: jarvis/smart-home-service
     newName: localhost:5000/jarvis/smart-home-service
-    newTag: w6
+    newTag: w8
   - name: jarvis/media-service
     newName: localhost:5000/jarvis/media-service
     newTag: w7

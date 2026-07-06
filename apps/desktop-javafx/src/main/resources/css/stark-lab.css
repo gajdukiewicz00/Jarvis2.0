@@ -62,3 +62,15 @@
 .shell-action-button:hover {
     -fx-background-color: rgba(79, 224, 255, 0.26);
 }
+
+/* App-wide vertical scroll wrapper (ShellRoot.scrollableDisplay).
+   Transparent so scrolling a screen never draws a grey box over the theme. */
+.shell-content-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+    -fx-padding: 0;
+}
+
+.shell-content-scroll > .viewport {
+    -fx-background-color: transparent;
+}

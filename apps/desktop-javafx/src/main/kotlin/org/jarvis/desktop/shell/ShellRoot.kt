@@ -3,6 +3,7 @@ package org.jarvis.desktop.shell
 import javafx.application.Platform
 import javafx.scene.Node
 import javafx.scene.Scene
+import javafx.scene.control.ScrollPane
 import javafx.scene.input.KeyCombination
 import javafx.scene.layout.BorderPane
 import javafx.scene.layout.StackPane
@@ -93,6 +94,7 @@ class ShellRoot(
         apiGatewayBaseUrlProvider = { AppConfig.current().apiGatewayBaseUrl }
     )
     private val routeViews = mutableMapOf<ShellRoute, Node>()
+    private val routeDisplays = mutableMapOf<ShellRoute, Node>()
     private val runtimeExecutor = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "jarvis-desktop-app-runtime").apply { isDaemon = true }
     }
@@ -285,10 +287,33 @@ class ShellRoot(
         activeRouteContent()?.onRouteDeactivated()
 
         val nextNode = routeView(route)
-        contentHost.children.setAll(nextNode)
+        contentHost.children.setAll(scrollableDisplay(route, nextNode))
         nextNode.routeContent()?.onRouteActivated()
         activeRoute = route
     }
+
+    /**
+     * Wrap a routed screen in a vertical [ScrollPane] so any view taller than the
+     * window can be scrolled up/down (mouse wheel, drag-pan, Page Up/Down). Views
+     * that already manage their own scrolling (they ARE a [ScrollPane]) are shown
+     * as-is to avoid nested scrollbars. Cached per route so the wrapper and its
+     * scroll position survive re-navigation. The wrapper is transparent (styled in
+     * stark-lab.css) so it adds scrolling without changing the look of a screen.
+     */
+    private fun scrollableDisplay(route: ShellRoute, view: Node): Node =
+        routeDisplays.getOrPut(route) {
+            if (view is ScrollPane) {
+                view
+            } else {
+                ScrollPane(view).apply {
+                    isFitToWidth = true
+                    isPannable = true
+                    hbarPolicy = ScrollPane.ScrollBarPolicy.NEVER
+                    vbarPolicy = ScrollPane.ScrollBarPolicy.AS_NEEDED
+                    styleClass += "shell-content-scroll"
+                }
+            }
+        }
 
     private fun activeRouteNode(): Node? = activeRoute?.let(routeViews::get)
 

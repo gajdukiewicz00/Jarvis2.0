@@ -19,6 +19,7 @@ public class SecurityConfig extends BaseSecurityConfig {
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",
+            "/actuator/prometheus",
             "/api/v1/llm/health"
         };
     }

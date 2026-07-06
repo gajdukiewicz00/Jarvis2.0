@@ -29,10 +29,12 @@ import org.springframework.web.context.WebApplicationContext;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -101,6 +103,30 @@ class LlmChatSecurityIntegrationTest {
                                 """))
                 .andExpect(result -> org.assertj.core.api.Assertions.assertThat(result.getResponse().getStatus())
                         .isIn(401, 403));
+    }
+
+    @Test
+    void actuatorPrometheusIsPermittedWithoutAuthenticationWhileChatStillRequiresIt() throws Exception {
+        // Prometheus scraping must not be blocked by the service-JWT/gateway filter chain.
+        // No handler is registered for /actuator/** in this WebMvcTest slice, so a permitted
+        // request reaches the DispatcherServlet and results in 404 (no handler) rather than
+        // being rejected at the security layer with 401/403.
+        int prometheusStatus = mockMvc.perform(get("/actuator/prometheus"))
+                .andReturn().getResponse().getStatus();
+        assertThat(prometheusStatus).isNotIn(401, 403);
+
+        // A real API path must still enforce authentication.
+        mockMvc.perform(post("/api/v1/llm/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "sessionId": "session-1",
+                                  "messages": [
+                                    {"role": "user", "content": "Привет"}
+                                  ]
+                                }
+                                """))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isIn(401, 403));
     }
 
     @Test

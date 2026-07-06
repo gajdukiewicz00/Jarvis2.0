@@ -71,7 +71,7 @@ images:
     newTag: w6
   - name: jarvis/security-service
     newName: localhost:5000/jarvis/security-service
-    newTag: w6
+    newTag: w7
   - name: jarvis/life-tracker
     newName: localhost:5000/jarvis/life-tracker
     newTag: w6

@@ -25,12 +25,20 @@ import java.util.List;
  *       explicit skip/overwrite/keep-both conflict resolution</li>
  *   <li>{@code POST   /api/v1/memory/notes/import/encrypted/resolve?mode=} — encrypted variant of the above</li>
  *   <li>{@code GET    /api/v1/memory/notes/{memoryId}/why}        — "why does Jarvis remember this?"</li>
- *   <li>{@code DELETE /api/v1/memory/notes/{memoryId}?actor=&reason=} — forget</li>
+ *   <li>{@code DELETE /api/v1/memory/notes/{memoryId}?actor=&reason=} — forget one note</li>
+ *   <li>{@code DELETE /api/v1/memory/notes/by-query?query=&scope=&actor=&reason=} — Roadmap #11:
+ *       forget every ACTIVE note matching a text query and/or scope filter, returns the count removed</li>
+ *   <li>{@code PUT    /api/v1/memory/notes/{memoryId}/pin}        — Roadmap #11: mark pinned
+ *       (excluded from TTL cleanup, ranked higher in search)</li>
+ *   <li>{@code DELETE /api/v1/memory/notes/{memoryId}/pin}        — Roadmap #11: unmark pinned</li>
+ *   <li>{@code PUT    /api/v1/memory/notes/{memoryId}/scope?scope=} — Roadmap #11: change scope,
+ *       re-applying the finance/health local-only privacy guard</li>
  * </ul>
  *
  * <p>The DELETE path matches the SPEC's "Jarvis, forget this" command;
  * the orchestrator (Phase 5 confirmation) gates it as
- * {@code memory.delete-entry} (HIGH risk).</p>
+ * {@code memory.delete-entry} (HIGH risk). {@code /by-query} backs the
+ * voice "забудь это" variant of the same command.</p>
  */
 @RestController
 @RequestMapping("/api/v1/memory/notes")
@@ -156,5 +164,50 @@ public class MemoryNoteController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Roadmap #11 — "forget by query": deletes every ACTIVE note matching a
+     * text query and/or scope filter and returns the count removed. Backs a
+     * voice "забудь это" ("forget this") command; the caller (orchestrator /
+     * intent resolver) resolves the utterance to {@code query}/{@code scope}
+     * before calling this endpoint. A static {@code /by-query} segment, so it
+     * does not collide with {@code DELETE /{memoryId}} above.
+     */
+    @DeleteMapping("/by-query")
+    public MemoryForgetService.ForgetByQueryResult forgetByQuery(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) MemoryScope scope,
+            @RequestParam(required = false) String actor,
+            @RequestParam(required = false) String reason) {
+        return forgetService.forgetByQuery(query, scope, actor, reason);
+    }
+
+    /**
+     * Roadmap #11 — mark a note pinned: excluded from the TTL cleanup sweep,
+     * ranked ahead of non-pinned notes in list/keyword/semantic search.
+     */
+    @PutMapping("/{memoryId}/pin")
+    public ResponseEntity<MemoryNoteEntity> pin(@PathVariable String memoryId) {
+        MemoryNoteEntity updated = noteService.setPinned(memoryId, true);
+        return updated == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(updated);
+    }
+
+    /** Roadmap #11 — unmark a note pinned. */
+    @DeleteMapping("/{memoryId}/pin")
+    public ResponseEntity<MemoryNoteEntity> unpin(@PathVariable String memoryId) {
+        MemoryNoteEntity updated = noteService.setPinned(memoryId, false);
+        return updated == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(updated);
+    }
+
+    /**
+     * Roadmap #11 — dedicated "change scope" op (voice: "move this to &lt;scope&gt;"),
+     * re-applying the finance/health local-only privacy guard from wave 4.
+     */
+    @PutMapping("/{memoryId}/scope")
+    public ResponseEntity<MemoryNoteEntity> changeScope(@PathVariable String memoryId,
+                                                        @RequestParam MemoryScope scope) {
+        MemoryNoteEntity updated = noteService.changeScope(memoryId, scope);
+        return updated == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(updated);
     }
 }

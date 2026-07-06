@@ -364,11 +364,13 @@ public class MemoryNoteService {
                 // "No results were returned" for this pgvector query on this driver.
                 // SELECT only non-vector columns (never read the embedding back).
                 if (jdbcTemplate != null) {
+                    // Roadmap #11 — pinned notes rank ahead of non-pinned ones even in
+                    // semantic search; "pinned" need not be SELECTed to be ORDERed by.
                     String sql = "SELECT memory_id, title, category, body, vault_relative_path, created_at"
                             + " FROM memory_notes WHERE embedding IS NOT NULL"
                             + " AND (status IS NULL OR status <> 'deleted')"
                             + " AND (embedding <=> CAST(? AS vector)) <= ?"
-                            + " ORDER BY embedding <=> CAST(? AS vector) LIMIT " + k;
+                            + " ORDER BY pinned DESC, embedding <=> CAST(? AS vector) LIMIT " + k;
                     List<java.util.Map<String, Object>> rows =
                             jdbcTemplate.queryForList(sql, sb.toString(), 0.75, sb.toString());
                     if (!rows.isEmpty()) {
@@ -466,6 +468,72 @@ public class MemoryNoteService {
         note = repository.save(note);
         emitAudit(AuditEventType.MEMORY_WRITTEN, note,
                 Map.of("category", note.getCategory(), "updated", true));
+        return note;
+    }
+
+    /**
+     * Roadmap #11 — mark/unmark a note as pinned. Pinned notes are excluded from
+     * {@link MemoryExpiryCleanupService}'s TTL sweep (see {@link
+     * MemoryNoteRepository#findByStatusAndExpiresAtBeforeAndPinnedFalse}) and
+     * ranked ahead of non-pinned notes in list/keyword/semantic search. Backs a
+     * voice "pin this" / "unpin this" command. Does not touch the vault mirror or
+     * re-embed — pin state is UI/voice metadata, not part of the note's content
+     * (same "state change without a vault rewrite" precedent as {@link
+     * #mergeDuplicate}).
+     *
+     * @return the updated note, or {@code null} if {@code memoryId} does not exist
+     */
+    @Transactional
+    public MemoryNoteEntity setPinned(String memoryId, boolean pinned) {
+        MemoryNoteEntity note = repository.findById(memoryId).orElse(null);
+        if (note == null) {
+            return null;
+        }
+        note.setPinned(pinned);
+        note.setUpdatedAt(Instant.now());
+        note = repository.save(note);
+        emitAudit(AuditEventType.MEMORY_WRITTEN, note,
+                Map.of("category", note.getCategory(), "pinned", pinned));
+        return note;
+    }
+
+    /**
+     * Roadmap #11 — dedicated "change scope" operation (voice: "move this to
+     * &lt;scope&gt;"), distinct from the general {@link #update} PUT: only touches
+     * {@code scope} (and the privacy consequence below), never title/body/tags.
+     * Re-applies the finance/health local-only privacy guard from wave 4 (see
+     * {@link #isSensitiveScope}) exactly like {@link #update} does, so a note
+     * moved into {@code FINANCE}/{@code HEALTH} is forced back to {@code
+     * local-only} even if it previously had a more permissive privacy value.
+     *
+     * @return the updated note, or {@code null} if {@code memoryId} does not exist
+     * @throws IllegalArgumentException if {@code newScope} is {@code null}
+     */
+    @Transactional
+    public MemoryNoteEntity changeScope(String memoryId, MemoryScope newScope) {
+        if (newScope == null) {
+            throw new IllegalArgumentException("scope is required");
+        }
+        MemoryNoteEntity note = repository.findById(memoryId).orElse(null);
+        if (note == null) {
+            return null;
+        }
+        note.setScope(newScope.name());
+        if (isSensitiveScope(newScope)) {
+            note.setPrivacy("local-only");
+        }
+        if (note.getFrontmatter() != null) {
+            note.getFrontmatter().put("privacy", note.getPrivacy());
+        }
+        note.setUpdatedAt(Instant.now());
+        note = repository.save(note);
+        String relativePath = vaultWriter.write(note);
+        if (relativePath != null) {
+            note.setVaultRelativePath(relativePath);
+        }
+        note = repository.save(note);
+        emitAudit(AuditEventType.MEMORY_WRITTEN, note,
+                Map.of("category", note.getCategory(), "scopeChanged", true, "newScope", newScope.name()));
         return note;
     }
 

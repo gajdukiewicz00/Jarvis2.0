@@ -10,12 +10,19 @@ import java.util.Locale;
  * (owner-facing UI, or Jarvis itself when asked "why do you remember this?")
  * doesn't have to reconstruct the sentence from {@link MemoryNoteEntity}
  * fields itself.
+ *
+ * <p>Roadmap #11 — also carries {@code privacy} and {@code pinned} so the
+ * same "show source/privacy" surface used by a memory-management UI /
+ * voice command doesn't need a second round trip to {@code GET
+ * /api/v1/memory/notes/{memoryId}} just to read those two fields.</p>
  */
 public record WhyRememberedResponse(
         String memoryId,
         String source,
         BigDecimal confidence,
         String scope,
+        String privacy,
+        boolean pinned,
         Instant createdAt,
         String explanation) {
 
@@ -25,6 +32,8 @@ public record WhyRememberedResponse(
                 note.getSource(),
                 note.getConfidence(),
                 note.getScope(),
+                note.getPrivacy(),
+                note.isPinned(),
                 note.getCreatedAt(),
                 buildExplanation(note));
     }

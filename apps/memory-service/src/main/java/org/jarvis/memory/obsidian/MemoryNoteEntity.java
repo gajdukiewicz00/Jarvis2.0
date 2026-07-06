@@ -118,6 +118,16 @@ public class MemoryNoteEntity {
     @Column(name = "expires_at")
     private Instant expiresAt;
 
+    /**
+     * Roadmap #11 — owner/voice ("pin this") flag. Pinned notes are excluded
+     * from {@link MemoryExpiryCleanupService}'s TTL sweep regardless of
+     * {@link #expiresAt}, and ranked ahead of non-pinned notes in
+     * list/keyword/semantic search. Defaults to {@code false} — both the
+     * DB column and an unset builder/no-args field naturally land there.
+     */
+    @Column(name = "pinned", nullable = false)
+    private boolean pinned;
+
     public static String newMemoryId() {
         return "mem-" + java.util.UUID.randomUUID();
     }

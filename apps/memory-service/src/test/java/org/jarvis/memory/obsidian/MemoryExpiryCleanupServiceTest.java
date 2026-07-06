@@ -50,7 +50,7 @@ class MemoryExpiryCleanupServiceTest {
 
     @Test
     void cleanupExpiredNotesForgetsEachExpiredActiveNote() {
-        when(repository.findByStatusAndExpiresAtBefore("ACTIVE", FIXED_NOW))
+        when(repository.findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", FIXED_NOW))
                 .thenReturn(List.of(expiredNote("mem-1"), expiredNote("mem-2")));
 
         int removed = service.cleanupExpiredNotes();
@@ -64,9 +64,27 @@ class MemoryExpiryCleanupServiceTest {
         assertThat(meterRegistry.get("memory.cleanup.duration").timer().count()).isEqualTo(1);
     }
 
+    // Roadmap #11 — pinned notes must never be swept by the TTL sweep. The
+    // pinned exclusion is applied at the repository/SQL level (see
+    // MemoryNoteRepository#findByStatusAndExpiresAtBeforeAndPinnedFalse); this
+    // asserts the service always goes through that pinned-aware query rather
+    // than the plain (pinned-agnostic) expiry lookup.
+    @Test
+    void cleanupExpiredNotesUsesPinnedAwareQueryAndNeverTheUnfilteredOne() {
+        when(repository.findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", FIXED_NOW))
+                .thenReturn(List.of(expiredNote("mem-unpinned")));
+
+        int removed = service.cleanupExpiredNotes();
+
+        assertThat(removed).isEqualTo(1);
+        verify(repository).findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", FIXED_NOW);
+        verify(repository, never()).findByStatusAndExpiresAtBefore(any(), any());
+        verify(forgetService).forget(eq("mem-unpinned"), eq("system"), eq("ttl-expired"));
+    }
+
     @Test
     void cleanupExpiredNotesReturnsZeroWhenNothingExpired() {
-        when(repository.findByStatusAndExpiresAtBefore("ACTIVE", FIXED_NOW)).thenReturn(List.of());
+        when(repository.findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", FIXED_NOW)).thenReturn(List.of());
 
         int removed = service.cleanupExpiredNotes();
 
@@ -79,7 +97,7 @@ class MemoryExpiryCleanupServiceTest {
 
     @Test
     void cleanupExpiredNotesRecordsFailureStatusAndRethrowsOnRepositoryError() {
-        when(repository.findByStatusAndExpiresAtBefore("ACTIVE", FIXED_NOW))
+        when(repository.findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", FIXED_NOW))
                 .thenThrow(new IllegalStateException("db unavailable"));
 
         try {
@@ -99,13 +117,13 @@ class MemoryExpiryCleanupServiceTest {
 
         service.scheduledCleanup();
 
-        verify(repository, never()).findByStatusAndExpiresAtBefore(any(), any());
+        verify(repository, never()).findByStatusAndExpiresAtBeforeAndPinnedFalse(any(), any());
     }
 
     @Test
     void scheduledCleanupRunsWhenEnabled() {
         properties.setEnabled(true);
-        when(repository.findByStatusAndExpiresAtBefore("ACTIVE", FIXED_NOW))
+        when(repository.findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", FIXED_NOW))
                 .thenReturn(List.of(expiredNote("mem-3")));
 
         service.scheduledCleanup();

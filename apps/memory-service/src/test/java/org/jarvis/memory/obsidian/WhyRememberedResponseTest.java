@@ -16,6 +16,8 @@ class WhyRememberedResponseTest {
                 .source("obsidian:03_Memory/Health/note.md")
                 .confidence(new BigDecimal("0.80"))
                 .scope(MemoryScope.HEALTH.name())
+                .privacy("local-only")
+                .pinned(true)
                 .createdAt(Instant.parse("2026-01-01T00:00:00Z"))
                 .build();
 
@@ -25,6 +27,8 @@ class WhyRememberedResponseTest {
         assertThat(response.source()).isEqualTo("obsidian:03_Memory/Health/note.md");
         assertThat(response.confidence()).isEqualByComparingTo("0.80");
         assertThat(response.scope()).isEqualTo("HEALTH");
+        assertThat(response.privacy()).isEqualTo("local-only");
+        assertThat(response.pinned()).isTrue();
         assertThat(response.createdAt()).isEqualTo(Instant.parse("2026-01-01T00:00:00Z"));
     }
 

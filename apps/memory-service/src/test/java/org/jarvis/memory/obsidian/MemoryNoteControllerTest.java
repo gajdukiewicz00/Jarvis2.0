@@ -292,4 +292,84 @@ class MemoryNoteControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody()).isNull();
     }
+
+    // ------------------------------------------------------------ forget-by-query
+
+    @Test
+    void forgetByQueryDelegatesToForgetService() {
+        MemoryForgetService.ForgetByQueryResult result =
+                new MemoryForgetService.ForgetByQueryResult(2, List.of("mem-1", "mem-2"));
+        when(forgetService.forgetByQuery("dentist", MemoryScope.HEALTH, "owner", "voice forget"))
+                .thenReturn(result);
+
+        MemoryForgetService.ForgetByQueryResult response =
+                controller.forgetByQuery("dentist", MemoryScope.HEALTH, "owner", "voice forget");
+
+        assertThat(response).isEqualTo(result);
+    }
+
+    // -------------------------------------------------------------------- pin
+
+    @Test
+    void pinDelegatesToServiceAndReturnsOk() {
+        MemoryNoteEntity pinned = note("mem-1", "Existing");
+        pinned.setPinned(true);
+        when(noteService.setPinned("mem-1", true)).thenReturn(pinned);
+
+        ResponseEntity<MemoryNoteEntity> response = controller.pin("mem-1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(pinned);
+    }
+
+    @Test
+    void pinReturnsNotFoundWhenMissing() {
+        when(noteService.setPinned("mem-x", true)).thenReturn(null);
+
+        ResponseEntity<MemoryNoteEntity> response = controller.pin("mem-x");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void unpinDelegatesToServiceAndReturnsOk() {
+        MemoryNoteEntity unpinned = note("mem-1", "Existing");
+        when(noteService.setPinned("mem-1", false)).thenReturn(unpinned);
+
+        ResponseEntity<MemoryNoteEntity> response = controller.unpin("mem-1");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(unpinned);
+    }
+
+    @Test
+    void unpinReturnsNotFoundWhenMissing() {
+        when(noteService.setPinned("mem-x", false)).thenReturn(null);
+
+        ResponseEntity<MemoryNoteEntity> response = controller.unpin("mem-x");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    // ---------------------------------------------------------------- change scope
+
+    @Test
+    void changeScopeDelegatesToServiceAndReturnsOk() {
+        MemoryNoteEntity updated = note("mem-1", "Existing");
+        when(noteService.changeScope("mem-1", MemoryScope.FINANCE)).thenReturn(updated);
+
+        ResponseEntity<MemoryNoteEntity> response = controller.changeScope("mem-1", MemoryScope.FINANCE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isEqualTo(updated);
+    }
+
+    @Test
+    void changeScopeReturnsNotFoundWhenMissing() {
+        when(noteService.changeScope("mem-x", MemoryScope.FINANCE)).thenReturn(null);
+
+        ResponseEntity<MemoryNoteEntity> response = controller.changeScope("mem-x", MemoryScope.FINANCE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
 }

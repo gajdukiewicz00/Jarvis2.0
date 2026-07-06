@@ -18,7 +18,7 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
             SELECT n FROM MemoryNoteEntity n
              WHERE (:category IS NULL OR n.category = :category)
                AND (:status   IS NULL OR n.status   = :status)
-             ORDER BY n.createdAt DESC
+             ORDER BY n.pinned DESC, n.createdAt DESC
             """)
     List<MemoryNoteEntity> search(@Param("category") String category,
                                   @Param("status") String status,
@@ -35,7 +35,7 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
              WHERE (n.status IS NULL OR n.status <> 'deleted')
                AND (LOWER(n.title) LIKE LOWER(CONCAT('%', :q, '%'))
                  OR LOWER(n.body)  LIKE LOWER(CONCAT('%', :q, '%')))
-             ORDER BY n.createdAt DESC
+             ORDER BY n.pinned DESC, n.createdAt DESC
             """)
     List<MemoryNoteEntity> searchByText(@Param("q") String q, Pageable pageable);
 
@@ -67,7 +67,7 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
              WHERE (:category IS NULL OR n.category = :category)
                AND (:scope    IS NULL OR n.scope    = :scope)
                AND (:status   IS NULL OR n.status   = :status)
-             ORDER BY n.createdAt DESC
+             ORDER BY n.pinned DESC, n.createdAt DESC
             """)
     List<MemoryNoteEntity> searchByCategoryAndScope(@Param("category") String category,
                                                     @Param("scope") String scope,
@@ -95,4 +95,11 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
 
     /** Notes in the given status whose TTL has passed — scheduled expiry cleanup. */
     List<MemoryNoteEntity> findByStatusAndExpiresAtBefore(String status, Instant instant);
+
+    /**
+     * Roadmap #11 — same as {@link #findByStatusAndExpiresAtBefore}, but excludes
+     * pinned notes: a pinned note never expires regardless of {@code expiresAt},
+     * so {@link MemoryExpiryCleanupService} uses this variant instead.
+     */
+    List<MemoryNoteEntity> findByStatusAndExpiresAtBeforeAndPinnedFalse(String status, Instant instant);
 }

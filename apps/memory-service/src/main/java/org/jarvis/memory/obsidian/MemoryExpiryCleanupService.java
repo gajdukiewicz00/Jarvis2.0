@@ -52,16 +52,21 @@ public class MemoryExpiryCleanupService {
     }
 
     /**
-     * Forgets every ACTIVE note whose {@code expiresAt} is in the past.
-     * Public (not just scheduler-invoked) so it is directly unit-testable
+     * Forgets every ACTIVE, non-pinned note whose {@code expiresAt} is in the
+     * past. Public (not just scheduler-invoked) so it is directly unit-testable
      * and callable on-demand (e.g. an admin endpoint, a future phase).
+     *
+     * <p>Roadmap #11 — pinned notes are excluded via
+     * {@link MemoryNoteRepository#findByStatusAndExpiresAtBeforeAndPinnedFalse}
+     * so a "pin this" never gets swept away by its own TTL.</p>
      *
      * @return the number of notes forgotten
      */
     public int cleanupExpiredNotes() {
         Instant start = clock.instant();
         try {
-            List<MemoryNoteEntity> expired = repository.findByStatusAndExpiresAtBefore("ACTIVE", clock.instant());
+            List<MemoryNoteEntity> expired =
+                    repository.findByStatusAndExpiresAtBeforeAndPinnedFalse("ACTIVE", clock.instant());
             for (MemoryNoteEntity note : expired) {
                 forgetService.forget(note.getMemoryId(), "system", "ttl-expired");
             }

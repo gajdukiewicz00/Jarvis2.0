@@ -4,11 +4,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.jarvis.common.eventbus.AuditPublisher;
 import org.jarvis.events.AuditEventType;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -34,6 +38,13 @@ import java.util.Optional;
 @Slf4j
 @Service
 public class MemoryForgetService {
+
+    /**
+     * Roadmap #11 — upper bound on how many notes a single "forget by query"
+     * call will resolve and delete, so a broad/ambiguous voice utterance
+     * cannot wipe an unbounded number of notes in one shot.
+     */
+    private static final int MAX_FORGET_BY_QUERY_MATCHES = 100;
 
     private final MemoryNoteRepository repository;
     private final ObsidianVaultWriter vaultWriter;
@@ -98,6 +109,60 @@ public class MemoryForgetService {
         log.info("[{}] memory FORGOTTEN by {} reason='{}' tombstone={}",
                 note.getMemoryId(), actor, reason, tombstonePath);
         return new ForgetResult(true, tombstonePath, "deleted");
+    }
+
+    /** Result of {@link #forgetByQuery}: how many notes were forgotten, and their ids. */
+    public record ForgetByQueryResult(int count, List<String> memoryIds) {}
+
+    /**
+     * Roadmap #11 — "forget by query": resolves a text query and/or scope filter
+     * to zero or more ACTIVE notes and forgets each one through {@link #forget},
+     * so the same tombstone + soft-delete + audit trail applies as a single-note
+     * "forget this". Backs a voice "забудь это" ("forget this") command whose
+     * utterance the caller (orchestrator / intent resolver) has already reduced
+     * to a search query and/or scope — this method does no NLU of its own.
+     *
+     * @throws IllegalArgumentException if neither {@code query} nor {@code scope} is given
+     */
+    @Transactional
+    public ForgetByQueryResult forgetByQuery(String query, MemoryScope scope, String actor, String reason) {
+        List<MemoryNoteEntity> matches = resolveMatches(query, scope);
+        List<String> forgottenIds = new ArrayList<>();
+        for (MemoryNoteEntity note : matches) {
+            ForgetResult result = forget(note.getMemoryId(), actor, reason);
+            if (result.removed()) {
+                forgottenIds.add(note.getMemoryId());
+            }
+        }
+        return new ForgetByQueryResult(forgottenIds.size(), List.copyOf(forgottenIds));
+    }
+
+    /**
+     * Text query (title/body keyword match, {@link MemoryNoteRepository#searchByText})
+     * narrowed by scope when both are given; scope-only lookup
+     * ({@link MemoryNoteRepository#searchByCategoryAndScope}) when there is no query.
+     */
+    private List<MemoryNoteEntity> resolveMatches(String query, MemoryScope scope) {
+        boolean hasQuery = query != null && !query.isBlank();
+        if (!hasQuery && scope == null) {
+            throw new IllegalArgumentException("query or scope is required");
+        }
+        Pageable pageable = PageRequest.of(0, MAX_FORGET_BY_QUERY_MATCHES);
+        if (!hasQuery) {
+            return repository.searchByCategoryAndScope(null, scope.name(), "ACTIVE", pageable);
+        }
+        List<MemoryNoteEntity> textMatches = repository.searchByText(query, pageable);
+        if (scope == null) {
+            return textMatches;
+        }
+        String scopeStr = scope.name();
+        List<MemoryNoteEntity> filtered = new ArrayList<>();
+        for (MemoryNoteEntity note : textMatches) {
+            if (scopeStr.equals(note.getScope())) {
+                filtered.add(note);
+            }
+        }
+        return filtered;
     }
 
     private void emitAudit(String memoryId, Map<String, Object> payload) {

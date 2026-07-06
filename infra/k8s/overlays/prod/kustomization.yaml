@@ -67,49 +67,49 @@ configMapGenerator:
 images:
   - name: jarvis/api-gateway
     newName: localhost:5000/jarvis/api-gateway
-    newTag: w4
+    newTag: w6
   - name: jarvis/security-service
     newName: localhost:5000/jarvis/security-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/life-tracker
     newName: localhost:5000/jarvis/life-tracker
-    newTag: w4
+    newTag: w6
   - name: jarvis/analytics-service
     newName: localhost:5000/jarvis/analytics-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/voice-gateway
     newName: localhost:5000/jarvis/voice-gateway
-    newTag: w3
+    newTag: w6
   - name: jarvis/pc-control
     newName: localhost:5000/jarvis/pc-control
-    newTag: w3
+    newTag: w6
   - name: jarvis/smart-home-service
     newName: localhost:5000/jarvis/smart-home-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/media-service
     newName: localhost:5000/jarvis/media-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/agent-service
     newName: localhost:5000/jarvis/agent-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/nlp-service
     newName: localhost:5000/jarvis/nlp-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/orchestrator
     newName: localhost:5000/jarvis/orchestrator
-    newTag: w4
+    newTag: w6
   - name: jarvis/user-profile
     newName: localhost:5000/jarvis/user-profile
-    newTag: movie1
+    newTag: w6
   - name: jarvis/planner-service
     newName: localhost:5000/jarvis/planner-service
-    newTag: w4
+    newTag: w6
   - name: jarvis/sync-service
     newName: localhost:5000/jarvis/sync-service
-    newTag: w5
+    newTag: w6
   - name: jarvis/llm-service
     newName: localhost:5000/jarvis/llm-service
-    newTag: w5
+    newTag: w6
   - name: jarvis/llm-server
     newName: localhost:5000/jarvis/llm-server
     newTag: local
@@ -118,7 +118,7 @@ images:
     newTag: local
   - name: jarvis/memory-service
     newName: localhost:5000/jarvis/memory-service
-    newTag: w5
+    newTag: w6
 
 patches:
   - path: ha-core-deployments.patch.yaml

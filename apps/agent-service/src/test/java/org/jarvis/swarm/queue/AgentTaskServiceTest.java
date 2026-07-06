@@ -6,18 +6,24 @@ import org.jarvis.swarm.executor.RoleExecutor;
 import org.jarvis.swarm.executor.RoleResult;
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.support.BlockingRoleExecutor;
+import org.jarvis.swarm.support.ForwardingAgentTaskStore;
 import org.jarvis.swarm.support.SwarmTestFactory;
 import org.jarvis.swarm.task.AgentTask;
 import org.jarvis.swarm.task.AgentTaskStatus;
+import org.jarvis.swarm.task.AgentTaskStore;
+import org.jarvis.swarm.task.InMemoryAgentTaskStore;
 import org.jarvis.swarm.task.TaskNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -77,6 +83,23 @@ class AgentTaskServiceTest {
         var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES");
         AgentTask created = engine.taskService().submit("u1", AgentRole.DOCS, "doc", Set.of(), true, null, null);
         assertThat(engine.taskService().cancel(created.taskId(), "u1")).isFalse();
+    }
+
+    @Test
+    void cancelOfAlreadyFailedTaskIsANoOpInsteadOfThrowing() {
+        var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES");
+        engine.panic().engage("test", "drill", 1L);
+        AgentTask created = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null);
+        AgentTask failed = engine.taskService().getTask(created.taskId(), "u1");
+        assertThat(failed.status()).isEqualTo(AgentTaskStatus.FAILED);
+
+        // Before the fix, cancel() treated FAILED as non-terminal and attempted the
+        // illegal FAILED -> CANCELLED transition, throwing InvalidTransitionException
+        // (surfaced as an HTTP 409) instead of returning a harmless no-op.
+        assertThat(engine.taskService().cancel(created.taskId(), "u1")).isFalse();
+        AgentTask stillFailed = engine.taskService().getTask(created.taskId(), "u1");
+        assertThat(stillFailed.status()).isEqualTo(AgentTaskStatus.FAILED);
     }
 
     @Test
@@ -185,6 +208,69 @@ class AgentTaskServiceTest {
                 Set.of(), true, null, null, "shared-key");
 
         assertThat(second.taskId()).isNotEqualTo(first.taskId());
+    }
+
+    @Test
+    void concurrentSubmitsWithSameIdempotencyKeyCreateOnlyOneTask() throws Exception {
+        // Simulates two concurrent replays of the same idempotent request racing the
+        // check-then-act in submit(): both must not be able to observe "not found" and
+        // each create a new task. A decorator around the store deterministically forces
+        // the first caller to be mid-check while the second caller is dispatched, so the
+        // interleaving described in the bug report (both calls see Optional.empty()) is
+        // reproduced exactly instead of relying on real thread-timing luck.
+        CountDownLatch firstCallEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstCall = new CountDownLatch(1);
+        // Counts down only if a second, distinct call reaches the lookup while the first
+        // is still mid-check — i.e. only reachable pre-fix, since the fix's per-key lock
+        // keeps a second caller blocked (never even reaching this method) until the first
+        // fully completes.
+        CountDownLatch secondCallReachedLookup = new CountDownLatch(1);
+        AtomicInteger lookupCalls = new AtomicInteger();
+        InMemoryAgentTaskStore delegate = new InMemoryAgentTaskStore();
+        AgentTaskStore racingStore = new ForwardingAgentTaskStore(delegate) {
+            @Override
+            public Optional<AgentTask> findByIdempotencyKey(String userId, String idempotencyKey) {
+                if (lookupCalls.getAndIncrement() == 0) {
+                    firstCallEntered.countDown();
+                    try {
+                        releaseFirstCall.await(2, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    // Real state at the moment this call started: nothing saved yet.
+                    return Optional.empty();
+                }
+                secondCallReachedLookup.countDown();
+                return delegate.findByIdempotencyKey(userId, idempotencyKey);
+            }
+        };
+
+        var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES",
+                new org.jarvis.swarm.support.SameThreadExecutorService(), null, racingStore);
+        ExecutorService callers = Executors.newFixedThreadPool(2);
+        try {
+            Future<AgentTask> callA = callers.submit(() -> engine.taskService().submit("u1", AgentRole.DOCS,
+                    "goal", Set.of(), true, null, null, "race-key"));
+            assertThat(firstCallEntered.await(2, TimeUnit.SECONDS)).isTrue();
+
+            Future<AgentTask> callB = callers.submit(() -> engine.taskService().submit("u1", AgentRole.DOCS,
+                    "goal", Set.of(), true, null, null, "race-key"));
+            // Best-effort: give callB a window to reach its own lookup call *before* callA is
+            // released, so an unguarded implementation reliably races both lookups against an
+            // empty store instead of happening to interleave the other way. Under the fix,
+            // callB blocks on the per-key lock instead, so this simply times out (expected)
+            // and callA is released regardless.
+            secondCallReachedLookup.await(500, TimeUnit.MILLISECONDS);
+            releaseFirstCall.countDown();
+
+            AgentTask taskA = callA.get(5, TimeUnit.SECONDS);
+            AgentTask taskB = callB.get(5, TimeUnit.SECONDS);
+
+            assertThat(taskB.taskId()).isEqualTo(taskA.taskId());
+            assertThat(engine.taskService().listTasks("u1")).hasSize(1);
+        } finally {
+            callers.shutdownNow();
+        }
     }
 
     @Test

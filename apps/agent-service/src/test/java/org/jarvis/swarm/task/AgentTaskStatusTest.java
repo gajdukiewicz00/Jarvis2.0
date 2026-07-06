@@ -21,6 +21,19 @@ class AgentTaskStatusTest {
     }
 
     @Test
+    void isTerminalIncludesFailedSoCancelCanNoOpInsteadOfThrowing() {
+        // FAILED must be terminal for AgentTaskService#cancel's isTerminal() guard to treat
+        // an already-failed task as a no-op instead of attempting the illegal
+        // FAILED -> CANCELLED transition (which canTransitionTo correctly rejects: retry
+        // only allows FAILED -> QUEUED).
+        assertThat(AgentTaskStatus.COMPLETED.isTerminal()).isTrue();
+        assertThat(AgentTaskStatus.CANCELLED.isTerminal()).isTrue();
+        assertThat(AgentTaskStatus.FAILED.isTerminal()).isTrue();
+        assertThat(AgentTaskStatus.RUNNING.isTerminal()).isFalse();
+        assertThat(AgentTaskStatus.QUEUED.isTerminal()).isFalse();
+    }
+
+    @Test
     void invalidTransitionsAreRejected() {
         assertThat(AgentTaskStatus.COMPLETED.canTransitionTo(AgentTaskStatus.RUNNING)).isFalse();
         assertThat(AgentTaskStatus.CANCELLED.canTransitionTo(AgentTaskStatus.QUEUED)).isFalse();

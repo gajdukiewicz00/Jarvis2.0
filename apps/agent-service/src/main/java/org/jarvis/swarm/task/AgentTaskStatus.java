@@ -14,8 +14,15 @@ public enum AgentTaskStatus {
     FAILED,
     CANCELLED;
 
+    /**
+     * True for any status that ends a single attempt: COMPLETED, CANCELLED, and FAILED.
+     * FAILED is included because callers like {@link org.jarvis.swarm.queue.AgentTaskService#cancel}
+     * must treat an already-FAILED task as a no-op rather than attempting the illegal
+     * FAILED -&gt; CANCELLED transition. A separate retry path (FAILED -&gt; QUEUED, see
+     * {@link #canTransitionTo}) is still allowed for a single attempt's failure.
+     */
     public boolean isTerminal() {
-        return this == COMPLETED || this == CANCELLED;
+        return this == COMPLETED || this == CANCELLED || this == FAILED;
     }
 
     /** FAILED is terminal for a single attempt but may be retried back to QUEUED. */

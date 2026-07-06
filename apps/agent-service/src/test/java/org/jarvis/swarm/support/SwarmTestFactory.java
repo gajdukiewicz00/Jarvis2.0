@@ -100,6 +100,15 @@ public final class SwarmTestFactory {
     /** Build an engine, optionally overriding the role executors (for deterministic blocking tests). */
     public static Engine engine(Path sandboxDir, String grantedCsv, ExecutorService executor,
                                 List<RoleExecutor> executorsOverride) {
+        return engine(sandboxDir, grantedCsv, executor, executorsOverride, null);
+    }
+
+    /**
+     * Build an engine, optionally overriding the role executors and/or the {@link AgentTaskStore}
+     * (e.g. a decorator that injects timing control for deterministic concurrency tests).
+     */
+    public static Engine engine(Path sandboxDir, String grantedCsv, ExecutorService executor,
+                                List<RoleExecutor> executorsOverride, AgentTaskStore storeOverride) {
         SwarmProperties props = props(sandboxDir);
         ProcessRunner runner = new ProcessRunner();
         SandboxManager sandbox = new SandboxManager(props, runner);
@@ -124,7 +133,7 @@ public final class SwarmTestFactory {
                 new FinanceAgentExecutor());
         RoleExecutorRegistry registry = new RoleExecutorRegistry(roleExecutors);
 
-        AgentTaskStore store = new InMemoryAgentTaskStore();
+        AgentTaskStore store = storeOverride != null ? storeOverride : new InMemoryAgentTaskStore();
         AgentTaskService taskService = new AgentTaskService(store, executor, Clock.systemUTC(), catalog,
                 resolver, sandbox, guard, registry, audit, metrics, props, new PendingPatchStore());
         SwarmCoordinator coordinator = new SwarmCoordinator(taskService, store, registry, props);

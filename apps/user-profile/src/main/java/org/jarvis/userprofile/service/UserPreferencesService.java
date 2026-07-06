@@ -7,6 +7,7 @@ import org.jarvis.userprofile.model.CommunicationStyle;
 import org.jarvis.userprofile.model.Emotion;
 import org.jarvis.userprofile.model.UserPreferences;
 import org.jarvis.userprofile.repository.UserPreferencesRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,9 +58,21 @@ public class UserPreferencesService {
         entity.setAllowSarcasm(false);
         entity.setTtsVoiceId("jarvis_male_en");
         entity.setTtsEmotionDefault(Emotion.NEUTRAL);
-        
-        UserPreferences saved = repository.save(entity);
-        return toDto(saved);
+
+        try {
+            UserPreferences saved = repository.save(entity);
+            return toDto(saved);
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent request already inserted default preferences for
+            // this user between our existsByUserId check and this save()
+            // (user_id has a DB-level UNIQUE constraint). Treat the
+            // unique-constraint violation as an idempotent success and
+            // return the row the other transaction created instead of
+            // propagating a raw 500.
+            return repository.findByUserId(userId)
+                    .map(this::toDto)
+                    .orElseThrow(() -> e);
+        }
     }
     
     public boolean exists(String userId) {

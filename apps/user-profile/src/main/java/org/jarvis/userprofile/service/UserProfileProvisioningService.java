@@ -3,6 +3,7 @@ package org.jarvis.userprofile.service;
 import lombok.RequiredArgsConstructor;
 import org.jarvis.userprofile.domain.UserProfile;
 import org.jarvis.userprofile.repository.UserProfileRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,19 @@ public class UserProfileProvisioningService {
         profile.setDisplayName(userId);
         profile.setTimezone("UTC");
         profile.setLanguage("en");
-        userProfileRepository.save(profile);
+
+        try {
+            userProfileRepository.save(profile);
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent request already created this user's profile between
+            // our existsByUserId check and this save() (user_id has a DB-level
+            // UNIQUE constraint). Treat the unique-constraint violation as an
+            // idempotent success rather than propagating a raw 500, but only
+            // if the row genuinely exists now - otherwise this was a different
+            // integrity violation and should still surface.
+            if (!userProfileRepository.existsByUserId(userId)) {
+                throw e;
+            }
+        }
     }
 }

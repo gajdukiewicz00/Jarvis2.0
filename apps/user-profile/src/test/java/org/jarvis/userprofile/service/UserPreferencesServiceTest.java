@@ -11,12 +11,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -193,6 +195,45 @@ class UserPreferencesServiceTest {
 
         assertEquals("user-5", result.getUserId());
         assertEquals(Emotion.NEUTRAL, result.getTtsEmotionDefault());
+    }
+
+    @Test
+    void createDefaultPreferencesIsIdempotentWhenConcurrentInsertWinsRace() {
+        // Simulates two concurrent first-time GETs for a user with no
+        // preferences row yet: both see existsByUserId() == false, both
+        // attempt the INSERT, and the loser hits the unique-constraint
+        // violation. The loser must catch it and return the row the winner
+        // already created instead of letting a raw 500 propagate.
+        when(repository.existsByUserId("user-9")).thenReturn(false);
+        when(repository.save(any(UserPreferences.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+
+        UserPreferences alreadyCreated = new UserPreferences();
+        alreadyCreated.setUserId("user-9");
+        alreadyCreated.setTimezone("Europe/Warsaw");
+        alreadyCreated.setLanguage("ru");
+        alreadyCreated.setCommunicationStyle(CommunicationStyle.FRIENDLY);
+        when(repository.findByUserId("user-9")).thenReturn(Optional.of(alreadyCreated));
+
+        UserPreferencesDto result = service.createDefaultPreferences("user-9");
+
+        assertEquals("user-9", result.getUserId());
+        assertEquals("Europe/Warsaw", result.getTimezone());
+        assertEquals(CommunicationStyle.FRIENDLY, result.getCommunicationStyle());
+    }
+
+    @Test
+    void createDefaultPreferencesRethrowsWhenConstraintViolationIsNotARace() {
+        // If no row exists for this user after the violation, this was some
+        // other integrity issue, not a benign concurrent-insert race, and
+        // must still surface to the caller.
+        when(repository.existsByUserId("user-10")).thenReturn(false);
+        when(repository.save(any(UserPreferences.class)))
+                .thenThrow(new DataIntegrityViolationException("some other violation"));
+        when(repository.findByUserId("user-10")).thenReturn(Optional.empty());
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> service.createDefaultPreferences("user-10"));
     }
 
     @Test

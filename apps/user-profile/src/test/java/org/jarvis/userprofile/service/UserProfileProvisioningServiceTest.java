@@ -7,9 +7,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,5 +48,39 @@ class UserProfileProvisioningServiceTest {
         service.ensureProfileExists("user-1");
 
         verify(userProfileRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void ensureProfileExistsIsIdempotentWhenConcurrentInsertWinsRace() {
+        // Simulates two concurrent requests for a brand-new user: both see
+        // existsByUserId() == false, both attempt the INSERT, and the loser
+        // hits the unique-constraint violation. The loser must swallow it
+        // instead of letting the DataIntegrityViolationException propagate,
+        // since the profile now exists (created by the winner).
+        when(userProfileRepository.existsByUserId("user-1"))
+                .thenReturn(false)
+                .thenReturn(true);
+        when(userProfileRepository.save(any(UserProfile.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"));
+
+        UserProfileProvisioningService service = new UserProfileProvisioningService(userProfileRepository);
+
+        assertDoesNotThrow(() -> service.ensureProfileExists("user-1"));
+
+        verify(userProfileRepository, times(2)).existsByUserId("user-1");
+    }
+
+    @Test
+    void ensureProfileExistsRethrowsWhenConstraintViolationIsNotARace() {
+        // If the profile still doesn't exist after the violation, this was
+        // some other integrity issue, not a benign concurrent-insert race,
+        // and must still surface to the caller.
+        when(userProfileRepository.existsByUserId("user-1")).thenReturn(false);
+        when(userProfileRepository.save(any(UserProfile.class)))
+                .thenThrow(new DataIntegrityViolationException("some other violation"));
+
+        UserProfileProvisioningService service = new UserProfileProvisioningService(userProfileRepository);
+
+        assertThrows(DataIntegrityViolationException.class, () -> service.ensureProfileExists("user-1"));
     }
 }

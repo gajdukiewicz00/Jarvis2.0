@@ -115,7 +115,7 @@ images:
     newTag: local
   - name: jarvis/embedding-service
     newName: localhost:5000/jarvis/embedding-service
-    newTag: local
+    newTag: w6
   - name: jarvis/memory-service
     newName: localhost:5000/jarvis/memory-service
     newTag: w6

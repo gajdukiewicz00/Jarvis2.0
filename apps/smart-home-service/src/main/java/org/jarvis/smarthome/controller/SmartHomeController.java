@@ -201,12 +201,22 @@ public class SmartHomeController {
         return ResponseEntity.ok(sceneSimulationService.simulate(name, confirm));
     }
 
-    /** Bounded, most-recent-first page of persisted state changes for a device. */
+    /**
+     * Bounded, most-recent-first page of persisted state changes for a device,
+     * scoped to the authenticated caller — one user must never be able to read
+     * another user's device state-history.
+     */
     @GetMapping("/devices/{deviceId}/state-history")
-    public List<DeviceStateHistoryEntry> deviceStateHistory(
+    public ResponseEntity<?> deviceStateHistory(
+            @RequestHeader(value = "X-User-Id", required = false) String userId,
             @PathVariable String deviceId,
             @RequestParam(required = false, defaultValue = "50") int limit) {
-        return stateHistoryService.history(deviceId, limit);
+        try {
+            String uid = requireUserId(userId);
+            return ResponseEntity.ok(stateHistoryService.history(uid, deviceId, limit));
+        } catch (SmartHomeValidationException e) {
+            return ResponseEntity.badRequest().body(error("MISSING_USER_CONTEXT", e.getMessage()));
+        }
     }
 
     /**

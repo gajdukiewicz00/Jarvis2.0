@@ -7,5 +7,7 @@ import java.util.List;
 
 public interface DeviceStateHistoryRepository extends JpaRepository<DeviceStateHistoryEntry, Long> {
 
-    List<DeviceStateHistoryEntry> findByDeviceIdOrderByRecordedAtDesc(String deviceId, Pageable pageable);
+    /** Scoped to the authenticated user so one user's history cannot leak another's. */
+    List<DeviceStateHistoryEntry> findByUserIdAndDeviceIdOrderByRecordedAtDesc(
+            String userId, String deviceId, Pageable pageable);
 }

@@ -42,9 +42,12 @@ public class DeviceStateHistoryService {
         return repository.save(entry);
     }
 
-    /** Bounded, most-recent-first page of persisted history for a device. */
-    public List<DeviceStateHistoryEntry> history(String deviceId, int limit) {
-        return repository.findByDeviceIdOrderByRecordedAtDesc(deviceId, PageRequest.of(0, clamp(limit)));
+    /**
+     * Bounded, most-recent-first page of persisted history for a device, scoped to
+     * {@code userId} — callers must never see another user's device history.
+     */
+    public List<DeviceStateHistoryEntry> history(String userId, String deviceId, int limit) {
+        return repository.findByUserIdAndDeviceIdOrderByRecordedAtDesc(userId, deviceId, PageRequest.of(0, clamp(limit)));
     }
 
     private static int clamp(int limit) {

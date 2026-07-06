@@ -53,29 +53,30 @@ class DeviceStateHistoryServiceTest {
 
     @Test
     void historyClampsLimitToConfiguredMaximum() {
-        service.history("kitchen_light", 10_000);
+        service.history("user-a", "kitchen_light", 10_000);
 
-        verify(repository).findByDeviceIdOrderByRecordedAtDesc(eq("kitchen_light"),
+        verify(repository).findByUserIdAndDeviceIdOrderByRecordedAtDesc(eq("user-a"), eq("kitchen_light"),
                 argThat(page -> page.getPageSize() == 500));
     }
 
     @Test
     void historyAppliesDefaultLimitWhenNonPositive() {
-        service.history("kitchen_light", 0);
+        service.history("user-a", "kitchen_light", 0);
 
-        verify(repository).findByDeviceIdOrderByRecordedAtDesc(eq("kitchen_light"),
+        verify(repository).findByUserIdAndDeviceIdOrderByRecordedAtDesc(eq("user-a"), eq("kitchen_light"),
                 argThat(page -> page.getPageSize() == 50));
     }
 
     @Test
     void historyDelegatesToRepositoryForNormalLimit() {
         List<DeviceStateHistoryEntry> expected = List.of();
-        when(repository.findByDeviceIdOrderByRecordedAtDesc(eq("kitchen_light"), any())).thenReturn(expected);
+        when(repository.findByUserIdAndDeviceIdOrderByRecordedAtDesc(eq("user-a"), eq("kitchen_light"), any()))
+                .thenReturn(expected);
 
-        List<DeviceStateHistoryEntry> result = service.history("kitchen_light", 5);
+        List<DeviceStateHistoryEntry> result = service.history("user-a", "kitchen_light", 5);
 
         assertSame(expected, result);
-        verify(repository).findByDeviceIdOrderByRecordedAtDesc(eq("kitchen_light"),
+        verify(repository).findByUserIdAndDeviceIdOrderByRecordedAtDesc(eq("user-a"), eq("kitchen_light"),
                 argThat(page -> page.getPageSize() == 5));
     }
 }

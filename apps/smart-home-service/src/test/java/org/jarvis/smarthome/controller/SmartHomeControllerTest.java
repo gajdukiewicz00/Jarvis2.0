@@ -54,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -805,7 +806,7 @@ class SmartHomeControllerTest {
     }
 
     @Test
-    void deviceStateHistoryDelegatesToStateHistoryService() {
+    void deviceStateHistoryDelegatesToStateHistoryServiceScopedToCaller() {
         DeviceStateHistoryEntry entry = DeviceStateHistoryEntry.builder()
                 .id(1L)
                 .deviceId("kitchen_light")
@@ -815,11 +816,50 @@ class SmartHomeControllerTest {
                 .success(true)
                 .recordedAt(Instant.now())
                 .build();
-        when(stateHistoryService.history("kitchen_light", 25)).thenReturn(List.of(entry));
+        when(stateHistoryService.history("user-1", "kitchen_light", 25)).thenReturn(List.of(entry));
 
-        List<DeviceStateHistoryEntry> result = controller.deviceStateHistory("kitchen_light", 25);
+        ResponseEntity<?> response = controller.deviceStateHistory("user-1", "kitchen_light", 25);
 
-        assertEquals(List.of(entry), result);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(List.of(entry), response.getBody());
+    }
+
+    @Test
+    void deviceStateHistoryRejectsMissingDelegatedUserContext() {
+        ResponseEntity<?> response = controller.deviceStateHistory(" ", "kitchen_light", 25);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("MISSING_USER_CONTEXT", ((Map<?, ?>) response.getBody()).get("error"));
+        verify(stateHistoryService, never()).history(any(), any(), anyInt());
+    }
+
+    /** Regression test for FINDING #5 (cross-user data leak): user A must never receive
+     * user B's device state-history for a shared deviceId — the service call itself must
+     * be scoped to the caller's own userId, not just the deviceId. */
+    @Test
+    void deviceStateHistoryDoesNotExposeAnotherUsersHistoryForSameDevice() {
+        DeviceStateHistoryEntry userBEntry = DeviceStateHistoryEntry.builder()
+                .id(2L)
+                .deviceId("kitchen_light")
+                .userId("user-b")
+                .action("TOGGLE")
+                .stateJson("{}")
+                .success(true)
+                .recordedAt(Instant.now())
+                .build();
+        // The repository/service layer is scoped by userId, so a query as "user-a" for a
+        // device that only has "user-b" history returns nothing for user-a.
+        when(stateHistoryService.history("user-a", "kitchen_light", 50)).thenReturn(List.of());
+        when(stateHistoryService.history("user-b", "kitchen_light", 50)).thenReturn(List.of(userBEntry));
+
+        ResponseEntity<?> userAResponse = controller.deviceStateHistory("user-a", "kitchen_light", 50);
+        ResponseEntity<?> userBResponse = controller.deviceStateHistory("user-b", "kitchen_light", 50);
+
+        assertEquals(HttpStatus.OK, userAResponse.getStatusCode());
+        assertTrue(((List<?>) userAResponse.getBody()).isEmpty());
+        assertEquals(List.of(userBEntry), userBResponse.getBody());
+        verify(stateHistoryService).history("user-a", "kitchen_light", 50);
+        verify(stateHistoryService).history("user-b", "kitchen_light", 50);
     }
 
     private static SmartHomeAutomationRule automationRule() {

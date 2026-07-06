@@ -106,10 +106,10 @@ images:
     newTag: w4
   - name: jarvis/sync-service
     newName: localhost:5000/jarvis/sync-service
-    newTag: w4
+    newTag: w5
   - name: jarvis/llm-service
     newName: localhost:5000/jarvis/llm-service
-    newTag: movie9
+    newTag: w5
   - name: jarvis/llm-server
     newName: localhost:5000/jarvis/llm-server
     newTag: local
@@ -118,7 +118,7 @@ images:
     newTag: local
   - name: jarvis/memory-service
     newName: localhost:5000/jarvis/memory-service
-    newTag: w4
+    newTag: w5
 
 patches:
   - path: ha-core-deployments.patch.yaml

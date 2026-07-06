@@ -57,6 +57,8 @@ services:
     url: ${API_GATEWAY_URL:http://api-gateway:8080}
   analytics:
     url: ${ANALYTICS_URL:http://analytics-service:8087}
+  life-tracker:
+    url: ${LIFE_TRACKER_URL:http://life-tracker:8085}
   user-profile:
     url: ${USER_PROFILE_URL:http://user-profile:8089}
   llm-service:

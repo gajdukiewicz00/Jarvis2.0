@@ -57,6 +57,24 @@ spec:
                 secretKeyRef:
                   name: jarvis-secrets
                   key: MQTT_PASSWORD
+            # Device state-history persistence (wave-6). Own schema in the shared
+            # jarvis_db, mirroring the other DB-backed services. Overrides the
+            # global SPRING_DATASOURCE_URL from jarvis-secrets; username/password
+            # still come from that secret via envFrom. Requires smart-home-service
+            # in the db-clients postgres NetworkPolicy allowlist (see
+            # overlays/prod/networkpolicy-allowlist.yaml).
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://postgres.jarvis-prod.svc.cluster.local:5432/jarvis_db?currentSchema=smarthome"
+            - name: SPRING_FLYWAY_TABLE
+              value: "flyway_schema_history_smarthome"
+            - name: SPRING_FLYWAY_SCHEMAS
+              value: "smarthome"
+            - name: SPRING_FLYWAY_DEFAULT_SCHEMA
+              value: "smarthome"
+            - name: SPRING_FLYWAY_CREATE_SCHEMAS
+              value: "true"
+            - name: SPRING_JPA_PROPERTIES_HIBERNATE_DEFAULT_SCHEMA
+              value: "smarthome"
           resources:
             limits:
               memory: "256Mi"

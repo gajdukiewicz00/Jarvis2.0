@@ -32,7 +32,7 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
     /** Keyword search over note title/body (fallback when embeddings are unavailable). */
     @Query("""
             SELECT n FROM MemoryNoteEntity n
-             WHERE (n.status IS NULL OR n.status <> 'deleted')
+             WHERE (n.status IS NULL OR n.status <> 'DELETED')
                AND (LOWER(n.title) LIKE LOWER(CONCAT('%', :q, '%'))
                  OR LOWER(n.body)  LIKE LOWER(CONCAT('%', :q, '%')))
              ORDER BY n.pinned DESC, n.createdAt DESC
@@ -48,7 +48,7 @@ public interface MemoryNoteRepository extends JpaRepository<MemoryNoteEntity, St
     @Query(value = """
             SELECT memory_id FROM memory_notes
              WHERE embedding IS NOT NULL
-               AND (status IS NULL OR status <> 'deleted')
+               AND (status IS NULL OR status <> 'DELETED')
                AND (embedding <=> CAST(:qv AS vector)) <= :maxDistance
              ORDER BY embedding <=> CAST(:qv AS vector)
              LIMIT :k

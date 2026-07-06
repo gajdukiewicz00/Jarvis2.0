@@ -229,6 +229,20 @@ public class MemoryNoteService {
                     || request.getConfidence().compareTo(existing.getConfidence()) > 0)) {
             existing.setConfidence(request.getConfidence());
         }
+        // Roadmap — dedup must not bypass the finance/health local-only privacy
+        // guard: re-resolve the effective scope (incoming request, else whatever
+        // the existing note already had) and re-apply the same guard used by
+        // update()/changeScope(), so a resubmission that reclassifies a note as
+        // FINANCE/HEALTH cannot silently keep an overly-permissive privacy value.
+        MemoryScope effectiveScope = request.getScope() != null
+                ? request.getScope() : MemoryScope.fromString(existing.getScope());
+        if (isSensitiveScope(effectiveScope)) {
+            existing.setScope(effectiveScope.name());
+            existing.setPrivacy("local-only");
+        } else if (request.getScope() != null || request.getPrivacy() != null) {
+            existing.setScope(effectiveScope.name());
+            existing.setPrivacy(resolvePrivacy(effectiveScope, request.getPrivacy()));
+        }
         Instant now = Instant.now();
         Instant requestedExpiry = resolveExpiresAt(request, now);
         if (requestedExpiry != null) {
@@ -368,7 +382,7 @@ public class MemoryNoteService {
                     // semantic search; "pinned" need not be SELECTed to be ORDERed by.
                     String sql = "SELECT memory_id, title, category, body, vault_relative_path, created_at"
                             + " FROM memory_notes WHERE embedding IS NOT NULL"
-                            + " AND (status IS NULL OR status <> 'deleted')"
+                            + " AND (status IS NULL OR status <> 'DELETED')"
                             + " AND (embedding <=> CAST(? AS vector)) <= ?"
                             + " ORDER BY pinned DESC, embedding <=> CAST(? AS vector) LIMIT " + k;
                     List<java.util.Map<String, Object>> rows =

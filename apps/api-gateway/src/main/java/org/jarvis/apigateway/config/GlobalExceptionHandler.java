@@ -5,6 +5,7 @@ import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.apigateway.capability.CapabilityUnavailableException;
 import org.jarvis.apigateway.proxy.UpstreamProxyException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -370,6 +371,27 @@ public class GlobalExceptionHandler {
             HttpStatus.BAD_REQUEST,
             "INVALID_ARGUMENT",
             ex.getMessage(),
+            request
+        );
+    }
+
+    /**
+     * Handle authorization denials (403). Method-security (@PreAuthorize) throws
+     * AuthorizationDeniedException (a subclass of AccessDeniedException) AFTER the
+     * Spring Security filter chain, so it escapes to MVC and — without this handler —
+     * would fall through to the catch-all below and be reported as a 500. Map it to
+     * a proper 403 so a non-authorized caller is Forbidden, not Server Error.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, Object>> handleAccessDenied(
+            AccessDeniedException ex, WebRequest request) {
+
+        log.warn("Access denied [{}]: {}", extractRequestPath(request), ex.getMessage());
+
+        return buildErrorResponse(
+            HttpStatus.FORBIDDEN,
+            "FORBIDDEN",
+            "You do not have permission to perform this action",
             request
         );
     }

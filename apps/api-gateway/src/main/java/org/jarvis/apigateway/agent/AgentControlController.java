@@ -7,6 +7,7 @@ import org.jarvis.commands.agent.AgentIdentity;
 import org.jarvis.common.safety.SystemPanicState;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Collection;
@@ -40,6 +41,7 @@ public class AgentControlController {
     private final PanicPropagator panicPropagator;
 
     /** Engage the global panic kill-switch — halts all action paths (EPIC 3). */
+    @PreAuthorize("hasAnyAuthority('ADMIN','OWNER')")
     @PostMapping("/panic")
     public ResponseEntity<Map<String, Object>> engagePanic(@RequestBody(required = false) PanicRequest body) {
         String actor = body == null || body.actor() == null ? "api" : body.actor();
@@ -50,6 +52,7 @@ public class AgentControlController {
     }
 
     /** Clear the global panic kill-switch — restores action paths. */
+    @PreAuthorize("hasAnyAuthority('ADMIN','OWNER')")
     @PostMapping("/panic/clear")
     public ResponseEntity<Map<String, Object>> clearPanic(@RequestBody(required = false) PanicRequest body) {
         String actor = body == null || body.actor() == null ? "api" : body.actor();
@@ -79,6 +82,7 @@ public class AgentControlController {
                 : ResponseEntity.badRequest().build();
     }
 
+    @PreAuthorize("hasAnyAuthority('ADMIN','OWNER')")
     @PostMapping("/{agentId}/kill-switch")
     public ResponseEntity<Void> killSwitch(@PathVariable String agentId,
                                            @RequestBody KillSwitchRequest body) {

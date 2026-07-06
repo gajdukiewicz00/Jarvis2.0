@@ -18,9 +18,10 @@ import java.util.List;
 
 /**
  * When {@link SystemPanicState} is engaged, refuse every action-bearing request
- * (agent execute, voice dispatch, tool routes) with 423 Locked. Read-only
- * requests and the panic control endpoints stay reachable so the operator can
- * inspect state and clear the panic.
+ * (agent execute, voice dispatch, tool routes, PC-desktop control, agent-swarm
+ * proxy, pc-control action dispatch) with 423 Locked. Read-only requests and the
+ * panic control endpoints stay reachable so the operator can inspect state and
+ * clear the panic.
  */
 @Slf4j
 @Component
@@ -31,7 +32,17 @@ public class PanicGuardFilter extends OncePerRequestFilter {
     private static final List<String> BLOCKED_PREFIXES = List.of(
             "/api/v1/agent/execute",
             "/api/v1/orchestrator/voice",
-            "/api/v1/tools");
+            "/api/v1/tools",
+            // PcDesktopController (/api/v1/pc/desktop/action) and the generic
+            // PcControlProxyController passthrough share this prefix.
+            "/api/v1/pc",
+            // AgentServiceProxyController: agent-swarm run + task proxy (plural "agents").
+            // Deliberately distinct from "/api/v1/agent" (singular) so the panic
+            // control endpoints below (/api/v1/agent/panic*, /register, /heartbeat)
+            // stay reachable while panic is engaged.
+            "/api/v1/agents",
+            // PcControlInternalController: internal action dispatch to desktop clients.
+            "/internal/pc-control");
 
     private final SystemPanicState panicState;
 

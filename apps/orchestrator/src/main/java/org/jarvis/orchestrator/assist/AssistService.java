@@ -42,21 +42,22 @@ public class AssistService {
         if (command.isEmpty()) {
             return new AssistResponse(command, "assist.freeform", null,
                     new AssistResponse.Memory(List.of(), List.of()),
-                    null, List.of(), List.of(), false, false, "command_required");
+                    null, List.of(), List.of(), false, false, "command_required", false);
         }
         String mode = req.modeOrDefault();
         String userId = req.userOrOwner();
         Map<String, Object> screen = req.wantScreen() ? req.screenContext() : null;
 
-        List<String> memRead = req.wantMemory()
-                ? memory.readRecent(userId, command, correlationId) : List.of();
+        AssistMemory.ReadOutcome memRead = req.wantMemory()
+                ? memory.readRecent(userId, command, correlationId) : AssistMemory.ReadOutcome.ok(List.of());
+        boolean memoryDegraded = memRead.degraded();
 
-        LlmReasoner.Reasoning r = reasoner.reason(command, screen, memRead, correlationId, userId);
+        LlmReasoner.Reasoning r = reasoner.reason(command, screen, memRead.items(), correlationId, userId);
         if (!r.available()) {
             log.info("assist cid={} llm unavailable: {}", correlationId, r.error());
             return new AssistResponse(command, "assist.freeform", screen,
-                    new AssistResponse.Memory(memRead, List.of()),
-                    null, List.of(), List.of(), false, false, r.error());
+                    new AssistResponse.Memory(memRead.items(), List.of()),
+                    null, List.of(), List.of(), false, false, r.error(), memoryDegraded);
         }
 
         String answer = SecretRedactor.redact(r.answer());
@@ -98,18 +99,21 @@ public class AssistService {
         }
 
         List<String> written = List.of();
+        boolean writeDegraded = false;
         if (req.wantMemory()) {
             String w = memory.write(userId, command, answer, screenSummary(screen),
                     executed.isEmpty() ? "none" : executed.get(0).reason(), correlationId);
             written = List.of(w);
+            writeDegraded = w != null && w.startsWith("skipped:");
         }
+        boolean degraded = memoryDegraded || writeDegraded;
 
-        log.info("assist cid={} mode={} user={} actionType={} class={} requiresConfirmation={} executed={}",
-                correlationId, mode, userId, type, cls, requiresConfirmation, executed.size());
+        log.info("assist cid={} mode={} user={} actionType={} class={} requiresConfirmation={} executed={} degraded={}",
+                correlationId, mode, userId, type, cls, requiresConfirmation, executed.size(), degraded);
 
         return new AssistResponse(command, "assist.freeform", screen,
-                new AssistResponse.Memory(memRead, written),
-                answer, proposed, executed, requiresConfirmation, true, null);
+                new AssistResponse.Memory(memRead.items(), written),
+                answer, proposed, executed, requiresConfirmation, true, null, degraded);
     }
 
     private boolean hasToken(AssistRequest req) {

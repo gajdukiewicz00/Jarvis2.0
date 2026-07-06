@@ -30,7 +30,8 @@ class AssistServiceTest {
         memory = mock(AssistMemory.class);
         executor = mock(HostActionExecutor.class);
         service = new AssistService(reasoner, memory, new ActionSafetyPolicy(), executor);
-        when(memory.readRecent(anyString(), anyString(), anyString())).thenReturn(List.of("prev note"));
+        when(memory.readRecent(anyString(), anyString(), anyString()))
+                .thenReturn(AssistMemory.ReadOutcome.ok(List.of("prev note")));
         when(memory.write(anyString(), anyString(), any(), any(), any(), anyString())).thenReturn("memory:assist-owner");
     }
 
@@ -137,5 +138,41 @@ class AssistServiceTest {
         AssistResponse r = service.assist(req("dry-run", null), "c10");
         assertThat(r.answer()).doesNotContain("SUPERSECRETVALUE12345");
         assertThat(r.answer()).contains("<redacted>");
+    }
+
+    @Test
+    void successfulTurnIsNotDegradedWhenMemoryHealthy() {
+        when(reasoner.reason(any(), any(), any(), any(), any()))
+                .thenReturn(LlmReasoner.Reasoning.of("ok", "NONE", ""));
+        AssistResponse r = service.assist(req("dry-run", null), "c11");
+        assertThat(r.success()).isTrue();
+        assertThat(r.degraded()).isFalse();
+    }
+
+    @Test
+    void degradedMemoryReadStillReturnsPartialSuccessfulResponse() {
+        when(memory.readRecent(anyString(), anyString(), anyString()))
+                .thenReturn(AssistMemory.ReadOutcome.unavailable());
+        when(reasoner.reason(any(), any(), any(), any(), any()))
+                .thenReturn(LlmReasoner.Reasoning.of("ok", "NONE", ""));
+
+        AssistResponse r = service.assist(req("dry-run", null), "c12");
+
+        assertThat(r.success()).isTrue();
+        assertThat(r.degraded()).isTrue();
+        assertThat(r.memory().read()).isEmpty();
+    }
+
+    @Test
+    void degradedMemoryWriteIsSurfacedOnAnOtherwiseSuccessfulResponse() {
+        when(memory.write(anyString(), anyString(), any(), any(), any(), anyString()))
+                .thenReturn("skipped:RuntimeException");
+        when(reasoner.reason(any(), any(), any(), any(), any()))
+                .thenReturn(LlmReasoner.Reasoning.of("ok", "NONE", ""));
+
+        AssistResponse r = service.assist(req("dry-run", null), "c13");
+
+        assertThat(r.success()).isTrue();
+        assertThat(r.degraded()).isTrue();
     }
 }

@@ -41,6 +41,25 @@ spring:
             connectTimeout: 3000
             readTimeout: 10000
             loggerLevel: BASIC
+          # Per-dependency timeout budgets: named clients match each @FeignClient's
+          # `name` attribute. Non-critical / best-effort dependencies get a
+          # tighter budget so a hanging downstream service fails fast into the
+          # retry + circuit-breaker path instead of blocking the request thread.
+          nlp-service:
+            connectTimeout: 1000
+            readTimeout: 3000
+          memory-service:
+            connectTimeout: 1000
+            readTimeout: 2000
+          pc-control:
+            connectTimeout: 1000
+            readTimeout: 3000
+          smart-home-service:
+            connectTimeout: 1000
+            readTimeout: 3000
+          api-gateway-pc:
+            connectTimeout: 1000
+            readTimeout: 3000
 
 # Service URLs (in-cluster defaults)
 jarvis:
@@ -51,10 +70,31 @@ jarvis:
       sweep-interval-ms: ${JARVIS_COMMAND_PENDING_SWEEP_MS:1000}
   nlp:
     url: ${NLP_SERVICE_URL:http://nlp-service:8082}
+    # NLP call resilience: bounded retry with backoff (analyze is a pure read,
+    # safe to retry) plus a circuit breaker. On exhaustion/open circuit,
+    # processText degrades to the LLM/rule-based fallback instead of failing.
+    retry:
+      max-attempts: ${JARVIS_NLP_RETRY_MAX_ATTEMPTS:2}
+      initial-backoff-ms: ${JARVIS_NLP_RETRY_BACKOFF_MS:200}
+    circuit-breaker:
+      failure-threshold: ${JARVIS_NLP_CB_FAILURE_THRESHOLD:3}
+      reset-timeout-seconds: ${JARVIS_NLP_CB_RESET_SECONDS:30}
   pc-control:
     url: ${PC_CONTROL_URL:http://pc-control:8084}
   smart-home:
     url: ${SMART_HOME_URL:http://smart-home-service:8086}
+  memory:
+    url: ${MEMORY_SERVICE_URL:http://memory-service:8093}
+    # Memory-service is a non-critical, best-effort dependency for the assist
+    # flow: reads are retried (idempotent search), writes are not (ingest has
+    # side effects). Shared circuit breaker degrades assist responses with a
+    # `degraded: true` flag instead of failing the whole request.
+    retry:
+      max-attempts: ${JARVIS_MEMORY_RETRY_MAX_ATTEMPTS:2}
+      initial-backoff-ms: ${JARVIS_MEMORY_RETRY_BACKOFF_MS:200}
+    circuit-breaker:
+      failure-threshold: ${JARVIS_MEMORY_CB_FAILURE_THRESHOLD:3}
+      reset-timeout-seconds: ${JARVIS_MEMORY_CB_RESET_SECONDS:30}
   llm:
     url: ${LLM_SERVICE_URL:http://llm-service:8091}
     # LLM Feature flag - disabled by default for stability

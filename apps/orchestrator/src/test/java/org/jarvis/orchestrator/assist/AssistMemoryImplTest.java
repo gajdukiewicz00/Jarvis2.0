@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,6 +18,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,7 +31,10 @@ class AssistMemoryImplTest {
     private AssistMemoryImpl assistMemory;
 
     private AssistMemoryImpl newInstance() {
-        return new AssistMemoryImpl(memory);
+        AssistMemoryImpl impl = new AssistMemoryImpl(memory);
+        // Keep retry/backoff fast and deterministic for tests.
+        ReflectionTestUtils.setField(impl, "retryInitialBackoffMs", 1L);
+        return impl;
     }
 
     @Test
@@ -42,9 +47,10 @@ class AssistMemoryImplTest {
                         Map.of("excerpt", "third memory")));
         when(memory.search(any(), eq("cid-1"))).thenReturn(resp);
 
-        List<String> out = assistMemory.readRecent("user-1", "goals", "cid-1");
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-1");
 
-        assertThat(out).containsExactly("first memory", "second memory", "third memory");
+        assertThat(out.degraded()).isFalse();
+        assertThat(out.items()).containsExactly("first memory", "second memory", "third memory");
     }
 
     @Test
@@ -54,9 +60,9 @@ class AssistMemoryImplTest {
         resp.put("chunks", List.of(Map.of("text", "chunked memory")));
         when(memory.search(any(), eq("cid-2"))).thenReturn(resp);
 
-        List<String> out = assistMemory.readRecent("user-1", "goals", "cid-2");
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-2");
 
-        assertThat(out).containsExactly("chunked memory");
+        assertThat(out.items()).containsExactly("chunked memory");
     }
 
     @Test
@@ -65,9 +71,9 @@ class AssistMemoryImplTest {
         Map<String, Object> resp = Map.of("results", List.of("raw-string-memory", 42));
         when(memory.search(any(), eq("cid-3"))).thenReturn(resp);
 
-        List<String> out = assistMemory.readRecent("user-1", "goals", "cid-3");
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-3");
 
-        assertThat(out).containsExactly("raw-string-memory", "42");
+        assertThat(out.items()).containsExactly("raw-string-memory", "42");
     }
 
     @Test
@@ -76,7 +82,9 @@ class AssistMemoryImplTest {
         Map<String, Object> resp = Map.of("results", "not-a-list");
         when(memory.search(any(), eq("cid-4"))).thenReturn(resp);
 
-        assertThat(assistMemory.readRecent("user-1", "goals", "cid-4")).isEmpty();
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-4");
+        assertThat(out.items()).isEmpty();
+        assertThat(out.degraded()).isFalse();
     }
 
     @Test
@@ -84,15 +92,56 @@ class AssistMemoryImplTest {
         assistMemory = newInstance();
         when(memory.search(any(), eq("cid-5"))).thenReturn(null);
 
-        assertThat(assistMemory.readRecent("user-1", "goals", "cid-5")).isEmpty();
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-5");
+        assertThat(out.items()).isEmpty();
+        assertThat(out.degraded()).isFalse();
     }
 
     @Test
-    void readRecentDegradesToEmptyOnMemoryServiceFailure() {
+    void readRecentDegradesAfterRetriesExhaustedOnMemoryServiceFailure() {
         assistMemory = newInstance();
+        ReflectionTestUtils.setField(assistMemory, "retryMaxAttempts", 2);
         when(memory.search(any(), eq("cid-6"))).thenThrow(new RuntimeException("memory-service down"));
 
-        assertThat(assistMemory.readRecent("user-1", "goals", "cid-6")).isEmpty();
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-6");
+
+        assertThat(out.degraded()).isTrue();
+        assertThat(out.items()).isEmpty();
+        // maxAttempts=2 -> the read is retried once before giving up.
+        verify(memory, times(2)).search(any(), eq("cid-6"));
+    }
+
+    @Test
+    void readRecentRetriesThenSucceeds() {
+        assistMemory = newInstance();
+        ReflectionTestUtils.setField(assistMemory, "retryMaxAttempts", 3);
+        Map<String, Object> resp = Map.of("results", List.of(Map.of("text", "recovered memory")));
+        when(memory.search(any(), eq("cid-6b")))
+                .thenThrow(new RuntimeException("transient"))
+                .thenReturn(resp);
+
+        AssistMemory.ReadOutcome out = assistMemory.readRecent("user-1", "goals", "cid-6b");
+
+        assertThat(out.degraded()).isFalse();
+        assertThat(out.items()).containsExactly("recovered memory");
+        verify(memory, times(2)).search(any(), eq("cid-6b"));
+    }
+
+    @Test
+    void circuitBreakerOpensAfterConsecutiveFailuresAndSkipsFurtherCalls() {
+        assistMemory = newInstance();
+        ReflectionTestUtils.setField(assistMemory, "retryMaxAttempts", 1);
+        ReflectionTestUtils.setField(assistMemory, "failureThreshold", 1);
+        ReflectionTestUtils.setField(assistMemory, "resetTimeoutSeconds", 60);
+        when(memory.search(any(), anyString())).thenThrow(new RuntimeException("memory-service down"));
+
+        AssistMemory.ReadOutcome first = assistMemory.readRecent("user-1", "goals", "cid-7a");
+        AssistMemory.ReadOutcome second = assistMemory.readRecent("user-1", "goals", "cid-7b");
+
+        assertThat(first.degraded()).isTrue();
+        assertThat(second.degraded()).isTrue();
+        // Breaker opened after the first failure; the second call must not reach memory-service at all.
+        verify(memory, times(1)).search(any(), anyString());
     }
 
     @Test
@@ -138,5 +187,20 @@ class AssistMemoryImplTest {
         String ref = assistMemory.write("user-1", "cmd", "answer", null, null, "cid-9");
 
         assertThat(ref).isEqualTo("skipped:IllegalStateException");
+    }
+
+    @Test
+    void writeSkipsCallWhenCircuitBreakerOpen() {
+        assistMemory = newInstance();
+        ReflectionTestUtils.setField(assistMemory, "failureThreshold", 1);
+        ReflectionTestUtils.setField(assistMemory, "resetTimeoutSeconds", 60);
+        doThrow(new RuntimeException("down")).when(memory).ingest(any(), anyString());
+
+        String first = assistMemory.write("user-1", "cmd", "answer", null, null, "cid-10a");
+        String second = assistMemory.write("user-1", "cmd", "answer", null, null, "cid-10b");
+
+        assertThat(first).isEqualTo("skipped:RuntimeException");
+        assertThat(second).isEqualTo("skipped:circuit-open");
+        verify(memory, times(1)).ingest(any(), anyString());
     }
 }

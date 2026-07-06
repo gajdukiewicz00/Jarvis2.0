@@ -12,10 +12,13 @@ import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
 import org.jarvis.orchestrator.phrases.Language;
 import org.jarvis.orchestrator.phrases.LanguageDetector;
 import org.jarvis.orchestrator.phrases.PhraseContext;
+import org.jarvis.orchestrator.resilience.RetryWithBackoff;
+import org.jarvis.orchestrator.resilience.SimpleCircuitBreaker;
 import org.jarvis.orchestrator.service.OrchestratorService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Locale;
@@ -27,14 +30,19 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Orchestrator service implementation with Jarvis cinematic phrase system.
- * 
+ *
  * Uses {@link JarvisPhraseProvider} for all responses, automatically detecting
  * language from the user's command or using the provided language parameter.
- * 
+ *
  * LLM integration has circuit breaker pattern:
  * - Feature flag: JARVIS_LLM_ENABLED (default: false)
  * - Timeout: JARVIS_LLM_TIMEOUT_SECONDS (default: 10)
  * - Circuit breaker: after N consecutive failures, LLM is disabled for M seconds
+ *
+ * NLP calls (analyze) have their own resilience: bounded retry with backoff
+ * (analyze is a pure read, safe to retry) plus a circuit breaker so a dead
+ * nlp-service degrades to the existing LLM/rule-based fallback phrase instead
+ * of failing the whole request with a 500.
  */
 @Slf4j
 @Service
@@ -69,6 +77,21 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     // Circuit breaker state
     private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
     private final AtomicReference<Instant> circuitOpenUntil = new AtomicReference<>(Instant.EPOCH);
+
+    // NLP call resilience: bounded retry with backoff + its own circuit breaker.
+    @Value("${jarvis.nlp.retry.max-attempts:2}")
+    private int nlpRetryMaxAttempts = 2;
+
+    @Value("${jarvis.nlp.retry.initial-backoff-ms:200}")
+    private long nlpRetryInitialBackoffMs = 200;
+
+    @Value("${jarvis.nlp.circuit-breaker.failure-threshold:3}")
+    private int nlpCircuitBreakerFailureThreshold = 3;
+
+    @Value("${jarvis.nlp.circuit-breaker.reset-timeout-seconds:30}")
+    private int nlpCircuitBreakerResetTimeoutSeconds = 30;
+
+    private final SimpleCircuitBreaker nlpCircuitBreaker = new SimpleCircuitBreaker();
 
     // Executor for async LLM calls with timeout (bounded queue + explicit rejection policy)
     private final ThreadPoolExecutor llmExecutor;
@@ -165,10 +188,45 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 ? Language.fromCode(language)
                 : LanguageDetector.detect(text);
 
-        NlpClient.NlpResult result = nlpClient.analyze(new NlpClient.AnalyzeRequest(text));
+        NlpClient.NlpResult result = analyzeWithResilience(text, correlationId);
+        if (result == null) {
+            // nlp-service degraded (retries exhausted or circuit open): degrade to the
+            // existing LLM/rule-based fallback instead of failing the whole request.
+            log.warn("🔍 NLP_DEGRADED: falling back without intent classification, correlationId={}", correlationId);
+            String fallback = callLlm(text, correlationId, lang, userId);
+            rememberExecutionMetadata(ExecutionMetadata.failure(false, false,
+                    "nlp_unavailable: retries exhausted or circuit open"));
+            return fallback;
+        }
         log.info("🔍 NLP Result: intent={}, slots={}, correlationId={}", result.intent(), result.slots(),
                 correlationId);
         return executeIntent(result.intent(), result.slots(), lang.getCode(), correlationId, text, userId);
+    }
+
+    /**
+     * Calls nlp-service with a bounded retry (analyze is a pure read, safe to
+     * retry) guarded by a circuit breaker. Returns {@code null} when the
+     * circuit is open or all retries are exhausted, signaling the caller to
+     * degrade gracefully rather than propagate the failure.
+     */
+    private NlpClient.NlpResult analyzeWithResilience(String text, String correlationId) {
+        if (!nlpCircuitBreaker.tryAcquire()) {
+            log.warn("🔍 NLP_CIRCUIT_OPEN: skipping analyze call, correlationId={}", correlationId);
+            return null;
+        }
+        try {
+            NlpClient.NlpResult result = RetryWithBackoff.call(
+                    () -> nlpClient.analyze(new NlpClient.AnalyzeRequest(text)),
+                    nlpRetryMaxAttempts,
+                    Duration.ofMillis(nlpRetryInitialBackoffMs));
+            nlpCircuitBreaker.recordSuccess();
+            return result;
+        } catch (RuntimeException e) {
+            nlpCircuitBreaker.recordFailure(nlpCircuitBreakerFailureThreshold,
+                    Duration.ofSeconds(nlpCircuitBreakerResetTimeoutSeconds));
+            log.warn("🔍 NLP_CALL_FAILED after retries: {}, correlationId={}", e.getMessage(), correlationId);
+            return null;
+        }
     }
 
     public String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,

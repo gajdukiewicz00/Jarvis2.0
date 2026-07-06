@@ -9,6 +9,7 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 /** Local-first health snapshot read from Health Connect (on-device, no cloud). */
@@ -36,7 +37,7 @@ class HealthConnectManager(private val context: Context) {
     suspend fun read(): HealthSnapshot {
         val now = Instant.now()
         val dayAgo = now.minus(24, ChronoUnit.HOURS)
-        val startOfToday = now.truncatedTo(ChronoUnit.DAYS)
+        val startOfToday = startOfLocalDay(now)
         val hc = client()
 
         val sleepMinutes = hc.readRecords(
@@ -50,3 +51,16 @@ class HealthConnectManager(private val context: Context) {
         return HealthSnapshot(sleepHours = sleepMinutes / 60.0, steps = steps)
     }
 }
+
+/**
+ * Computes the start of the local calendar day containing [now], expressed as an [Instant].
+ *
+ * Extracted as a plain top-level function (rather than inlined via
+ * `now.truncatedTo(ChronoUnit.DAYS)`) so it can be unit tested without a Health Connect runtime
+ * / Android [Context]: [Instant.truncatedTo] truncates at the UTC epoch-day boundary because an
+ * [Instant] carries no timezone offset, which computed the wrong 24h window for "today" for any
+ * non-UTC user (finding #53). Converting through [ZoneId] first anchors the day boundary to the
+ * device's actual local calendar day.
+ */
+fun startOfLocalDay(now: Instant, zone: ZoneId = ZoneId.systemDefault()): Instant =
+    now.atZone(zone).toLocalDate().atStartOfDay(zone).toInstant()

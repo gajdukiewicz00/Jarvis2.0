@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -70,20 +71,51 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
                 ciphertextB64 = SyncCryptoKt.b64(ciphertext),
                 occurredAtClient = Instant.now().toString()
             )
-            try {
-                val code = client.postBlob(envelope)
-                if (code in 200..299) {
-                    dao.markSynced(item.id, System.currentTimeMillis())
-                } else {
-                    dao.markFailed(item.id, System.currentTimeMillis(), "http=$code")
-                    anyFailed = true
+            val failed = attemptItemSync(
+                postBlob = { client.postBlob(envelope) },
+                onSynced = { dao.markSynced(item.id, System.currentTimeMillis()) },
+                onFailed = { message ->
+                    Log.w(tag, "sync failed for ${item.id}: $message")
+                    dao.markFailed(item.id, System.currentTimeMillis(), message)
                 }
-            } catch (e: Exception) {
-                Log.w(tag, "sync failed for ${item.id}: ${e.message}")
-                dao.markFailed(item.id, System.currentTimeMillis(), e.message ?: e::class.simpleName.orEmpty())
-                anyFailed = true
-            }
+            )
+            if (failed) anyFailed = true
         }
         return if (anyFailed) Result.retry() else Result.success()
+    }
+}
+
+/**
+ * Attempts to sync a single queued item and classifies the outcome. Extracted from the
+ * [SyncWorker.doWork] loop body — as a plain top-level function — so the cancellation-safety
+ * behavior (finding #33: a WorkManager-initiated cancellation must propagate immediately
+ * instead of being swallowed as an ordinary sync failure) can be unit tested without an
+ * Android [android.content.Context] / WorkManager / Room.
+ *
+ * @return `true` when the item failed to sync (HTTP error or exception) and the caller should
+ *   count it toward `anyFailed`; `false` on success.
+ * @throws CancellationException instead of treating it as an ordinary failure — this lets the
+ *   coroutine's cancellation unwind the loop immediately (structured-concurrency semantics)
+ *   rather than continuing to the next pending item after cancellation was requested.
+ */
+suspend fun attemptItemSync(
+    postBlob: suspend () -> Int,
+    onSynced: suspend () -> Unit,
+    onFailed: suspend (String) -> Unit
+): Boolean {
+    return try {
+        val code = postBlob()
+        if (code in 200..299) {
+            onSynced()
+            false
+        } else {
+            onFailed("http=$code")
+            true
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        onFailed(e.message ?: e::class.simpleName.orEmpty())
+        true
     }
 }

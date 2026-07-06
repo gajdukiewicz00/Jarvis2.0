@@ -8,7 +8,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,12 +16,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.jarvis.android.data.local.JarvisDatabase
 import org.jarvis.android.data.local.PendingItem
+import org.jarvis.android.data.local.PendingItemDao
 import java.util.UUID
 
 /**
@@ -63,11 +65,11 @@ fun ManualFinanceScreen(modifier: Modifier = Modifier) {
     var description by remember { mutableStateOf("") }
     var feedback by remember { mutableStateOf("") }
     val dao = remember { JarvisDatabase.get(context).pendingItems() }
-    val recent by dao.recent(20).let { flow ->
-        val state = remember { mutableStateOf(emptyList<PendingItem>()) }
-        LaunchedEffect(flow) { flow.collect { state.value = it } }
-        state
-    }
+    // Memoized by dao identity (see [RecentItemsFlowCache]) so recomposition triggered by
+    // typing in the fields above does not re-issue the underlying Room query on every
+    // keystroke (finding #54).
+    val recentItemsFlowCache = remember { RecentItemsFlowCache() }
+    val recent by recentItemsFlowCache.flowFor(dao).collectAsState(initial = emptyList())
 
     Column(modifier.fillMaxSize().padding(16.dp), Arrangement.spacedBy(8.dp)) {
         Text("Manual finance entry", style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
@@ -95,6 +97,34 @@ fun ManualFinanceScreen(modifier: Modifier = Modifier) {
         recent.forEach {
             val tag = if (it.syncedAtEpochMs != null) "✓" else if (it.lastError != null) "!" else "…"
             Text("$tag  ${it.kind}  ${it.payloadJson.take(80)}")
+        }
+    }
+}
+
+/**
+ * Caches the [Flow] returned by [PendingItemDao.recent], keyed on DAO instance identity, so
+ * repeated calls with the same [dao] return the *same* Flow instance instead of a fresh one.
+ *
+ * Extracted as a plain class (rather than relying only on inline `remember` inside the
+ * composable) so the "same key -> same Flow instance, DAO queried at most once per key" fix for
+ * finding #54 can be unit tested on plain JVM, without a Compose runtime. [ManualFinanceScreen]
+ * holds one instance of this class via `remember { RecentItemsFlowCache() }` — since state
+ * hoisted higher up (amount/currency/category/description) triggers recomposition of the whole
+ * composable body on every keystroke, calling `dao.recent(20)` directly (uncached) there
+ * produced a *new* Flow object each time, which in turn made downstream Flow collection
+ * (`LaunchedEffect`/`collectAsState`, keyed on that Flow's identity) cancel and re-subscribe the
+ * underlying Room query on every keystroke instead of once.
+ */
+class RecentItemsFlowCache {
+    private var cachedDao: PendingItemDao? = null
+    private var cachedFlow: Flow<List<PendingItem>>? = null
+
+    fun flowFor(dao: PendingItemDao, limit: Int = 20): Flow<List<PendingItem>> {
+        val existing = cachedFlow
+        if (cachedDao === dao && existing != null) return existing
+        return dao.recent(limit).also {
+            cachedDao = dao
+            cachedFlow = it
         }
     }
 }

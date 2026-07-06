@@ -725,7 +725,11 @@ class AuthServiceTest {
 
         assertThat(user.getPassword()).isEqualTo("new-hashed-password");
         assertThat(response.accessToken()).isEqualTo("access-tok-2");
-        verify(userRepository).save(user);
+        // Saved twice: once for the new password, once more when the
+        // session-floor bump (tokensValidFrom) is persisted so previously
+        // issued access tokens are rejected (see revokeAllRefreshTokens).
+        verify(userRepository, times(2)).save(user);
+        assertThat(user.getTokensValidFrom()).isNotNull();
         verify(refreshTokenRepository).revokeAllActiveTokensForUser(eq(1L), any(Instant.class),
                 eq("PASSWORD_CHANGED"));
         assertThat(meterRegistry.counter("security.audit.events", "type", "PASSWORD_CHANGED").count())

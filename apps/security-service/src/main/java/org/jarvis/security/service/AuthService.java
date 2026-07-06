@@ -358,8 +358,24 @@ public class AuthService {
                 .build());
     }
 
+    /**
+     * Revoke every outstanding refresh token for a user AND advance their
+     * access-token validity floor to now, mirroring {@code
+     * TokenRevocationService.revokeAllForUser}. Bumping {@code
+     * tokensValidFrom} is what makes this effective against already-issued
+     * access tokens (see {@link #isBeforeSessionFloor}) - without it, an
+     * access token minted before a password change or account disablement
+     * would remain valid until it naturally expires, even though its
+     * refresh token (and the password/enabled state behind it) has already
+     * been invalidated.
+     */
     private void revokeAllRefreshTokens(Long userId, String reason) {
-        int revokedCount = refreshTokenRepository.revokeAllActiveTokensForUser(userId, Instant.now(), reason);
+        Instant now = Instant.now();
+        int revokedCount = refreshTokenRepository.revokeAllActiveTokensForUser(userId, now, reason);
+        userRepository.findById(userId).ifPresent(user -> {
+            user.setTokensValidFrom(now);
+            userRepository.save(user);
+        });
         securityMetrics.tokenRevoked("all", reason, revokedCount);
     }
 }

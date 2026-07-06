@@ -179,6 +179,46 @@ class SecurityServiceAuthIntegrationTest {
     }
 
     @Test
+    void changePasswordInvalidatesAlreadyIssuedAccessTokenViaSessionFloor() throws Exception {
+        AuthPair initial = register("judy", "password123", "USER");
+
+        // Sanity: the access token is valid before the password change.
+        mockMvc.perform(get("/auth/me")
+                        .header("Authorization", "Bearer " + initial.accessToken()))
+                .andExpect(status().isOk());
+
+        // Cross a whole-second boundary before changing the password. JWT
+        // `iat` has second resolution, so the session floor bumped by
+        // changePassword can only distinguish the pre-change token from a
+        // post-change token if they fall in different seconds (same
+        // reasoning as revokeAllForUserInvalidatesAlreadyIssuedAccessTokenViaTokensValidFrom).
+        Thread.sleep(1100);
+
+        mockMvc.perform(post("/auth/password/change")
+                        .header("Authorization", "Bearer " + initial.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "currentPassword": "password123",
+                                  "newPassword": "new-password-123"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        // The access token issued before the password change predates the
+        // new tokens_valid_from floor, so it must now be rejected even
+        // though access-token jtis are not individually tracked
+        // server-side. Before the fix, changePassword only revoked the
+        // refresh token in the DB and never advanced tokensValidFrom, so
+        // this pre-change access token would remain valid until its
+        // natural (access-token TTL) expiry.
+        mockMvc.perform(get("/auth/me")
+                        .header("Authorization", "Bearer " + initial.accessToken()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error").value("TOKEN_REVOKED"));
+    }
+
+    @Test
     void revokeAllForUserInvalidatesAlreadyIssuedAccessTokenViaTokensValidFrom() throws Exception {
         AuthPair target = register("ivan", "password123", "USER");
         AuthPair owner = registerOwnerDirectly("root-owner", "owner-password-1");

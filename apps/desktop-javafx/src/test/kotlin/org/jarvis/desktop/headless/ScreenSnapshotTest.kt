@@ -11,12 +11,16 @@ import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.config.ConfigSource
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.features.agentswarm.AgentSwarmView
+import org.jarvis.desktop.features.ai.AiView
 import org.jarvis.desktop.features.analytics.AnalyticsView
 import org.jarvis.desktop.features.controlcenter.ControlCenterView
 import org.jarvis.desktop.features.finance.FinanceReviewView
+import org.jarvis.desktop.features.insights.InsightsView
 import org.jarvis.desktop.features.media.MediaJobsView
 import org.jarvis.desktop.features.memory.MemoryView
+import org.jarvis.desktop.features.pccontrol.PcControlView
 import org.jarvis.desktop.features.planner.PlannerView
+import org.jarvis.desktop.features.proactive.ProactiveView
 import org.jarvis.desktop.features.security.SecuritySessionsView
 import org.jarvis.desktop.features.settings.SettingsView
 import org.jarvis.desktop.features.smarthome.SmartHomeView
@@ -98,6 +102,10 @@ class ScreenSnapshotTest {
         "media-jobs" to { MediaJobsView(deadApiClient) },
         "planner" to { PlannerView(deadApiClient) },
         "analytics" to { AnalyticsView(deadApiClient) },
+        "insights" to { InsightsView(deadApiClient) },
+        "pc-control" to { PcControlView(deadApiClient) },
+        "ai-runtime" to { AiView() },
+        "proactive" to { ProactiveView(deadApiClient) },
         "settings" to { SettingsView(deadApiClient, onLogout = {}) }
     )
 

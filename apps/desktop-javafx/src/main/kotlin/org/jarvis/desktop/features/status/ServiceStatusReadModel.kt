@@ -19,7 +19,19 @@ class ServiceStatusReadModel(
         val refreshedAt: Instant,
         val baseUrl: String,
         val services: List<StatusAggregator.ServiceStatus>
-    )
+    ) {
+        /**
+         * Count of services that are actually reachable — UP or PROTECTED
+         * (alive, just gated behind auth). This is the number the top bar and
+         * summary pill should present as "healthy", not a strict UP-only count.
+         */
+        val healthyCount: Int
+            get() = services.count { it.status.isReachable }
+
+        /** Services that are genuinely unhealthy (DEGRADED or DOWN) — excludes PROTECTED. */
+        val downServices: List<StatusAggregator.ServiceStatus>
+            get() = services.filterNot { it.status.isReachable }
+    }
 
     @Volatile private var aggregator: StatusAggregator? = null
     @Volatile private var aggregatorBaseUrl: String? = null

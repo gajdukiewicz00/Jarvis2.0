@@ -74,3 +74,306 @@
 .shell-content-scroll > .viewport {
     -fx-background-color: transparent;
 }
+
+/* -----------------------------------------------------------------------
+   Feature-view re-theme: Life / Life Map / Analytics / PC Control /
+   Smart Home / Insights.
+
+   These routes host legacy Tab-based panels (LifeTab, AnalyticsTab,
+   DevicesTab, PcControlTab) and the raw LifeMapPanel TabPane, none of
+   which use shell-native style classes for their controls, so they render
+   with Modena's default (light) chrome. The rules below re-skin that
+   default chrome (Button, TextArea, ListView, TabPane, Separator) by
+   scoping every selector to the route's own wrapper style class — already
+   applied by each view — so nothing here can bleed into routes owned by
+   other views (AiView, ControlCenterView, ProactiveView, etc.) that never
+   carry these wrapper classes.
+   ----------------------------------------------------------------------- */
+
+/* Life Map has no card treatment in shell.css yet — without this the
+   routed Life screen shows the bare (white) Scene background. */
+.shell-life-map-view {
+    -fx-background-color: -jarvis-surface;
+    -fx-background-radius: 18px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 18px;
+}
+
+/* -- default (unstyled) buttons: dark pill, readable text -- */
+.shell-life-view .button,
+.shell-life-map-view .button,
+.shell-analytics-view .button,
+.shell-pc-control-view .button,
+.shell-smart-home-view .button {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-width: 1px;
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+    -fx-padding: 8px 16px;
+    -fx-cursor: hand;
+}
+
+.shell-life-view .button:hover,
+.shell-life-map-view .button:hover,
+.shell-analytics-view .button:hover,
+.shell-pc-control-view .button:hover,
+.shell-smart-home-view .button:hover {
+    -fx-background-color: rgba(79, 224, 255, 0.14);
+    -fx-border-color: -jarvis-primary;
+}
+
+.shell-life-view .button:armed,
+.shell-life-map-view .button:armed,
+.shell-analytics-view .button:armed,
+.shell-pc-control-view .button:armed,
+.shell-smart-home-view .button:armed {
+    -fx-background-color: rgba(79, 224, 255, 0.24);
+}
+
+/* Reassert the existing accent action buttons at equal selector
+   specificity (wrapper class + one more class) so the generic button
+   reset above never overrides Resolve/Execute/Activate/Delete-style
+   buttons (IntentView, ScenesView) — the later rule in this file wins
+   ties, same as the plain `.shell-action-button` rule further up. */
+.shell-life-view .shell-action-button,
+.shell-life-map-view .shell-action-button,
+.shell-analytics-view .shell-action-button,
+.shell-pc-control-view .shell-action-button,
+.shell-smart-home-view .shell-action-button {
+    -fx-background-color: rgba(79, 224, 255, 0.14);
+    -fx-text-fill: -jarvis-primary;
+    -fx-border-color: rgba(79, 224, 255, 0.4);
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+.shell-life-view .shell-action-button:hover,
+.shell-life-map-view .shell-action-button:hover,
+.shell-analytics-view .shell-action-button:hover,
+.shell-pc-control-view .shell-action-button:hover,
+.shell-smart-home-view .shell-action-button:hover {
+    -fx-background-color: rgba(79, 224, 255, 0.26);
+}
+
+.shell-life-view .shell-action-button-danger,
+.shell-life-map-view .shell-action-button-danger,
+.shell-analytics-view .shell-action-button-danger,
+.shell-pc-control-view .shell-action-button-danger,
+.shell-smart-home-view .shell-action-button-danger {
+    -fx-background-color: rgba(255, 92, 122, 0.14);
+    -fx-text-fill: -jarvis-error;
+    -fx-border-color: rgba(255, 92, 122, 0.4);
+}
+
+.shell-life-view .shell-action-button-danger:hover,
+.shell-life-map-view .shell-action-button-danger:hover,
+.shell-analytics-view .shell-action-button-danger:hover,
+.shell-pc-control-view .shell-action-button-danger:hover,
+.shell-smart-home-view .shell-action-button-danger:hover {
+    -fx-background-color: rgba(255, 92, 122, 0.22);
+}
+
+/* -- default TextArea: dark surface instead of the Modena white pane -- */
+.shell-life-view .text-area,
+.shell-life-map-view .text-area,
+.shell-analytics-view .text-area,
+.shell-pc-control-view .text-area,
+.shell-smart-home-view .text-area {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-control-inner-background: -jarvis-surface-elevated;
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+    -fx-highlight-fill: rgba(79, 224, 255, 0.35);
+    -fx-highlight-text-fill: -jarvis-text-primary;
+}
+
+.shell-life-view .text-area .content,
+.shell-life-map-view .text-area .content,
+.shell-analytics-view .text-area .content,
+.shell-pc-control-view .text-area .content,
+.shell-smart-home-view .text-area .content {
+    -fx-background-color: -jarvis-surface-elevated;
+}
+
+.shell-life-view .text-area .scroll-pane,
+.shell-life-map-view .text-area .scroll-pane,
+.shell-analytics-view .text-area .scroll-pane,
+.shell-pc-control-view .text-area .scroll-pane,
+.shell-smart-home-view .text-area .scroll-pane,
+.shell-life-view .text-area .scroll-pane .viewport,
+.shell-life-map-view .text-area .scroll-pane .viewport,
+.shell-analytics-view .text-area .scroll-pane .viewport,
+.shell-pc-control-view .text-area .scroll-pane .viewport,
+.shell-smart-home-view .text-area .scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+/* -- default ListView (LifeTab's recent-expenses list) -- */
+.shell-life-view .list-view,
+.shell-life-map-view .list-view,
+.shell-analytics-view .list-view,
+.shell-pc-control-view .list-view,
+.shell-smart-home-view .list-view {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 10px;
+    -fx-background-radius: 10px;
+}
+
+.shell-life-view .list-cell,
+.shell-life-map-view .list-cell,
+.shell-analytics-view .list-cell,
+.shell-pc-control-view .list-cell,
+.shell-smart-home-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-border-color: transparent transparent -jarvis-outline transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.shell-life-view .list-cell:filled:hover,
+.shell-life-map-view .list-cell:filled:hover,
+.shell-analytics-view .list-cell:filled:hover,
+.shell-pc-control-view .list-cell:filled:hover,
+.shell-smart-home-view .list-cell:filled:hover {
+    -fx-background-color: rgba(79, 224, 255, 0.10);
+}
+
+.shell-life-view .list-cell:filled:selected,
+.shell-life-map-view .list-cell:filled:selected,
+.shell-analytics-view .list-cell:filled:selected,
+.shell-pc-control-view .list-cell:filled:selected,
+.shell-smart-home-view .list-cell:filled:selected {
+    -fx-background-color: rgba(79, 224, 255, 0.18);
+}
+
+/* -- Separator: replace the Modena light-grey line -- */
+.shell-life-view .separator .line,
+.shell-life-map-view .separator .line,
+.shell-analytics-view .separator .line,
+.shell-pc-control-view .separator .line,
+.shell-smart-home-view .separator .line {
+    -fx-border-color: -jarvis-outline transparent transparent transparent;
+}
+
+/* -- LifeMapPanel's TabPane (the routed Life screen) -- */
+.shell-life-map-view .tab-pane {
+    -fx-background-color: transparent;
+}
+
+.shell-life-map-view .tab-pane .tab-header-area {
+    -fx-background-color: -jarvis-surface;
+    -fx-padding: 8px 8px 0 8px;
+}
+
+.shell-life-map-view .tab-pane .tab-header-background {
+    -fx-background-color: transparent;
+    -fx-opacity: 0;
+}
+
+.shell-life-map-view .tab-pane .tab {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 10px 10px 0 0;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-width: 1px 1px 0 1px;
+    -fx-border-radius: 10px 10px 0 0;
+    -fx-padding: 8px 14px;
+}
+
+.shell-life-map-view .tab-pane .tab:selected {
+    -fx-background-color: rgba(79, 224, 255, 0.14);
+    -fx-border-color: -jarvis-primary;
+}
+
+.shell-life-map-view .tab-pane .tab-label {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-weight: bold;
+}
+
+.shell-life-map-view .tab-pane .tab:selected .tab-label {
+    -fx-text-fill: -jarvis-primary;
+}
+
+.shell-life-map-view .tab-pane .tab-content-area {
+    -fx-background-color: transparent;
+}
+
+/* Each Life Map tab wraps its section in a bare ScrollPane(VBox) — make
+   the ScrollPane transparent and give the VBox a proper elevated card. */
+.shell-life-map-view .tab-pane .scroll-pane,
+.shell-life-map-view .tab-pane .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+}
+
+.shell-life-map-view .tab-pane .v-box {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+}
+
+/* -- AnalyticsTab's four GridPane sections: replace the inline
+   `-fx-border-color: lightgray` box outline with the theme outline
+   (background-color/radius here are plain additions; only border-color
+   needs !important to beat AnalyticsTab's inline style). -- */
+.shell-analytics-view .grid-pane > .v-box {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline !important;
+    -fx-border-radius: 14px;
+}
+
+/* -- DevicesTab renders per-device cards with an inline near-white
+   background (#f6f8fb) that can only be reached structurally, since
+   DevicesTab.kt is out of scope for this pass. This selector targets
+   exactly that VBox-in-VBox-in-VBox device-card chain (content >
+   deviceContainer > deviceCard) without touching the classed
+   IntentView/ScenesView cards that sit alongside it in Smart Home. -- */
+.shell-smart-home-view > .v-box > .v-box > .v-box {
+    -fx-background-color: -jarvis-surface-elevated !important;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 10px;
+}
+
+/* -- Insights: readable dark cards for parsed JSON, replacing raw text -- */
+.insights-result-box {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 12px 14px;
+}
+
+.insights-json-row {
+    -fx-padding: 2px 0;
+}
+
+.insights-json-key {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+    -fx-min-width: 140px;
+}
+
+.insights-json-value {
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+.insights-json-group {
+    -fx-padding: 4px 0 0 0;
+}
+
+.insights-json-nested {
+    -fx-padding: 4px 0 4px 14px;
+    -fx-border-color: transparent transparent transparent -jarvis-outline;
+    -fx-border-width: 0 0 0 2px;
+}
+
+.insights-raw-block {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-family: "Monaco", "Courier New", monospace;
+    -fx-font-size: 12px;
+}

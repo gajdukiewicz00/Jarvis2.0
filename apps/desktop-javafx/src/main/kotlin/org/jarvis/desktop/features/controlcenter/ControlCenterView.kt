@@ -1,37 +1,141 @@
 package org.jarvis.desktop.features.controlcenter
 
+import javafx.application.Platform
 import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Node
 import javafx.scene.control.Button
 import javafx.scene.control.Label
 import javafx.scene.control.ScrollPane
+import javafx.scene.control.Tooltip
 import javafx.scene.layout.FlowPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
+import org.jarvis.desktop.auth.TokenManager
+import org.jarvis.desktop.features.ai.AiReadModel
+import org.jarvis.desktop.features.status.ServiceStatusReadModel
 import org.jarvis.desktop.shell.ShellRoute
 import org.jarvis.desktop.shell.ShellRouteContent
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Control Center — a cinematic landing dashboard plus the full feature index.
  *
- * It is intentionally self-contained (no API client / service wiring) so it
- * always renders and never breaks the build. Beyond the verified system status
- * and the live voice-demo checklist, it now exposes EVERY product surface as a
- * navigable tile so the operator can reach the whole feature set from one
- * screen. Navigation reuses the existing shell routes via [onNavigate].
+ * The feature index and informational panels below are static, but the
+ * headline system-status badge and the "14B Brain" status card are backed by
+ * live reads ([ServiceStatusReadModel], [AiReadModel]) — the same sources
+ * [org.jarvis.desktop.features.status.ServiceStatusView] and
+ * [org.jarvis.desktop.features.ai.AiView] use — so this landing screen never
+ * claims "ALL CORE SYSTEMS READY" or a specific model/GPU while something is
+ * actually down or unverified. Construction itself does no network I/O; the
+ * first refresh happens on [onRouteActivated] on a background thread.
+ * Navigation reuses the existing shell routes via [onNavigate].
  */
 class ControlCenterView(
-    private val onNavigate: (ShellRoute) -> Unit
+    private val onNavigate: (ShellRoute) -> Unit,
+    private val serviceStatusReadModel: ServiceStatusReadModel = ServiceStatusReadModel(),
+    private val aiReadModel: AiReadModel = AiReadModel(tokenProvider = { TokenManager.getAccessToken() })
 ) : ScrollPane(), ShellRouteContent {
+
+    private val worker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "jarvis-desktop-app-control-center").apply { isDaemon = true }
+    }
+    private val refreshInFlight = AtomicBoolean(false)
+
+    private val overallBadge = Label("CHECKING SYSTEMS…")
+    private val brainStatusDot = statusDot(ACCENT_BLUE)
+    private val brainStatusBadge = Label("Checking…")
+    private val brainDetailLabel = Label("Checking model and GPU status…").apply {
+        style = "-fx-text-fill: #8aa0c0; -fx-font-size: 12px;"
+        isWrapText = true
+        maxWidth = 230.0
+    }
 
     init {
         isFitToWidth = true
         styleClass += "control-center"
         style = "-fx-background: #0b0f17; -fx-background-color: #0b0f17;"
+        applyBadgeStyle(overallBadge, ACCENT_BLUE)
+        applyBadgeStyle(brainStatusBadge, ACCENT_BLUE)
         content = buildContent()
+    }
+
+    override fun onRouteActivated() {
+        refreshLiveStatus()
+    }
+
+    override fun onShellShutdown() {
+        worker.shutdownNow()
+    }
+
+    private fun refreshLiveStatus() {
+        if (!refreshInFlight.compareAndSet(false, true)) {
+            return
+        }
+        worker.execute {
+            val serviceSnapshot = runCatching { serviceStatusReadModel.refresh() }.getOrNull()
+            val aiSnapshot = runCatching { aiReadModel.refresh() }.getOrNull()
+            Platform.runLater {
+                serviceSnapshot?.let(::renderOverallBadge)
+                aiSnapshot?.let(::renderBrainStatus)
+                refreshInFlight.set(false)
+            }
+        }
+    }
+
+    private fun renderOverallBadge(snapshot: ServiceStatusReadModel.Snapshot) {
+        val total = snapshot.services.size
+        val down = snapshot.downServices
+        val (text, color) = when {
+            total == 0 -> "CHECKING SYSTEMS…" to ACCENT_BLUE
+            down.isEmpty() -> "ALL CORE SYSTEMS READY" to ACCENT_GREEN
+            down.size == total -> "ALL CORE SYSTEMS DOWN" to ACCENT_RED
+            else -> "${snapshot.healthyCount}/$total SYSTEMS READY — ${down.size} DOWN" to ACCENT_AMBER
+        }
+        overallBadge.text = text
+        applyBadgeStyle(overallBadge, color)
+        overallBadge.tooltip = if (down.isEmpty()) {
+            Tooltip("All $total service(s) reachable (target ${snapshot.baseUrl}).")
+        } else {
+            Tooltip(
+                "Down/degraded (target ${snapshot.baseUrl}):\n" +
+                    down.joinToString("\n") { svc -> "- ${svc.name} (${svc.status.name})" }
+            )
+        }
+    }
+
+    private fun renderBrainStatus(snapshot: AiReadModel.Snapshot) {
+        val color = when (snapshot.overallStatus) {
+            AiReadModel.AiStatus.READY -> ACCENT_GREEN
+            AiReadModel.AiStatus.DEGRADED, AiReadModel.AiStatus.STARTING -> ACCENT_AMBER
+            AiReadModel.AiStatus.DOWN, AiReadModel.AiStatus.ERROR -> ACCENT_RED
+            AiReadModel.AiStatus.DISABLED -> ACCENT_MUTED
+        }
+        brainStatusDot.style = "-fx-background-color: $color; -fx-background-radius: 6;"
+        brainStatusBadge.text = snapshot.overallStatus.name
+        applyBadgeStyle(brainStatusBadge, color)
+
+        val model = snapshot.model.effectiveLlmModel.takeUnless { it.isBlank() || it.equals("unknown", true) }
+            ?: snapshot.model.llmModel.takeUnless { it.isBlank() || it.equals("unknown", true) }
+            ?: "Model unknown"
+        val gpu = snapshot.gpu
+        val gpuDescription = when {
+            gpu.available && gpu.gpuName.isNotBlank() -> "GPU ${gpu.gpuName}"
+            gpu.available -> "GPU active"
+            gpu.device.equals("cpu", true) -> "CPU only"
+            gpu.device.equals("unknown", true) || gpu.readinessStatus.equals("unknown", true) -> "GPU status unknown"
+            else -> "GPU unavailable"
+        }
+        val provider = snapshot.llm.provider.takeUnless { it.isBlank() || it.equals("unknown", true) } ?: "unknown backend"
+        brainDetailLabel.text = "$model  ·  $gpuDescription  ·  via $provider"
+    }
+
+    private fun applyBadgeStyle(label: Label, color: String) {
+        label.style = "-fx-background-color: ${color}22; -fx-text-fill: $color; " +
+            "-fx-background-radius: 8; -fx-padding: 4 10 4 10; -fx-font-size: 11px; -fx-font-weight: bold;"
     }
 
     private fun buildContent(): Node {
@@ -63,7 +167,9 @@ class ControlCenterView(
         val title = Label("J.A.R.V.I.S. — Control Center").apply {
             style = "-fx-text-fill: #eaf2ff; -fx-font-size: 28px; -fx-font-weight: bold;"
         }
-        val subtitle = Label("Local cinematic assistant · Qwen3-14B brain · 100% on-device").apply {
+        // Model name intentionally omitted here — the "14B Brain" status card below
+        // is the single source of truth for the actual model/GPU/backend in use.
+        val subtitle = Label("Local cinematic assistant · on-device inference").apply {
             style = "-fx-text-fill: #8aa0c0; -fx-font-size: 13px;"
         }
         // Static build stamp — confirms the operator is looking at the new UI.
@@ -71,9 +177,8 @@ class ControlCenterView(
         val build = Label("UI build $UI_BUILD · full feature index · voice + brain + memory + finance + PC + vision").apply {
             style = "-fx-text-fill: #5f7691; -fx-font-size: 11px;"
         }
-        val pill = badge("ALL CORE SYSTEMS READY", ACCENT_GREEN)
         val spacer = Region().also { HBox.setHgrow(it, Priority.ALWAYS) }
-        val top = HBox(12.0, VBox(4.0, title, subtitle, build), spacer, pill).apply {
+        val top = HBox(12.0, VBox(4.0, title, subtitle, build), spacer, overallBadge).apply {
             alignment = Pos.CENTER_LEFT
         }
         return top
@@ -116,8 +221,28 @@ class ControlCenterView(
     // ---- status cards -------------------------------------------------------
     private fun statusGrid(): Node {
         val grid = FlowPane(16.0, 16.0)
+        grid.children += brainStatusCard()
         SERVICES.forEach { grid.children += statusCard(it) }
         return grid
+    }
+
+    /**
+     * Live card for the local AI brain — unlike [statusCard], the badge/detail here are
+     * mutable fields kept in sync with [AiReadModel] via [renderBrainStatus] so this never
+     * hardcodes a specific model or GPU (see class doc).
+     */
+    private fun brainStatusCard(): Node {
+        val name = Label("14B Brain").apply {
+            style = "-fx-text-fill: #eaf2ff; -fx-font-size: 15px; -fx-font-weight: bold;"
+        }
+        val card = VBox(10.0, HBox(10.0, brainStatusDot, name).apply {
+            alignment = Pos.CENTER_LEFT
+        }, brainStatusBadge, brainDetailLabel)
+        card.padding = Insets(16.0)
+        card.prefWidth = 262.0
+        card.style = "-fx-background-color: #131a27; -fx-background-radius: 14; " +
+            "-fx-border-color: #1f2a3d; -fx-border-radius: 14; -fx-border-width: 1;"
+        return card
     }
 
     private fun statusCard(svc: ServiceStatus): Node {
@@ -220,9 +345,13 @@ class ControlCenterView(
         const val ACCENT_BLUE = "#5aa9ff"
         const val ACCENT_PURPLE = "#b48cff"
         const val ACCENT_AMBER = "#f4bf4f"
+        const val ACCENT_RED = "#f4606e"
+        const val ACCENT_MUTED = "#5f7691"
 
         val FEATURES = listOf(
-            Feature("Brain / AI Chat", "Talk to the local Qwen3-14B brain.", ShellRoute.BRAIN, ACCENT_PURPLE),
+            // Model name intentionally generic — the live "14B Brain" status card is the
+            // single source of truth for which model/GPU/backend is actually in use.
+            Feature("Brain / AI Chat", "Talk to the local on-device brain.", ShellRoute.BRAIN, ACCENT_PURPLE),
             Feature("Voice Commands", "Live catalog: ты можешь сказать…", ShellRoute.VOICE_HELP, ACCENT_GREEN),
             Feature("Voice Control", "Mic, STT/TTS, voice diagnostics.", ShellRoute.VOICE, ACCENT_GREEN),
             Feature("Memory", "Semantic recall + Obsidian search.", ShellRoute.MEMORY, ACCENT_BLUE),
@@ -247,8 +376,9 @@ class ControlCenterView(
             Feature("Settings", "Endpoint, locale, session.", ShellRoute.SETTINGS, ACCENT_BLUE)
         )
 
+        // "14B Brain" is rendered live via [brainStatusCard] — see class doc; it is
+        // intentionally not duplicated as a static entry here.
         val SERVICES = listOf(
-            ServiceStatus("14B Brain", State.READY, "Qwen3-14B on RTX 5070 via host-model-daemon:18080"),
             ServiceStatus("RAG Memory", State.READY, "pgvector recall proven end-to-end"),
             ServiceStatus("Obsidian Search", State.READY, "Semantic note search; duplicates cleaned"),
             ServiceStatus("Voice Gateway", State.READY, "Sessions, runtime + WebSocket healthy"),

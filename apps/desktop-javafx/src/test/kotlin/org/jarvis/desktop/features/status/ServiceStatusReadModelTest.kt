@@ -8,6 +8,7 @@ import org.jarvis.agent.status.StatusAggregator
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Instant
 
 class ServiceStatusReadModelTest {
 
@@ -20,6 +21,9 @@ class ServiceStatusReadModelTest {
             }
         }
     }
+
+    private fun service(name: String, status: StatusAggregator.ProbeStatus, detail: String? = null) =
+        StatusAggregator.ServiceStatus(name, status, detail)
 
     @Test
     fun `refresh returns a snapshot with every configured service sorted by name`() {
@@ -78,5 +82,56 @@ class ServiceStatusReadModelTest {
             serverA.shutdown()
             serverB.shutdown()
         }
+    }
+
+    @Test
+    fun `healthyCount treats PROTECTED services as healthy alongside UP`() {
+        val snapshot = ServiceStatusReadModel.Snapshot(
+            refreshedAt = Instant.now(),
+            baseUrl = "http://example.invalid",
+            services = listOf(
+                service("backend-api-gateway", StatusAggregator.ProbeStatus.UP),
+                service("voice-gateway", StatusAggregator.ProbeStatus.PROTECTED, "HTTP 401"),
+                service("llm-service", StatusAggregator.ProbeStatus.DEGRADED, "HTTP 503"),
+                service("memory-service", StatusAggregator.ProbeStatus.DOWN, "IOException")
+            )
+        )
+
+        assertEquals(2, snapshot.healthyCount)
+    }
+
+    @Test
+    fun `downServices excludes PROTECTED and only lists DEGRADED or DOWN services`() {
+        val protectedService = service("voice-gateway", StatusAggregator.ProbeStatus.PROTECTED, "HTTP 403")
+        val degradedService = service("llm-service", StatusAggregator.ProbeStatus.DEGRADED, "HTTP 503")
+        val downService = service("memory-service", StatusAggregator.ProbeStatus.DOWN, "IOException")
+        val snapshot = ServiceStatusReadModel.Snapshot(
+            refreshedAt = Instant.now(),
+            baseUrl = "http://example.invalid",
+            services = listOf(
+                service("backend-api-gateway", StatusAggregator.ProbeStatus.UP),
+                protectedService,
+                degradedService,
+                downService
+            )
+        )
+
+        assertEquals(listOf(degradedService, downService), snapshot.downServices)
+        assertTrue(protectedService !in snapshot.downServices)
+    }
+
+    @Test
+    fun `healthyCount and downServices agree when every service is fully up`() {
+        val snapshot = ServiceStatusReadModel.Snapshot(
+            refreshedAt = Instant.now(),
+            baseUrl = "http://example.invalid",
+            services = listOf(
+                service("backend-api-gateway", StatusAggregator.ProbeStatus.UP),
+                service("voice-gateway", StatusAggregator.ProbeStatus.UP)
+            )
+        )
+
+        assertEquals(2, snapshot.healthyCount)
+        assertTrue(snapshot.downServices.isEmpty())
     }
 }

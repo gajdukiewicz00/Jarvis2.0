@@ -513,19 +513,31 @@ class AiView(
     }
 
     private fun renderGpu(gpu: AiReadModel.GpuStatus) {
+        // GPU truthfulness: when the backend genuinely does not know GPU status (the
+        // authoritative /runtime endpoint was unreachable and only the limited /health
+        // fallback answered), say so explicitly instead of collapsing into "Unavailable" —
+        // "unknown" and "unavailable" are different claims and must not be conflated.
+        val statusUnknown = gpu.device.equals("unknown", ignoreCase = true) ||
+            gpu.readinessStatus.equals("unknown", ignoreCase = true)
         gpuStatusPill.text = when {
             gpu.available -> "Active"
             gpu.readinessStatus == "verified" -> "Verified"
+            statusUnknown -> "Unknown"
             gpu.device == "cpu" || gpu.device == "n/a" -> "CPU only"
             else -> "Unavailable"
         }
         applyTone(gpuStatusPill, when {
             gpu.available -> "shell-status-tone-success"
             gpu.readinessStatus == "verified" -> "shell-status-tone-success"
+            statusUnknown -> "shell-status-tone-muted"
             gpu.device == "cpu" -> "shell-status-tone-muted"
             else -> "shell-status-tone-warning"
         })
-        gpuDeviceLabel.text = gpu.device.ifBlank { "Not detected" }
+        gpuDeviceLabel.text = when {
+            gpu.device.isBlank() -> "Not detected"
+            gpu.device.equals("unknown", ignoreCase = true) -> "Unknown"
+            else -> gpu.device
+        }
         gpuLayersLabel.text = buildString {
             append("Configured layers: ${gpu.configuredGpuLayers ?: "n/a"}")
             append("  |  Effective: ${gpu.effectiveGpuLayers ?: "n/a"}")
@@ -534,7 +546,7 @@ class AiView(
             if (gpu.gpuName.isNotBlank()) append(gpu.gpuName)
             if (gpu.cudaVersion.isNotBlank()) append("  |  CUDA ${gpu.cudaVersion}")
             if (gpu.driverVersion.isNotBlank()) append("  |  Driver ${gpu.driverVersion}")
-            if (isEmpty()) append("No GPU hardware detected")
+            if (isEmpty()) append(if (statusUnknown) "GPU hardware not reliably known" else "No GPU hardware detected")
         }
         gpuReadinessLabel.text = "${gpu.readinessStatus}: ${gpu.readinessReason}".take(200)
     }

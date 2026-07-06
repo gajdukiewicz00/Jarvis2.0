@@ -73,10 +73,14 @@ class StatusAggregator(
         val req = Request.Builder().url(url).get().build()
         return runCatching {
             client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    ServiceStatus(name, ProbeStatus.DEGRADED, "HTTP ${resp.code}")
-                } else {
-                    ServiceStatus(name, ProbeStatus.UP, null)
+                when {
+                    resp.isSuccessful -> ServiceStatus(name, ProbeStatus.UP, null)
+                    // A 401/403 means the process answered the request — it is alive and
+                    // reachable, just gated behind auth. That is not the same as "down" and
+                    // must not be counted as such by callers (see ProbeStatus.isReachable).
+                    resp.code == 401 || resp.code == 403 ->
+                        ServiceStatus(name, ProbeStatus.PROTECTED, "HTTP ${resp.code} (reachable, requires authentication)")
+                    else -> ServiceStatus(name, ProbeStatus.DEGRADED, "HTTP ${resp.code}")
                 }
             }
         }.getOrElse { ex ->
@@ -85,7 +89,19 @@ class StatusAggregator(
     }
 
     data class ServiceStatus(val name: String, val status: ProbeStatus, val detail: String?)
-    enum class ProbeStatus { UP, DEGRADED, DOWN }
+
+    enum class ProbeStatus {
+        UP,
+
+        /** Reachable (the process responded) but the endpoint requires authentication. */
+        PROTECTED,
+        DEGRADED,
+        DOWN;
+
+        /** True for any status that means the service process is actually up and answering. */
+        val isReachable: Boolean
+            get() = this == UP || this == PROTECTED
+    }
 
     companion object {
         private val TARGETS = linkedMapOf(

@@ -16,6 +16,7 @@ import javafx.scene.layout.VBox
 import javafx.scene.control.ButtonBar
 import javafx.scene.control.ButtonType
 import javafx.scene.control.Dialog
+import org.jarvis.desktop.api.AccessDeniedException
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.features.common.ShellPanelSupport
@@ -150,15 +151,27 @@ class SecuritySessionsView(
                 }
             } catch (e: Exception) {
                 Platform.runLater {
-                    statusPill.text = "Unavailable"
+                    statusPill.text = if (e is AccessDeniedException) "Forbidden" else "Unavailable"
                     ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
-                    renderPlaceholder("Аудит временно недоступен.\n${e.message ?: "Unknown error"}")
+                    renderPlaceholder(describeError(e))
                 }
             } finally {
                 inFlight.set(false)
                 Platform.runLater { refreshButton.isDisable = false }
             }
         }
+    }
+
+    /**
+     * Session/audit endpoints here are OWNER-only. A raw "403" is not actionable for the
+     * operator, so surface the role check they actually failed instead.
+     */
+    private fun describeError(e: Exception): String {
+        if (e is AccessDeniedException) {
+            val role = TokenManager.getUserRole() ?: "unknown"
+            return "Requires OWNER role (your role: $role). Log in as an OWNER account to manage sessions and view the audit trail."
+        }
+        return "Аудит временно недоступен.\n${e.message ?: "Unknown error"}"
     }
 
     private fun revokeToken() {
@@ -245,9 +258,9 @@ class SecuritySessionsView(
                 }
             } catch (e: Exception) {
                 Platform.runLater {
-                    statusPill.text = "Unavailable"
+                    statusPill.text = if (e is AccessDeniedException) "Forbidden" else "Unavailable"
                     ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
-                    actionResult.text = e.message ?: "Security request failed."
+                    actionResult.text = if (e is AccessDeniedException) describeError(e) else (e.message ?: "Security request failed.")
                 }
             } finally {
                 inFlight.set(false)

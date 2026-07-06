@@ -5,6 +5,8 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class StatusAggregatorTest {
@@ -33,6 +35,41 @@ class StatusAggregatorTest {
         } finally {
             server.shutdown()
         }
+    }
+
+    @Test
+    fun `refresh marks a 401 or 403 response PROTECTED rather than DEGRADED or DOWN`() {
+        val server = MockWebServer()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.path) {
+                    "/actuator/health" -> MockResponse().setResponseCode(401)
+                    "/api/v1/voice/runtime" -> MockResponse().setResponseCode(403)
+                    else -> MockResponse().setResponseCode(200)
+                }
+            }
+        }
+
+        try {
+            server.start()
+            val aggregator = StatusAggregator(backendBaseUrl = server.url("/").toString().removeSuffix("/"))
+            val snapshot = aggregator.refresh()
+
+            assertEquals(StatusAggregator.ProbeStatus.PROTECTED, snapshot["backend-api-gateway"]!!.status)
+            assertEquals(StatusAggregator.ProbeStatus.PROTECTED, snapshot["voice-gateway"]!!.status)
+            assertTrue(snapshot["backend-api-gateway"]!!.status.isReachable)
+            assertTrue(snapshot["voice-gateway"]!!.status.isReachable)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `isReachable is true only for UP and PROTECTED`() {
+        assertTrue(StatusAggregator.ProbeStatus.UP.isReachable)
+        assertTrue(StatusAggregator.ProbeStatus.PROTECTED.isReachable)
+        assertFalse(StatusAggregator.ProbeStatus.DEGRADED.isReachable)
+        assertFalse(StatusAggregator.ProbeStatus.DOWN.isReachable)
     }
 
     @Test

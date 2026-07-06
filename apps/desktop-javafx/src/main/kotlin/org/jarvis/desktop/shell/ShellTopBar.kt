@@ -128,17 +128,29 @@ class ShellTopBar(
 
     /** Pushed periodically by the shell owner — this Node never polls network itself. */
     fun renderServiceStatus(snapshot: ServiceStatusReadModel.Snapshot) {
-        val up = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.UP }
+        val healthy = snapshot.healthyCount
         val total = snapshot.services.size
-        servicesStatusPill.text = "Services: $up/$total up"
+        servicesStatusPill.text = "Services: $healthy/$total up"
         servicesStatusPill.styleClass.removeIf { it.startsWith("shell-status-tone-") }
-        val down = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.DOWN }
-        val degraded = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.DEGRADED }
+        val downServices = snapshot.downServices
+        val down = downServices.count { it.status == StatusAggregator.ProbeStatus.DOWN }
+        val degraded = downServices.count { it.status == StatusAggregator.ProbeStatus.DEGRADED }
         servicesStatusPill.styleClass += when {
             down > 0 -> "shell-status-tone-error"
             degraded > 0 -> "shell-status-tone-warning"
             total > 0 -> "shell-status-tone-success"
             else -> "shell-status-tone-muted"
+        }
+        servicesStatusPill.tooltip = if (downServices.isEmpty()) {
+            Tooltip("All $total service(s) reachable. Click to open Service Status.")
+        } else {
+            Tooltip(
+                "Down/degraded:\n" +
+                    downServices.joinToString("\n") { svc ->
+                        "- ${svc.name} (${svc.status.name})" + (svc.detail?.let { ": $it" } ?: "")
+                    } +
+                    "\nClick to open Service Status."
+            )
         }
     }
 

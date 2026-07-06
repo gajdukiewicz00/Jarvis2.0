@@ -113,10 +113,24 @@ class ProactiveView(
                         }
                     }
                     is ProactiveReadModel.Result.Unavailable -> {
-                        statusPill.text = "Unavailable"
+                        // A 404 across every candidate route means the proactive feed simply
+                        // isn't exposed here (the loop runs host-side) — show that plainly as a
+                        // partial feature, not a raw error, and never as a ready feature.
+                        val notDeployed = result.reason.contains("404")
+                        statusPill.text = if (notDeployed) "Partial feature" else "Unavailable"
                         ShellPanelSupport.applyTone(statusPill, "shell-status-tone-warning")
-                        statusLabel.text = result.reason
-                        renderPlaceholder("Проактивный модуль временно недоступен.\n${result.reason}")
+                        statusLabel.text = if (notDeployed) {
+                            "Proactive is not deployed here — it runs host-side only, so this is a partial feature in this environment."
+                        } else {
+                            result.reason
+                        }
+                        renderPlaceholder(
+                            if (notDeployed) {
+                                "Proactive is not deployed / host-side only — partial feature.\n${result.reason}"
+                            } else {
+                                "Проактивный модуль временно недоступен.\n${result.reason}"
+                            }
+                        )
                     }
                 }
                 refreshButton.isDisable = false

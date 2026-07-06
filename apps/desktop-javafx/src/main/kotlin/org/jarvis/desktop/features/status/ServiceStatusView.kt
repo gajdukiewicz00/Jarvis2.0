@@ -206,10 +206,11 @@ class ServiceStatusView(
         updatedLabel.text = "Updated ${timeFormatter.format(snapshot.refreshedAt)}"
 
         val up = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.UP }
+        val protected = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.PROTECTED }
         val degraded = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.DEGRADED }
         val down = snapshot.services.count { it.status == StatusAggregator.ProbeStatus.DOWN }
 
-        summaryPill.text = "$up/${snapshot.services.size} services up"
+        summaryPill.text = "${snapshot.healthyCount}/${snapshot.services.size} services up"
         applyTone(
             summaryPill,
             when {
@@ -219,7 +220,8 @@ class ServiceStatusView(
                 else -> "shell-status-tone-muted"
             }
         )
-        summaryLabel.text = "Target ${snapshot.baseUrl}  |  Up $up  |  Degraded $degraded  |  Down $down"
+        summaryLabel.text = "Target ${snapshot.baseUrl}  |  Up $up  |  Protected $protected  |  " +
+            "Degraded $degraded  |  Down $down"
 
         servicesContainer.children.clear()
         if (snapshot.services.isEmpty()) {
@@ -252,6 +254,8 @@ class ServiceStatusView(
 
     private fun toneFor(status: StatusAggregator.ProbeStatus): String = when (status) {
         StatusAggregator.ProbeStatus.UP -> "shell-status-tone-success"
+        // Reachable and alive, just gated behind auth — not a degraded/down state.
+        StatusAggregator.ProbeStatus.PROTECTED -> "shell-status-tone-info"
         StatusAggregator.ProbeStatus.DEGRADED -> "shell-status-tone-warning"
         StatusAggregator.ProbeStatus.DOWN -> "shell-status-tone-error"
     }

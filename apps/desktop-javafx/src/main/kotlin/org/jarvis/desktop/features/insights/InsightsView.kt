@@ -1,5 +1,6 @@
 package org.jarvis.desktop.features.insights
 
+import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import javafx.application.Platform
 import javafx.geometry.Insets
@@ -8,7 +9,6 @@ import javafx.scene.Node
 import javafx.scene.control.Button
 import javafx.scene.control.Label
 import javafx.scene.control.ScrollPane
-import javafx.scene.control.TextArea
 import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
@@ -22,13 +22,15 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Analytics Insights panel — day-score, forecast, insights, and report
  * intelligence from the analytics service. Each section renders its endpoint's
- * payload, or an honest "временно недоступно" line when that endpoint is down.
+ * payload as labeled dark cards (key/value rows, recursing into nested
+ * objects/arrays), or an honest "временно недоступно" line when that
+ * endpoint is down — never a raw JSON blob.
  */
 class InsightsView(
     apiClient: ApiClient
 ) : ScrollPane(), ShellRouteContent {
     private val readModel = InsightsReadModel(apiClient)
-    private val objectMapper = jacksonObjectMapper().writerWithDefaultPrettyPrinter()
+    private val objectMapper = jacksonObjectMapper()
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "jarvis-desktop-app-insights").apply { isDaemon = true }
     }
@@ -41,13 +43,13 @@ class InsightsView(
     }
 
     private val insightsPill = ShellPanelSupport.statusPill("Insights")
-    private val insightsArea = readOnlyArea()
+    private val insightsBox = resultBox()
     private val dayScorePill = ShellPanelSupport.statusPill("Day score")
-    private val dayScoreArea = readOnlyArea()
+    private val dayScoreBox = resultBox()
     private val forecastPill = ShellPanelSupport.statusPill("Forecast")
-    private val forecastArea = readOnlyArea()
+    private val forecastBox = resultBox()
     private val reportPill = ShellPanelSupport.statusPill("Report")
-    private val reportArea = readOnlyArea()
+    private val reportBox = resultBox()
 
     init {
         styleClass += "shell-route-scroll"
@@ -87,10 +89,10 @@ class InsightsView(
             padding = Insets(24.0)
             children.addAll(
                 header,
-                sectionCard("Day score", dayScorePill, dayScoreArea, "/api/v1/analytics/insights/day-score"),
-                sectionCard("Forecast", forecastPill, forecastArea, "/api/v1/analytics/insights/forecast"),
-                sectionCard("Insights", insightsPill, insightsArea, "/api/v1/analytics/insights"),
-                sectionCard("Report", reportPill, reportArea, "/api/v1/analytics/insights/report")
+                sectionCard("Day score", dayScorePill, dayScoreBox, "/api/v1/analytics/insights/day-score"),
+                sectionCard("Forecast", forecastPill, forecastBox, "/api/v1/analytics/insights/forecast"),
+                sectionCard("Insights", insightsPill, insightsBox, "/api/v1/analytics/insights"),
+                sectionCard("Report", reportPill, reportBox, "/api/v1/analytics/insights/report")
             )
         }
     }
@@ -107,10 +109,10 @@ class InsightsView(
             try {
                 val snapshot = readModel.refresh()
                 Platform.runLater {
-                    bind(insightsPill, insightsArea, snapshot.insights)
-                    bind(dayScorePill, dayScoreArea, snapshot.dayScore)
-                    bind(forecastPill, forecastArea, snapshot.forecast)
-                    bind(reportPill, reportArea, snapshot.report)
+                    bind(insightsPill, insightsBox, snapshot.insights)
+                    bind(dayScorePill, dayScoreBox, snapshot.dayScore)
+                    bind(forecastPill, forecastBox, snapshot.forecast)
+                    bind(reportPill, reportBox, snapshot.report)
                     val anyUp = listOf(snapshot.insights, snapshot.dayScore, snapshot.forecast, snapshot.report)
                         .any { it is InsightsReadModel.Result.Available }
                     statusPill.text = if (anyUp) "Ready" else "Unavailable"
@@ -126,28 +128,22 @@ class InsightsView(
         }
     }
 
-    private fun bind(pill: Label, area: TextArea, result: InsightsReadModel.Result) {
+    private fun bind(pill: Label, box: VBox, result: InsightsReadModel.Result) {
         when (result) {
             is InsightsReadModel.Result.Available -> {
                 pill.text = "OK"
                 ShellPanelSupport.applyTone(pill, "shell-status-tone-success")
-                area.text = prettify(result.body)
+                renderResult(box, result.body)
             }
             is InsightsReadModel.Result.Unavailable -> {
                 pill.text = "Unavailable"
                 ShellPanelSupport.applyTone(pill, "shell-status-tone-warning")
-                area.text = "Временно недоступно: ${result.reason}"
+                box.children.setAll(rawBlock("Временно недоступно: ${result.reason}"))
             }
         }
     }
 
-    private fun prettify(body: String): String =
-        runCatching {
-            val mapper = jacksonObjectMapper()
-            objectMapper.writeValueAsString(mapper.readTree(body))
-        }.getOrDefault(body)
-
-    private fun sectionCard(title: String, pill: Label, area: TextArea, endpoint: String): Node {
+    private fun sectionCard(title: String, pill: Label, box: VBox, endpoint: String): Node {
         return VBox(10.0).apply {
             styleClass += "shell-section-card"
             children += HBox(12.0).apply {
@@ -159,16 +155,88 @@ class InsightsView(
                 children += pill
             }
             children += Label(endpoint).apply { styleClass += "diagnostics-code-value" }
-            children += area
+            children += box
         }
     }
 
-    private fun readOnlyArea(): TextArea =
-        TextArea().apply {
-            isEditable = false
-            isWrapText = true
-            prefRowCount = 6
-            styleClass += "diagnostics-readonly-area"
-            text = "Loading…"
+    private fun resultBox(): VBox = VBox(4.0).apply {
+        styleClass += "insights-result-box"
+        children += valueLabel("Loading…")
+    }
+
+    /** Parses [text] as JSON and renders it as labeled rows; falls back to a raw block if it isn't JSON. */
+    private fun renderResult(box: VBox, text: String) {
+        box.children.clear()
+        val node = runCatching { objectMapper.readTree(text) }.getOrNull()
+        if (node == null || node.isMissingNode) {
+            box.children += rawBlock(text)
+            return
         }
+        renderNode(box, node)
+    }
+
+    private fun renderNode(container: VBox, node: JsonNode) {
+        when {
+            node.isObject -> {
+                if (node.size() == 0) {
+                    container.children += valueLabel("No data.")
+                    return
+                }
+                node.fields().forEachRemaining { entry ->
+                    container.children += fieldRow(entry.key, entry.value)
+                }
+            }
+            node.isArray -> {
+                if (node.size() == 0) {
+                    container.children += valueLabel("No data.")
+                    return
+                }
+                node.forEachIndexed { index, value ->
+                    container.children += fieldRow("[$index]", value)
+                }
+            }
+            else -> container.children += valueLabel(scalarText(node))
+        }
+    }
+
+    private fun fieldRow(key: String, value: JsonNode): Node {
+        return if (value.isObject || value.isArray) {
+            VBox(4.0).apply {
+                styleClass += "insights-json-group"
+                children += Label(labelize(key)).apply { styleClass += "insights-json-key" }
+                children += VBox(4.0).apply {
+                    styleClass += "insights-json-nested"
+                    renderNode(this, value)
+                }
+            }
+        } else {
+            HBox(8.0).apply {
+                styleClass += "insights-json-row"
+                children += Label(labelize(key)).apply { styleClass += "insights-json-key" }
+                children += Label(scalarText(value)).apply {
+                    styleClass += "insights-json-value"
+                    isWrapText = true
+                }
+            }
+        }
+    }
+
+    private fun scalarText(node: JsonNode): String = when {
+        node.isNull -> "—"
+        node.isTextual -> node.asText()
+        else -> node.toString()
+    }
+
+    /** "dayScore" -> "Day score", "total_events" -> "Total events". */
+    private fun labelize(key: String): String {
+        val spaced = key.replace(Regex("(?<=[a-z0-9])(?=[A-Z])"), " ").replace('_', ' ')
+        return spaced.replaceFirstChar { it.uppercase() }
+    }
+
+    private fun valueLabel(text: String): Label = Label(text).apply { styleClass += "insights-json-value" }
+
+    private fun rawBlock(text: String): Node = Label(text).apply {
+        styleClass += "insights-raw-block"
+        isWrapText = true
+    }
 }

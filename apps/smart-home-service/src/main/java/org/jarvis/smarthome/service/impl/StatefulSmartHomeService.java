@@ -1,6 +1,7 @@
 package org.jarvis.smarthome.service.impl;
 
 import lombok.RequiredArgsConstructor;
+import org.jarvis.common.safety.SystemPanicState;
 import org.jarvis.smarthome.model.SmartHomeActionRequest;
 import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
@@ -10,6 +11,7 @@ import org.jarvis.smarthome.security.SafetyPolicy;
 import org.jarvis.smarthome.service.SmartHomeCommandTransport;
 import org.jarvis.smarthome.service.SmartHomeDeviceCatalog;
 import org.jarvis.smarthome.service.SmartHomeDeviceNotFoundException;
+import org.jarvis.smarthome.service.SmartHomePanicEngagedException;
 import org.jarvis.smarthome.service.SmartHomeService;
 import org.jarvis.smarthome.service.SmartHomeValidationException;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,7 @@ public class StatefulSmartHomeService implements SmartHomeService {
     private final SmartHomeDeviceCatalog catalog;
     private final SmartHomeCommandTransport commandTransport;
     private final Clock clock;
+    private final SystemPanicState panicState;
 
     private final Map<String, StoredDeviceState> stateStore = new ConcurrentHashMap<>();
 
@@ -52,6 +55,9 @@ public class StatefulSmartHomeService implements SmartHomeService {
     @Override
     public SmartHomeActionResult executeAction(String userId, String deviceId, SmartHomeActionRequest request,
             boolean confirmed) {
+        if (panicState.isEngaged()) {
+            throw new SmartHomePanicEngagedException();
+        }
         if (request == null || request.action() == null || request.action().isBlank()) {
             throw new SmartHomeValidationException("Action is required");
         }

@@ -27,6 +27,7 @@ import org.jarvis.smarthome.service.SmartHomeDeviceDiscoveryService;
 import org.jarvis.smarthome.service.SmartHomeDeviceNotFoundException;
 import org.jarvis.smarthome.service.SmartHomeGroupService;
 import org.jarvis.smarthome.service.SmartHomeIntentService;
+import org.jarvis.smarthome.service.SmartHomePanicEngagedException;
 import org.jarvis.smarthome.service.SmartHomeRoomService;
 import org.jarvis.smarthome.service.SmartHomeSceneHistoryService;
 import org.jarvis.smarthome.service.SmartHomeSceneService;
@@ -145,6 +146,21 @@ class SmartHomeControllerTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(blocked, response.getBody());
+        verify(stateHistoryService, never())
+                .record(any(), any(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void executeActionReturnsLockedWhenSystemPanicIsEngaged() {
+        when(smartHomeService.executeAction(
+                "user-1", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), true))
+                .thenThrow(new SmartHomePanicEngagedException());
+
+        ResponseEntity<?> response = controller.executeAction(
+                "user-1", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), true);
+
+        assertEquals(HttpStatus.LOCKED, response.getStatusCode());
+        assertEquals("SYSTEM_PANIC_ENGAGED", ((Map<?, ?>) response.getBody()).get("error"));
         verify(stateHistoryService, never())
                 .record(any(), any(), any(), any(), any(), anyBoolean());
     }
@@ -433,6 +449,24 @@ class SmartHomeControllerTest {
         Map<?, ?> errorEntry = (Map<?, ?>) results.get(1);
         assertEquals("front_door_lock", errorEntry.get("deviceId"));
         assertEquals("Action LOCK is not supported for device front_door_lock", errorEntry.get("error"));
+    }
+
+    @Test
+    void activateSceneRecordsPanicBlockedStepAsAnErrorEntryWithoutFailingTheWholeRequest() {
+        SmartHomeScene.SceneStep step = new SmartHomeScene.SceneStep("kitchen_light", "TURN_OFF", null);
+        SmartHomeScene scene = new SmartHomeScene("night", List.of(step));
+        when(sceneService.find("night")).thenReturn(Optional.of(scene));
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null), false))
+                .thenThrow(new SmartHomePanicEngagedException());
+
+        ResponseEntity<?> response = controller.activateScene("user-1", "night", false);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        Map<?, ?> body = (Map<?, ?>) response.getBody();
+        List<?> results = (List<?>) body.get("results");
+        Map<?, ?> errorEntry = (Map<?, ?>) results.get(0);
+        assertEquals("kitchen_light", errorEntry.get("deviceId"));
+        assertTrue(((String) errorEntry.get("error")).toLowerCase().contains("panic"));
     }
 
     @Test

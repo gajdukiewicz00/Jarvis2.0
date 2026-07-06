@@ -32,7 +32,9 @@ import org.jarvis.smarthome.service.SmartHomeSceneSimulationService;
 import org.jarvis.smarthome.service.SmartHomeSensorService;
 import org.jarvis.smarthome.service.SmartHomeService;
 import org.jarvis.smarthome.service.SmartHomeDeviceNotFoundException;
+import org.jarvis.smarthome.service.SmartHomePanicEngagedException;
 import org.jarvis.smarthome.service.SmartHomeValidationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -155,6 +157,9 @@ public class SmartHomeController {
                 recordStateHistory(uid, deviceId, result, request.payload());
             }
             return ResponseEntity.ok(result);
+        } catch (SmartHomePanicEngagedException e) {
+            log.warn("PANIC: blocking device action for user={} device={}", userId, deviceId);
+            return ResponseEntity.status(HttpStatus.LOCKED).body(error("SYSTEM_PANIC_ENGAGED", e.getMessage()));
         } catch (SmartHomeDeviceNotFoundException e) {
             return ResponseEntity.status(404).body(error("DEVICE_NOT_FOUND", e.getMessage()));
         } catch (SmartHomeValidationException e) {

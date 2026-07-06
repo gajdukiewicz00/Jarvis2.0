@@ -1,5 +1,6 @@
 package org.jarvis.smarthome.service;
 
+import org.jarvis.common.safety.SystemPanicState;
 import org.jarvis.smarthome.model.SmartHomeActionRequest;
 import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
@@ -31,6 +32,7 @@ class StatefulSmartHomeServiceTest {
     private StatefulSmartHomeService service;
     private RecordingTransport transport;
     private SmartHomeDeviceCatalog catalog;
+    private SystemPanicState panicState;
 
     @BeforeEach
     void setUp() {
@@ -40,12 +42,14 @@ class StatefulSmartHomeServiceTest {
                 "SET_TEMPERATURE", "SET_BRIGHTNESS", "LOCK", "UNLOCK", "OPEN", "CLOSE"));
         transport = new RecordingTransport();
         catalog = new SmartHomeDeviceCatalog();
+        panicState = new SystemPanicState();
         service = new StatefulSmartHomeService(
                 validator,
                 new SafetyPolicy(),
                 catalog,
                 transport,
-                Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC),
+                panicState);
     }
 
     @Test
@@ -309,6 +313,44 @@ class StatefulSmartHomeServiceTest {
     }
 
     @Test
+    void executeActionBlocksLockActionWhenPanicIsEngaged() {
+        panicState.engage("test-actor", "safety drill", 1000L);
+
+        assertThrows(SmartHomePanicEngagedException.class,
+                () -> service.executeAction(
+                        "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), true));
+
+        // Device state must be unchanged (default locked=true) — the action was never actuated.
+        assertTrue((Boolean) service.getDevice("user-a", "front_door_lock").state().get("locked"));
+    }
+
+    @Test
+    void executeActionBlocksAnyDeviceActionWhenPanicIsEngaged() {
+        panicState.engage("test-actor", "safety drill", 1000L);
+
+        assertThrows(SmartHomePanicEngagedException.class,
+                () -> service.executeAction(
+                        "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null)));
+
+        assertFalse((Boolean) service.getDevice("user-a", "kitchen_light").state().get("power"));
+    }
+
+    @Test
+    void executeActionProceedsNormallyOnceAgainAfterPanicIsCleared() {
+        panicState.engage("test-actor", "safety drill", 1000L);
+        assertThrows(SmartHomePanicEngagedException.class,
+                () -> service.executeAction(
+                        "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null)));
+
+        panicState.clear("test-actor", 2000L);
+
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null));
+        assertTrue(result.success());
+        assertTrue((Boolean) result.device().state().get("power"));
+    }
+
+    @Test
     void executeActionDefaultThreeArgOverloadTreatsActionAsUnconfirmed() {
         SmartHomeActionResult result = service.executeAction(
                 "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null));
@@ -374,7 +416,8 @@ class StatefulSmartHomeServiceTest {
                 new SafetyPolicy(),
                 new SmartHomeDeviceCatalog(),
                 new RecordingTransport("mock"),
-                Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC),
+                new SystemPanicState());
 
         SmartHomeActionResult result = mockProviderService.executeAction(
                 "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null));

@@ -28,7 +28,13 @@ public class TokenValidationFilter extends OncePerRequestFilter {
 
     private static final String USER_ID_HEADER = "X-User-Id";
     private static final String USER_ROLES_HEADER = "X-User-Roles";
+
+    // "/api/v1/pc/action" is the real dispatch endpoint (PcControlController#executeAction)
+    // that executes host actions (SYSTEM_COMMAND, LOCK_SCREEN, SCREENSHOT, HOTKEY, etc.),
+    // so it must be the one gated by the admin role check below. "/shutdown" and "/restart"
+    // do not correspond to any controller mapping and are kept only as historical entries.
     private static final List<String> ADMIN_ONLY_PATHS = Arrays.asList(
+            "/api/v1/pc/action",
             "/api/v1/pc/shutdown",
             "/api/v1/pc/restart");
 
@@ -80,7 +86,9 @@ public class TokenValidationFilter extends OncePerRequestFilter {
     }
 
     private boolean isAdminOnlyPath(String path) {
-        return ADMIN_ONLY_PATHS.stream().anyMatch(path::startsWith);
+        // Exact match, not a prefix match: "/api/v1/pc/action" must not also gate the
+        // read-only "/api/v1/pc/actions" listing endpoint.
+        return ADMIN_ONLY_PATHS.contains(path);
     }
 
     private boolean hasAdminRole(String roles) {

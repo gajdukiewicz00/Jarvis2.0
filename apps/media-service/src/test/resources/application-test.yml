@@ -19,6 +19,15 @@ media:
   tts:
     mode: mock
 
+# Pin the in-memory job store for the full-context @SpringBootTest. The effective
+# production default is now file-backed (FileBackedMediaJobStore, matchIfMissing =
+# true) so job history survives a pod restart, but the test suite should stay
+# isolated from the developer's real filesystem and not accumulate stray
+# /tmp/jarvis-media-jobs/*.json files across local test runs.
+jarvis:
+  media:
+    job-store: memory
+
 logging:
   level:
     org.jarvis.media: INFO

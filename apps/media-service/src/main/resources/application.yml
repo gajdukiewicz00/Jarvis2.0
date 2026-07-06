@@ -81,13 +81,15 @@ media:
     max-segment-seconds: ${MEDIA_MAX_SEGMENT_SECONDS:7}
     min-confidence: ${MEDIA_MIN_CONFIDENCE:0.5}
 
-# Job store mode ('memory' default / 'file' / 'postgres') is intentionally not
-# declared here — it is read from JARVIS_MEDIA_JOB_STORE with no YAML default, the
-# same way it worked before this section existed (see
-# InMemoryMediaJobStore/FileBackedMediaJobStore/PostgresMediaJobStore
+# Job store mode ('file' effective default / 'memory' / 'postgres') is intentionally
+# not declared here — it is read from JARVIS_MEDIA_JOB_STORE with no YAML default,
+# the same way it worked before this section existed (see
+# FileBackedMediaJobStore/InMemoryMediaJobStore/PostgresMediaJobStore
 # @ConditionalOnProperty("jarvis.media.job-store")). Declaring it as a scalar here
 # AND as a mapping for the settings below would be a YAML key conflict, so only
-# the file-/postgres-store-specific settings live in this file:
+# the file-/postgres-store-specific settings live in this file. Leaving the
+# property unset means FileBackedMediaJobStore (matchIfMissing=true) is active, so
+# job history persists across restarts by default at ${JARVIS_MEDIA_JOB_STORE_DIR}.
 jarvis:
   media:
     job-store:

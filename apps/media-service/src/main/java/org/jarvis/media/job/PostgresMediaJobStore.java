@@ -20,7 +20,8 @@ import java.util.Optional;
  * so jobs survive a pod restart AND are shared across replicas (unlike {@link
  * FileBackedMediaJobStore}, which only survives a restart of the same pod backed by
  * the same volume). Opt in with {@code jarvis.media.job-store=postgres}; the
- * in-memory store remains the default and this bean does not exist otherwise.
+ * file-backed store remains the effective default and this bean does not exist
+ * otherwise.
  *
  * <p>Deliberately plain JDBC ({@link JdbcTemplate}), not JPA: there is exactly one
  * table and one access pattern (save / find-by-id / find-by-user), so an ORM would

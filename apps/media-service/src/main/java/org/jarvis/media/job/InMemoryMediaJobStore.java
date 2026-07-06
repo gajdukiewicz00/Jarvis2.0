@@ -10,14 +10,15 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Thread-safe in-memory job store. The MVP intentionally avoids a database so the
- * service stays isolated (no cross-service network policy, no migrations). Jobs are
- * ephemeral and reset on restart — documented as a known limitation. Set
- * {@code jarvis.media.job-store=file} to opt into {@link FileBackedMediaJobStore}
- * instead, which survives a pod restart.
+ * Thread-safe in-memory job store. Jobs are ephemeral and reset on restart — an
+ * explicit opt-in for callers that genuinely want a stateless store (e.g. a
+ * throwaway dev container with no writable volume). {@link FileBackedMediaJobStore}
+ * is the effective default (see its javadoc): it persists every job to disk so work
+ * survives a pod restart without requiring a database. Set
+ * {@code jarvis.media.job-store=memory} explicitly to opt into this store instead.
  */
 @Repository
-@ConditionalOnProperty(name = "jarvis.media.job-store", havingValue = "memory", matchIfMissing = true)
+@ConditionalOnProperty(name = "jarvis.media.job-store", havingValue = "memory")
 public class InMemoryMediaJobStore implements MediaJobStore {
 
     private final Map<String, MediaJob> jobs = new ConcurrentHashMap<>();

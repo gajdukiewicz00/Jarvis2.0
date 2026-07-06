@@ -4,7 +4,8 @@ Inspects media files, detects audio/subtitle streams, generates Russian subtitle
 prepares a **safe, neutral-voice** Russian dubbing pipeline. Increment C (C1–C8).
 
 Port `8095` · package `org.jarvis.media` · Java 21 / Spring Boot 3.3 · **no database
-by default** (in-memory job store; Postgres is an opt-in alternative — see "Job
+by default** (job history persists to local disk via the file-backed job store;
+Postgres and the ephemeral in-memory store are both opt-in alternatives — see "Job
 store" below) · feature flag `media.enabled`.
 
 ## Safety & legal posture (non-negotiable)
@@ -195,6 +196,7 @@ Job endpoints are disabled (503) when `media.enabled=false`.
 | GET | `/api/v1/media/jobs/{id}` | job status + artifacts + details |
 | POST | `/api/v1/media/jobs/{id}/cancel` | cancel a job |
 | GET | `/api/v1/media/jobs/{id}/artifacts/{index}` | download one produced artifact (subtitle/audio/muxed file) |
+| GET | `/api/v1/media/status` | current `enabled` flag, effective job-store mode, and each provider's `mock`/real mode — lets a UI clearly show mock vs real |
 
 Job model: `id, userId, type, status (CREATED/RUNNING/COMPLETED/FAILED/CANCELLED),
 inputFile, outputFiles[], createdAt, updatedAt, errorMessage, details{}`.
@@ -245,15 +247,21 @@ sudo k3s kubectl create -f k8s/base/media-service/deployment.yaml
 sudo k3s kubectl -n jarvis-prod set image deploy/media-service media-service=localhost:5000/jarvis/media-service:<tag>
 ```
 
-## Job store: memory (default) / file / Postgres
+## Job store: file (default) / memory / Postgres
 
 `jarvis.media.job-store` selects the `MediaJobStore` implementation:
 
 | Value | Implementation | Survives pod restart? | Shared across replicas? |
 |---|---|---|---|
-| `memory` (default) | `InMemoryMediaJobStore` | no | no |
-| `file` | `FileBackedMediaJobStore` — one JSON file per job under `jarvis.media.job-store.dir` | yes (same pod/volume) | no |
+| `file` (default) | `FileBackedMediaJobStore` — one JSON file per job under `jarvis.media.job-store.dir` | yes (same pod/volume) | no |
+| `memory` | `InMemoryMediaJobStore` | no | no |
 | `postgres` | `PostgresMediaJobStore` — one JSON-payload row per job, migrated via Flyway (`db/media/migration`) | yes | yes |
+
+Leaving the property unset (the common case) now gets you the file-backed store —
+job history is durable across a pod restart with no database to provision, mirroring
+the `jarvis.agent.task-store` pattern in agent-service. Set
+`JARVIS_MEDIA_JOB_STORE=memory` to opt back into the ephemeral in-memory store (e.g.
+a throwaway dev container with no writable volume).
 
 All three implement the same `MediaJobStore` interface and are wired via
 `@ConditionalOnProperty`, so switching stores never touches `MediaJobService` or any
@@ -267,8 +275,9 @@ schema would add migration churn without adding query power. Configure with
 
 ## Known limitations
 
-- `memory` remains the default job store (resets on pod restart); `file` and
-  `postgres` are opt-in (see above) — no DB is provisioned unless explicitly
+- `file` is the default job store (persists to `jarvis.media.job-store.dir`, default
+  `/tmp/jarvis-media-jobs`); `memory` (ephemeral) and `postgres` (shared across
+  replicas) are both opt-in (see above) — no DB is provisioned unless explicitly
   configured, keeping the service's default footprint unchanged.
 - Real ffmpeg/ffprobe/whisper.cpp/Piper require the opt-in `real-media-image` build
   (see above); the default image still ships none of them, so prod runs mock unless

@@ -20,12 +20,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * File-backed job store: persists every {@link MediaJob} as its own JSON file so jobs
  * survive a pod restart, without introducing a database. All jobs are loaded into an
  * in-memory cache on construction and every {@link #save} writes through to disk
- * immediately. Opt in with {@code jarvis.media.job-store=file}; the in-memory store
- * remains the default.
+ * immediately. This is the effective default job store (no {@code
+ * jarvis.media.job-store} property needs to be set) so job history is durable
+ * out of the box, mirroring the agent-service task-store pattern; set {@code
+ * jarvis.media.job-store=memory} to opt back into the ephemeral {@link
+ * InMemoryMediaJobStore}, or {@code =postgres} for a store shared across replicas.
  */
 @Slf4j
 @Repository
-@ConditionalOnProperty(name = "jarvis.media.job-store", havingValue = "file")
+@ConditionalOnProperty(name = "jarvis.media.job-store", havingValue = "file", matchIfMissing = true)
 public class FileBackedMediaJobStore implements MediaJobStore {
 
     private final Path dir;

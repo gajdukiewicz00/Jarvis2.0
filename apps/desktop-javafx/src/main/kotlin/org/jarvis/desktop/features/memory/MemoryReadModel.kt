@@ -14,6 +14,9 @@ import java.nio.charset.StandardCharsets
  *  - recent notes    -> GET    /api/v1/memory/notes?scope=&limit=
  *  - edit note       -> PUT    /api/v1/memory/notes/{memoryId}
  *  - forget note      -> DELETE /api/v1/memory/notes/{memoryId}?actor=&reason=
+ *  - why remembered  -> GET    /api/v1/memory/notes/{memoryId}/why
+ *  - pin/unpin note  -> PUT/DELETE /api/v1/memory/notes/{memoryId}/pin
+ *  - change scope    -> PUT    /api/v1/memory/notes/{memoryId}/scope?scope=
  *
  * Endpoints are relative to the desktop client's `/api/v1` base URL. Result
  * shapes vary by deployment, so parsing probes several common container keys
@@ -34,7 +37,9 @@ class MemoryReadModel(
         val title: String,
         val snippet: String,
         val source: String,
-        val score: Double?
+        val score: Double?,
+        val pinned: Boolean = false,
+        val scope: String? = null
     ) {
         /**
          * Edit/forget only apply to real memory notes. Unified search also
@@ -44,6 +49,18 @@ class MemoryReadModel(
         val isManageable: Boolean
             get() = !memoryId.isNullOrBlank() && source != "conversation"
     }
+
+    /** `GET /{memoryId}/why` — provenance + privacy for "why does Jarvis remember this?". */
+    data class WhyInfo(
+        val memoryId: String,
+        val source: String?,
+        val confidence: Double?,
+        val scope: String?,
+        val privacy: String?,
+        val pinned: Boolean,
+        val createdAt: String?,
+        val explanation: String?
+    )
 
     fun search(query: String, limit: Int = 10): List<MemoryItem> {
         val payload = objectMapper.createObjectNode().apply {
@@ -99,6 +116,36 @@ class MemoryReadModel(
         apiClient.delete(query)
     }
 
+    /** "Why does Jarvis remember this?" — source, confidence, scope, privacy and pin state. */
+    fun why(memoryId: String): WhyInfo {
+        val node = objectMapper.readTree(apiClient.get("/memory/notes/${encode(memoryId)}/why"))
+        return WhyInfo(
+            memoryId = node.path("memoryId").textOrNull() ?: memoryId,
+            source = node.path("source").textOrNull(),
+            confidence = node.path("confidence").let { if (it.isNumber) it.asDouble() else null },
+            scope = node.path("scope").textOrNull(),
+            privacy = node.path("privacy").textOrNull(),
+            pinned = node.path("pinned").let { it.isBoolean && it.asBoolean() },
+            createdAt = node.path("createdAt").textOrNull(),
+            explanation = node.path("explanation").textOrNull()
+        )
+    }
+
+    /** Roadmap #11 — mark pinned: excluded from TTL cleanup, ranked higher in search. */
+    fun pinNote(memoryId: String) {
+        apiClient.put("/memory/notes/${encode(memoryId)}/pin", "{}")
+    }
+
+    /** Roadmap #11 — unmark pinned. */
+    fun unpinNote(memoryId: String) {
+        apiClient.delete("/memory/notes/${encode(memoryId)}/pin")
+    }
+
+    /** Roadmap #11 — dedicated "change scope" op; re-applies the finance/health privacy guard server-side. */
+    fun changeScope(memoryId: String, scope: String) {
+        apiClient.put("/memory/notes/${encode(memoryId)}/scope?scope=${encode(scope)}", "{}")
+    }
+
     private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 
     private fun parseItems(root: JsonNode): List<MemoryItem> {
@@ -138,7 +185,9 @@ class MemoryReadModel(
         ) ?: "memory"
         val score = node.path("score").let { if (it.isNumber) it.asDouble() else null }
             ?: node.path("similarity").let { if (it.isNumber) it.asDouble() else null }
-        return MemoryItem(memoryId, title, snippet.take(500), source, score)
+        val pinned = node.path("pinned").let { it.isBoolean && it.asBoolean() }
+        val scope = node.path("scope").textOrNull()
+        return MemoryItem(memoryId, title, snippet.take(500), source, score, pinned, scope)
     }
 
     private fun firstNonBlank(vararg values: String?): String? =

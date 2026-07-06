@@ -15,9 +15,11 @@ import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
+import javafx.stage.FileChooser
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.features.common.ShellPanelSupport
 import org.jarvis.desktop.shell.ShellRouteContent
+import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -266,7 +268,10 @@ class AgentSwarmView(
                 HBox.setHgrow(spacer, Priority.ALWAYS)
                 children += spacer
                 val pill = ShellPanelSupport.statusPill(task.status)
-                ShellPanelSupport.applyTone(pill, statusTone(task.status))
+                ShellPanelSupport.applyTone(
+                    pill,
+                    if (task.isAwaitingApproval) "shell-status-tone-warning" else statusTone(task.status)
+                )
                 children += pill
                 children += Button("Cancel").apply {
                     styleClass += "shell-action-button"
@@ -284,6 +289,30 @@ class AgentSwarmView(
                     styleClass += "shell-section-subtitle"
                 }
             }
+            if (task.isAwaitingApproval) {
+                children += HBox(8.0).apply {
+                    alignment = Pos.CENTER_RIGHT
+                    children += Button("Reject").apply {
+                        styleClass += "shell-action-button-danger"
+                        setOnAction { rejectTask(task.taskId) }
+                    }
+                    children += Button("Approve").apply {
+                        styleClass += "shell-action-button"
+                        setOnAction { approveTask(task.taskId) }
+                    }
+                }
+            }
+            children += HBox(8.0).apply {
+                alignment = Pos.CENTER_RIGHT
+                children += Button("Download diff").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { downloadArtifact(task.taskId, "diff.patch") { readModel.downloadDiff(task.taskId) } }
+                }
+                children += Button("Download report").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { downloadArtifact(task.taskId, "${task.taskId}-report.md") { readModel.downloadReport(task.taskId) } }
+                }
+            }
         }
     }
 
@@ -292,6 +321,48 @@ class AgentSwarmView(
             readModel.cancelTask(taskId)
             val tasks = readModel.listTasks()
             Platform.runLater { renderTasks(tasks) }
+        }
+    }
+
+    private fun approveTask(taskId: String) {
+        runBusy("Approving task…") {
+            readModel.approveTask(taskId)
+            val tasks = readModel.listTasks()
+            Platform.runLater {
+                renderTasks(tasks)
+                startResult.text = "Approved task $taskId — patch applied to its sandbox."
+            }
+        }
+    }
+
+    private fun rejectTask(taskId: String) {
+        runBusy("Rejecting task…") {
+            readModel.rejectTask(taskId)
+            val tasks = readModel.listTasks()
+            Platform.runLater {
+                renderTasks(tasks)
+                startResult.text = "Rejected task $taskId — nothing was applied."
+            }
+        }
+    }
+
+    /** Fetches an artifact's text content and lets the owner save it to a local file. */
+    private fun downloadArtifact(taskId: String, suggestedFileName: String, fetch: () -> String) {
+        runBusy("Fetching artifact…") {
+            val content = fetch()
+            Platform.runLater {
+                val chooser = FileChooser().apply {
+                    title = "Save artifact for task $taskId"
+                    initialFileName = suggestedFileName
+                }
+                val target: File? = chooser.showSaveDialog(scene?.window)
+                if (target != null) {
+                    target.writeText(content)
+                    startResult.text = "Saved ${target.name}."
+                } else {
+                    startResult.text = "Artifact fetched — save cancelled."
+                }
+            }
         }
     }
 

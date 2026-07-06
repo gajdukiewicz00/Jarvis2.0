@@ -12,13 +12,16 @@ import java.nio.charset.StandardCharsets
  * security-service does not expose a live "list active sessions" endpoint —
  * session/token activity is instead surfaced through its OWNER-only audit
  * trail, which records every token issuance/rotation/revocation event. This
- * model wires that trail plus the two revoke actions it supports:
+ * model wires that trail plus the revoke actions it supports:
  *  - audit trail                    -> GET  /api/v1/security/auth/audit?limit=
  *  - revoke a single token          -> POST /api/v1/security/auth/revoke
  *  - revoke every session for a user -> POST /api/v1/security/auth/revoke-all/{userId}
+ *  - revoke the caller's own current session -> POST /api/v1/security/auth/revoke-current
  *
- * All three require the OWNER role; a non-owner caller gets a 403, surfaced
- * like any other gated call via [org.jarvis.desktop.api.AccessDeniedException].
+ * The first three require the OWNER role; a non-owner caller gets a 403,
+ * surfaced like any other gated call via [org.jarvis.desktop.api.AccessDeniedException].
+ * `revoke-current` is different: any authenticated caller may revoke only
+ * their own session (no OWNER role required).
  */
 class SecuritySessionsReadModel(
     private val apiClient: ApiClient
@@ -36,6 +39,8 @@ class SecuritySessionsReadModel(
     data class RevokeResult(val revoked: Boolean, val jti: String?, val tokenType: String?)
 
     data class RevokeAllResult(val userId: String, val revokedRefreshTokens: Int)
+
+    data class RevokeCurrentResult(val revoked: Boolean, val accessJti: String?, val refreshJti: String?)
 
     fun listAudit(limit: Int = 50): List<AuditEvent> {
         val root = objectMapper.readTree(apiClient.get("/security/auth/audit?limit=$limit"))
@@ -73,6 +78,24 @@ class SecuritySessionsReadModel(
         return RevokeAllResult(
             userId = root.path("userId").asText(userId),
             revokedRefreshTokens = root.path("revokedRefreshTokens").asInt(0)
+        )
+    }
+
+    /**
+     * Revoke the caller's own current session (blacklists both the presented access
+     * token's jti and [refreshToken]'s jti). Unlike [revokeToken]/[revokeAllForUser],
+     * this requires no OWNER role — any authenticated caller may revoke only their
+     * own session this way.
+     */
+    fun revokeCurrentSession(refreshToken: String): RevokeCurrentResult {
+        val payload = objectMapper.createObjectNode().apply { put("refreshToken", refreshToken.trim()) }
+        val root = objectMapper.readTree(
+            apiClient.post("/security/auth/revoke-current", objectMapper.writeValueAsString(payload))
+        )
+        return RevokeCurrentResult(
+            revoked = root.path("revoked").let { it.isBoolean && it.asBoolean() },
+            accessJti = root.path("accessJti").textOrNull(),
+            refreshJti = root.path("refreshJti").textOrNull()
         )
     }
 

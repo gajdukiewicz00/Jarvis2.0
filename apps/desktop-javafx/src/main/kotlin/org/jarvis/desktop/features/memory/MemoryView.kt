@@ -214,9 +214,26 @@ class MemoryView(
                     styleClass += "shell-section-subtitle"
                 }
             }
+            item.scope?.let { scope ->
+                children += Label("scope: $scope${if (item.pinned) " · pinned" else ""}").apply {
+                    styleClass += "shell-section-subtitle"
+                }
+            }
             if (item.isManageable) {
                 children += HBox(8.0).apply {
                     alignment = Pos.CENTER_RIGHT
+                    children += Button("Why?").apply {
+                        styleClass += "shell-action-button"
+                        setOnAction { showWhy(item) }
+                    }
+                    children += Button("Scope…").apply {
+                        styleClass += "shell-action-button"
+                        setOnAction { beginChangeScope(item) }
+                    }
+                    children += Button(if (item.pinned) "Unpin" else "Pin").apply {
+                        styleClass += "shell-action-button"
+                        setOnAction { togglePin(item) }
+                    }
                     children += Button("Edit").apply {
                         styleClass += "shell-action-button"
                         setOnAction { beginEdit(item) }
@@ -314,6 +331,134 @@ class MemoryView(
                     statusPill.text = "Unavailable"
                     ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
                     statusLabel.text = e.message ?: "Failed to save note."
+                }
+            }
+        }
+    }
+
+    private fun showWhy(item: MemoryReadModel.MemoryItem) {
+        val memoryId = item.memoryId ?: return
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        statusPill.text = "Loading"
+        ShellPanelSupport.applyTone(statusPill, "shell-status-tone-info")
+        statusLabel.text = "Loading provenance for \"${item.title}\"…"
+
+        worker.execute {
+            try {
+                val info = readModel.why(memoryId)
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Ready"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-success")
+                    renderWhyDialog(item.title, info)
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Unavailable"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
+                    statusLabel.text = e.message ?: "Failed to load provenance."
+                }
+            }
+        }
+    }
+
+    private fun renderWhyDialog(title: String, info: MemoryReadModel.WhyInfo) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Why does Jarvis remember this?"
+        dialog.headerText = title
+        dialog.dialogPane.content = VBox(6.0).apply {
+            padding = Insets(12.0)
+            children += Label("Source: ${info.source ?: "unknown"}")
+            children += Label("Privacy: ${info.privacy ?: "unknown"}")
+            children += Label("Scope: ${info.scope ?: "unknown"}")
+            children += Label("Pinned: ${if (info.pinned) "yes" else "no"}")
+            children += Label("Confidence: ${info.confidence?.let { "%.2f".format(it) } ?: "n/a"}")
+            children += Label("Created: ${info.createdAt ?: "unknown"}")
+            if (!info.explanation.isNullOrBlank()) {
+                children += Label(info.explanation).apply { isWrapText = true }
+            }
+        }
+        dialog.dialogPane.buttonTypes.setAll(ButtonType.CLOSE)
+        dialog.showAndWait()
+    }
+
+    private fun togglePin(item: MemoryReadModel.MemoryItem) {
+        val memoryId = item.memoryId ?: return
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        val pinning = !item.pinned
+        statusPill.text = if (pinning) "Pinning" else "Unpinning"
+        ShellPanelSupport.applyTone(statusPill, "shell-status-tone-info")
+        statusLabel.text = "${if (pinning) "Pinning" else "Unpinning"} \"${item.title}\"…"
+
+        worker.execute {
+            try {
+                if (pinning) readModel.pinNote(memoryId) else readModel.unpinNote(memoryId)
+                Platform.runLater {
+                    inFlight.set(false)
+                    run("Refreshing…", lastFetch)
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Unavailable"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
+                    statusLabel.text = e.message ?: "Failed to update pin state."
+                }
+            }
+        }
+    }
+
+    private fun beginChangeScope(item: MemoryReadModel.MemoryItem) {
+        val memoryId = item.memoryId ?: return
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Change scope"
+        dialog.headerText = "Move \"${item.title}\" to a new scope"
+
+        val scopeCombo = ComboBox<String>().apply {
+            items.addAll(MemoryReadModel.SCOPES)
+            value = item.scope?.takeIf { it in MemoryReadModel.SCOPES } ?: MemoryReadModel.SCOPES.first()
+        }
+        dialog.dialogPane.content = VBox(10.0).apply {
+            padding = Insets(12.0)
+            children += Label("Scope")
+            children += scopeCombo
+        }
+        val applyButton = ButtonType("Apply", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(applyButton, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == applyButton) {
+                submitChangeScope(memoryId, scopeCombo.value ?: MemoryReadModel.SCOPES.first())
+            }
+        }
+    }
+
+    private fun submitChangeScope(memoryId: String, scope: String) {
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        statusPill.text = "Saving"
+        ShellPanelSupport.applyTone(statusPill, "shell-status-tone-info")
+        statusLabel.text = "Changing scope to $scope…"
+
+        worker.execute {
+            try {
+                readModel.changeScope(memoryId, scope)
+                Platform.runLater {
+                    inFlight.set(false)
+                    run("Refreshing…", lastFetch)
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inFlight.set(false)
+                    statusPill.text = "Unavailable"
+                    ShellPanelSupport.applyTone(statusPill, "shell-status-tone-error")
+                    statusLabel.text = e.message ?: "Failed to change scope."
                 }
             }
         }

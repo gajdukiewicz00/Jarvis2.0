@@ -5,6 +5,9 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import javafx.application.Platform
 import javafx.geometry.Insets
 import javafx.scene.control.Button
+import javafx.scene.control.ButtonBar
+import javafx.scene.control.ButtonType
+import javafx.scene.control.Dialog
 import javafx.scene.control.Label
 import javafx.scene.control.ScrollPane
 import javafx.scene.control.Tab
@@ -12,6 +15,7 @@ import javafx.scene.layout.FlowPane
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
+import org.jarvis.desktop.features.smarthome.SmartHomeActionReadModel
 import org.jarvis.desktop.model.SmartHomeActionCommand
 import org.jarvis.desktop.model.SmartHomeDeviceDto
 import org.jarvis.desktop.service.SmartHomeStateFormatter
@@ -26,6 +30,7 @@ class DevicesTab(private val apiClient: ApiClient) {
     val tab = Tab("Devices")
     private val statusLabel = Label("")
     private val objectMapper = jacksonObjectMapper()
+    private val actionModel = SmartHomeActionReadModel(apiClient)
     private val deviceContainer = VBox(12.0)
 
     init {
@@ -144,20 +149,32 @@ class DevicesTab(private val apiClient: ApiClient) {
         return row
     }
 
-    private fun executeAction(device: SmartHomeDeviceDto, command: SmartHomeActionCommand) {
+    private fun executeAction(device: SmartHomeDeviceDto, command: SmartHomeActionCommand, confirm: Boolean = false) {
         statusLabel.text = "Sending ${command.action} to ${device.displayName}..."
         statusLabel.style = "-fx-text-fill: #1565c0; -fx-font-weight: bold;"
 
         Thread {
             try {
-                apiClient.post(
-                    "/smarthome/devices/${device.id}/action",
-                    objectMapper.writeValueAsString(command)
-                )
+                val outcome = actionModel.execute(device.id, command.action, command.payload, confirm)
                 Platform.runLater {
-                    statusLabel.text = "✓ ${device.displayName}: ${command.action}"
-                    statusLabel.style = "-fx-text-fill: #2e7d32; -fx-font-weight: bold;"
-                    loadDevices()
+                    when {
+                        outcome.success -> {
+                            statusLabel.text = "✓ ${device.displayName}: ${command.action}"
+                            statusLabel.style = "-fx-text-fill: #2e7d32; -fx-font-weight: bold;"
+                            loadDevices()
+                        }
+                        outcome.needsConfirmation && !confirm -> {
+                            statusLabel.text = "⚠ ${device.displayName}: ${command.action} needs confirmation"
+                            statusLabel.style = "-fx-text-fill: #f9a825; -fx-font-weight: bold;"
+                            if (confirmSecurityCriticalAction(device.displayName, command.action)) {
+                                executeAction(device, command, confirm = true)
+                            }
+                        }
+                        else -> {
+                            statusLabel.text = "✗ ${device.displayName}: ${outcome.message ?: "Action failed"}"
+                            statusLabel.style = "-fx-text-fill: #c62828; -fx-font-weight: bold;"
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 logger.error("Failed to execute smart-home action {} for {}: {}", command.action, device.id, e.message, e)
@@ -171,5 +188,18 @@ class DevicesTab(private val apiClient: ApiClient) {
             name = "jarvis-desktop-devices-action"
             start()
         }
+    }
+
+    /** Security-critical devices (locks/doors/garages) require an explicit owner confirmation. */
+    private fun confirmSecurityCriticalAction(deviceLabel: String, action: String): Boolean {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Confirm action"
+        dialog.headerText = "Confirm $action on $deviceLabel"
+        dialog.dialogPane.content = Label(
+            "This is a security-critical device (lock/door/garage). Confirm to proceed."
+        ).apply { isWrapText = true }
+        val confirmButton = ButtonType("Confirm", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(confirmButton, ButtonType.CANCEL)
+        return dialog.showAndWait().orElse(ButtonType.CANCEL) == confirmButton
     }
 }

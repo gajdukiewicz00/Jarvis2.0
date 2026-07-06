@@ -6,6 +6,7 @@ import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.config.ConfigSource
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.Locale
@@ -127,6 +128,117 @@ class FinanceReviewReadModelTest {
             assertTrue(body.contains("EUR"))
             assertTrue(body.contains("transport"))
             assertTrue(body.contains("Uber"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `listInbox parses the paged review-inbox envelope`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {
+                      "items": [
+                        {"id": 7, "amount": "45.00", "currency": "PLN", "merchant": "Lidl", "category": "groceries",
+                         "confidence": "MEDIUM", "status": "DRAFT", "occurredAt": "2026-01-01T10:00:00", "notes": "ambiguous currency"}
+                      ],
+                      "page": 0, "size": 20, "totalElements": 1, "totalPages": 1
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        try {
+            server.start()
+            val page = modelFor(server).listInbox()
+
+            assertEquals(1, page.items.size)
+            assertEquals(7L, page.items[0].id)
+            assertEquals("45.00", page.items[0].amount)
+            assertEquals("Lidl", page.items[0].merchant)
+            assertEquals("DRAFT", page.items[0].status)
+            assertEquals(1, page.totalPages)
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/life/finance/review-inbox"))
+            assertTrue(request.path!!.contains("page=0"))
+            assertTrue(request.path!!.contains("size=20"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `editInboxDraft PUTs only the non-blank fields`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"id": 7, "amount": "50.00", "currency": "PLN", "merchant": "Lidl", "category": "groceries",
+                         "confidence": "MEDIUM", "status": "DRAFT", "occurredAt": "2026-01-01T10:00:00", "notes": ""}"""
+                )
+        )
+
+        try {
+            server.start()
+            val updated = modelFor(server).editInboxDraft(7, amount = "50.00", merchant = "", category = "", currency = "")
+
+            assertEquals("50.00", updated.amount)
+
+            val request = server.takeRequest()
+            assertEquals("PUT", request.method)
+            assertTrue(request.path!!.contains("/life/finance/review-inbox/7"))
+            val body = request.body.readUtf8()
+            assertTrue(body.contains("50.0") || body.contains("50.00"))
+            assertFalse(body.contains("merchant"))
+            assertFalse(body.contains("category"))
+            assertFalse(body.contains("currency"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `approveInboxDraft posts to the approve path and parses duplicate flag`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"duplicate": true, "expense": {"amount": "45.00", "currency": "PLN", "merchant": "Lidl"}}""")
+        )
+
+        try {
+            server.start()
+            val outcome = modelFor(server).approveInboxDraft(7)
+
+            assertTrue(outcome.duplicate)
+            assertTrue(outcome.expenseSummary.contains("Lidl"))
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/life/finance/review-inbox/7/approve"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `rejectInboxDraft DELETEs the draft path`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody(""))
+
+        try {
+            server.start()
+            modelFor(server).rejectInboxDraft(7)
+
+            val request = server.takeRequest()
+            assertEquals("DELETE", request.method)
+            assertTrue(request.path!!.contains("/life/finance/review-inbox/7"))
         } finally {
             server.shutdown()
         }

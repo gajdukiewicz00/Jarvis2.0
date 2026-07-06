@@ -253,4 +253,116 @@ class MemoryReadModelTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun `why parses source, privacy, scope and pin state`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {"memoryId": "m-1", "source": "voice", "confidence": 0.75, "scope": "FINANCE",
+                     "privacy": "LOCAL_ONLY", "pinned": true, "createdAt": "2026-01-01T10:00:00Z",
+                     "explanation": "Jarvis remembered this because it came from voice."}
+                    """.trimIndent()
+                )
+        )
+
+        try {
+            server.start()
+            val info = modelFor(server).why("m-1")
+
+            assertEquals("voice", info.source)
+            assertEquals(0.75, info.confidence)
+            assertEquals("FINANCE", info.scope)
+            assertEquals("LOCAL_ONLY", info.privacy)
+            assertTrue(info.pinned)
+            assertEquals("2026-01-01T10:00:00Z", info.createdAt)
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/memory/notes/m-1/why"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `pinNote PUTs to the pin path`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("{}"))
+
+        try {
+            server.start()
+            modelFor(server).pinNote("m-1")
+
+            val request = server.takeRequest()
+            assertEquals("PUT", request.method)
+            assertTrue(request.path!!.contains("/memory/notes/m-1/pin"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `unpinNote DELETEs the pin path`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("{}"))
+
+        try {
+            server.start()
+            modelFor(server).unpinNote("m-1")
+
+            val request = server.takeRequest()
+            assertEquals("DELETE", request.method)
+            assertTrue(request.path!!.contains("/memory/notes/m-1/pin"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `changeScope PUTs the new scope as a query parameter`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("{}"))
+
+        try {
+            server.start()
+            modelFor(server).changeScope("m-1", "FINANCE")
+
+            val request = server.takeRequest()
+            assertEquals("PUT", request.method)
+            assertTrue(request.path!!.contains("/memory/notes/m-1/scope"))
+            assertTrue(request.path!!.contains("scope=FINANCE"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `recentNotes parses pinned and scope fields when present`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    [
+                      {"memoryId": "m-1", "title": "Budget note", "body": "text", "scope": "FINANCE", "pinned": true}
+                    ]
+                    """.trimIndent()
+                )
+        )
+
+        try {
+            server.start()
+            val items = modelFor(server).recentNotes()
+
+            assertEquals(1, items.size)
+            assertTrue(items[0].pinned)
+            assertEquals("FINANCE", items[0].scope)
+        } finally {
+            server.shutdown()
+        }
+    }
 }

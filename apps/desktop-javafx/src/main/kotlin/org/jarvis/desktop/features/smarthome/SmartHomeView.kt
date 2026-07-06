@@ -10,9 +10,10 @@ import org.jarvis.desktop.ui.tabs.DevicesTab
 
 /**
  * Smart Home route — hosts the legacy [DevicesTab] device list plus the
- * [ScenesView] section (list / create / activate / delete scenes) in a
- * single scrollable page, mirroring the outer-ScrollPane + inner
- * `shell-*-view` card layout used by [org.jarvis.desktop.features.planner.PlannerView].
+ * [IntentView] (natural-language command box) and [ScenesView] sections
+ * (list / create / activate / delete scenes) in a single scrollable page,
+ * mirroring the outer-ScrollPane + inner `shell-*-view` card layout used by
+ * [org.jarvis.desktop.features.planner.PlannerView].
  */
 class SmartHomeView(
     apiClient: ApiClient
@@ -21,6 +22,7 @@ class SmartHomeView(
     private val legacyContent: Node = requireNotNull(legacyDevicesTab.tab.content) {
         "DevicesTab content was not initialized"
     }
+    private val intentView = IntentView(apiClient)
     private val scenesView = ScenesView(apiClient)
 
     init {
@@ -32,6 +34,7 @@ class SmartHomeView(
             styleClass += "shell-smart-home-view"
             padding = Insets(24.0)
             children += unwrap(legacyContent)
+            children += intentView
             children += scenesView
         }
     }
@@ -42,6 +45,7 @@ class SmartHomeView(
     }
 
     override fun onShellShutdown() {
+        intentView.shutdown()
         scenesView.shutdown()
     }
 

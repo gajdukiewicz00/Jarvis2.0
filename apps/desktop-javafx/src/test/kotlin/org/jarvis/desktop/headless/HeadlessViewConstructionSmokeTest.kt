@@ -22,6 +22,7 @@ import org.jarvis.desktop.features.proactive.ProactiveView
 import org.jarvis.desktop.features.security.SecuritySessionsView
 import org.jarvis.desktop.features.security.SecurityView
 import org.jarvis.desktop.features.settings.SettingsView
+import org.jarvis.desktop.features.smarthome.IntentView
 import org.jarvis.desktop.features.smarthome.ScenesView
 import org.jarvis.desktop.features.smarthome.SmartHomeView
 import org.jarvis.desktop.features.status.ServiceStatusView
@@ -125,6 +126,7 @@ class HeadlessViewConstructionSmokeTest {
             assertNotNull(MemoryView(deadApiClient))
             assertNotNull(FinanceView(deadApiClient))
             assertNotNull(ScenesView(deadApiClient))
+            assertNotNull(IntentView(deadApiClient))
             assertNotNull(SmartHomeView(deadApiClient))
             assertNotNull(PlannerView(deadApiClient))
             assertNotNull(AnalyticsView(deadApiClient))

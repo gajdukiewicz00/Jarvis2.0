@@ -119,4 +119,30 @@ class SecuritySessionsReadModelTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun `revokeCurrentSession posts the refresh token and parses jti pair`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"revoked": true, "accessJti": "jti-access", "refreshJti": "jti-refresh"}""")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).revokeCurrentSession("refresh.token.value")
+
+            assertTrue(result.revoked)
+            assertEquals("jti-access", result.accessJti)
+            assertEquals("jti-refresh", result.refreshJti)
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/security/auth/revoke-current"))
+            assertTrue(request.body.readUtf8().contains("refresh.token.value"))
+        } finally {
+            server.shutdown()
+        }
+    }
 }

@@ -16,6 +16,10 @@ import java.nio.charset.StandardCharsets
  *  - cancel a task -> POST /api/v1/agents/tasks/{id}/cancel
  *  - start a swarm -> POST /api/v1/agents/swarm          (this panel always sends dryRun=true)
  *  - combined report -> GET /api/v1/agents/swarm/{id}
+ *  - approve a pending CODER patch (AWAITING_APPROVAL) -> POST /api/v1/agents/tasks/{id}/approve
+ *  - reject a pending CODER patch                      -> POST /api/v1/agents/tasks/{id}/reject
+ *  - download the produced diff                         -> GET  /api/v1/agents/tasks/{id}/artifacts/diff
+ *  - download the rendered task report                  -> GET  /api/v1/agents/tasks/{id}/artifacts/report
  *
  * Response shapes mirror `org.jarvis.swarm.role.RoleDefinition`,
  * `org.jarvis.swarm.web.TaskView`, `org.jarvis.swarm.run.SwarmRun`, and
@@ -46,6 +50,10 @@ class AgentSwarmReadModel(
         /** COMPLETED/CANCELLED are the only terminal states — see AgentTaskStatus.isTerminal(). */
         val isTerminal: Boolean
             get() = status == "COMPLETED" || status == "CANCELLED"
+
+        /** A pending CODER patch proposal is waiting for an explicit approve/reject. */
+        val isAwaitingApproval: Boolean
+            get() = status == "AWAITING_APPROVAL"
     }
 
     data class RoleOutcomeInfo(
@@ -87,6 +95,22 @@ class AgentSwarmReadModel(
 
     fun cancelTask(taskId: String): TaskInfo =
         parseTask(objectMapper.readTree(apiClient.post("/agents/tasks/${encode(taskId)}/cancel", "{}")))
+
+    /** Approve a pending CODER patch proposal (AWAITING_APPROVAL): applies it to the sandbox. */
+    fun approveTask(taskId: String): TaskInfo =
+        parseTask(objectMapper.readTree(apiClient.post("/agents/tasks/${encode(taskId)}/approve", "{}")))
+
+    /** Reject a pending CODER patch proposal: discards it, nothing is ever applied. */
+    fun rejectTask(taskId: String): TaskInfo =
+        parseTask(objectMapper.readTree(apiClient.post("/agents/tasks/${encode(taskId)}/reject", "{}")))
+
+    /** Downloads the CODER-produced DIFF.patch for a task as text. */
+    fun downloadDiff(taskId: String): String =
+        apiClient.get("/agents/tasks/${encode(taskId)}/artifacts/diff")
+
+    /** Downloads the rendered combined report (summary, risks, artifacts, output) for a task. */
+    fun downloadReport(taskId: String): String =
+        apiClient.get("/agents/tasks/${encode(taskId)}/artifacts/report")
 
     /**
      * Starts a swarm run. Always sends `dryRun=true` and `awaitCompletion=false` so

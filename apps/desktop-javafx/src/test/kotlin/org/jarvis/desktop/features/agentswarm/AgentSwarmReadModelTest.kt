@@ -191,4 +191,113 @@ class AgentSwarmReadModelTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun `isAwaitingApproval is true only for AWAITING_APPROVAL status`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    [
+                      {"taskId": "t-1", "role": "CODER", "goal": "fix bug", "status": "AWAITING_APPROVAL", "dryRun": false},
+                      {"taskId": "t-2", "role": "CODER", "goal": "fix bug", "status": "RUNNING", "dryRun": false}
+                    ]
+                    """.trimIndent()
+                )
+        )
+
+        try {
+            server.start()
+            val tasks = modelFor(server).listTasks()
+
+            assertTrue(tasks[0].isAwaitingApproval)
+            assertTrue(!tasks[1].isAwaitingApproval)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `approveTask posts to the approve endpoint and parses the resulting task`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"taskId": "t-1", "role": "CODER", "goal": "fix bug", "status": "COMPLETED", "dryRun": false}""")
+        )
+
+        try {
+            server.start()
+            val task = modelFor(server).approveTask("t-1")
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/agents/tasks/t-1/approve"))
+            assertEquals("COMPLETED", task.status)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `rejectTask posts to the reject endpoint and parses the resulting task`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"taskId": "t-1", "role": "CODER", "goal": "fix bug", "status": "CANCELLED", "dryRun": false}""")
+        )
+
+        try {
+            server.start()
+            val task = modelFor(server).rejectTask("t-1")
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/agents/tasks/t-1/reject"))
+            assertEquals("CANCELLED", task.status)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `downloadDiff GETs the diff artifact path and returns its raw text`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("--- a/file\n+++ b/file\n"))
+
+        try {
+            server.start()
+            val diff = modelFor(server).downloadDiff("t-1")
+
+            assertTrue(diff.contains("--- a/file"))
+
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertTrue(request.path!!.contains("/agents/tasks/t-1/artifacts/diff"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `downloadReport GETs the report artifact path and returns its raw text`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("# Task Report\n"))
+
+        try {
+            server.start()
+            val report = modelFor(server).downloadReport("t-1")
+
+            assertTrue(report.contains("# Task Report"))
+
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertTrue(request.path!!.contains("/agents/tasks/t-1/artifacts/report"))
+        } finally {
+            server.shutdown()
+        }
+    }
 }

@@ -13,7 +13,11 @@ import javafx.scene.layout.HBox
 import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
+import javafx.scene.control.ButtonBar
+import javafx.scene.control.ButtonType
+import javafx.scene.control.Dialog
 import org.jarvis.desktop.api.ApiClient
+import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.features.common.ShellPanelSupport
 import org.jarvis.desktop.shell.ShellRouteContent
 import java.util.concurrent.Executors
@@ -55,6 +59,11 @@ class SecuritySessionsView(
     private val revokeAllButton = Button("Revoke all sessions").apply {
         styleClass += "shell-action-button-danger"
         setOnAction { revokeAllForUser() }
+    }
+
+    private val revokeCurrentButton = Button("Revoke my current session").apply {
+        styleClass += "shell-action-button-danger"
+        setOnAction { confirmRevokeCurrentSession() }
     }
 
     private val actionResult = ShellPanelSupport.sectionSubtitle("")
@@ -104,6 +113,9 @@ class SecuritySessionsView(
             }
             children += FlowPane(12.0, 12.0).apply {
                 children.addAll(userIdField, revokeAllReasonField, revokeAllButton)
+            }
+            children += FlowPane(12.0, 12.0).apply {
+                children.addAll(revokeCurrentButton)
             }
             children += actionResult
         }
@@ -183,6 +195,38 @@ class SecuritySessionsView(
         }
     }
 
+    /** HIGH-risk confirmation — revoking the current session invalidates this app's own login. */
+    private fun confirmRevokeCurrentSession() {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Revoke current session"
+        dialog.headerText = "Revoke your own current session?"
+        dialog.dialogPane.content = Label(
+            "This immediately invalidates the access and refresh tokens this desktop app is using. " +
+                "You will need to log in again."
+        ).apply { isWrapText = true }
+        val revokeButtonType = ButtonType("Revoke", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(revokeButtonType, ButtonType.CANCEL)
+
+        val confirmed = dialog.showAndWait().orElse(ButtonType.CANCEL) == revokeButtonType
+        if (confirmed) {
+            revokeCurrentSession()
+        }
+    }
+
+    private fun revokeCurrentSession() {
+        val refreshToken = TokenManager.getRefreshToken()
+        if (refreshToken.isNullOrBlank()) {
+            actionResult.text = "No refresh token available for this session."
+            return
+        }
+        runAction("Revoking current session…") {
+            val result = readModel.revokeCurrentSession(refreshToken)
+            Platform.runLater {
+                actionResult.text = "Revoked current session (accessJti=${result.accessJti ?: "?"})."
+            }
+        }
+    }
+
     private fun runAction(progress: String, block: () -> Unit) {
         if (!inFlight.compareAndSet(false, true)) {
             return
@@ -216,6 +260,7 @@ class SecuritySessionsView(
         refreshButton.isDisable = busy
         revokeButton.isDisable = busy
         revokeAllButton.isDisable = busy
+        revokeCurrentButton.isDisable = busy
     }
 
     private fun renderAudit(events: List<SecuritySessionsReadModel.AuditEvent>) {

@@ -60,6 +60,15 @@ class FinanceReviewView(
 
     private val draftsContainer = VBox(10.0)
 
+    private val inboxStatusLabel = ShellPanelSupport.sectionSubtitle(
+        "Drafts persisted server-side (FINANCE-REVIEW) — edit amount/merchant/category, then approve or reject."
+    )
+    private val inboxRefreshButton = Button("Refresh inbox").apply {
+        styleClass += "shell-action-button"
+        setOnAction { loadInbox() }
+    }
+    private val inboxContainer = VBox(10.0)
+
     init {
         styleClass += "shell-route-scroll"
         styleClass += "shell-finance-review-view"
@@ -68,6 +77,11 @@ class FinanceReviewView(
         vbarPolicy = ScrollBarPolicy.AS_NEEDED
         content = buildContent()
         renderPlaceholder("Parse a batch above to populate the review queue.")
+        renderInboxPlaceholder("Refresh to load the persisted review inbox.")
+    }
+
+    override fun onRouteActivated() {
+        loadInbox()
     }
 
     override fun onShellShutdown() {
@@ -105,9 +119,23 @@ class FinanceReviewView(
             children += draftsContainer
         }
 
+        val inboxCard = VBox(12.0).apply {
+            styleClass += "shell-section-card"
+            children += HBox(12.0).apply {
+                alignment = Pos.CENTER_LEFT
+                children += ShellPanelSupport.sectionTitle("Persisted review inbox")
+                val spacer = Region()
+                HBox.setHgrow(spacer, Priority.ALWAYS)
+                children += spacer
+                children += inboxRefreshButton
+            }
+            children += inboxStatusLabel
+            children += inboxContainer
+        }
+
         return VBox(18.0).apply {
             padding = Insets(24.0)
-            children.addAll(header, parserCard, queueCard)
+            children.addAll(header, parserCard, queueCard, inboxCard)
         }
     }
 
@@ -268,6 +296,209 @@ class FinanceReviewView(
 
     private fun renderPlaceholder(message: String) {
         draftsContainer.children.setAll(
+            VBox(6.0).apply {
+                styleClass.addAll("shell-section-card", "shell-placeholder")
+                children += Label(message).apply {
+                    styleClass += "shell-placeholder-body"
+                    isWrapText = true
+                }
+            }
+        )
+    }
+
+    private fun loadInbox() {
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        inboxRefreshButton.isDisable = true
+        inboxStatusLabel.text = "Loading persisted drafts…"
+
+        worker.execute {
+            try {
+                val page = readModel.listInbox()
+                Platform.runLater {
+                    renderInbox(page)
+                    inboxStatusLabel.text = "${page.items.size} draft(s) awaiting review (page ${page.page + 1}/${maxOf(page.totalPages, 1)})."
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inboxStatusLabel.text = e.message ?: "Review inbox request failed."
+                    renderInboxPlaceholder("Unable to load the review inbox.\n${e.message ?: "Unknown error"}")
+                }
+            } finally {
+                inFlight.set(false)
+                Platform.runLater { inboxRefreshButton.isDisable = false }
+            }
+        }
+    }
+
+    private fun renderInbox(page: FinanceReviewReadModel.InboxPage) {
+        if (page.items.isEmpty()) {
+            renderInboxPlaceholder("No persisted drafts awaiting review.")
+            return
+        }
+        inboxContainer.children.setAll(page.items.map(::inboxDraftCard))
+    }
+
+    private fun inboxDraftCard(draft: FinanceReviewReadModel.InboxDraft): Node {
+        return VBox(6.0).apply {
+            styleClass += "shell-section-card"
+            children += HBox(12.0).apply {
+                alignment = Pos.CENTER_LEFT
+                children += Label("${draft.amount} ${draft.currency} · ${draft.merchant.ifBlank { "unknown merchant" }}").apply {
+                    styleClass += "shell-section-title"
+                }
+                val spacer = Region()
+                HBox.setHgrow(spacer, Priority.ALWAYS)
+                children += spacer
+                val pill = ShellPanelSupport.statusPill(draft.confidence)
+                ShellPanelSupport.applyTone(
+                    pill,
+                    if (draft.confidence == "MEDIUM") "shell-status-tone-warning" else "shell-status-tone-error"
+                )
+                children += pill
+            }
+            children += Label("category: ${draft.category} · occurred: ${draft.occurredAt.ifBlank { "unknown" }}").apply {
+                styleClass += "shell-section-subtitle"
+            }
+            if (draft.notes.isNotBlank()) {
+                children += Label(draft.notes).apply {
+                    isWrapText = true
+                    styleClass += "shell-section-subtitle"
+                }
+            }
+            children += HBox(8.0).apply {
+                alignment = Pos.CENTER_RIGHT
+                children += Button("Edit").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { beginEditInboxDraft(draft) }
+                }
+                children += Button("Reject").apply {
+                    styleClass += "shell-action-button-danger"
+                    setOnAction { rejectInboxDraft(draft.id) }
+                }
+                children += Button("Approve").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { approveInboxDraft(draft.id) }
+                }
+            }
+        }
+    }
+
+    private fun beginEditInboxDraft(draft: FinanceReviewReadModel.InboxDraft) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Edit review-inbox draft"
+        dialog.headerText = "Editing ${draft.merchant.ifBlank { "transaction" }}"
+
+        val amountField = TextField(draft.amount)
+        val currencyField = TextField(draft.currency)
+        val categoryField = TextField(draft.category)
+        val merchantField = TextField(draft.merchant)
+        dialog.dialogPane.content = VBox(10.0).apply {
+            padding = Insets(12.0)
+            children += Label("Amount")
+            children += amountField
+            children += Label("Currency")
+            children += currencyField
+            children += Label("Category")
+            children += categoryField
+            children += Label("Merchant / description")
+            children += merchantField
+        }
+        val saveButton = ButtonType("Save", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(saveButton, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result == saveButton) {
+                submitEditInboxDraft(
+                    draft.id,
+                    amountField.text,
+                    merchantField.text,
+                    categoryField.text,
+                    currencyField.text
+                )
+            }
+        }
+    }
+
+    private fun submitEditInboxDraft(id: Long, amount: String, merchant: String, category: String, currency: String) {
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        inboxStatusLabel.text = "Saving changes…"
+
+        worker.execute {
+            try {
+                readModel.editInboxDraft(id, amount, merchant, category, currency)
+                val page = readModel.listInbox()
+                Platform.runLater {
+                    renderInbox(page)
+                    inboxStatusLabel.text = "Draft updated."
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inboxStatusLabel.text = e.message ?: "Failed to save draft."
+                }
+            } finally {
+                inFlight.set(false)
+            }
+        }
+    }
+
+    private fun approveInboxDraft(id: Long) {
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        inboxStatusLabel.text = "Approving draft…"
+
+        worker.execute {
+            try {
+                val outcome = readModel.approveInboxDraft(id)
+                val page = readModel.listInbox()
+                Platform.runLater {
+                    renderInbox(page)
+                    inboxStatusLabel.text = if (outcome.duplicate) {
+                        "Duplicate of an existing expense — no new row created (${outcome.expenseSummary})."
+                    } else {
+                        "Approved and stored as an expense (${outcome.expenseSummary})."
+                    }
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inboxStatusLabel.text = e.message ?: "Failed to approve draft."
+                }
+            } finally {
+                inFlight.set(false)
+            }
+        }
+    }
+
+    private fun rejectInboxDraft(id: Long) {
+        if (!inFlight.compareAndSet(false, true)) {
+            return
+        }
+        inboxStatusLabel.text = "Rejecting draft…"
+
+        worker.execute {
+            try {
+                readModel.rejectInboxDraft(id)
+                val page = readModel.listInbox()
+                Platform.runLater {
+                    renderInbox(page)
+                    inboxStatusLabel.text = "Draft rejected — nothing was persisted."
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    inboxStatusLabel.text = e.message ?: "Failed to reject draft."
+                }
+            } finally {
+                inFlight.set(false)
+            }
+        }
+    }
+
+    private fun renderInboxPlaceholder(message: String) {
+        inboxContainer.children.setAll(
             VBox(6.0).apply {
                 styleClass.addAll("shell-section-card", "shell-placeholder")
                 children += Label(message).apply {

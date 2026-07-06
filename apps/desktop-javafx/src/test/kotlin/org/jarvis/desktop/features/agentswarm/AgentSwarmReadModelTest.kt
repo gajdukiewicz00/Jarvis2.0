@@ -264,6 +264,40 @@ class AgentSwarmReadModelTest {
     }
 
     @Test
+    fun `submitTask posts to the tasks endpoint with dryRun false and the given approvalRequired flag`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"taskId": "t-7", "role": "CODER", "goal": "fix bug", "status": "AWAITING_APPROVAL", "dryRun": false}"""
+                )
+        )
+
+        try {
+            server.start()
+            val task = modelFor(server).submitTask("CODER", "fix bug", approvalRequired = true)
+
+            assertEquals("t-7", task.taskId)
+            assertEquals("CODER", task.role)
+            assertEquals("AWAITING_APPROVAL", task.status)
+            assertTrue(task.isAwaitingApproval)
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/agents/tasks"))
+            assertTrue(!request.path!!.contains("/agents/tasks/"))
+            val body = request.body.readUtf8()
+            assertTrue(body.contains("\"role\":\"CODER\""))
+            assertTrue(body.contains("\"goal\":\"fix bug\""))
+            assertTrue(body.contains("\"dryRun\":false"))
+            assertTrue(body.contains("\"approvalRequired\":true"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `downloadDiff GETs the diff artifact path and returns its raw text`() {
         val server = MockWebServer()
         server.enqueue(MockResponse().setBody("--- a/file\n+++ b/file\n"))

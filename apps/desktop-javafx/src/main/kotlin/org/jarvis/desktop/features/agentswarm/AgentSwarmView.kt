@@ -26,10 +26,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Agent Swarm panel — the "House Party Protocol" multi-role coding swarm
  * surfaced from agent-service: role catalog, task states, a dry-run swarm
- * trigger, and the combined report for a run.
+ * trigger, the REAL (approval-gated) submission path, and the combined
+ * report for a run.
  *
- * The trigger only ever sends `dryRun=true` from this GUI — a real
- * (side-effecting) run is deliberately not exposed here.
+ * Two submission modes share the goal/role picker:
+ *  - dry-run swarm (default): fans the goal out across the selected roles with
+ *    `dryRun=true` — every role proposes without side effects.
+ *  - real task submission (approval toggle checked): submits one real task per
+ *    selected role with `dryRun=false` and `approvalRequired=true`, so a CODER
+ *    patch proposal stops at AWAITING_APPROVAL until explicitly approved or
+ *    rejected below instead of applying immediately.
  */
 class AgentSwarmView(
     apiClient: ApiClient
@@ -54,6 +60,12 @@ class AgentSwarmView(
         promptText = "Swarm goal (e.g. \"Add input validation to the login form\")"
         isWrapText = true
         prefRowCount = 2
+    }
+    private val approvalRequiredToggle = CheckBox("Real run — require approval (no dry-run)").apply {
+        isSelected = false
+        selectedProperty().addListener { _, _, requireApproval ->
+            startButton.text = if (requireApproval) "Submit real task(s)" else "Start dry-run swarm"
+        }
     }
     private val startButton = Button("Start dry-run swarm").apply {
         styleClass += "shell-action-button"
@@ -118,12 +130,16 @@ class AgentSwarmView(
 
         val triggerCard = VBox(12.0).apply {
             styleClass += "shell-section-card"
-            children += ShellPanelSupport.sectionTitle("Start a dry-run swarm")
+            children += ShellPanelSupport.sectionTitle("Start a swarm run")
             children += ShellPanelSupport.sectionSubtitle(
-                "Fans one goal out across the selected roles. This panel always runs with dryRun=true, so roles propose without side effects."
+                "Fans one goal out across the selected roles. By default this always runs with dryRun=true, " +
+                    "so roles propose without side effects. Check the box below to submit real (non-dry-run) " +
+                    "tasks instead — a CODER patch proposal then stops at AWAITING_APPROVAL until you Approve " +
+                    "or Reject it in the Tasks list."
             )
             children += goalField
             children += FlowPane(10.0, 6.0).apply { children.addAll(roleChecks) }
+            children += HBox(12.0, approvalRequiredToggle).apply { alignment = Pos.CENTER_LEFT }
             children += HBox(12.0, startButton).apply { alignment = Pos.CENTER_LEFT }
             children += startResult
         }
@@ -174,11 +190,38 @@ class AgentSwarmView(
             startResult.text = "Select at least one role."
             return
         }
+        if (approvalRequiredToggle.isSelected) {
+            submitRealTasks(goal, selectedRoles)
+        } else {
+            startDryRunSwarm(goal, selectedRoles)
+        }
+    }
+
+    private fun startDryRunSwarm(goal: String, selectedRoles: List<String>) {
         runBusy("Starting dry-run swarm…") {
             val started = readModel.startDryRunSwarm(goal, selectedRoles)
             Platform.runLater {
                 swarmIdField.text = started.swarmId
                 startResult.text = "Started swarmId=${started.swarmId} · roles=${started.roles.joinToString(", ")} · dryRun=${started.dryRun}"
+            }
+        }
+    }
+
+    /**
+     * Submits one REAL (non-dry-run) task per selected role with `approvalRequired=true`.
+     * A CODER task then stops at AWAITING_APPROVAL instead of applying immediately — see
+     * the Approve/Reject buttons on its card in the Tasks list below. Other roles run for
+     * real right away (the approval flag only gates CODER's applyable patch proposal).
+     */
+    private fun submitRealTasks(goal: String, selectedRoles: List<String>) {
+        runBusy("Submitting real task(s)…") {
+            val submitted = selectedRoles.map { role -> readModel.submitTask(role, goal, approvalRequired = true) }
+            val tasks = readModel.listTasks()
+            Platform.runLater {
+                renderTasks(tasks)
+                startResult.text = "Submitted ${submitted.size} real task(s) (dryRun=false, approvalRequired=true): " +
+                    submitted.joinToString(", ") { "${it.role}=${it.status}" } +
+                    ". See the Tasks list below."
             }
         }
     }
@@ -226,6 +269,7 @@ class AgentSwarmView(
     private fun setBusy(busy: Boolean) {
         refreshButton.isDisable = busy
         startButton.isDisable = busy
+        approvalRequiredToggle.isDisable = busy
         fetchReportButton.isDisable = busy
     }
 
@@ -302,17 +346,34 @@ class AgentSwarmView(
                     }
                 }
             }
+            val artifactView = TextArea().apply {
+                isEditable = false
+                isWrapText = true
+                prefRowCount = 10
+                styleClass += "diagnostics-readonly-area"
+                isVisible = false
+                isManaged = false
+            }
             children += HBox(8.0).apply {
                 alignment = Pos.CENTER_RIGHT
+                children += Button("View diff").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { viewArtifact("diff", artifactView) { readModel.downloadDiff(task.taskId) } }
+                }
                 children += Button("Download diff").apply {
                     styleClass += "shell-action-button"
                     setOnAction { downloadArtifact(task.taskId, "diff.patch") { readModel.downloadDiff(task.taskId) } }
+                }
+                children += Button("View report").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { viewArtifact("report", artifactView) { readModel.downloadReport(task.taskId) } }
                 }
                 children += Button("Download report").apply {
                     styleClass += "shell-action-button"
                     setOnAction { downloadArtifact(task.taskId, "${task.taskId}-report.md") { readModel.downloadReport(task.taskId) } }
                 }
             }
+            children += artifactView
         }
     }
 
@@ -342,6 +403,18 @@ class AgentSwarmView(
             Platform.runLater {
                 renderTasks(tasks)
                 startResult.text = "Rejected task $taskId — nothing was applied."
+            }
+        }
+    }
+
+    /** Fetches an artifact's text content and displays it inline in the task's card. */
+    private fun viewArtifact(label: String, viewArea: TextArea, fetch: () -> String) {
+        runBusy("Fetching $label…") {
+            val content = fetch()
+            Platform.runLater {
+                viewArea.text = content.ifBlank { "($label is empty.)" }
+                viewArea.isVisible = true
+                viewArea.isManaged = true
             }
         }
     }

@@ -14,7 +14,8 @@ import java.nio.charset.StandardCharsets
  *  - role catalog  -> GET  /api/v1/agents/roles
  *  - task list     -> GET  /api/v1/agents/tasks
  *  - cancel a task -> POST /api/v1/agents/tasks/{id}/cancel
- *  - start a swarm -> POST /api/v1/agents/swarm          (this panel always sends dryRun=true)
+ *  - start a swarm -> POST /api/v1/agents/swarm          (this trigger always sends dryRun=true)
+ *  - submit a real task -> POST /api/v1/agents/tasks     (dryRun=false, optionally approvalRequired=true)
  *  - combined report -> GET /api/v1/agents/swarm/{id}
  *  - approve a pending CODER patch (AWAITING_APPROVAL) -> POST /api/v1/agents/tasks/{id}/approve
  *  - reject a pending CODER patch                      -> POST /api/v1/agents/tasks/{id}/reject
@@ -135,6 +136,24 @@ class AgentSwarmReadModel(
 
     fun report(swarmId: String): CombinedReportInfo =
         parseReport(objectMapper.readTree(apiClient.get("/agents/swarm/${encode(swarmId)}")))
+
+    /**
+     * Submits a single REAL (non-dry-run) task for one role — the side-effecting path the
+     * dry-run swarm trigger deliberately never exercises. When [approvalRequired] is true,
+     * a CODER patch proposal stops at AWAITING_APPROVAL instead of applying immediately —
+     * approve or reject it afterwards with [approveTask]/[rejectTask]. Ignored (no behavior
+     * change) for any role whose executor never produces an approval-worthy proposal.
+     */
+    fun submitTask(role: String, goal: String, approvalRequired: Boolean): TaskInfo {
+        val payload = objectMapper.createObjectNode().apply {
+            put("role", role)
+            put("goal", goal.trim())
+            putArray("permissions")
+            put("dryRun", false)
+            put("approvalRequired", approvalRequired)
+        }
+        return parseTask(objectMapper.readTree(apiClient.post("/agents/tasks", objectMapper.writeValueAsString(payload))))
+    }
 
     private fun parseTask(node: JsonNode): TaskInfo {
         return TaskInfo(

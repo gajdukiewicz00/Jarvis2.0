@@ -16,7 +16,8 @@ import java.nio.charset.StandardCharsets
  *  - list scenes    -> GET    /api/v1/smarthome/scenes
  *  - create scene   -> POST   /api/v1/smarthome/scenes
  *  - delete scene   -> DELETE /api/v1/smarthome/scenes/{name}
- *  - activate scene -> POST   /api/v1/smarthome/scenes/{name}/activate
+ *  - simulate scene -> POST   /api/v1/smarthome/scenes/{name}/simulate?confirm=
+ *  - activate scene -> POST   /api/v1/smarthome/scenes/{name}/activate?confirm=
  */
 class ScenesReadModel(
     private val apiClient: ApiClient
@@ -37,6 +38,26 @@ class ScenesReadModel(
     data class ActivationResult(
         val applied: Int,
         val summary: String
+    )
+
+    /** Mirrors `SmartHomeSimulatedAction` — a single predicted (never-actuated) step outcome. */
+    data class SimulatedAction(
+        val deviceId: String,
+        val action: String,
+        val payload: String?,
+        val deviceFound: Boolean,
+        val actionSupported: Boolean,
+        val needsConfirmation: Boolean,
+        val wouldExecute: Boolean,
+        val message: String?
+    )
+
+    /** Mirrors `SmartHomeSceneSimulation` — the dry-run outcome of activating a scene. */
+    data class SceneSimulation(
+        val sceneName: String,
+        val found: Boolean,
+        val actions: List<SimulatedAction>,
+        val message: String?
     )
 
     fun loadScenes(): List<Scene> {

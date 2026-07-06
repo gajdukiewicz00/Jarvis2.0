@@ -19,14 +19,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.time.Instant;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Orchestrator service implementation with Jarvis cinematic phrase system.
@@ -61,6 +59,15 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     @Value("${jarvis.nlp.url:${NLP_SERVICE_URL:http://nlp-service:8082}}")
     private String nlpUrl = "http://nlp-service:8082";
 
+    /**
+     * Zone used for get_time/get_date intents. The JVM default zone
+     * (ZoneId.systemDefault()) depends on the container/host TZ configuration,
+     * which is not guaranteed to match the user's actual local zone, so this is
+     * bound to an explicit, configurable property instead of relying on it.
+     */
+    @Value("${jarvis.timezone:Europe/Moscow}")
+    private String timezone = "Europe/Moscow";
+
     // LLM Feature flag and configuration
     @Value("${jarvis.llm.enabled:false}")
     private boolean llmEnabled;
@@ -74,9 +81,10 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     @Value("${jarvis.llm.circuit-breaker.reset-timeout-seconds:60}")
     private int circuitBreakerResetTimeoutSeconds;
 
-    // Circuit breaker state
-    private final AtomicInteger consecutiveFailures = new AtomicInteger(0);
-    private final AtomicReference<Instant> circuitOpenUntil = new AtomicReference<>(Instant.EPOCH);
+    // Circuit breaker state - shared SimpleCircuitBreaker (same as nlpCircuitBreaker below),
+    // which provides an explicit half-open, single-trial-on-reopen state instead of a raw
+    // timestamp comparison that lets every concurrent caller through the instant cooldown elapses.
+    private final SimpleCircuitBreaker llmCircuitBreaker = new SimpleCircuitBreaker();
 
     // NLP call resilience: bounded retry with backoff + its own circuit breaker.
     @Value("${jarvis.nlp.retry.max-attempts:2}")
@@ -593,14 +601,14 @@ public class OrchestratorServiceImpl implements OrchestratorService {
 
                 // ==================== Read-only queries (time/date) ====================
                 case "get_time", "what_time", "current_time" -> {
-                    java.time.LocalTime now = java.time.LocalTime.now();
+                    java.time.LocalTime now = java.time.LocalTime.now(resolveZoneId());
                     String hhmm = String.format("%02d:%02d", now.getHour(), now.getMinute());
                     log.info("🕐 get_time -> {}, correlationId={}", hhmm, correlationId);
                     yield lang == Language.RU ? "Сейчас " + hhmm + ", сэр."
                             : "It is " + hhmm + ", sir.";
                 }
                 case "get_date", "what_date", "current_date" -> {
-                    java.time.LocalDate today = java.time.LocalDate.now();
+                    java.time.LocalDate today = java.time.LocalDate.now(resolveZoneId());
                     log.info("📅 get_date -> {}, correlationId={}", today, correlationId);
                     yield lang == Language.RU ? "Сегодня " + today + ", сэр."
                             : "Today is " + today + ", sir.";
@@ -684,9 +692,20 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                 new SmartHomeClient.ActionRequest(action, payload));
         rememberExecutionMetadata(ExecutionMetadata.success());
 
-        sendPcAction("NOTIFY", Map.of(
-                "title", lang == Language.RU ? "Умный дом" : "Smart Home",
-                "message", buildSmartHomeNotification(result)), correlationId, scopedUserId);
+        // Best-effort desktop notification only: the smart-home action itself already
+        // succeeded above, so a failure here (both API-Gateway and direct pc-control
+        // unreachable) must not be allowed to escape and be mistaken by the generic
+        // RuntimeException handler in executeIntent() for the smart-home action itself
+        // failing (which would overwrite the correct success phrase with ACK_ERROR).
+        try {
+            sendPcAction("NOTIFY", Map.of(
+                    "title", lang == Language.RU ? "Умный дом" : "Smart Home",
+                    "message", buildSmartHomeNotification(result)), correlationId, scopedUserId);
+        } catch (PcActionDispatchException e) {
+            log.warn(
+                    "⚠️ Smart-home NOTIFY dispatch failed (best-effort, ignoring): deviceId={}, action={}, reason={}, correlationId={}",
+                    deviceId, action, e.getMessage(), correlationId);
+        }
 
         return phraseProvider.getPhrase(
                 resolveSmartHomePhraseContext(result),
@@ -742,14 +761,30 @@ public class OrchestratorServiceImpl implements OrchestratorService {
                     correlationId,
                     result);
             if (!dispatchResult.executionSucceeded()) {
-                log.warn(
-                        "⚠️ API Gateway PC action was not executed (action={}, reason={}); trying direct host pc-control, correlationId={}",
-                        action,
-                        dispatchResult.failureReason(),
-                        correlationId);
-                PcDispatchResult direct = tryDirectPcControl(action, params, userId, correlationId);
-                if (direct != null) {
-                    return direct;
+                if (!dispatchResult.executorFound() || !dispatchResult.executionAttempted()) {
+                    log.warn(
+                            "⚠️ API Gateway PC action was not executed (action={}, reason={}); trying direct host pc-control, correlationId={}",
+                            action,
+                            dispatchResult.failureReason(),
+                            correlationId);
+                    PcDispatchResult direct = tryDirectPcControl(action, params, userId, correlationId);
+                    if (direct != null) {
+                        return direct;
+                    }
+                } else {
+                    // The desktop executor was found AND actually attempted the action (e.g. an
+                    // ack_timeout/soft-failure on the gateway side after the action already ran).
+                    // Do NOT retry via the independent direct host pc-control channel here: for
+                    // non-idempotent actions (MUTE/UNMUTE, NEXT_TRACK, undo, ...) that would risk
+                    // executing the same action a second time. Surface the failure to the caller
+                    // instead.
+                    log.warn(
+                            "⚠️ API Gateway PC action was attempted by the desktop executor but reported failure "
+                                    + "(action={}, reason={}); NOT retrying via direct host pc-control to avoid a "
+                                    + "duplicate, non-idempotent execution, correlationId={}",
+                            action,
+                            dispatchResult.failureReason(),
+                            correlationId);
                 }
             }
             return dispatchResult;
@@ -821,6 +856,21 @@ public class OrchestratorServiceImpl implements OrchestratorService {
 
     private void rememberExecutionMetadata(ExecutionMetadata metadata) {
         executionMetadata.set(metadata);
+    }
+
+    /**
+     * Resolves the configured {@code jarvis.timezone} zone for get_time/get_date,
+     * falling back to UTC if it is missing or not a valid zone id rather than
+     * silently using the JVM's default zone (which may not reflect the user's
+     * actual local time in a container).
+     */
+    private java.time.ZoneId resolveZoneId() {
+        try {
+            return java.time.ZoneId.of(timezone);
+        } catch (java.time.DateTimeException | NullPointerException e) {
+            log.warn("⚠️ Invalid jarvis.timezone value '{}', falling back to UTC", timezone);
+            return java.time.ZoneOffset.UTC;
+        }
     }
 
     private boolean isExecutionFailure(ExecutionMetadata metadata) {
@@ -959,9 +1009,9 @@ public class OrchestratorServiceImpl implements OrchestratorService {
         }
 
         // Check 2: Circuit breaker
-        Instant openUntil = circuitOpenUntil.get();
-        if (Instant.now().isBefore(openUntil)) {
-            log.warn("🧠 LLM_CIRCUIT_OPEN: disabled until {}, correlationId={}", openUntil, correlationId);
+        if (!llmCircuitBreaker.tryAcquire()) {
+            log.warn("🧠 LLM_CIRCUIT_OPEN: disabled (state={}), correlationId={}",
+                    llmCircuitBreaker.getState(), correlationId);
             return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
         }
 
@@ -986,19 +1036,19 @@ public class OrchestratorServiceImpl implements OrchestratorService {
             } catch (TimeoutException e) {
                 future.cancel(true);
                 log.warn("🧠 LLM_TIMEOUT: exceeded {}s, correlationId={}", llmTimeoutSeconds, correlationId);
-                recordFailure();
+                recordLlmFailure();
                 return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
             }
 
             // Success - reset circuit breaker
-            consecutiveFailures.set(0);
-            
+            llmCircuitBreaker.recordSuccess();
+
             log.info("🧠 LLM_SUCCESS: reply='{}', correlationId={}", 
                     truncate(response.reply(), 100), correlationId);
             return response.reply();
 
         } catch (RejectedExecutionException e) {
-            recordFailure();
+            recordLlmFailure();
             log.warn("🧠 LLM_REJECTED: executor overloaded, queueSize={}, activeThreads={}, rejectedCount={}, correlationId={}",
                     llmExecutor.getQueue().size(),
                     llmExecutor.getActiveCount(),
@@ -1008,11 +1058,11 @@ public class OrchestratorServiceImpl implements OrchestratorService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.warn("🧠 LLM_INTERRUPTED: {}, correlationId={}", e.getMessage(), correlationId);
-            recordFailure();
+            recordLlmFailure();
             return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
         } catch (ExecutionException | RuntimeException e) {
             log.error("🧠 LLM_ERROR: {}, correlationId={}", e.getMessage(), correlationId);
-            recordFailure();
+            recordLlmFailure();
             return phraseProvider.getPhrase(PhraseContext.UNKNOWN_COMMAND, lang);
         }
     }
@@ -1089,17 +1139,12 @@ public class OrchestratorServiceImpl implements OrchestratorService {
     }
 
     /**
-     * Record a failure and potentially open the circuit breaker.
+     * Record an LLM call failure against the shared circuit breaker, potentially
+     * opening (or re-opening, after a failed half-open trial) the circuit.
      */
-    private void recordFailure() {
-        int failures = consecutiveFailures.incrementAndGet();
-        if (failures >= circuitBreakerFailureThreshold) {
-            Instant until = Instant.now().plusSeconds(circuitBreakerResetTimeoutSeconds);
-            circuitOpenUntil.set(until);
-            log.warn("🧠 LLM_CIRCUIT_OPENED: {} consecutive failures, disabled until {}", 
-                    failures, until);
-            consecutiveFailures.set(0); // Reset counter after opening circuit
-        }
+    private void recordLlmFailure() {
+        llmCircuitBreaker.recordFailure(
+                circuitBreakerFailureThreshold, Duration.ofSeconds(circuitBreakerResetTimeoutSeconds));
     }
 
     /**

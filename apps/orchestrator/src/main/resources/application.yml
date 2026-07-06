@@ -63,6 +63,10 @@ spring:
 
 # Service URLs (in-cluster defaults)
 jarvis:
+  # Zone used for get_time/get_date intents. The JVM default zone
+  # (ZoneId.systemDefault()) depends on the container/host TZ configuration and
+  # is not guaranteed to match the user's actual local zone, so this is explicit.
+  timezone: ${JARVIS_TIMEZONE:Europe/Moscow}
   # Phase 4: command pipeline tuning
   command:
     default-ttl-seconds: ${JARVIS_COMMAND_DEFAULT_TTL_SECONDS:30}

@@ -11,6 +11,7 @@ import org.jarvis.orchestrator.dto.LlmChatResponse;
 import org.jarvis.orchestrator.phrases.JarvisPhraseProvider;
 import org.jarvis.orchestrator.phrases.Language;
 import org.jarvis.orchestrator.phrases.PhraseContext;
+import org.jarvis.orchestrator.resilience.SimpleCircuitBreaker;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -21,10 +22,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -342,6 +342,42 @@ class OrchestratorServiceImplIntentTest {
         assertTrue(result.startsWith("Today is "));
     }
 
+    /**
+     * Regression test for finding #48 (timezone-misuse): get_time must use the configured
+     * jarvis.timezone zone, not the JVM's default zone (ZoneId.systemDefault(), which in a
+     * container may be UTC or anything else unrelated to the user's actual local time).
+     */
+    @Test
+    void getTimeUsesConfiguredTimezoneInsteadOfJvmDefault() {
+        newService();
+        // Pacific/Kiritimati is UTC+14 (the largest positive UTC offset that exists), so it is
+        // virtually guaranteed to differ from this test runner's JVM default zone -- if get_time
+        // ever regresses to the raw no-arg LocalTime.now() (JVM default zone) instead of the
+        // configured jarvis.timezone, this assertion fails.
+        ReflectionTestUtils.setField(service, "timezone", "Pacific/Kiritimati");
+        java.time.ZoneId zone = java.time.ZoneId.of("Pacific/Kiritimati");
+
+        java.time.LocalTime before = java.time.LocalTime.now(zone);
+        String result = service.executeIntent("get_time", Map.of(), "en", "corr", "text", "u");
+        java.time.LocalTime after = java.time.LocalTime.now(zone);
+
+        String beforeHhmm = String.format("%02d:%02d", before.getHour(), before.getMinute());
+        String afterHhmm = String.format("%02d:%02d", after.getHour(), after.getMinute());
+        assertTrue(result.contains(beforeHhmm) || result.contains(afterHhmm),
+                "expected time formatted in the configured zone (" + beforeHhmm + " or " + afterHhmm
+                        + ") but got: " + result);
+    }
+
+    @Test
+    void resolveZoneIdFallsBackToUtcForInvalidTimezoneConfig() {
+        newService();
+        ReflectionTestUtils.setField(service, "timezone", "not-a-real-zone");
+
+        Object resolved = ReflectionTestUtils.invokeMethod(service, "resolveZoneId");
+
+        assertEquals(java.time.ZoneOffset.UTC, resolved);
+    }
+
     // --- Group 5: media/legacy url actions and timer ---------------------------
 
     @Test
@@ -436,6 +472,41 @@ class OrchestratorServiceImplIntentTest {
         verifyNoInteractions(smartHomeClient);
     }
 
+    /**
+     * Regression test for finding #29 (degraded-partial-response): the smart-home action
+     * itself succeeds, but the best-effort desktop NOTIFY dispatch fails (both API-Gateway
+     * and direct host pc-control unreachable). That best-effort failure must not clobber the
+     * already-correct smart-home success response with the generic ACK_ERROR phrase.
+     */
+    @Test
+    void smartHomeActionSucceedsAndBestEffortNotifyFailureDoesNotOverwriteSuccessResponse() {
+        newService();
+        SmartHomeClient.DeviceView device = new SmartHomeClient.DeviceView(
+                "kitchen_light", "Kitchen Light", "Kitchen", "LIGHT",
+                java.util.List.of("TURN_ON", "TURN_OFF"), Map.of("power", true), "mock", "2026-03-14T10:45:00Z");
+        SmartHomeClient.ActionResult actionResult = new SmartHomeClient.ActionResult(
+                true, "u", "TURN_ON", "Action executed locally", device, "2026-03-14T10:45:00Z");
+        when(smartHomeClient.executeAction(
+                eq("u"), eq("kitchen_light"), eq(new SmartHomeClient.ActionRequest("TURN_ON", null))))
+                .thenReturn(actionResult);
+        when(phraseProvider.getPhrase(
+                eq(PhraseContext.SMART_HOME_TURN_ON), eq(Language.RU), eq(Map.of("device", "кухонный свет"))))
+                .thenReturn("Кухонный свет включён, сэр.");
+        // Both the API-Gateway and the direct host pc-control bridge are unreachable, so the
+        // best-effort NOTIFY dispatch fails -- this must NOT clobber the smart-home success response.
+        when(apiGatewayPcClient.sendPcAction(any())).thenThrow(new RuntimeException("gateway down"));
+        doThrow(new RuntimeException("host bridge down")).when(pcControlClient).executeAction(any(), any());
+
+        IntentExecutionResult result = service.executeIntentDetailed(
+                "smart_home_action",
+                Map.of("deviceId", "kitchen_light", "action", "TURN_ON"),
+                "ru", "corr", "text", "u");
+
+        assertEquals("Кухонный свет включён, сэр.", result.responseText());
+        assertTrue(result.executionSucceeded());
+        assertFalse(result.executionFailed());
+    }
+
     // --- Group 7: intent normalization ------------------------------------------
 
     @Test
@@ -476,10 +547,10 @@ class OrchestratorServiceImplIntentTest {
     void circuitBreakerOpenSkipsLlmCallEntirely() {
         newService();
         ReflectionTestUtils.setField(service, "llmEnabled", true);
-        @SuppressWarnings("unchecked")
-        AtomicReference<Instant> circuitOpenUntil =
-                (AtomicReference<Instant>) ReflectionTestUtils.getField(service, "circuitOpenUntil");
-        circuitOpenUntil.set(Instant.now().plusSeconds(60));
+        SimpleCircuitBreaker llmCircuitBreaker =
+                (SimpleCircuitBreaker) ReflectionTestUtils.getField(service, "llmCircuitBreaker");
+        // Force the breaker open for 60s (threshold=1 -> a single recorded failure trips it).
+        llmCircuitBreaker.recordFailure(1, Duration.ofSeconds(60));
         when(phraseProvider.getPhrase(eq(PhraseContext.UNKNOWN_COMMAND), eq(Language.RU))).thenReturn("dunno");
 
         String result = service.executeIntent("totally_unrecognized", Map.of(), "ru", "corr", "text", "u");
@@ -534,6 +605,51 @@ class OrchestratorServiceImplIntentTest {
 
         assertEquals("dunno", third);
         verify(llmClient, org.mockito.Mockito.times(2))
+                .chat(any(), anyString(), nullable(String.class), anyString());
+    }
+
+    /**
+     * Regression test for finding #47 (circuit-breaker): the LLM circuit breaker must
+     * use the shared {@link SimpleCircuitBreaker} half-open/single-trial semantics
+     * instead of a hand-rolled counter that gets reset to 0 the instant the circuit
+     * opens. With the old hand-rolled logic, once the cooldown elapsed the breaker
+     * behaved as fully CLOSED again, so a single failed retry after the cooldown was
+     * not enough to re-open it -- it took a whole fresh run of
+     * {@code circuitBreakerFailureThreshold} consecutive failures. With the fix, a
+     * single failed half-open trial must re-open the circuit immediately.
+     */
+    @Test
+    void singleFailedHalfOpenTrialReopensCircuitWithoutRequiringFreshFailureRun() throws InterruptedException {
+        newService();
+        ReflectionTestUtils.setField(service, "llmEnabled", true);
+        ReflectionTestUtils.setField(service, "llmTimeoutSeconds", 5);
+        ReflectionTestUtils.setField(service, "circuitBreakerFailureThreshold", 3);
+        ReflectionTestUtils.setField(service, "circuitBreakerResetTimeoutSeconds", 1);
+        doThrow(new RuntimeException("boom"))
+                .when(llmClient).chat(any(), anyString(), nullable(String.class), anyString());
+        when(phraseProvider.getPhrase(eq(PhraseContext.UNKNOWN_COMMAND), eq(Language.RU))).thenReturn("dunno");
+
+        // Trip the breaker with 3 consecutive failures (threshold=3).
+        service.executeIntent("totally_unrecognized", Map.of(), "ru", "c1", "text", "u");
+        service.executeIntent("totally_unrecognized", Map.of(), "ru", "c2", "text", "u");
+        service.executeIntent("totally_unrecognized", Map.of(), "ru", "c3", "text", "u");
+        verify(llmClient, org.mockito.Mockito.times(3))
+                .chat(any(), anyString(), nullable(String.class), anyString());
+
+        // Let the 1s cooldown elapse: the breaker is now HALF_OPEN and must allow exactly
+        // one trial call through.
+        Thread.sleep(1100);
+        service.executeIntent("totally_unrecognized", Map.of(), "ru", "c4-half-open-trial", "text", "u");
+        verify(llmClient, org.mockito.Mockito.times(4))
+                .chat(any(), anyString(), nullable(String.class), anyString());
+
+        // The half-open trial (c4) also failed, so the breaker must re-open IMMEDIATELY --
+        // not require a fresh run of circuitBreakerFailureThreshold consecutive failures.
+        // The very next call must therefore be rejected without reaching llmClient at all.
+        String afterFailedTrial = service.executeIntent("totally_unrecognized", Map.of(), "ru", "c5", "text", "u");
+
+        assertEquals("dunno", afterFailedTrial);
+        verify(llmClient, org.mockito.Mockito.times(4))
                 .chat(any(), anyString(), nullable(String.class), anyString());
     }
 
@@ -593,5 +709,31 @@ class OrchestratorServiceImplIntentTest {
         String result = service.executeIntent("mute", Map.of(), "ru", "corr", "text", "u");
 
         assertEquals("ack-error", result);
+    }
+
+    /**
+     * Regression test for finding #28 (non-idempotent-retry): when the API-Gateway
+     * response indicates the desktop executor WAS found and DID attempt the action
+     * (e.g. an ack_timeout/soft-failure on the gateway side after the action already
+     * ran), dispatchPcAction must NOT retry via the independent direct host
+     * pc-control channel -- doing so risks executing a non-idempotent action
+     * (MUTE/UNMUTE, NEXT_TRACK, undo, ...) a second time. It must surface the
+     * failure to the caller instead.
+     */
+    @Test
+    void softFailureWithExecutorFoundAndAttemptedDoesNotRetryViaDirectHost() {
+        newService();
+        when(phraseProvider.getPhrase(eq(PhraseContext.ACK_ERROR), eq(Language.RU))).thenReturn("ack-error");
+        Map<String, Object> gatewayResult = Map.of(
+                "executorFound", true,
+                "executionAttempted", true,
+                "executionSucceeded", false,
+                "failureReason", "ack_timeout");
+        when(apiGatewayPcClient.sendPcAction(any())).thenReturn(gatewayResult);
+
+        String result = service.executeIntent("mute", Map.of(), "ru", "corr", "text", "u");
+
+        assertEquals("ack-error", result);
+        verifyNoInteractions(pcControlClient);
     }
 }

@@ -20,6 +20,8 @@ class WakeWordDetector(
 ) {
     
     private var porcupine: Porcupine? = null
+
+    @Volatile
     private var isRunning = false
     private var audioThread: Thread? = null
     private var targetDataLine: TargetDataLine? = null

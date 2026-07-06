@@ -8,6 +8,9 @@ import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.AppConfig
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.slf4j.LoggerFactory
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 import java.util.concurrent.TimeUnit
 
 /**
@@ -109,7 +112,16 @@ class PcControlWebSocketClient(
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(30, TimeUnit.SECONDS)
         .build()
-    
+
+    // Runs the (potentially slow, blocking) SystemControlService invocation off the
+    // JavaFX Application Thread. Only the resulting status/ack callbacks are marshalled
+    // back via uiDispatcher; the OS command execution itself never touches the FX thread.
+    private val actionExecutor: ExecutorService = Executors.newSingleThreadExecutor(
+        ThreadFactory { runnable ->
+            Thread(runnable, "jarvis-desktop-pc-control-action").apply { isDaemon = true }
+        }
+    )
+
     private var webSocket: WebSocket? = null
     private var isConnected = false
     private var reconnectAttempts = 0
@@ -199,8 +211,8 @@ class PcControlWebSocketClient(
         
         logger.info("🎯 Executing PC action: action={}, requestId={}, params={}", action, requestId, params)
         updateStatus("Executing $actionSummary")
-        
-        uiDispatcher {
+
+        actionExecutor.execute {
             try {
                 fun missingParameterResult(vararg names: String): Result<Unit> {
                     val joined = names.joinToString(" or ")

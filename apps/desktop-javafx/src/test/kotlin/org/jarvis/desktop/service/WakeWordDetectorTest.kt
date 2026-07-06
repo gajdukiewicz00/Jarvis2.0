@@ -3,7 +3,9 @@ package org.jarvis.desktop.service
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.lang.reflect.Modifier
 
 /**
  * [WakeWordDetector.start] normally boots the native Porcupine engine and a
@@ -65,5 +67,26 @@ class WakeWordDetectorTest {
             keywords = listOf(ai.picovoice.porcupine.Porcupine.BuiltInKeyword.JARVIS)
         ) {}
         assertEquals(WakeWordDetector.ListeningState.STOPPED, d.getState())
+    }
+
+    /**
+     * Regression test for finding #52: `isRunning` is written by start()/stop() on the
+     * caller thread and read in the tight polling loop of processMicrophoneAudio() on the
+     * dedicated WakeWordDetectorThread, with no synchronized/Lock/AtomicBoolean guarding it.
+     * Without @Volatile (or an equivalent JMM happens-before mechanism), there is no
+     * guarantee the audio thread ever observes stop() setting isRunning = false, which can
+     * pin it in a tight retry loop against a closed TargetDataLine past the 1s join() window.
+     * `currentState` in the same class is correctly annotated @Volatile for the same reason.
+     */
+    @Test
+    fun `isRunning must be volatile so stop is visible to the audio capture thread`() {
+        val field = WakeWordDetector::class.java.getDeclaredField("isRunning")
+
+        assertTrue(
+            Modifier.isVolatile(field.modifiers),
+            "isRunning is written by start()/stop() on the caller thread and read in the " +
+                "polling loop on WakeWordDetectorThread; it must be @Volatile (like " +
+                "currentState) to guarantee the audio thread observes stop() promptly."
+        )
     }
 }

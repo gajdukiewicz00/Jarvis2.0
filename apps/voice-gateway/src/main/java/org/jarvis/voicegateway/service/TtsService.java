@@ -168,7 +168,8 @@ public class TtsService {
     /**
      * Synthesize text to speech with caching.
      */
-    @Cacheable(value = "tts", key = "#text + '-' + #languageCode + '-' + #voiceName")
+    @Cacheable(value = "tts",
+            key = "#text + '-' + #languageCode + '-' + #voiceName + '-' + #speakingRate + '-' + #pitch")
     public byte[] synthesize(String text, String languageCode, String voiceName, Double speakingRate, Double pitch) {
         return synthesizeDetailed(text, languageCode, voiceName, speakingRate, pitch).audioData();
     }

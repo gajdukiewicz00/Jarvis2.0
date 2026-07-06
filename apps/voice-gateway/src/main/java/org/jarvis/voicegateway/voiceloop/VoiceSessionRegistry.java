@@ -61,9 +61,25 @@ public class VoiceSessionRegistry {
     }
 
     public VoiceSession update(String sessionId, java.util.function.Consumer<VoiceSession> mutator) {
+        return update(sessionId, s -> true, mutator);
+    }
+
+    /**
+     * B1 — guarded update. The {@code guard} predicate is evaluated on the session
+     * inside the same synchronized block as the mutation, so a concurrent
+     * {@link #cancel(String, String)} (barge-in) cannot be silently overwritten by a
+     * stale in-flight update that started before the cancel landed: if the guard
+     * returns false (e.g. the session was already cancelled), the mutator is
+     * skipped entirely and the session is returned unchanged.
+     */
+    public VoiceSession update(String sessionId, java.util.function.Predicate<VoiceSession> guard,
+            java.util.function.Consumer<VoiceSession> mutator) {
         VoiceSession s = sessions.get(sessionId);
         if (s == null) return null;
         synchronized (s) {
+            if (!guard.test(s)) {
+                return s;
+            }
             mutator.accept(s);
             s.setExpiresAt(Instant.now().plusSeconds(ttlSeconds));
         }

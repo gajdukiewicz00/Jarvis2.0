@@ -73,6 +73,36 @@ class VoiceSessionRegistryTest {
     }
 
     @Test
+    void guardedUpdateAppliesMutatorWhenGuardPasses() {
+        VoiceSession session = registry.start("agent-1", "user-1");
+
+        VoiceSession updated = registry.update(session.getSessionId(),
+                s -> s.getStatus() != VoiceSessionStatus.CANCELLED,
+                s -> s.setStatus(VoiceSessionStatus.COMPLETED));
+
+        assertEquals(VoiceSessionStatus.COMPLETED, updated.getStatus());
+    }
+
+    @Test
+    void guardedUpdateSkipsMutatorWhenGuardFails() {
+        VoiceSession session = registry.start("agent-1", "user-1");
+        registry.cancel(session.getSessionId(), "barge-in");
+
+        VoiceSession updated = registry.update(session.getSessionId(),
+                s -> s.getStatus() != VoiceSessionStatus.CANCELLED,
+                s -> s.setStatus(VoiceSessionStatus.COMPLETED));
+
+        assertNotNull(updated);
+        assertEquals(VoiceSessionStatus.CANCELLED, updated.getStatus());
+    }
+
+    @Test
+    void guardedUpdateReturnsNullForUnknownSession() {
+        VoiceSession updated = registry.update("missing", s -> true, s -> s.setTranscript("x"));
+        assertNull(updated);
+    }
+
+    @Test
     void cancelMarksSessionCancelledAndReturnsIt() {
         VoiceSession session = registry.start("agent-1", "user-1");
 

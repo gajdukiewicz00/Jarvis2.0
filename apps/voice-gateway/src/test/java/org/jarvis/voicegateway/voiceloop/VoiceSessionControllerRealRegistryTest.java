@@ -76,6 +76,40 @@ class VoiceSessionControllerRealRegistryTest {
     }
 
     @Test
+    void utteranceDoesNotOverwriteBargeInCancelWithStaleOrchestratorReply() {
+        // B1 regression: barge-in / cancel arrives WHILE orchestratorClient.dispatch()
+        // is still in flight (e.g. a POST /cancel handled on another thread), landing
+        // just before dispatch() returns. Without the fix, the post-dispatch update in
+        // utterance() unconditionally overwrites status/commandId, silently reverting
+        // the CANCELLED status back to COMPLETED and making a barge-in look like the
+        // command succeeded.
+        VoiceSession session = registry.start("agent-1", "user-1");
+        String sessionId = session.getSessionId();
+        when(intents.resolve("выключи свет", "ru"))
+                .thenReturn(new IntentResolver.Resolution("LIGHTS_OFF", "regex", 0.9));
+
+        OrchestratorVoiceClient.VoiceLoopReply reply = new OrchestratorVoiceClient.VoiceLoopReply(
+                "cmd-99", "corr-99", VoiceSessionStatus.COMPLETED,
+                VoiceFeedback.builder().code("SUCCESS").level(VoiceFeedback.Level.INFO)
+                        .spokenText("Готово").build());
+        when(orchestratorClient.dispatch(eq(sessionId), eq("user-1"), anyString(),
+                eq("LIGHTS_OFF"), eq("выключи свет")))
+                .thenAnswer(invocation -> {
+                    // Simulate the concurrent /cancel request completing while dispatch()
+                    // is still blocked waiting on the orchestrator.
+                    registry.cancel(sessionId, "barge-in");
+                    return reply;
+                });
+
+        controller.utterance(sessionId, new VoiceSessionController.UtteranceRequest("выключи свет", "ru"));
+
+        VoiceSession stored = registry.get(sessionId).orElseThrow();
+        assertEquals(VoiceSessionStatus.CANCELLED, stored.getStatus());
+        assertEquals(null, stored.getCommandId());
+        assertEquals(null, stored.getReplyText());
+    }
+
+    @Test
     void utteranceHandlesReplyWithNullFeedbackGracefully() {
         VoiceSession session = registry.start("agent-1", "user-1");
         when(intents.resolve("громче", "ru")).thenReturn(new IntentResolver.Resolution("VOLUME_UP", "regex", 0.9));

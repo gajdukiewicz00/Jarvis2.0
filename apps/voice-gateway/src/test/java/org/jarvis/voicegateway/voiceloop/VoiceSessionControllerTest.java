@@ -123,8 +123,10 @@ class VoiceSessionControllerTest {
         assertEquals(200, response.getStatusCode().value());
         assertEquals("cmd-1", response.getBody().commandId());
         assertEquals(VoiceSessionStatus.COMPLETED, response.getBody().sessionStatus());
-        // TRANSCRIBED, then CLASSIFIED, then the final reply-status transition.
-        verify(registry, times(3)).update(eq("s1"), any());
+        // TRANSCRIBED, then CLASSIFIED go through the unguarded 2-arg overload.
+        verify(registry, times(2)).update(eq("s1"), any());
+        // The final reply-status transition is guarded (skipped if barge-in cancelled first).
+        verify(registry).update(eq("s1"), any(), any());
     }
 
     @Test

@@ -89,12 +89,18 @@ public class VoiceSessionController {
                 sessionId, session.getUserId(), correlationId,
                 resolution.intent(), body.transcript());
 
-        registry.update(sessionId, s -> {
-            s.setStatus(reply.status());
-            s.setCommandId(reply.commandId());
-            s.setCorrelationId(reply.correlationId());
-            s.setReplyText(reply.feedback() == null ? null : reply.feedback().getSpokenText());
-        });
+        // B1 — barge-in guard: if the user cancelled while dispatch() was in flight,
+        // the session is already CANCELLED by the time we get here. Skip applying the
+        // orchestrator's (now-stale) reply so a cancelled command doesn't silently
+        // flip back to COMPLETED/FAILED and get reported as having succeeded.
+        registry.update(sessionId,
+                s -> s.getStatus() != VoiceSessionStatus.CANCELLED,
+                s -> {
+                    s.setStatus(reply.status());
+                    s.setCommandId(reply.commandId());
+                    s.setCorrelationId(reply.correlationId());
+                    s.setReplyText(reply.feedback() == null ? null : reply.feedback().getSpokenText());
+                });
 
         log.info("[{}] utterance done: intent={} source={} status={} feedback={}",
                 sessionId, resolution.intent(), resolution.source(), reply.status(),

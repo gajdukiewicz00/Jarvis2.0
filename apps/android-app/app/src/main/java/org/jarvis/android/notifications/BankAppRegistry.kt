@@ -33,6 +33,13 @@ object BankAppRegistry {
     fun displayNameFor(packageName: String): String =
         KNOWN_BANK_APPS.firstOrNull { it.packageName == packageName }?.displayName ?: packageName
 
-    /** The default enabled set for a fresh install: every known bank app. */
+    /**
+     * The full set of known bank-app packages — i.e. every entry in [KNOWN_BANK_APPS].
+     *
+     * <p>NOT used as the fresh-install default: [BankAppSettings.enabledPackages] defaults
+     * to empty (see [DEFAULT_BANK_ENABLED_PACKAGES]) so no bank notification is captured
+     * until the user opts one in. This is a convenience accessor for UI/tests that need
+     * "every known package" (e.g. a future "select all" action), not a privacy default.</p>
+     */
     fun defaultEnabledPackages(): Set<String> = KNOWN_BANK_APPS.map { it.packageName }.toSet()
 }

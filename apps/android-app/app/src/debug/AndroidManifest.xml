@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Increment #12 (privacy hardening) — debug-build-only manifest override.
+
+  Build-type-specific manifests (this file) are merged on top of
+  src/main/AndroidManifest.xml with higher priority for the same attribute, and ONLY
+  for that build type — so this networkSecurityConfig override applies to debug builds
+  only. Release builds are assembled from src/main/AndroidManifest.xml alone and keep
+  android:usesCleartextTraffic="false" (with no networkSecurityConfig) exactly as
+  declared there: no cleartext traffic anywhere, globally.
+
+  The referenced config (res/xml/network_security_config_debug.xml, also debug-only)
+  permits cleartext so local development against the on-prem sync-service over the
+  home LAN keeps working without weakening the release/global posture.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/network_security_config_debug" />
+</manifest>

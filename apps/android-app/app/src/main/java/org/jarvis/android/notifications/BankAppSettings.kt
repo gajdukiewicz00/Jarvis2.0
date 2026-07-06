@@ -5,8 +5,29 @@ import android.content.Context
 /** Raw-text retention window is clamped to this many days (see [BankAppSettings.setRetentionDays]). */
 const val MAX_BANK_DRAFT_RETENTION_DAYS = 30
 
-/** Default retention window applied on a fresh install. */
-const val DEFAULT_BANK_DRAFT_RETENTION_DAYS = 7
+/**
+ * Default retention window applied on a fresh install: `0` (do not persist raw
+ * notification text at all — see [BankAppSettings.retentionDays]). Secure-by-default:
+ * the user must explicitly raise this before any sanitized notification text is stored
+ * on-device, rather than the app opting them in to N days of retention.
+ */
+const val DEFAULT_BANK_DRAFT_RETENTION_DAYS = 0
+
+/**
+ * Default master-switch state on a fresh install: capture is OFF. The user must
+ * explicitly opt in via [org.jarvis.android.ui.notifications.BankNotificationSettingsScreen]
+ * before [BankNotificationListenerService] reads any notification content.
+ */
+const val DEFAULT_BANK_NOTIFICATION_CAPTURE_ENABLED = false
+
+/**
+ * Default bank-app whitelist on a fresh install: empty. No bank app is treated as a
+ * trusted source — and therefore no notification content is read — until the user adds
+ * one explicitly. [org.jarvis.android.notifications.BankAppRegistry.KNOWN_BANK_APPS]
+ * only seeds the *choices* offered in the settings UI; it is deliberately not used as
+ * the enabled-by-default set.
+ */
+val DEFAULT_BANK_ENABLED_PACKAGES: Set<String> = emptySet()
 
 /**
  * Clamps a user-entered retention value into `[0, MAX_BANK_DRAFT_RETENTION_DAYS]`.
@@ -30,16 +51,23 @@ class BankAppSettings(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    /** Bank-app packages the [BankNotificationListenerService] treats as trusted sources. */
+    /**
+     * Bank-app packages the [BankNotificationListenerService] treats as trusted sources.
+     * Defaults to [DEFAULT_BANK_ENABLED_PACKAGES] (empty) — no bank is captured until the
+     * user opts one in.
+     */
     fun enabledPackages(): Set<String> =
-        prefs.getStringSet(KEY_ENABLED_PACKAGES, null) ?: BankAppRegistry.defaultEnabledPackages()
+        prefs.getStringSet(KEY_ENABLED_PACKAGES, null) ?: DEFAULT_BANK_ENABLED_PACKAGES
 
     fun setEnabledPackages(packages: Set<String>) {
         prefs.edit().putStringSet(KEY_ENABLED_PACKAGES, packages).apply()
     }
 
-    /** Master switch — off means the listener ignores every notification regardless of whitelist. */
-    fun isCaptureEnabled(): Boolean = prefs.getBoolean(KEY_CAPTURE_ENABLED, true)
+    /**
+     * Master switch — off means the listener ignores every notification regardless of
+     * whitelist. Defaults to [DEFAULT_BANK_NOTIFICATION_CAPTURE_ENABLED] (`false`).
+     */
+    fun isCaptureEnabled(): Boolean = prefs.getBoolean(KEY_CAPTURE_ENABLED, DEFAULT_BANK_NOTIFICATION_CAPTURE_ENABLED)
 
     fun setCaptureEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_CAPTURE_ENABLED, enabled).apply()

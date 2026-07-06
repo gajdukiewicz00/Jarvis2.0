@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Increment #12 (privacy hardening) — debug-build-only network security config.
+
+  Permits cleartext (HTTP) traffic ONLY for debug builds, so local development against
+  the on-prem sync-service over the home LAN (see SettingsScreen's default
+  baseUrl, e.g. http://10.113.0.176:30095) keeps working without granting any cleartext
+  allowance in release builds.
+
+  This file lives under src/debug/res/xml, so it is only packaged into debug builds;
+  release builds never see it and keep the global
+  android:usesCleartextTraffic="false" declared in src/main/AndroidManifest.xml
+  completely unmodified. See src/debug/AndroidManifest.xml for the debug-only manifest
+  override that wires this config in.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

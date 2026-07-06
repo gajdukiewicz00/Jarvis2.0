@@ -23,6 +23,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -126,8 +127,40 @@ class RecurringTaskGeneratorTest {
         daily.setLastGeneratedDate(date);
         when(taskRepository.findByUserIdAndRecurrenceRuleNot("user-1", RecurrenceRule.NONE))
                 .thenReturn(List.of(daily));
+        when(taskRepository.existsByRecurrenceSourceTaskIdAndDueDateGreaterThanEqualAndDueDateLessThan(
+                        eq(1L), any(), any()))
+                .thenReturn(true);
 
         List<Task> generated = generator.generateOccurrencesForDate("user-1", date);
+
+        assertThat(generated).isEmpty();
+        verify(taskRepository, never()).save(any(Task.class));
+        verify(plannerMetrics, never()).recurringTaskGenerated(any());
+    }
+
+    /**
+     * Reproduces finding #16: generateNextOccurrences() can advance a
+     * template's lastGeneratedDate past "today" while materializing a batch
+     * that already includes today's occurrence. A subsequent daily
+     * generateOccurrencesForDate("today") pass must not re-create a duplicate
+     * occurrence just because date.equals(lastGeneratedDate) is false — it
+     * must consult the real persisted occurrences instead of the scalar flag.
+     */
+    @Test
+    void generateOccurrencesForDateDoesNotDuplicateWhenLastGeneratedDateWasAdvancedPastTodayByAPriorBatch() {
+        LocalDate today = LocalDate.of(2026, 6, 1);
+        Task weekly = template(RecurrenceRule.WEEKLY, today);
+        // A prior generateNextOccurrences(count=5) call already materialized
+        // today's occurrence plus several future ones, leaving
+        // lastGeneratedDate several weeks ahead of "today".
+        weekly.setLastGeneratedDate(LocalDate.of(2026, 6, 29));
+        when(taskRepository.findByUserIdAndRecurrenceRuleNot("user-1", RecurrenceRule.NONE))
+                .thenReturn(List.of(weekly));
+        when(taskRepository.existsByRecurrenceSourceTaskIdAndDueDateGreaterThanEqualAndDueDateLessThan(
+                        eq(1L), any(), any()))
+                .thenReturn(true);
+
+        List<Task> generated = generator.generateOccurrencesForDate("user-1", today);
 
         assertThat(generated).isEmpty();
         verify(taskRepository, never()).save(any(Task.class));

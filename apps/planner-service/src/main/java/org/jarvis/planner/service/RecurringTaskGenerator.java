@@ -52,15 +52,17 @@ public class RecurringTaskGenerator {
         List<Task> generated = new ArrayList<>();
 
         for (Task template : templates) {
-            if (date.equals(template.getLastGeneratedDate()) || !isDue(template, date)) {
+            if (!isDue(template, date) || occurrenceAlreadyGenerated(template, date)) {
                 continue;
             }
             Task occurrence = taskRepository.save(buildOccurrence(template, date));
             generated.add(occurrence);
             plannerMetrics.recurringTaskGenerated(template.getRecurrenceRule().name());
 
-            template.setLastGeneratedDate(date);
-            taskRepository.save(template);
+            if (template.getLastGeneratedDate() == null || date.isAfter(template.getLastGeneratedDate())) {
+                template.setLastGeneratedDate(date);
+                taskRepository.save(template);
+            }
         }
 
         log.info("Generated {} recurring task occurrence(s) for user {} on {}", generated.size(), userId, date);
@@ -109,6 +111,21 @@ public class RecurringTaskGenerator {
 
         log.info("Generated next {} occurrence(s) for template {} (user {})", generated.size(), templateId, userId);
         return generated;
+    }
+
+    /**
+     * Whether {@code template} already has a materialized occurrence for
+     * {@code date}. Checked against the actual persisted occurrences rather
+     * than the scalar {@code lastGeneratedDate}, since a prior
+     * {@link #generateNextOccurrences} batch can advance that value past
+     * {@code date} while still having generated {@code date}'s occurrence as
+     * part of the same batch.
+     */
+    private boolean occurrenceAlreadyGenerated(Task template, LocalDate date) {
+        Instant startOfDay = date.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant endOfDay = date.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        return taskRepository.existsByRecurrenceSourceTaskIdAndDueDateGreaterThanEqualAndDueDateLessThan(
+                template.getId(), startOfDay, endOfDay);
     }
 
     /** Whether {@code template}'s recurrence pattern is due on {@code date}. */

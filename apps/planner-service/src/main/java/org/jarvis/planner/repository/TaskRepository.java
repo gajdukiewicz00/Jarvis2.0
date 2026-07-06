@@ -37,4 +37,14 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     /** Recurring task templates (RRULE-lite) for a user, excluding one-off tasks. */
     List<Task> findByUserIdAndRecurrenceRuleNot(String userId, RecurrenceRule recurrenceRule);
+
+    /**
+     * Whether a recurring template already has a materialized occurrence whose
+     * due date falls within [startOfDayInclusive, endOfDayExclusive) — used as
+     * the real per-date dedup check instead of trusting a single scalar
+     * {@code lastGeneratedDate}, which loses information about earlier dates
+     * already materialized in a batch (e.g. via generate-next-occurrences).
+     */
+    boolean existsByRecurrenceSourceTaskIdAndDueDateGreaterThanEqualAndDueDateLessThan(
+            Long recurrenceSourceTaskId, Instant startOfDayInclusive, Instant endOfDayExclusive);
 }

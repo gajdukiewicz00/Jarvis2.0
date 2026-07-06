@@ -123,7 +123,7 @@ public class BankNotificationParser {
                 .replaceAll("(?<=\\D)(\\d{6,})", "******");
 
         return new ParsedTransactionDTO(valid, confidence, needsReview, amount, currency, merchant,
-                type, category, cardMask, dedupKey, LocalDateTime.now(), rawMasked, notes, null);
+                type, category, cardMask, dedupKey, LocalDateTime.now(), rawMasked, notes, null, null);
     }
 
     private String extractMerchant(String text, String lower) {

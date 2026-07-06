@@ -14,6 +14,10 @@ import java.util.List;
  *
  * <p>US-BANK-002 (extract), 003 (validate), 004 (confidence), 005 (needs-review inbox),
  * 006 (dedupKey), 007 (category), 009 (cardMask), 010 (local-only).
+ *
+ * <p>FINANCE-REVIEW: when {@code needsReview} is true and the caller asked to store the draft,
+ * it is persisted to the review inbox (an {@code ExpenseDraft}, status=DRAFT) instead of being
+ * dropped; {@code draftId} is then non-null.
  */
 public record ParsedTransactionDTO(
         boolean valid,
@@ -32,5 +36,6 @@ public record ParsedTransactionDTO(
         LocalDateTime occurredAt,
         String rawMasked,         // original text with card digits masked
         List<String> notes,       // validation / parsing notes
-        Long storedId             // non-null only if it was persisted
+        Long storedId,            // non-null only if it was persisted as an Expense
+        Long draftId              // non-null only if it was persisted to the review inbox
 ) {}

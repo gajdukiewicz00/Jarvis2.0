@@ -5,9 +5,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.lifetracker.domain.EntrySource;
 import org.jarvis.lifetracker.domain.Expense;
+import org.jarvis.lifetracker.domain.ExpenseDraft;
 import org.jarvis.lifetracker.dto.ParsedTransactionDTO;
 import org.jarvis.lifetracker.repository.ExpenseRepository;
 import org.jarvis.lifetracker.service.BankNotificationParser;
+import org.jarvis.lifetracker.service.ReviewInboxService;
 import org.jarvis.lifetracker.util.CsvUtils;
 import org.jarvis.lifetracker.util.UserContext;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,8 +30,10 @@ import java.util.Optional;
  * Bank push-notification → transaction draft (Banking Push Parser epic).
  *
  * <p>Deterministic + local-only (no external LLM). Returns a parsed draft with a
- * confidence score; with {@code store=true} it persists ONLY HIGH-confidence valid
- * drafts (US-BANK-005: low/medium stay in the manual inbox). Card details are masked
+ * confidence score; with {@code store=true} it persists HIGH-confidence valid drafts
+ * straight to {@code Expense}, while MEDIUM/LOW-confidence (or invalid) drafts are
+ * persisted to the review inbox instead of being dropped (US-BANK-005, FINANCE-REVIEW —
+ * see {@link ReviewInboxService} for list/edit/approve/reject). Card details are masked
  * (US-BANK-009) and the raw text is never stored verbatim.
  */
 @Slf4j
@@ -40,6 +44,7 @@ public class BankNotificationController {
 
     private final BankNotificationParser parser;
     private final ExpenseRepository expenseRepository;
+    private final ReviewInboxService reviewInboxService;
 
     public record ParseRequest(String text, Boolean store) {}
 
@@ -50,30 +55,37 @@ public class BankNotificationController {
         }
         ParsedTransactionDTO d = parser.parse(req.text());
 
-        if (Boolean.TRUE.equals(req.store()) && d.valid() && "HIGH".equals(d.confidence()) && !d.needsReview()) {
-            String userId = requireUserId(http);
+        if (!Boolean.TRUE.equals(req.store())) {
+            return d;
+        }
+        String userId = requireUserId(http);
 
+        if (d.valid() && "HIGH".equals(d.confidence()) && !d.needsReview()) {
             Optional<Expense> duplicate = expenseRepository.findByUserIdAndDedupKey(userId, d.dedupKey());
             if (duplicate.isPresent()) {
                 log.info("skipped duplicate bank tx dedup={} already stored as id={}",
                         d.dedupKey(), duplicate.get().getId());
-                return withNoteAndStoredId(d, "duplicate_skipped", duplicate.get().getId());
+                return withNoteAndStoredId(d, "duplicate_skipped", duplicate.get().getId(), null);
             }
 
             try {
                 Expense saved = expenseRepository.save(buildExpense(d, userId));
                 log.info("stored parsed bank tx id={} amount={} {} cat={} dedup={}",
                         saved.getId(), d.amount(), d.currency(), d.category(), d.dedupKey());
-                return withNoteAndStoredId(d, null, saved.getId());
+                return withNoteAndStoredId(d, null, saved.getId(), null);
             } catch (DataIntegrityViolationException ex) {
                 // Race: another request stored the same dedup key between our check and insert.
                 Expense existing = expenseRepository.findByUserIdAndDedupKey(userId, d.dedupKey()).orElseThrow(() -> ex);
                 log.warn("concurrent duplicate bank tx dedup={} resolved to existing id={}",
                         d.dedupKey(), existing.getId());
-                return withNoteAndStoredId(d, "duplicate_skipped", existing.getId());
+                return withNoteAndStoredId(d, "duplicate_skipped", existing.getId(), null);
             }
         }
-        return d;
+
+        // MEDIUM/LOW confidence (or invalid): queue for manual review instead of dropping (US-BANK-005).
+        ExpenseDraft draft = reviewInboxService.createDraft(userId, d);
+        log.info("queued bank tx draft id={} confidence={} dedup={}", draft.getId(), d.confidence(), d.dedupKey());
+        return withNoteAndStoredId(d, "queued_for_review", null, draft.getId());
     }
 
     private Expense buildExpense(ParsedTransactionDTO d, String userId) {
@@ -92,22 +104,22 @@ public class BankNotificationController {
         return e;
     }
 
-    private ParsedTransactionDTO withNoteAndStoredId(ParsedTransactionDTO d, String extraNote, Long storedId) {
+    private ParsedTransactionDTO withNoteAndStoredId(ParsedTransactionDTO d, String extraNote, Long storedId, Long draftId) {
         List<String> notes = new ArrayList<>(d.notes());
         if (extraNote != null) {
             notes.add(extraNote);
         }
         return new ParsedTransactionDTO(d.valid(), d.confidence(), d.needsReview(), d.amount(), d.currency(),
                 d.merchant(), d.type(), d.category(), d.cardMask(), d.dedupKey(), d.occurredAt(),
-                d.rawMasked(), notes, storedId);
+                d.rawMasked(), notes, storedId, draftId);
     }
 
     /**
      * Bulk CSV import of raw bank notification texts (one notification per row/field, CSV-quoted
      * so embedded commas / decimal commas survive). Each row is run through the same deterministic
      * {@link BankNotificationParser}; HIGH-confidence valid drafts are auto-stored, everything else
-     * (LOW/MEDIUM confidence, or invalid) is returned in {@code needsReview} for a manual inbox
-     * instead of being silently discarded (US-BANK-005).
+     * (LOW/MEDIUM confidence, or invalid) is queued in the review inbox (FINANCE-REVIEW) instead of
+     * being silently discarded (US-BANK-005), and also returned in {@code needsReview} for the caller.
      */
     @PostMapping("/import-csv-notifications")
     public Map<String, Object> importCsvNotifications(@RequestBody Map<String, String> body, HttpServletRequest http) {
@@ -117,6 +129,7 @@ public class BankNotificationController {
 
         int imported = 0;
         int duplicatesSkipped = 0;
+        int draftsQueued = 0;
         List<ParsedTransactionDTO> needsReview = new ArrayList<>();
         for (List<String> row : rows) {
             if (row.isEmpty()) {
@@ -139,16 +152,19 @@ public class BankNotificationController {
                     duplicatesSkipped++;
                 }
             } else {
+                reviewInboxService.createDraft(userId, parsed);
+                draftsQueued++;
                 needsReview.add(parsed);
             }
         }
-        log.info("CSV bank import for {}: imported={} needsReview={} duplicatesSkipped={}",
-                userId, imported, needsReview.size(), duplicatesSkipped);
+        log.info("CSV bank import for {}: imported={} needsReview={} duplicatesSkipped={} draftsQueued={}",
+                userId, imported, needsReview.size(), duplicatesSkipped, draftsQueued);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("imported", imported);
         result.put("needsReview", needsReview);
         result.put("totalRows", rows.size());
         result.put("duplicatesSkipped", duplicatesSkipped);
+        result.put("draftsQueued", draftsQueued);
         return result;
     }
 

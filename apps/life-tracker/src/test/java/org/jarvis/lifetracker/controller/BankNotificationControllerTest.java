@@ -1,11 +1,14 @@
 package org.jarvis.lifetracker.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.jarvis.lifetracker.domain.DraftStatus;
 import org.jarvis.lifetracker.domain.Expense;
+import org.jarvis.lifetracker.domain.ExpenseDraft;
 import org.jarvis.lifetracker.domain.TransactionType;
 import org.jarvis.lifetracker.dto.ParsedTransactionDTO;
 import org.jarvis.lifetracker.repository.ExpenseRepository;
 import org.jarvis.lifetracker.service.BankNotificationParser;
+import org.jarvis.lifetracker.service.ReviewInboxService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -21,6 +24,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -45,10 +49,13 @@ class BankNotificationControllerTest {
     @MockBean
     private ExpenseRepository expenseRepository;
 
+    @MockBean
+    private ReviewInboxService reviewInboxService;
+
     private ParsedTransactionDTO parsedDto(boolean valid, String confidence, boolean needsReview) {
         return new ParsedTransactionDTO(valid, confidence, needsReview, new BigDecimal("45.99"), "PLN",
                 "Lidl", TransactionType.EXPENSE, "groceries", null, "abc123", LocalDateTime.now(),
-                "masked text", List.of(), null);
+                "masked text", List.of(), null, null);
     }
 
     @Test
@@ -104,6 +111,10 @@ class BankNotificationControllerTest {
     @Test
     void parseNotificationWithStoreButLowConfidenceDoesNotSave() throws Exception {
         when(parser.parse("something 12,34")).thenReturn(parsedDto(false, "LOW", true));
+        ExpenseDraft draft = new ExpenseDraft();
+        draft.setId(7L);
+        draft.setStatus(DraftStatus.DRAFT);
+        when(reviewInboxService.createDraft(eq("user-1"), any(ParsedTransactionDTO.class))).thenReturn(draft);
 
         mockMvc.perform(post("/api/v1/life/finance/parse-notification")
                         .header("X-User-Id", "user-1")
@@ -112,9 +123,49 @@ class BankNotificationControllerTest {
                                 {"text": "something 12,34", "store": true}
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.storedId").doesNotExist())
+                .andExpect(jsonPath("$.draftId").value(7));
+
+        verify(expenseRepository, never()).save(any(Expense.class));
+        verify(reviewInboxService).createDraft(eq("user-1"), any(ParsedTransactionDTO.class));
+    }
+
+    @Test
+    void parseNotificationWithStoreAndMediumConfidenceQueuesReviewDraftInsteadOfSaving() throws Exception {
+        when(parser.parse("Payment 20.50 USD")).thenReturn(parsedDto(true, "MEDIUM", true));
+        ExpenseDraft draft = new ExpenseDraft();
+        draft.setId(11L);
+        draft.setStatus(DraftStatus.DRAFT);
+        when(reviewInboxService.createDraft(eq("user-1"), any(ParsedTransactionDTO.class))).thenReturn(draft);
+
+        mockMvc.perform(post("/api/v1/life/finance/parse-notification")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "Payment 20.50 USD", "store": true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draftId").value(11))
                 .andExpect(jsonPath("$.storedId").doesNotExist());
 
         verify(expenseRepository, never()).save(any(Expense.class));
+        verify(reviewInboxService).createDraft(eq("user-1"), any(ParsedTransactionDTO.class));
+    }
+
+    @Test
+    void parseNotificationWithoutStoreFlagNeverQueuesDraftEvenIfLowConfidence() throws Exception {
+        when(parser.parse("something 12,34")).thenReturn(parsedDto(false, "LOW", true));
+
+        mockMvc.perform(post("/api/v1/life/finance/parse-notification")
+                        .header("X-User-Id", "user-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"text": "something 12,34"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draftId").doesNotExist());
+
+        verify(reviewInboxService, never()).createDraft(anyString(), any(ParsedTransactionDTO.class));
     }
 
     @Test
@@ -149,9 +200,11 @@ class BankNotificationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.imported").value(1))
                 .andExpect(jsonPath("$.needsReview.length()").value(1))
-                .andExpect(jsonPath("$.totalRows").value(3));
+                .andExpect(jsonPath("$.totalRows").value(3))
+                .andExpect(jsonPath("$.draftsQueued").value(1));
 
         verify(expenseRepository, times(1)).save(any(Expense.class));
+        verify(reviewInboxService, times(1)).createDraft(eq("user-1"), any(ParsedTransactionDTO.class));
     }
 
     @Test

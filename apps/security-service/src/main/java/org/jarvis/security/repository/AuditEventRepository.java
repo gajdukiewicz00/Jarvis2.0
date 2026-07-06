@@ -19,12 +19,17 @@ public interface AuditEventRepository extends JpaRepository<AuditEvent, Long> {
      * eventType}, {@code from}, {@code to} may be {@code null} to skip that
      * predicate entirely.
      */
+    // Each optional param is cast to its concrete type in the null-check so Postgres
+    // can determine the bind parameter's data type even when the value is null (an
+    // untyped NULL in `:param is null` triggers "could not determine data type of
+    // parameter" / SQLState 42P18 on PostgreSQL; H2 infers it, which is why this only
+    // surfaced against the real DB, not in tests).
     @Query("""
             select e from AuditEvent e
-            where (:userId is null or e.userId = :userId)
-              and (:eventType is null or e.eventType = :eventType)
-              and (:from is null or e.occurredAt >= :from)
-              and (:to is null or e.occurredAt <= :to)
+            where (cast(:userId as Long) is null or e.userId = :userId)
+              and (cast(:eventType as String) is null or e.eventType = :eventType)
+              and (cast(:from as Instant) is null or e.occurredAt >= :from)
+              and (cast(:to as Instant) is null or e.occurredAt <= :to)
             """)
     Page<AuditEvent> findFiltered(
             @Param("userId") Long userId,

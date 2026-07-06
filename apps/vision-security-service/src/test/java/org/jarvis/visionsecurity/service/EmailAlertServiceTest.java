@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +43,7 @@ class EmailAlertServiceTest {
         properties.getEmail().setRecipient("owner@example.com");
         properties.getEmail().setFrom("jarvis@example.com");
         properties.getEmail().setSubjectPrefix("[Jarvis]");
-        service = new EmailAlertService(properties, mailSenderProvider);
+        service = new EmailAlertService(properties, mailSenderProvider, "smtp.example.com");
     }
 
     private MimeMessage realMimeMessage() {
@@ -66,7 +67,22 @@ class EmailAlertServiceTest {
         CapabilityStatus status = service.capabilityStatus();
 
         assertThat(status.state()).isEqualTo("UNAVAILABLE");
-        assertThat(status.detail()).contains("spring.mail");
+        assertThat(status.detail()).contains("SPRING_MAIL_HOST");
+    }
+
+    @Test
+    void capabilityIsUnavailableWhenSmtpHostBlankEvenIfMailSenderBeanExists() {
+        // application.yml always sets spring.mail.host (defaulting to ""), which is
+        // enough for Spring's MailSenderAutoConfiguration to register a JavaMailSender
+        // bean even when SMTP was never really configured. The service must not treat
+        // that bean's mere presence as "configured" -- it must check the host too.
+        EmailAlertService unconfigured = new EmailAlertService(properties, mailSenderProvider, "");
+        when(mailSenderProvider.getIfAvailable()).thenReturn(mailSender);
+
+        CapabilityStatus status = unconfigured.capabilityStatus();
+
+        assertThat(status.state()).isEqualTo("UNAVAILABLE");
+        assertThat(status.detail()).contains("SPRING_MAIL_HOST");
     }
 
     @Test
@@ -97,7 +113,20 @@ class EmailAlertServiceTest {
         EmailDelivery delivery = service.sendIncidentAlert(incident(null, null, null));
 
         assertThat(delivery.attempted()).isFalse();
-        assertThat(delivery.message()).contains("JavaMailSender is not configured");
+        assertThat(delivery.message()).contains("SMTP host is not configured");
+    }
+
+    @Test
+    void sendIncidentAlertReturnsNotConfiguredWhenSmtpHostBlankEvenIfMailSenderBeanExists() {
+        EmailAlertService unconfigured = new EmailAlertService(properties, mailSenderProvider, "");
+        when(mailSenderProvider.getIfAvailable()).thenReturn(mailSender);
+
+        EmailDelivery delivery = unconfigured.sendIncidentAlert(incident(null, null, null));
+
+        assertThat(delivery.attempted()).isFalse();
+        assertThat(delivery.sent()).isFalse();
+        assertThat(delivery.message()).contains("SMTP host is not configured");
+        verify(mailSender, never()).send(any(MimeMessage.class));
     }
 
     @Test
@@ -161,7 +190,20 @@ class EmailAlertServiceTest {
         EmailDelivery delivery = service.sendTestAlert("owner");
 
         assertThat(delivery.attempted()).isFalse();
-        assertThat(delivery.message()).contains("JavaMailSender is not configured");
+        assertThat(delivery.message()).contains("SMTP host is not configured");
+    }
+
+    @Test
+    void sendTestAlertReturnsNotConfiguredWhenSmtpHostBlankEvenIfMailSenderBeanExists() {
+        EmailAlertService unconfigured = new EmailAlertService(properties, mailSenderProvider, "");
+        when(mailSenderProvider.getIfAvailable()).thenReturn(mailSender);
+
+        EmailDelivery delivery = unconfigured.sendTestAlert("owner");
+
+        assertThat(delivery.attempted()).isFalse();
+        assertThat(delivery.sent()).isFalse();
+        assertThat(delivery.message()).contains("SMTP host is not configured");
+        verify(mailSender, never()).send(any(MimeMessage.class));
     }
 
     @Test

@@ -1,11 +1,11 @@
 package org.jarvis.visionsecurity.service;
 
-import lombok.RequiredArgsConstructor;
 import org.jarvis.visionsecurity.config.VisionSecurityProperties;
 import org.jarvis.visionsecurity.model.CapabilityStatus;
 import org.jarvis.visionsecurity.model.EmailDelivery;
 import org.jarvis.visionsecurity.model.IncidentRecord;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -15,19 +15,43 @@ import jakarta.mail.internet.MimeMessage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * Sends incident/test alert emails when both a recipient
+ * ({@code VISION_SECURITY_EMAIL_RECIPIENT}) and SMTP delivery
+ * ({@code SPRING_MAIL_HOST} plus optional user/password) are configured.
+ *
+ * <p>{@code application.yml} always defines {@code spring.mail.host} (falling
+ * back to an empty string when {@code SPRING_MAIL_HOST} is unset). That keeps
+ * the property present in the environment, which is enough for Spring Boot's
+ * {@code MailSenderAutoConfiguration} to register a {@link JavaMailSender}
+ * bean even though no real SMTP server was ever configured. So an empty
+ * {@link #smtpHost} is checked explicitly here — relying on
+ * {@code mailSenderProvider.getIfAvailable() == null} alone is not sufficient
+ * to detect "SMTP not configured".
+ */
 @Service
-@RequiredArgsConstructor
 public class EmailAlertService {
 
     private final VisionSecurityProperties properties;
     private final ObjectProvider<JavaMailSender> mailSenderProvider;
+    private final String smtpHost;
+
+    public EmailAlertService(
+            VisionSecurityProperties properties,
+            ObjectProvider<JavaMailSender> mailSenderProvider,
+            @Value("${spring.mail.host:}") String smtpHost) {
+        this.properties = properties;
+        this.mailSenderProvider = mailSenderProvider;
+        this.smtpHost = smtpHost == null ? "" : smtpHost;
+    }
 
     public CapabilityStatus capabilityStatus() {
         if (properties.getEmail().getRecipient().isBlank()) {
             return new CapabilityStatus("UNAVAILABLE", "Set VISION_SECURITY_EMAIL_RECIPIENT to enable alerts");
         }
-        if (mailSenderProvider.getIfAvailable() == null) {
-            return new CapabilityStatus("UNAVAILABLE", "Set spring.mail.* settings to enable SMTP delivery");
+        if (!isSmtpConfigured() || mailSenderProvider.getIfAvailable() == null) {
+            return new CapabilityStatus("UNAVAILABLE",
+                    "Set SPRING_MAIL_HOST (and SPRING_MAIL_USERNAME/SPRING_MAIL_PASSWORD if required) to enable SMTP delivery");
         }
         return new CapabilityStatus("AVAILABLE", "Configured for " + properties.getEmail().getRecipient());
     }
@@ -37,8 +61,8 @@ public class EmailAlertService {
         if (properties.getEmail().getRecipient().isBlank()) {
             return new EmailDelivery(false, false, "Alert email recipient is not configured");
         }
-        if (sender == null) {
-            return new EmailDelivery(false, false, "JavaMailSender is not configured");
+        if (!isSmtpConfigured() || sender == null) {
+            return new EmailDelivery(false, false, "SMTP host is not configured (set SPRING_MAIL_HOST)");
         }
 
         try {
@@ -65,8 +89,8 @@ public class EmailAlertService {
         if (properties.getEmail().getRecipient().isBlank()) {
             return new EmailDelivery(false, false, "Alert email recipient is not configured");
         }
-        if (sender == null) {
-            return new EmailDelivery(false, false, "JavaMailSender is not configured");
+        if (!isSmtpConfigured() || sender == null) {
+            return new EmailDelivery(false, false, "SMTP host is not configured (set SPRING_MAIL_HOST)");
         }
 
         try {
@@ -83,6 +107,10 @@ public class EmailAlertService {
         } catch (Exception ex) {
             return new EmailDelivery(true, false, ex.getMessage() == null ? "Test alert failed" : ex.getMessage());
         }
+    }
+
+    private boolean isSmtpConfigured() {
+        return !smtpHost.isBlank();
     }
 
     private String buildBody(IncidentRecord incident) {

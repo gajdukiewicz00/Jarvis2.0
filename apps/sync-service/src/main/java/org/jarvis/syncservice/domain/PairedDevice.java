@@ -29,6 +29,16 @@ public final class PairedDevice {
     public PairedDevice(String deviceId, String deviceLabel, byte[] identityPub,
                         byte[] devicePubKex, byte[] serverPubKex, SessionKeys sessionKey,
                         String routingId, Instant pairedAt) {
+        this(deviceId, deviceLabel, identityPub, devicePubKex, serverPubKex, sessionKey,
+                routingId, pairedAt, null);
+    }
+
+    /** Full reconstruction constructor — used by {@code FilePairingStore} to restore a
+     * device record from disk with its original {@code lastSeen}, rather than resetting
+     * it to {@code pairedAt} on every reload. */
+    public PairedDevice(String deviceId, String deviceLabel, byte[] identityPub,
+                        byte[] devicePubKex, byte[] serverPubKex, SessionKeys sessionKey,
+                        String routingId, Instant pairedAt, Instant lastSeen) {
         this.deviceId = Objects.requireNonNull(deviceId);
         this.deviceLabel = deviceLabel != null ? deviceLabel : "unnamed-device";
         this.identityPub = identityPub.clone();
@@ -37,7 +47,7 @@ public final class PairedDevice {
         this.sessionKey = Objects.requireNonNull(sessionKey);
         this.routingId = Objects.requireNonNull(routingId);
         this.pairedAt = pairedAt != null ? pairedAt : Instant.now();
-        this.lastSeen = this.pairedAt;
+        this.lastSeen = lastSeen != null ? lastSeen : this.pairedAt;
     }
 
     public String deviceId() { return deviceId; }

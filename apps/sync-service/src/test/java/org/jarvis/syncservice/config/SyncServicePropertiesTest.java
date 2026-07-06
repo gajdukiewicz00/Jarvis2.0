@@ -11,10 +11,12 @@ class SyncServicePropertiesTest {
         SyncServiceProperties props = new SyncServiceProperties();
 
         assertThat(props.getServerKeyPath()).isEqualTo("/var/lib/jarvis/sync/server-keys.json");
+        assertThat(props.getPairedDevicesPath()).isEqualTo("/var/lib/jarvis/sync/paired-devices.json");
+        assertThat(props.getReplayCacheStorePath()).isEqualTo("/var/lib/jarvis/sync/replay-cache.json");
         assertThat(props.getReplayCacheSizePerDevice()).isEqualTo(4096);
         assertThat(props.getPairingNonceTtlSeconds()).isEqualTo(120L);
         assertThat(props.getLifeTrackerUrl()).isEqualTo("http://life-tracker:8085");
-        assertThat(props.getOrchestratorUrl()).isEqualTo("http://orchestrator:8080");
+        assertThat(props.getOrchestratorUrl()).isEqualTo("http://orchestrator:8083");
         assertThat(props.getDispatchTimeoutMillis()).isEqualTo(1500L);
         assertThat(props.getRecordsDeltaDefaultPageSize()).isEqualTo(100);
         assertThat(props.getRecordsDeltaMaxPageSize()).isEqualTo(500);
@@ -22,10 +24,22 @@ class SyncServicePropertiesTest {
     }
 
     @Test
+    void defaultOrchestratorUrlUsesPort8083() {
+        // The orchestrator service listens on :8083, not :8080 — this default
+        // must match the orchestrator's actual listen port so dispatch works
+        // out-of-the-box before any JARVIS_SYNC_ORCHESTRATOR_URL override.
+        SyncServiceProperties props = new SyncServiceProperties();
+
+        assertThat(props.getOrchestratorUrl()).isEqualTo("http://orchestrator:8083");
+    }
+
+    @Test
     void settersOverrideEveryField() {
         SyncServiceProperties props = new SyncServiceProperties();
 
         props.setServerKeyPath("/tmp/keys.json");
+        props.setPairedDevicesPath("/tmp/paired-devices.json");
+        props.setReplayCacheStorePath("/tmp/replay-cache.json");
         props.setReplayCacheSizePerDevice(10);
         props.setPairingNonceTtlSeconds(30L);
         props.setLifeTrackerUrl("http://life-tracker-test:9000");
@@ -36,6 +50,8 @@ class SyncServicePropertiesTest {
         props.setRecordsConflictLogCapacity(50);
 
         assertThat(props.getServerKeyPath()).isEqualTo("/tmp/keys.json");
+        assertThat(props.getPairedDevicesPath()).isEqualTo("/tmp/paired-devices.json");
+        assertThat(props.getReplayCacheStorePath()).isEqualTo("/tmp/replay-cache.json");
         assertThat(props.getReplayCacheSizePerDevice()).isEqualTo(10);
         assertThat(props.getPairingNonceTtlSeconds()).isEqualTo(30L);
         assertThat(props.getLifeTrackerUrl()).isEqualTo("http://life-tracker-test:9000");

@@ -1,8 +1,6 @@
 package org.jarvis.syncservice.repository;
 
 import org.jarvis.syncservice.domain.PairedDevice;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,13 +8,14 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Phase 12 — volatile in-memory pairing store.
  *
- * <p>Process-local; acceptable for the diploma demo (one operator, one
- * desktop). A JPA implementation will replace this in Phase 12-bis when
- * sync-service runs on k8s with multiple replicas. Don't add features
- * here that wouldn't survive that swap.</p>
+ * <p>Superseded in production by {@link FilePairingStore} (Phase 12-bis),
+ * which is the only {@code @Component}-registered {@link PairingStore}
+ * implementation, so a sync-service restart no longer drops every paired
+ * device. This class is intentionally not Spring-managed anymore — it is
+ * kept as a lightweight, dependency-free {@link PairingStore} for unit
+ * tests that don't need file persistence (see {@code PairingServiceTest},
+ * {@code BlobInboxServiceTest}).</p>
  */
-@Component
-@ConditionalOnMissingBean(value = PairingStore.class, ignored = InMemoryPairingStore.class)
 public class InMemoryPairingStore implements PairingStore {
 
     private final ConcurrentHashMap<String, PairedDevice> byDeviceId = new ConcurrentHashMap<>();

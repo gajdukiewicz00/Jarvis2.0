@@ -12,10 +12,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class SyncServiceProperties {
 
     private String serverKeyPath = "/var/lib/jarvis/sync/server-keys.json";
+    private String pairedDevicesPath = "/var/lib/jarvis/sync/paired-devices.json";
+    private String replayCacheStorePath = "/var/lib/jarvis/sync/replay-cache.json";
     private int replayCacheSizePerDevice = 4096;
     private long pairingNonceTtlSeconds = 120;
     private String lifeTrackerUrl = "http://life-tracker:8085";
-    private String orchestratorUrl = "http://orchestrator:8080";
+    private String orchestratorUrl = "http://orchestrator:8083";
     private long dispatchTimeoutMillis = 1500;
     private int recordsDeltaDefaultPageSize = 100;
     private int recordsDeltaMaxPageSize = 500;
@@ -23,6 +25,10 @@ public class SyncServiceProperties {
 
     public String getServerKeyPath() { return serverKeyPath; }
     public void setServerKeyPath(String v) { this.serverKeyPath = v; }
+    public String getPairedDevicesPath() { return pairedDevicesPath; }
+    public void setPairedDevicesPath(String v) { this.pairedDevicesPath = v; }
+    public String getReplayCacheStorePath() { return replayCacheStorePath; }
+    public void setReplayCacheStorePath(String v) { this.replayCacheStorePath = v; }
     public int getReplayCacheSizePerDevice() { return replayCacheSizePerDevice; }
     public void setReplayCacheSizePerDevice(int v) { this.replayCacheSizePerDevice = v; }
     public long getPairingNonceTtlSeconds() { return pairingNonceTtlSeconds; }

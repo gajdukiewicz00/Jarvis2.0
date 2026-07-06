@@ -28,6 +28,13 @@ import java.util.UUID;
 @Component
 public class HttpDispatchClient implements DispatchClient {
 
+    /** Marks a FINANCE_ENTRY payload as an Android bank push-notification draft
+     * (see {@code BankNotificationListenerService.buildBankDraftPayload} on the
+     * Android side) rather than a user-confirmed transaction. Such drafts may
+     * have no {@code amount} at all, so they must never be posted to
+     * {@code /transaction} — they go through the free-text parser instead. */
+    private static final String BANK_NOTIFICATION_SOURCE = "BANK_NOTIFICATION";
+
     private final RestTemplate http;
     private final SyncServiceProperties props;
 
@@ -43,6 +50,9 @@ public class HttpDispatchClient implements DispatchClient {
     @Override
     public DispatchResult dispatchFinanceEntry(String userId, SyncPayload payload) {
         Map<String, Object> data = payload.getData();
+        if (BANK_NOTIFICATION_SOURCE.equals(data.get("source"))) {
+            return dispatchBankNotification(userId, payload);
+        }
         Map<String, Object> body = new HashMap<>();
         body.put("userId", userId);
         body.put("amount", data.get("amount"));
@@ -75,6 +85,39 @@ public class HttpDispatchClient implements DispatchClient {
             return DispatchResult.success();
         } catch (RestClientException e) {
             log.warn("life-tracker dispatch failed: {}", e.getMessage());
+            return DispatchResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Bank push-notification drafts (source=BANK_NOTIFICATION) carry free-form
+     * title/description text and usually no parsed amount, so they cannot be
+     * posted as a structured {@code /transaction}. Instead they go through
+     * life-tracker's deterministic notification parser with {@code store=true};
+     * life-tracker decides HIGH-confidence auto-save vs. review-inbox queuing.
+     */
+    private DispatchResult dispatchBankNotification(String userId, SyncPayload payload) {
+        Map<String, Object> data = payload.getData();
+        Object titleRaw = data.get("title");
+        Object descriptionRaw = data.get("description");
+        String title = titleRaw != null ? titleRaw.toString() : "";
+        String description = descriptionRaw != null ? descriptionRaw.toString() : "";
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("text", title + "\n" + description);
+        body.put("store", true);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-User-Id", userId);
+        headers.set("X-Client-Nonce", payload.getClientNonce());
+
+        try {
+            http.postForEntity(props.getLifeTrackerUrl() + "/api/v1/life/finance/parse-notification",
+                    new HttpEntity<>(body, headers), Map.class);
+            return DispatchResult.success();
+        } catch (RestClientException e) {
+            log.warn("life-tracker bank-notification dispatch failed: {}", e.getMessage());
             return DispatchResult.failure(e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }

@@ -119,6 +119,63 @@ class HttpDispatchClientTest {
     }
 
     @Test
+    void dispatchFinanceEntry_bankNotificationSource_routesToParseNotificationNotTransaction() {
+        server.expect(requestTo(LIFE_TRACKER_URL + "/api/v1/life/finance/parse-notification"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-User-Id", "dev-1"))
+                .andExpect(header("X-Client-Nonce", "n-bank-1"))
+                .andExpect(jsonPath("$.text").value("mBank\nCard payment PLN 12.34 at Zabka"))
+                .andExpect(jsonPath("$.store").value(true))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        SyncPayload payload = new SyncPayload(SyncPayloadKind.FINANCE_ENTRY, "n-bank-1",
+                Instant.parse("2026-06-06T10:00:00Z"),
+                Map.of("source", "BANK_NOTIFICATION",
+                        "title", "mBank",
+                        "description", "Card payment PLN 12.34 at Zabka",
+                        "needsReview", true));
+
+        DispatchResult result = client.dispatchFinanceEntry("dev-1", payload);
+
+        assertThat(result.ok()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void dispatchFinanceEntry_bankNotificationSource_neverPostsToTransactionEndpoint() {
+        // No expectation is registered for /transaction — if the client mistakenly posts
+        // there instead of /parse-notification, MockRestServiceServer.verify() below fails
+        // with "no further requests expected" / unmatched request, catching a routing regression.
+        server.expect(requestTo(LIFE_TRACKER_URL + "/api/v1/life/finance/parse-notification"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        SyncPayload payload = new SyncPayload(SyncPayloadKind.FINANCE_ENTRY, "n-bank-2",
+                Instant.now(),
+                Map.of("source", "BANK_NOTIFICATION", "title", "Revolut", "description", "no amount here"));
+
+        client.dispatchFinanceEntry("dev-1", payload);
+
+        server.verify();
+    }
+
+    @Test
+    void dispatchFinanceEntry_normalSource_stillPostsToTransaction() {
+        server.expect(requestTo(LIFE_TRACKER_URL + "/api/v1/life/finance/transaction"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.amount").value(4.5))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        SyncPayload payload = new SyncPayload(SyncPayloadKind.FINANCE_ENTRY, "n-normal-1",
+                Instant.parse("2026-06-06T10:00:00Z"),
+                Map.of("amount", 4.5, "currency", "EUR", "category", "coffee"));
+
+        DispatchResult result = client.dispatchFinanceEntry("dev-1", payload);
+
+        assertThat(result.ok()).isTrue();
+        server.verify();
+    }
+
+    @Test
     void dispatchHealthEntry_success_postsMappedBody() {
         server.expect(requestTo(LIFE_TRACKER_URL + "/api/v1/life/wellness/health-entry"))
                 .andExpect(method(HttpMethod.POST))

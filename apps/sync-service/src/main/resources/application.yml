@@ -19,13 +19,19 @@ jarvis:
     # Where the long-lived server X25519+Ed25519 keys are persisted (so paired
     # devices keep working across restarts). Created with mode 0600 on first boot.
     server-key-path: ${JARVIS_SYNC_SERVER_KEY_PATH:/var/lib/jarvis/sync/server-keys.json}
+    # Where paired-device records (incl. derived session keys) are persisted so a
+    # sync-service restart does not drop every paired phone. Created with mode 0600.
+    paired-devices-path: ${JARVIS_SYNC_PAIRED_DEVICES_PATH:/var/lib/jarvis/sync/paired-devices.json}
+    # Where the replay-protection nonce cache is persisted so replays are still
+    # rejected across a restart. Created with mode 0600.
+    replay-cache-store-path: ${JARVIS_SYNC_REPLAY_CACHE_STORE_PATH:/var/lib/jarvis/sync/replay-cache.json}
     # Replay window: at most this many recent nonces tracked per device.
     replay-cache-size-per-device: 4096
     # Pairing-init nonces are only valid this long.
     pairing-nonce-ttl-seconds: 120
     # Where decrypted payloads are dispatched.
     life-tracker-url: ${JARVIS_SYNC_LIFE_TRACKER_URL:http://life-tracker:8085}
-    orchestrator-url: ${JARVIS_SYNC_ORCHESTRATOR_URL:http://orchestrator:8080}
+    orchestrator-url: ${JARVIS_SYNC_ORCHESTRATOR_URL:http://orchestrator:8083}
     dispatch-timeout-millis: 1500
     # Delta-sync page size (GET /api/v1/sync/records/delta) when the caller omits ?limit,
     # and the hard cap applied to whatever ?limit the caller asks for.

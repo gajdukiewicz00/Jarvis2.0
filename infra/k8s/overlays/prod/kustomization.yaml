@@ -82,16 +82,16 @@ images:
     newTag: w6
   - name: jarvis/pc-control
     newName: localhost:5000/jarvis/pc-control
-    newTag: w6
+    newTag: w7
   - name: jarvis/smart-home-service
     newName: localhost:5000/jarvis/smart-home-service
     newTag: w6
   - name: jarvis/media-service
     newName: localhost:5000/jarvis/media-service
-    newTag: w6
+    newTag: w7
   - name: jarvis/agent-service
     newName: localhost:5000/jarvis/agent-service
-    newTag: w6
+    newTag: w7
   - name: jarvis/nlp-service
     newName: localhost:5000/jarvis/nlp-service
     newTag: w6
@@ -106,7 +106,7 @@ images:
     newTag: w6
   - name: jarvis/sync-service
     newName: localhost:5000/jarvis/sync-service
-    newTag: w6
+    newTag: w7
   - name: jarvis/llm-service
     newName: localhost:5000/jarvis/llm-service
     newTag: w6

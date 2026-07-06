@@ -27,6 +27,12 @@ jarvis:
     life-tracker-url: ${JARVIS_SYNC_LIFE_TRACKER_URL:http://life-tracker:8085}
     orchestrator-url: ${JARVIS_SYNC_ORCHESTRATOR_URL:http://orchestrator:8080}
     dispatch-timeout-millis: 1500
+    # Delta-sync page size (GET /api/v1/sync/records/delta) when the caller omits ?limit,
+    # and the hard cap applied to whatever ?limit the caller asks for.
+    records-delta-default-page-size: 100
+    records-delta-max-page-size: 500
+    # How many resolved conflicts the in-memory conflict log keeps (oldest evicted first).
+    records-conflict-log-capacity: 1000
 
 logging:
   level:

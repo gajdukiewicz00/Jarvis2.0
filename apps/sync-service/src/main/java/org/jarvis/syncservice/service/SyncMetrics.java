@@ -38,4 +38,10 @@ public class SyncMetrics {
                 "confidence", confidence == null ? "unknown" : confidence,
                 "stored", Boolean.toString(stored)).increment();
     }
+
+    /** One record was ingested via {@code POST /api/v1/sync/records}, tagged by
+     * outcome: {@code stored}, {@code duplicate}, or {@code conflict_resolved}. */
+    public void recordRecordIngest(String status) {
+        registry.counter("sync.records.ingest", "status", status).increment();
+    }
 }

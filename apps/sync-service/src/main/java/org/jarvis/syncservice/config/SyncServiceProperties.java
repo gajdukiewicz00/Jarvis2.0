@@ -17,6 +17,9 @@ public class SyncServiceProperties {
     private String lifeTrackerUrl = "http://life-tracker:8085";
     private String orchestratorUrl = "http://orchestrator:8080";
     private long dispatchTimeoutMillis = 1500;
+    private int recordsDeltaDefaultPageSize = 100;
+    private int recordsDeltaMaxPageSize = 500;
+    private int recordsConflictLogCapacity = 1000;
 
     public String getServerKeyPath() { return serverKeyPath; }
     public void setServerKeyPath(String v) { this.serverKeyPath = v; }
@@ -30,4 +33,10 @@ public class SyncServiceProperties {
     public void setOrchestratorUrl(String v) { this.orchestratorUrl = v; }
     public long getDispatchTimeoutMillis() { return dispatchTimeoutMillis; }
     public void setDispatchTimeoutMillis(long v) { this.dispatchTimeoutMillis = v; }
+    public int getRecordsDeltaDefaultPageSize() { return recordsDeltaDefaultPageSize; }
+    public void setRecordsDeltaDefaultPageSize(int v) { this.recordsDeltaDefaultPageSize = v; }
+    public int getRecordsDeltaMaxPageSize() { return recordsDeltaMaxPageSize; }
+    public void setRecordsDeltaMaxPageSize(int v) { this.recordsDeltaMaxPageSize = v; }
+    public int getRecordsConflictLogCapacity() { return recordsConflictLogCapacity; }
+    public void setRecordsConflictLogCapacity(int v) { this.recordsConflictLogCapacity = v; }
 }

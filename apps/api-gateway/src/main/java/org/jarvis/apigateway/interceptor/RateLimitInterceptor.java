@@ -20,7 +20,7 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     @Value("${rate-limit.max-requests-per-minute:100}")
     private int maxRequestsPerMinute;
 
-    private RateLimiter rateLimiter;
+    private volatile RateLimiter rateLimiter;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
@@ -31,10 +31,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         }
 
         if (rateLimiter == null) {
-            // Initialize rate limiter (permits per second)
-            double permitsPerSecond = maxRequestsPerMinute / 60.0;
-            rateLimiter = RateLimiter.create(permitsPerSecond);
-            log.info("Rate limiter initialized: {} requests/minute", maxRequestsPerMinute);
+            synchronized (this) {
+                if (rateLimiter == null) {
+                    // Initialize rate limiter (permits per second)
+                    double permitsPerSecond = maxRequestsPerMinute / 60.0;
+                    rateLimiter = createRateLimiter(permitsPerSecond);
+                    log.info("Rate limiter initialized: {} requests/minute", maxRequestsPerMinute);
+                }
+            }
         }
 
         if (!rateLimiter.tryAcquire()) {
@@ -45,5 +49,13 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    /**
+     * Creates the underlying rate limiter. Extracted so tests can override it to
+     * observe/verify single-initialization behavior under concurrent access.
+     */
+    RateLimiter createRateLimiter(double permitsPerSecond) {
+        return RateLimiter.create(permitsPerSecond);
     }
 }

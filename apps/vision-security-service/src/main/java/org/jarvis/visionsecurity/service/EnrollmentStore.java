@@ -138,7 +138,12 @@ public class EnrollmentStore {
     }
 
     public Path userDirectory(String userId) {
-        return Path.of(properties.getStorage().getRoot(), "users", sanitize(userId));
+        Path usersRoot = Path.of(properties.getStorage().getRoot(), "users").normalize();
+        Path resolved = usersRoot.resolve(sanitize(userId)).normalize();
+        if (resolved.equals(usersRoot) || !resolved.startsWith(usersRoot)) {
+            throw new IllegalArgumentException("userId escapes the allowed storage directory");
+        }
+        return resolved;
     }
 
     public Path samplesDirectory(String userId) {
@@ -150,7 +155,11 @@ public class EnrollmentStore {
     }
 
     private String sanitize(String userId) {
-        return userId.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String cleaned = userId.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (cleaned.isBlank() || cleaned.equals(".") || cleaned.equals("..")) {
+            throw new IllegalArgumentException("Invalid userId");
+        }
+        return cleaned;
     }
 
     private void recreateDirectory(Path directory) throws IOException {

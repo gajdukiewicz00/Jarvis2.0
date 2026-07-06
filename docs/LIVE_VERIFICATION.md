@@ -1,5 +1,29 @@
 # Jarvis 2.0 — Live Verification
 
+## Acceptance pass — 2026-07-06 (node IP `10.110.0.58`)
+
+Full acceptance pass re-run. Cluster: **28/28 pods Running, 24/24 deployments Ready.**
+
+| Check | Result |
+|-------|--------|
+| `./jarvis status` | ✅ 24/24 Ready, gateway UP, host LLM :18080 = 200, host TTS :18090 = 200, host-model-daemon endpoint == node IP |
+| `./jarvis doctor` | ✅ all checks OK (k3s active, node Ready, brains 200, all pods/deployments, gateway UP, endpoint wired) |
+| `./jarvis drift-check` | ✅ **18/18** live images match the pinned overlay tags |
+| `./jarvis reboot-verify` | ✅ **7 passed / 0 failed** (k3s svc, k3s API, node IP, host-model endpoint, pods Ready, gateway health, brain-via-cluster) |
+| `./jarvis smoke-e2e` | ✅ **4 passed / 0 failed** (login, brain chat `model=qwen3-14b-q4_k_m.gguf`, memory /search 200, planner /llm/recommend 200) |
+| **Prometheus scrapes agent/media/sync** | ❌ **NOT scraped** — see gap below |
+| memory-service Prometheus target | ⚠️ reports **down** (has `scrape=true port=8093` but target unhealthy — investigate) |
+
+### ❗ Open gap — Prometheus visibility (operator-gated)
+Live `agent-service`, `media-service`, `sync-service` deployments carry **no** `prometheus.io/scrape` annotation, and the live NetworkPolicy `jarvis-services-ingress-from-prometheus` (67d old) does **not** include them. The scrape patches + netpol allowlist are **committed in the repo but not applied live** (the agent is guard-blocked from `kubectl apply` of NetworkPolicy). Operator fix:
+```
+sudo k3s kubectl -n jarvis-prod apply -f ~/Jarvis/Jarvis2.0/infra/k8s/overlays/prod/networkpolicy-allowlist.yaml
+sudo k3s kubectl apply -k ~/Jarvis/Jarvis2.0/infra/k8s/overlays/prod
+```
+After apply, re-check with the Prometheus `/api/v1/targets` query (agent/media/sync should become `up`). This also re-applies the base observability netpol change that added agent/media/sync to the ingress-from-prometheus allowlist.
+
+---
+
 _Run: 2026-07-05 23:49 CEST_ · node IP `10.110.0.58`
 
 ## 1. `./jarvis doctor`

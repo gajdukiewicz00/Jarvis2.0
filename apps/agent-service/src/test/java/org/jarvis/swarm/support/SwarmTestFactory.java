@@ -82,7 +82,8 @@ public final class SwarmTestFactory {
                 new SwarmProperties.Workspace(sandboxDir.toString(), gitRepoDir),
                 new SwarmProperties.Queue(64, 3),
                 new SwarmProperties.Task(120, 1),
-                new SwarmProperties.SwarmRun(10, 7));
+                new SwarmProperties.SwarmRun(10, 7),
+                new SwarmProperties.Retention(true, 30, 50, 3_600_000L));
     }
 
     /** Build an engine. {@code grantedCsv} is the system ToolPermissionPolicy grant set. */

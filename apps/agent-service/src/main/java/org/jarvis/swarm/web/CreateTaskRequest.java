@@ -7,14 +7,23 @@ import java.util.List;
 /**
  * Create-task request.
  *
- * @param role        role name (CODER/TESTER/RESEARCH/DOCS/SECURITY/MEDIA/FINANCE)
- * @param goal        the task goal
- * @param permissions permission names the user grants to this task (e.g. ["RUN_SHELL"])
- * @param dryRun      when true, propose actions without side effects
+ * @param role           role name (CODER/TESTER/RESEARCH/DOCS/SECURITY/MEDIA/FINANCE)
+ * @param goal           the task goal
+ * @param permissions    permission names the user grants to this task (e.g. ["RUN_SHELL"])
+ * @param dryRun         when true, propose actions without side effects
+ * @param idempotencyKey optional client-supplied key; a repeated submit with the same key
+ *                       (scoped to the caller) returns the existing task instead of starting
+ *                       a second run
  */
 public record CreateTaskRequest(
         @NotBlank String role,
         @NotBlank String goal,
         List<String> permissions,
-        boolean dryRun) {
+        boolean dryRun,
+        String idempotencyKey) {
+
+    /** Convenience constructor for callers that don't supply an idempotency key. */
+    public CreateTaskRequest(String role, String goal, List<String> permissions, boolean dryRun) {
+        this(role, goal, permissions, dryRun, null);
+    }
 }

@@ -38,7 +38,8 @@ class AgentTaskJpaRepositoryTest {
                         Set.of(ToolPermission.READ_FILES, ToolPermission.WRITE_FILES), false, 1,
                         "corr-1", "swarm-1", now)
                 .withGranted(Set.of(ToolPermission.WRITE_FILES))
-                .withSandbox("/tmp/jarvis-agents/t1");
+                .withSandbox("/tmp/jarvis-agents/t1")
+                .withIdempotencyKey("client-key-1");
         AgentTask running = task.queued(now).running(now);
         AgentTask completed = running.completed("done", List.of("/tmp/a.txt", "/tmp/b.txt"),
                 List.of("risk-a"), now.plusSeconds(5));
@@ -63,6 +64,39 @@ class AgentTaskJpaRepositoryTest {
         assertThat(domain.resultSummary()).isEqualTo("done");
         assertThat(domain.correlationId()).isEqualTo("corr-1");
         assertThat(domain.swarmId()).isEqualTo("swarm-1");
+        assertThat(domain.idempotencyKey()).isEqualTo("client-key-1");
+    }
+
+    @Test
+    void findByUserIdAndIdempotencyKeyFindsTheMatchingRecord() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        AgentTask task = AgentTask.created("t-idem", "u1", AgentRole.CODER, "build a thing",
+                Set.of(), false, 1, "corr-1", "swarm-1", now).withIdempotencyKey("key-1");
+        repository.save(AgentTaskEntity.fromDomain(task));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(repository.findByUserIdAndIdempotencyKey("u1", "key-1")).isPresent();
+        assertThat(repository.findByUserIdAndIdempotencyKey("u2", "key-1")).isEmpty();
+        assertThat(repository.findByUserIdAndIdempotencyKey("u1", "other-key")).isEmpty();
+    }
+
+    @Test
+    void findByStatusInReturnsOnlyMatchingStatuses() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        AgentTask completed = AgentTask.created("done", "u1", AgentRole.CODER, "goal",
+                Set.of(), false, 1, "corr-1", null, now).queued(now).running(now)
+                .completed("done", List.of(), List.of(), now);
+        AgentTask stillQueued = AgentTask.created("queued", "u1", AgentRole.CODER, "goal",
+                Set.of(), false, 1, "corr-2", null, now).queued(now);
+        repository.save(AgentTaskEntity.fromDomain(completed));
+        repository.save(AgentTaskEntity.fromDomain(stillQueued));
+        entityManager.flush();
+        entityManager.clear();
+
+        List<AgentTaskEntity> found = repository.findByStatusIn(List.of(AgentTaskStatus.COMPLETED));
+
+        assertThat(found).extracting(AgentTaskEntity::getTaskId).containsExactly("done");
     }
 
     @Test

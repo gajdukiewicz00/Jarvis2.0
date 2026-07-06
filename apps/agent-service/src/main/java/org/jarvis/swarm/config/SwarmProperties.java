@@ -12,7 +12,8 @@ public record SwarmProperties(
         @DefaultValue Workspace workspace,
         @DefaultValue Queue queue,
         @DefaultValue Task task,
-        @DefaultValue SwarmRun swarmRun) {
+        @DefaultValue SwarmRun swarmRun,
+        @DefaultValue Retention retention) {
 
     public record Workspace(
             @DefaultValue("/tmp/jarvis-agents") String dir,
@@ -31,4 +32,13 @@ public record SwarmProperties(
     public record SwarmRun(
             @DefaultValue("60") int waitTimeoutSeconds,
             @DefaultValue("7") int maxRoles) {}
+
+    /** Retention/TTL sweep of finished agent-task records (see AgentTaskRetentionSweeper). */
+    public record Retention(
+            @DefaultValue("true") boolean enabled,
+            // Runs older than this (by createdAt) are eligible for deletion.
+            @DefaultValue("30") int maxAgeDays,
+            // Always kept per user regardless of age, so a quiet user never loses all history.
+            @DefaultValue("50") int keepPerUser,
+            @DefaultValue("3600000") long sweepIntervalMs) {}
 }

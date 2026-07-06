@@ -1,6 +1,7 @@
 package org.jarvis.swarm.task.jpa;
 
 import org.jarvis.swarm.task.AgentTask;
+import org.jarvis.swarm.task.AgentTaskStatus;
 import org.jarvis.swarm.task.AgentTaskStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
@@ -8,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Postgres-backed {@link AgentTaskStore}: every lifecycle transition is written through
@@ -54,5 +56,29 @@ public class JpaAgentTaskStore implements AgentTaskStore {
         return repository.findBySwarmIdOrderByCreatedAtAsc(swarmId).stream()
                 .map(AgentTaskEntity::toDomain)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AgentTask> findByIdempotencyKey(String userId, String idempotencyKey) {
+        return repository.findByUserIdAndIdempotencyKey(userId, idempotencyKey).map(AgentTaskEntity::toDomain);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AgentTask> findByStatuses(Set<AgentTaskStatus> statuses) {
+        return repository.findByStatusIn(statuses).stream()
+                .map(AgentTaskEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteById(String id) {
+        if (!repository.existsById(id)) {
+            return false;
+        }
+        repository.deleteById(id);
+        return true;
     }
 }

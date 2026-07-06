@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -83,8 +84,28 @@ public class AgentTaskService {
     /** Create + queue a task. Returns immediately with the QUEUED task. */
     public AgentTask submit(String userId, AgentRole role, String goal, Set<ToolPermission> requested,
                             boolean dryRun, String swarmId, String correlationId) {
+        return submit(userId, role, goal, requested, dryRun, swarmId, correlationId, null);
+    }
+
+    /**
+     * Create + queue a task, honoring an optional client idempotency key: a repeated
+     * submit for the same user + key returns the ALREADY-existing task (whatever state
+     * it has reached) instead of starting a second run. The key is not validated against
+     * the goal/role/permissions of the original request — a mismatched replay simply
+     * gets the original task back, mirroring the "return the existing result" contract
+     * rather than treating it as a conflict.
+     */
+    public AgentTask submit(String userId, AgentRole role, String goal, Set<ToolPermission> requested,
+                            boolean dryRun, String swarmId, String correlationId, String idempotencyKey) {
         if (goal == null || goal.isBlank()) {
             throw new IllegalArgumentException("goal is required");
+        }
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            Optional<AgentTask> existing = store.findByIdempotencyKey(userId, idempotencyKey);
+            if (existing.isPresent()) {
+                metrics.replayed();
+                return existing.get();
+            }
         }
         RoleDefinition def = catalog.definition(role);
         String taskId = UUID.randomUUID().toString();
@@ -93,7 +114,8 @@ public class AgentTaskService {
 
         AgentTask task = AgentTask.created(taskId, userId, role, goal, requested, dryRun,
                         def.maxRetries(), corr, swarmId, clock.instant())
-                .withGranted(granted);
+                .withGranted(granted)
+                .withIdempotencyKey(idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey);
         store.save(task);
         audit.lifecycle(taskId, corr, role.name(), "CREATED");
 
@@ -124,6 +146,11 @@ public class AgentTaskService {
 
     public RoleResult resultOf(String id) {
         return results.get(id);
+    }
+
+    /** Drops the cached {@link RoleResult} for a task removed by retention cleanup. */
+    public void evictResult(String taskId) {
+        results.remove(taskId);
     }
 
     public List<AgentTask> listTasks(String userId) {

@@ -34,7 +34,8 @@ public record AgentTask(
         List<String> artifacts,
         List<String> risks,
         String correlationId,
-        String swarmId) {
+        String swarmId,
+        String idempotencyKey) {
 
     public AgentTask {
         permissionsRequested = permissionsRequested == null ? Set.of() : Set.copyOf(permissionsRequested);
@@ -48,7 +49,7 @@ public record AgentTask(
                                     String correlationId, String swarmId, Instant now) {
         return new AgentTask(taskId, userId, role, goal, AgentTaskStatus.CREATED,
                 requested, Set.of(), null, dryRun, 0, maxRetries,
-                now, now, null, null, null, null, List.of(), List.of(), correlationId, swarmId);
+                now, now, null, null, null, null, List.of(), List.of(), correlationId, swarmId, null);
     }
 
     private AgentTask to(AgentTaskStatus target, Instant now) {
@@ -67,7 +68,8 @@ public record AgentTask(
         return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,
                 t.permissionsGranted, t.sandboxPath, t.dryRun, t.attempt, t.maxRetries,
                 t.createdAt, now, startedAt == null ? now : startedAt, t.finishedAt,
-                t.errorMessage, t.resultSummary, t.artifacts, t.risks, t.correlationId, t.swarmId);
+                t.errorMessage, t.resultSummary, t.artifacts, t.risks, t.correlationId, t.swarmId,
+                t.idempotencyKey);
     }
 
     public AgentTask paused(Instant now) {
@@ -84,7 +86,8 @@ public record AgentTask(
         AgentTask t = to(AgentTaskStatus.COMPLETED, now);
         return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,
                 t.permissionsGranted, t.sandboxPath, t.dryRun, t.attempt, t.maxRetries,
-                t.createdAt, now, t.startedAt, now, null, summary, artifacts, risks, t.correlationId, t.swarmId);
+                t.createdAt, now, t.startedAt, now, null, summary, artifacts, risks, t.correlationId,
+                t.swarmId, t.idempotencyKey);
     }
 
     public AgentTask failed(String message, Instant now) {
@@ -92,7 +95,7 @@ public record AgentTask(
         return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,
                 t.permissionsGranted, t.sandboxPath, t.dryRun, t.attempt, t.maxRetries,
                 t.createdAt, now, t.startedAt, now, message, t.resultSummary, t.artifacts, t.risks,
-                t.correlationId, t.swarmId);
+                t.correlationId, t.swarmId, t.idempotencyKey);
     }
 
     public AgentTask cancelled(Instant now) {
@@ -101,7 +104,7 @@ public record AgentTask(
                 t.permissionsGranted, t.sandboxPath, t.dryRun, t.attempt, t.maxRetries,
                 t.createdAt, now, t.startedAt, now,
                 t.errorMessage == null ? "cancelled_by_user" : t.errorMessage,
-                t.resultSummary, t.artifacts, t.risks, t.correlationId, t.swarmId);
+                t.resultSummary, t.artifacts, t.risks, t.correlationId, t.swarmId, t.idempotencyKey);
     }
 
     /** Retry a FAILED task: back to QUEUED with the attempt counter incremented. */
@@ -113,21 +116,29 @@ public record AgentTask(
         return new AgentTask(t.taskId, t.userId, t.role, t.goal, t.status, t.permissionsRequested,
                 t.permissionsGranted, t.sandboxPath, t.dryRun, attempt + 1, t.maxRetries,
                 t.createdAt, now, t.startedAt, null, null, t.resultSummary, t.artifacts, t.risks,
-                t.correlationId, t.swarmId);
+                t.correlationId, t.swarmId, t.idempotencyKey);
     }
 
     public AgentTask withGranted(Set<ToolPermission> granted) {
         return new AgentTask(taskId, userId, role, goal, status, permissionsRequested,
                 granted, sandboxPath, dryRun, attempt, maxRetries,
                 createdAt, updatedAt, startedAt, finishedAt, errorMessage, resultSummary,
-                artifacts, risks, correlationId, swarmId);
+                artifacts, risks, correlationId, swarmId, idempotencyKey);
     }
 
     public AgentTask withSandbox(String path) {
         return new AgentTask(taskId, userId, role, goal, status, permissionsRequested,
                 permissionsGranted, path, dryRun, attempt, maxRetries,
                 createdAt, updatedAt, startedAt, finishedAt, errorMessage, resultSummary,
-                artifacts, risks, correlationId, swarmId);
+                artifacts, risks, correlationId, swarmId, idempotencyKey);
+    }
+
+    /** Attach the client-supplied idempotency key so a replayed submit can be looked up and returned as-is. */
+    public AgentTask withIdempotencyKey(String key) {
+        return new AgentTask(taskId, userId, role, goal, status, permissionsRequested,
+                permissionsGranted, sandboxPath, dryRun, attempt, maxRetries,
+                createdAt, updatedAt, startedAt, finishedAt, errorMessage, resultSummary,
+                artifacts, risks, correlationId, swarmId, key);
     }
 
     public boolean isGranted(ToolPermission permission) {
@@ -138,6 +149,6 @@ public record AgentTask(
         return new AgentTask(taskId, userId, role, goal, newStatus, permissionsRequested,
                 permissionsGranted, sandboxPath, dryRun, attempt, maxRetries,
                 createdAt, now, startedAt, finishedAt, errorMessage, resultSummary,
-                artifacts, risks, correlationId, swarmId);
+                artifacts, risks, correlationId, swarmId, idempotencyKey);
     }
 }

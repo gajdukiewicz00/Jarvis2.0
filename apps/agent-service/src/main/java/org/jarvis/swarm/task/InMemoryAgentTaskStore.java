@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -46,5 +47,24 @@ public class InMemoryAgentTaskStore implements AgentTaskStore {
                 .filter(t -> swarmId.equals(t.swarmId()))
                 .sorted(Comparator.comparing(AgentTask::createdAt))
                 .toList();
+    }
+
+    @Override
+    public Optional<AgentTask> findByIdempotencyKey(String userId, String idempotencyKey) {
+        return tasks.values().stream()
+                .filter(t -> userId.equals(t.userId()) && idempotencyKey.equals(t.idempotencyKey()))
+                .findFirst();
+    }
+
+    @Override
+    public List<AgentTask> findByStatuses(Set<AgentTaskStatus> statuses) {
+        return tasks.values().stream()
+                .filter(t -> statuses.contains(t.status()))
+                .toList();
+    }
+
+    @Override
+    public boolean deleteById(String id) {
+        return tasks.remove(id) != null;
     }
 }

@@ -53,6 +53,13 @@ swarm:
     # Max seconds the coordinator waits for all child tasks before reporting partial results.
     wait-timeout-seconds: ${SWARM_RUN_WAIT_TIMEOUT:60}
     max-roles: ${SWARM_MAX_ROLES:7}
+  retention:
+    # Periodic sweep of finished (COMPLETED/FAILED/CANCELLED) task records — never touches
+    # an active task regardless of age. The newest keep-per-user tasks are always kept.
+    enabled: ${SWARM_RETENTION_ENABLED:true}
+    max-age-days: ${SWARM_RETENTION_MAX_AGE_DAYS:30}
+    keep-per-user: ${SWARM_RETENTION_KEEP_PER_USER:50}
+    sweep-interval-ms: ${SWARM_RETENTION_SWEEP_INTERVAL_MS:3600000}
 
 # Reuse the shared safety policy. Conservative defaults: dangerous perms NOT granted.
 jarvis:

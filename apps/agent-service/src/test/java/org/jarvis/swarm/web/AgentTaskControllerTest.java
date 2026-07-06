@@ -53,7 +53,7 @@ class AgentTaskControllerTest {
     @Test
     void createSubmitsTaskAndReturnsAccepted() {
         when(taskService.submit(eq("u1"), eq(AgentRole.CODER), eq("build a thing"),
-                anySet(), eq(true), isNull(), isNull())).thenReturn(sampleTask);
+                anySet(), eq(true), isNull(), isNull(), isNull())).thenReturn(sampleTask);
         when(taskService.resultOf(sampleTask.taskId())).thenReturn(null);
         CreateTaskRequest request = new CreateTaskRequest("CODER", "build a thing",
                 List.of("WRITE_FILES"), true);
@@ -63,6 +63,21 @@ class AgentTaskControllerTest {
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         assertThat(resp.getBody().taskId()).isEqualTo(sampleTask.taskId());
         assertThat(resp.getBody().goal()).isEqualTo("build a thing");
+    }
+
+    @Test
+    void createForwardsClientIdempotencyKeyToTaskService() {
+        when(taskService.submit(eq("u1"), eq(AgentRole.CODER), eq("build a thing"),
+                anySet(), eq(true), isNull(), isNull(), eq("client-key-1"))).thenReturn(sampleTask);
+        when(taskService.resultOf(sampleTask.taskId())).thenReturn(null);
+        CreateTaskRequest request = new CreateTaskRequest("CODER", "build a thing",
+                List.of("WRITE_FILES"), true, "client-key-1");
+
+        ResponseEntity<TaskView> resp = controller.create(request, requestWithUser("u1"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        verify(taskService).submit(eq("u1"), eq(AgentRole.CODER), eq("build a thing"),
+                anySet(), eq(true), isNull(), isNull(), eq("client-key-1"));
     }
 
     @Test

@@ -7,6 +7,7 @@ import org.jarvis.swarm.role.AgentRole;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Optional;
@@ -78,5 +79,56 @@ class FileBackedAgentTaskStoreTest {
 
         FileBackedAgentTaskStore reloaded = new FileBackedAgentTaskStore(mapper, tmp.toString());
         assertThat(reloaded.findById("t1").orElseThrow().status()).isEqualTo(AgentTaskStatus.RUNNING);
+    }
+
+    @Test
+    void findByIdempotencyKeyMatchesOnlyTheOwningUser() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        AgentTask task = AgentTask.created("t1", "u1", AgentRole.CODER, "build a thing",
+                Set.of(), false, 1, "corr-1", "swarm-1", now).withIdempotencyKey("key-1");
+
+        FileBackedAgentTaskStore store = new FileBackedAgentTaskStore(mapper, tmp.toString());
+        store.save(task);
+
+        assertThat(store.findByIdempotencyKey("u1", "key-1")).isPresent();
+        assertThat(store.findByIdempotencyKey("u2", "key-1")).isEmpty();
+        assertThat(store.findByIdempotencyKey("u1", "other-key")).isEmpty();
+    }
+
+    @Test
+    void findByStatusesReturnsOnlyMatchingTasks() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        AgentTask completed = AgentTask.created("done", "u1", AgentRole.CODER, "goal",
+                Set.of(), false, 1, "corr-1", null, now).queued(now).running(now)
+                .completed("done", java.util.List.of(), java.util.List.of(), now);
+        AgentTask stillQueued = AgentTask.created("queued", "u1", AgentRole.CODER, "goal",
+                Set.of(), false, 1, "corr-2", null, now).queued(now);
+
+        FileBackedAgentTaskStore store = new FileBackedAgentTaskStore(mapper, tmp.toString());
+        store.save(completed);
+        store.save(stillQueued);
+
+        assertThat(store.findByStatuses(Set.of(AgentTaskStatus.COMPLETED)))
+                .extracting(AgentTask::taskId).containsExactly("done");
+    }
+
+    @Test
+    void deleteByIdRemovesTaskAndItsBackingFile() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        AgentTask task = AgentTask.created("t1", "u1", AgentRole.CODER, "build a thing",
+                Set.of(), false, 1, "corr-1", "swarm-1", now);
+
+        FileBackedAgentTaskStore store = new FileBackedAgentTaskStore(mapper, tmp.toString());
+        store.save(task);
+
+        assertThat(store.deleteById("t1")).isTrue();
+        assertThat(store.findById("t1")).isEmpty();
+        assertThat(Files.exists(tmp.resolve("t1.json"))).isFalse();
+    }
+
+    @Test
+    void deleteByIdReturnsFalseWhenTaskDoesNotExist() {
+        FileBackedAgentTaskStore store = new FileBackedAgentTaskStore(mapper, tmp.toString());
+        assertThat(store.deleteById("missing")).isFalse();
     }
 }

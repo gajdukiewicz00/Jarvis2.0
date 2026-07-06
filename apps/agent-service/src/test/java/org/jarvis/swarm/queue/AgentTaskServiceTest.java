@@ -137,6 +137,68 @@ class AgentTaskServiceTest {
     }
 
     @Test
+    void submitWithSameIdempotencyKeyReturnsExistingTaskInsteadOfRunningAgain() {
+        AtomicInteger calls = new AtomicInteger();
+        RoleExecutor counting = new RoleExecutor() {
+            @Override
+            public AgentRole role() {
+                return AgentRole.CODER;
+            }
+
+            @Override
+            public RoleResult execute(ExecutionContext ctx) {
+                calls.incrementAndGet();
+                return RoleResult.success("done", null, List.of(), List.of(), List.of(), List.of());
+            }
+        };
+        var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES",
+                new org.jarvis.swarm.support.SameThreadExecutorService(), List.of(counting));
+
+        AgentTask first = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), false, null, null, "client-key-1");
+        AgentTask second = engine.taskService().submit("u1", AgentRole.CODER, "a different goal",
+                Set.of(), false, null, null, "client-key-1");
+
+        assertThat(second.taskId()).isEqualTo(first.taskId());
+        assertThat(calls.get()).isEqualTo(1);
+        assertThat(engine.taskService().listTasks("u1")).hasSize(1);
+    }
+
+    @Test
+    void submitWithDifferentIdempotencyKeysRunsTwice() {
+        var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES");
+        AgentTask first = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null, "key-a");
+        AgentTask second = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null, "key-b");
+
+        assertThat(second.taskId()).isNotEqualTo(first.taskId());
+        assertThat(engine.taskService().listTasks("u1")).hasSize(2);
+    }
+
+    @Test
+    void submitWithSameIdempotencyKeyButDifferentUserRunsTwice() {
+        var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES");
+        AgentTask first = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null, "shared-key");
+        AgentTask second = engine.taskService().submit("u2", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null, "shared-key");
+
+        assertThat(second.taskId()).isNotEqualTo(first.taskId());
+    }
+
+    @Test
+    void submitWithoutIdempotencyKeyAlwaysRunsANewTask() {
+        var engine = SwarmTestFactory.engine(tmp, "READ_FILES,WRITE_FILES");
+        AgentTask first = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null);
+        AgentTask second = engine.taskService().submit("u1", AgentRole.CODER, "build a thing",
+                Set.of(), true, null, null);
+
+        assertThat(second.taskId()).isNotEqualTo(first.taskId());
+    }
+
+    @Test
     void retriesOnFailureUntilRoleBudgetThenSucceeds() {
         AtomicInteger calls = new AtomicInteger();
         RoleExecutor flaky = new RoleExecutor() {

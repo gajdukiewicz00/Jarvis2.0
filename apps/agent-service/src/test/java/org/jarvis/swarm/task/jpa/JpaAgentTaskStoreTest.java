@@ -2,6 +2,7 @@ package org.jarvis.swarm.task.jpa;
 
 import org.jarvis.swarm.role.AgentRole;
 import org.jarvis.swarm.task.AgentTask;
+import org.jarvis.swarm.task.AgentTaskStatus;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -88,5 +90,50 @@ class JpaAgentTaskStoreTest {
 
         assertThat(found).extracting(AgentTask::taskId).containsExactly("t1");
         verify(repository).findBySwarmIdOrderByCreatedAtAsc("swarm-1");
+    }
+
+    @Test
+    void findByIdempotencyKeyDelegatesToRepositoryAndMapsBack() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        AgentTaskEntity entity = AgentTaskEntity.fromDomain(sampleTask("t1", now).withIdempotencyKey("key-1"));
+        when(repository.findByUserIdAndIdempotencyKey("u1", "key-1")).thenReturn(Optional.of(entity));
+
+        Optional<AgentTask> found = store.findByIdempotencyKey("u1", "key-1");
+
+        assertThat(found).isPresent();
+        assertThat(found.get().idempotencyKey()).isEqualTo("key-1");
+    }
+
+    @Test
+    void findByIdempotencyKeyReturnsEmptyWhenRepositoryReturnsEmpty() {
+        when(repository.findByUserIdAndIdempotencyKey("u1", "missing")).thenReturn(Optional.empty());
+
+        assertThat(store.findByIdempotencyKey("u1", "missing")).isEmpty();
+    }
+
+    @Test
+    void findByStatusesDelegatesToRepository() {
+        Instant now = Instant.parse("2026-06-24T10:00:00Z");
+        List<AgentTaskEntity> entities = List.of(AgentTaskEntity.fromDomain(sampleTask("t1", now)));
+        when(repository.findByStatusIn(anyCollection())).thenReturn(entities);
+
+        List<AgentTask> found = store.findByStatuses(Set.of(AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED));
+
+        assertThat(found).extracting(AgentTask::taskId).containsExactly("t1");
+    }
+
+    @Test
+    void deleteByIdReturnsFalseWhenTaskDoesNotExist() {
+        when(repository.existsById("missing")).thenReturn(false);
+
+        assertThat(store.deleteById("missing")).isFalse();
+    }
+
+    @Test
+    void deleteByIdDeletesThenReturnsTrueWhenTaskExists() {
+        when(repository.existsById("t1")).thenReturn(true);
+
+        assertThat(store.deleteById("t1")).isTrue();
+        verify(repository).deleteById("t1");
     }
 }

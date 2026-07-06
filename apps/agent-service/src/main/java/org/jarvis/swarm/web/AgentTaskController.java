@@ -41,7 +41,7 @@ public class AgentTaskController {
         AgentRole role = AgentRole.fromText(request.role());
         Set<ToolPermission> requested = RequestParser.parsePermissions(request.permissions());
         AgentTask task = taskService.submit(userId, role, request.goal(), requested,
-                request.dryRun(), null, null);
+                request.dryRun(), null, null, request.idempotencyKey());
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(view(task));
     }
 

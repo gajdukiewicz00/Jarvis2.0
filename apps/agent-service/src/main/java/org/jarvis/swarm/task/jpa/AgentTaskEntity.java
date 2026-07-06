@@ -99,6 +99,9 @@ public class AgentTaskEntity {
     @Column(name = "swarm_id")
     private String swarmId;
 
+    @Column(name = "idempotency_key")
+    private String idempotencyKey;
+
     protected AgentTaskEntity() {
         // JPA
     }
@@ -126,6 +129,7 @@ public class AgentTaskEntity {
         entity.risks = task.risks();
         entity.correlationId = task.correlationId();
         entity.swarmId = task.swarmId();
+        entity.idempotencyKey = task.idempotencyKey();
         return entity;
     }
 
@@ -133,6 +137,6 @@ public class AgentTaskEntity {
         return new AgentTask(taskId, userId, role, goal, status,
                 permissionsRequested, permissionsGranted, sandboxPath, dryRun,
                 attempt, maxRetries, createdAt, updatedAt, startedAt, finishedAt,
-                errorMessage, resultSummary, artifacts, risks, correlationId, swarmId);
+                errorMessage, resultSummary, artifacts, risks, correlationId, swarmId, idempotencyKey);
     }
 }

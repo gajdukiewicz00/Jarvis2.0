@@ -43,6 +43,24 @@ class EnvelopeJsonTest {
     }
 
     @Test
+    void unrecognizedKindResolvesToUnknownViaJsonEnumDefaultValue() throws Exception {
+        // Documented forward-compat guarantee (SyncPayloadKind.java javadoc): a newer client
+        // shipping a kind this build hasn't heard of must degrade to UNKNOWN, not blow up.
+        // This only works if UNKNOWN carries @JsonEnumDefaultValue *and* the mapper enables
+        // READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE — exercise exactly that combination.
+        String s = "{\"kind\":\"LOCATION_PING\",\"clientNonce\":\"n2\",\"data\":{\"k\":\"v\"}}";
+        ObjectMapper defaultValueMapper = new ObjectMapper()
+                .configure(
+                        com.fasterxml.jackson.databind.DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE,
+                        true);
+
+        SyncPayload p = defaultValueMapper.readValue(s, SyncPayload.class);
+
+        assertThat(p.getKind()).isEqualTo(SyncPayloadKind.UNKNOWN);
+        assertThat(p.getClientNonce()).isEqualTo("n2");
+    }
+
+    @Test
     void payloadRoundTripPreservesMap() throws Exception {
         SyncPayload p = new SyncPayload(SyncPayloadKind.FINANCE_ENTRY, "n1",
                 Instant.parse("2026-05-01T08:00:00Z"),

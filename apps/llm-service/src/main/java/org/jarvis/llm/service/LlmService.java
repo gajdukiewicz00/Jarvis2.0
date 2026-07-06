@@ -172,9 +172,18 @@ public class LlmService {
             log.info("[{}] Memory privacy: provider={} local={} includeLocalOnly={} includeSensitive={}",
                     correlationId, llmClient.providerName(), llmClient.isLocal(),
                     includeLocalOnly, includeSensitive);
-            MemoryClient.SearchContextResult memoryResult = memoryClient.searchContext(
-                    effectiveUserId, userMessage, memoryTopK, memoryMaxTokens,
-                    includeLocalOnly, includeSensitive, correlationId);
+            MemoryClient.SearchContextResult memoryResult;
+            try {
+                memoryResult = memoryClient.searchContext(
+                        effectiveUserId, userMessage, memoryTopK, memoryMaxTokens,
+                        includeLocalOnly, includeSensitive, correlationId);
+            } catch (MemoryClient.MemoryClientException e) {
+                // Memory (RAG) is a best-effort augmentation: a down/erroring memory-service
+                // must not fail the whole chat turn. Degrade gracefully instead.
+                log.warn("[{}] Memory search failed (non-fatal), continuing without memory context: {}",
+                        correlationId, e.getMessage());
+                memoryResult = new MemoryClient.SearchContextResult("", "unavailable", 0, 0, e.getMessage());
+            }
             // Retrieved long-term memory (search results + notes) is external/untrusted:
             // wrap it as DATA so a malicious memory ("ignore previous instructions ...")
             // cannot hijack the prompt (prompt-injection guard).

@@ -86,6 +86,11 @@ object SyncCryptoKt {
         return X25519PublicKeyParameters(raw, 0)
     }
 
+    fun decodeEd25519Pub(raw: ByteArray): Ed25519PublicKeyParameters {
+        require(raw.size == ED25519_KEY_LEN) { "Ed25519 pubkey must be $ED25519_KEY_LEN bytes, got ${raw.size}" }
+        return Ed25519PublicKeyParameters(raw, 0)
+    }
+
     fun x25519Agree(ourPriv: X25519PrivateKeyParameters, theirPub: X25519PublicKeyParameters): ByteArray {
         val agreement = X25519Agreement()
         agreement.init(ourPriv)
@@ -106,6 +111,22 @@ object SyncCryptoKt {
         signer.init(true, priv)
         signer.update(message, 0, message.size)
         return signer.generateSignature()
+    }
+
+    /**
+     * Verifies an Ed25519 signature. Used to authenticate the *server's* identity during
+     * pairing (see [org.jarvis.android.sync.Pairing]) — the mirror-image check of
+     * [signEd25519], which the device uses to prove its own identity to the server.
+     */
+    fun verifyEd25519(pub: Ed25519PublicKeyParameters, message: ByteArray, signature: ByteArray): Boolean {
+        return try {
+            val verifier = Ed25519Signer()
+            verifier.init(false, pub)
+            verifier.update(message, 0, message.size)
+            verifier.verifySignature(signature)
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun seal(key: ByteArray, nonce: ByteArray, aad: ByteArray, plaintext: ByteArray): ByteArray {

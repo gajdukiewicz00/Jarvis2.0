@@ -41,7 +41,15 @@ class SyncClient(
         val serverKexPubB64: String,
         val routingId: String,
         val senderDeviceId: String,
-        val pairedAt: String
+        val pairedAt: String,
+        // Server-authenticity proof (finding #11 fix): the server's persistent Ed25519
+        // identity pubkey plus its signature over (pairingNonceB64 || serverKexPubB64).
+        // Optional/nullable for wire-format backward compatibility with older server
+        // builds that don't send them yet — but [Pairing.pair] treats missing/invalid
+        // values as a hard pairing failure (fail-closed), since without this proof a
+        // LAN attacker could otherwise impersonate the server (MITM).
+        val serverIdentityPubB64: String? = null,
+        val serverIdentitySigB64: String? = null
     )
 
     @Serializable

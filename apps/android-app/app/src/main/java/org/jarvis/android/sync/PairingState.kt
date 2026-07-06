@@ -15,6 +15,9 @@ import androidx.security.crypto.MasterKey
  *   <li>{@code senderDeviceId} — alias the server assigned us</li>
  *   <li>{@code sessionKeyB64} — derived ChaCha20-Poly1305 key</li>
  *   <li>{@code identityPrivPkcs8B64} — Ed25519 private (for re-pairing)</li>
+ *   <li>{@code serverIdentityPubB64} — the server's Ed25519 identity pubkey, pinned
+ *       (trust-on-first-use) at pairing time so a later re-pair to the same
+ *       {@code baseUrl} can detect a server-identity swap (see {@link Pairing})</li>
  * </ul>
  *
  * <p>Re-pairing produces fresh values; the previous record is
@@ -36,13 +39,15 @@ class PairingState(context: Context) {
         routingId: String,
         senderDeviceId: String,
         sessionKeyB64: String,
-        baseUrl: String
+        baseUrl: String,
+        serverIdentityPubB64: String
     ) {
         prefs.edit()
             .putString("routingId", routingId)
             .putString("senderDeviceId", senderDeviceId)
             .putString("sessionKeyB64", sessionKeyB64)
             .putString("baseUrl", baseUrl)
+            .putString("serverIdentityPubB64", serverIdentityPubB64)
             .apply()
     }
 
@@ -50,6 +55,15 @@ class PairingState(context: Context) {
     fun senderDeviceId(): String? = prefs.getString("senderDeviceId", null)
     fun sessionKeyB64(): String? = prefs.getString("sessionKeyB64", null)
     fun baseUrl(): String? = prefs.getString("baseUrl", null)
+    fun serverIdentityPubB64(): String? = prefs.getString("serverIdentityPubB64", null)
+
+    /**
+     * The previously pinned server identity to check a *new* pairing against, but only
+     * when re-pairing against the same [baseUrl] — a fresh [baseUrl] is a new trust root
+     * and has nothing to pin against yet (trust-on-first-use).
+     */
+    fun pinnedServerIdentityFor(baseUrl: String): String? =
+        if (baseUrl() == baseUrl) serverIdentityPubB64() else null
 
     fun forget() {
         prefs.edit().clear().apply()

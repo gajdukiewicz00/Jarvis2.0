@@ -47,6 +47,24 @@ class OtpGuardTest {
     }
 
     @Test
+    fun isOtpOrAuthCode_detectsBlikCode() {
+        // Regression test for finding #10: BLIK is the primary OTP/authorization
+        // mechanism for Polish banking (P2P transfers, POS/ATM, online payments),
+        // including the whitelisted PKO/IKO app, and must be blocked like any OTP.
+        assertTrue(OtpGuard.isOtpOrAuthCode("PKO IKO", "Twój kod BLIK to 123456"))
+    }
+
+    @Test
+    fun isOtpOrAuthCode_detectsBlikCodeCaseInsensitiveAndLowercase() {
+        assertTrue(OtpGuard.isOtpOrAuthCode(null, "blik code: 654321"))
+    }
+
+    @Test
+    fun isOtpOrAuthCode_detectsBlikInTitleOnly() {
+        assertTrue(OtpGuard.isOtpOrAuthCode("BLIK", "Autoryzacja płatności 42.50 PLN"))
+    }
+
+    @Test
     fun isOtpOrAuthCode_falseForRegularTransactionNotification() {
         assertFalse(OtpGuard.isOtpOrAuthCode("mBank", "Card payment of 42.50 PLN at Biedronka"))
     }

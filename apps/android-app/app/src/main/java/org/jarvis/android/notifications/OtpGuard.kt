@@ -34,7 +34,12 @@ object OtpGuard {
         """\bmfa\b""",
         // Polish
         """kod (?:autoryzacyjny|weryfikacyjny|jednorazowy|sms|dostępu|logowania|potwierdzaj\w*)""",
-        """hasł\w* jednorazow\w*"""
+        """hasł\w* jednorazow\w*""",
+        // BLIK — the dominant OTP/authorization mechanism for Polish banking (P2P
+        // transfers, POS/ATM withdrawals, online payments) including PKO/IKO, which
+        // is whitelisted in BankAppRegistry. A BLIK code is exactly as sensitive as
+        // any other OTP and must never be forwarded off-device.
+        """\bblik\b"""
     ).map { Regex(it, RegexOption.IGNORE_CASE) }
 
     /** @return true if [title]/[text] looks like an OTP, 2FA challenge, or authorization code. */

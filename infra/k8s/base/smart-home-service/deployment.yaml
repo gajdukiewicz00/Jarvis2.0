@@ -77,11 +77,11 @@ spec:
               value: "smarthome"
           resources:
             limits:
-              memory: "256Mi"
-              cpu: "250m"
+              memory: "512Mi"
+              cpu: "500m"
             requests:
-              memory: "128Mi"
-              cpu: "50m"
+              memory: "256Mi"
+              cpu: "100m"
           startupProbe:
             httpGet:
               path: /actuator/health

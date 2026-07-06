@@ -29,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: media-service
-          image: localhost:5000/jarvis/media-service:movie1
+          image: jarvis/media-service
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

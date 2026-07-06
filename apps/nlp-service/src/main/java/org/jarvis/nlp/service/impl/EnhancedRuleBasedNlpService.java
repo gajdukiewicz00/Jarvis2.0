@@ -2,22 +2,44 @@ package org.jarvis.nlp.service.impl;
 
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.nlp.model.EnhancedNlpResult;
+import org.jarvis.nlp.model.IntentCandidate;
 import org.jarvis.nlp.model.NlpResult;
 import org.jarvis.nlp.service.EnhancedNlpService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Enhanced rule-based NLP service with confidence scoring.
+ *
+ * <p>Classification confidence is compared against a configurable threshold
+ * ({@code jarvis.nlp.confidence.threshold}). Results below the threshold are
+ * downgraded to the {@link #UNKNOWN_INTENT} intent with {@code needsClarification}
+ * set and a ranked list of alternative intents attached, so the orchestrator can
+ * ask the user instead of guessing.</p>
  */
 @Service
 @Slf4j
 public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
+
+    /**
+     * Intent name returned when the top match's confidence is below the
+     * configured clarification threshold.
+     */
+    public static final String UNKNOWN_INTENT = "UNKNOWN";
+
+    private static final String DEFAULT_CLARIFICATION_QUESTION =
+            "Я не уверен, что вы имеете в виду. Можете переформулировать?";
 
     private static final int RXF = Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE | Pattern.UNICODE_CHARACTER_CLASS;
 
@@ -25,7 +47,8 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
     private static final Pattern HELLO = Pattern.compile(
             "(?:^|\\b)(?:привет|здравствуй|здорово|добрый\\s+(?:день|вечер|утро))\\b", RXF);
     private static final Pattern TIMER_FULL = Pattern.compile(
-            "(?:^|\\b)(?:(поставь|установи|заведи|постави)\\s+)?таймер(?:\\s+на)?\\s+([\\p{L}\\d]+)\\s*(секунд(?:у|ы)?|сек|с|минут(?:у|ы)?|мин)\\b",
+            "(?:^|\\b)(?:(поставь|установи|заведи|постави)\\s+)?таймер(?:\\s+на)?\\s+([\\p{L}\\d]+)\\s*"
+                    + "(секунд(?:у|ы)?|сек|с|минут(?:у|ы)?|мин|час(?:а|ов)?|ч)\\b",
             RXF);
     private static final Pattern TIMER_SHORT = Pattern.compile(
             "(?:^|\\b)таймер\\s+([\\p{L}\\d]+)(?:\\b|$)", RXF);
@@ -50,12 +73,58 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
 
     private static final Map<String, Integer> RUS_NUM = buildRusNumbers();
 
+    /**
+     * Lightweight (intent, pattern, confidence) signal used only to suggest
+     * clarification candidates. Kept separate from the primary sequential
+     * matcher above so the well-tested first-match classification order is
+     * never touched by this additive feature.
+     */
+    private record IntentSignal(String intent, Pattern pattern, double confidence) {}
+
+    private static final List<IntentSignal> INTENT_SIGNALS = List.of(
+            new IntentSignal("hello", HELLO, 0.95),
+            new IntentSignal("set_timer", TIMER_FULL, 0.9),
+            new IntentSignal("set_timer", TIMER_SHORT, 0.7),
+            new IntentSignal("change_volume", VOL_UP, 0.85),
+            new IntentSignal("change_volume", VOL_DOWN, 0.85),
+            new IntentSignal("change_volume", VOL_ON, 0.8),
+            new IntentSignal("get_time", TIME_QUERY, 0.9),
+            new IntentSignal("add_expense", EXPENSE, 0.8),
+            new IntentSignal("add_reminder", REMINDER, 0.75));
+
+    private final double confidenceThreshold;
+    private final int topK;
+
+    public EnhancedRuleBasedNlpService(
+            @Value("${jarvis.nlp.confidence.threshold:0.5}") double confidenceThreshold,
+            @Value("${jarvis.nlp.confidence.top-k:3}") int topK) {
+        this.confidenceThreshold = confidenceThreshold;
+        this.topK = topK;
+    }
+
     @Override
     public EnhancedNlpResult analyzeWithConfidence(String text, String languageCode) {
-        if (text == null)
-            text = "";
-        String norm = TextNormalizer.normalize(text);
+        String safeText = text == null ? "" : text;
+        String norm = TextNormalizer.normalize(safeText);
 
+        EnhancedNlpResult matched = classifyPatterns(norm, safeText);
+        if (matched.confidence() >= confidenceThreshold) {
+            return matched;
+        }
+
+        String question = matched.clarificationQuestion() != null
+                ? matched.clarificationQuestion()
+                : DEFAULT_CLARIFICATION_QUESTION;
+        List<IntentCandidate> candidates = suggestCandidates(norm);
+        return new EnhancedNlpResult(
+                UNKNOWN_INTENT, matched.entities(), matched.confidence(), true, question, safeText, candidates);
+    }
+
+    /**
+     * Sequential first-match intent classification. Order matters: earlier
+     * patterns take priority over later ones when more than one could match.
+     */
+    private EnhancedNlpResult classifyPatterns(String norm, String text) {
         // High confidence patterns
         if (HELLO.matcher(norm).find()) {
             return new EnhancedNlpResult("hello", Map.of(), 0.95, false, null, text);
@@ -68,7 +137,7 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
             String unitTok = mt.group(3);
             Integer amount = parseNumber(amountTok);
             if (amount != null && amount > 0) {
-                String unit = isSeconds(unitTok) ? "sec" : "min";
+                String unit = resolveTimeUnit(unitTok);
                 Map<String, String> slots = new HashMap<>();
                 slots.put("amount", String.valueOf(amount));
                 slots.put("unit", unit);
@@ -146,6 +215,7 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
             Map<String, String> slots = new HashMap<>();
             String what = mr.group(1);
             slots.put("text", what != null ? what.trim() : "");
+            slots.putAll(DateTimeEntityExtractor.extract(norm));
             return new EnhancedNlpResult("add_reminder", slots, 0.75, false, null, text);
         }
 
@@ -155,8 +225,29 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
                 Map.of(),
                 0.2,
                 true,
-                "Я не уверен, что вы имеете в виду. Можете переформулировать?",
+                DEFAULT_CLARIFICATION_QUESTION,
                 text);
+    }
+
+    /**
+     * Scans every known pattern (not just the first that matched) so a
+     * clarification prompt can offer plausible alternatives. Distinct intents
+     * only, ranked by their base confidence, capped at {@link #topK}.
+     */
+    private List<IntentCandidate> suggestCandidates(String norm) {
+        List<IntentCandidate> found = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (IntentSignal signal : INTENT_SIGNALS) {
+            if (seen.contains(signal.intent())) {
+                continue;
+            }
+            if (signal.pattern().matcher(norm).find()) {
+                found.add(new IntentCandidate(signal.intent(), signal.confidence()));
+                seen.add(signal.intent());
+            }
+        }
+        found.sort(Comparator.comparingDouble(IntentCandidate::confidence).reversed());
+        return found.size() > topK ? List.copyOf(found.subList(0, topK)) : List.copyOf(found);
     }
 
     @Override
@@ -166,11 +257,20 @@ public class EnhancedRuleBasedNlpService implements EnhancedNlpService {
         return new NlpResult(enhanced.intent(), enhanced.entities());
     }
 
-    private static boolean isSeconds(String unitTok) {
+    /**
+     * Resolves a matched timer unit token to one of "sec", "min", or "hour".
+     * Defaults to "min" when the token is missing or unrecognized, matching
+     * the prior sec-vs-min-only behavior.
+     */
+    private static String resolveTimeUnit(String unitTok) {
         if (unitTok == null)
-            return false;
+            return "min";
         String u = unitTok.toLowerCase(Locale.ROOT).replace('ё', 'е');
-        return u.startsWith("сек") || u.equals("с");
+        if (u.startsWith("сек") || u.equals("с"))
+            return "sec";
+        if (u.startsWith("час") || u.equals("ч"))
+            return "hour";
+        return "min";
     }
 
     private static Integer parseNumber(String token) {

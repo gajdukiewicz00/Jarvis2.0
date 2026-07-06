@@ -16,6 +16,12 @@ jarvis:
       enabled: ${JARVIS_NLP_FAST_INTENT_ENABLED:false}
       url: ${JARVIS_NLP_FAST_INTENT_URL:http://llm-service:8091/api/v1/llm/intent}
       timeout-ms: ${JARVIS_NLP_FAST_INTENT_TIMEOUT_MS:1500}
+    # Below this confidence, EnhancedRuleBasedNlpService returns intent=UNKNOWN
+    # with needsClarification=true and up to top-k candidate intents, so the
+    # orchestrator can ask instead of guessing.
+    confidence:
+      threshold: ${JARVIS_NLP_CONFIDENCE_THRESHOLD:0.5}
+      top-k: ${JARVIS_NLP_CONFIDENCE_TOP_K:3}
 
 spring:
   lifecycle:

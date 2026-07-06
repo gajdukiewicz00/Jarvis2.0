@@ -21,12 +21,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * File-backed task store: persists every {@link AgentTask} as its own JSON file so
  * tasks survive a pod restart, without introducing a database. All tasks are loaded
  * into an in-memory cache on construction and every {@link #save} writes through to
- * disk immediately. Opt in with {@code jarvis.agent.task-store=file}; the in-memory
- * store remains the default.
+ * disk immediately. This is the EFFECTIVE DEFAULT: it activates whenever {@code
+ * jarvis.agent.task-store} is left unset (real deployments must not silently lose queued
+ * or AWAITING_APPROVAL work) as well as when it is explicitly set to {@code file}. Set it
+ * to {@code memory} to opt back into the ephemeral {@link InMemoryAgentTaskStore} (fast
+ * local dev only), or to {@code postgres} for the JPA-backed store.
  */
 @Slf4j
 @Repository
-@ConditionalOnProperty(name = "jarvis.agent.task-store", havingValue = "file")
+@ConditionalOnProperty(name = "jarvis.agent.task-store", havingValue = "file", matchIfMissing = true)
 public class FileBackedAgentTaskStore implements AgentTaskStore {
 
     private final Path dir;

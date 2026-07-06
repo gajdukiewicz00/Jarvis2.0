@@ -10,6 +10,16 @@ swarm:
   workspace:
     dir: ${java.io.tmpdir}/jarvis-agents-test
 
+# The production default is the durable file-backed store (see application.yml); the
+# broad @SpringBootTest suite pins the ephemeral in-memory store explicitly instead, so
+# tests stay fast/isolated and never write real JSON files to a shared temp path.
+# Persistence itself (task + pending-patch survival across a restart) is covered directly
+# by FileBackedAgentTaskStoreTest / PendingPatchStoreTest / AgentTaskServiceTest, which
+# construct those stores against a fresh @TempDir per test.
+jarvis:
+  agent:
+    task-store: memory
+
 # Only used by @DataJpaTest slices exercising the Postgres-backed AgentTaskStore
 # (org.jarvis.swarm.task.jpa) — an H2 database in PostgreSQL compatibility mode, schema
 # generated from the @Entity mapping (Flyway's Postgres-only SQL isn't H2-compatible).

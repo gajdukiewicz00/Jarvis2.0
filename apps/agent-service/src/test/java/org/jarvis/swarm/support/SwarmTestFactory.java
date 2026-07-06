@@ -1,5 +1,7 @@
 package org.jarvis.swarm.support;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.jarvis.common.safety.SystemPanicState;
 import org.jarvis.common.safety.ToolPermissionPolicy;
@@ -47,6 +49,9 @@ import java.util.concurrent.ExecutorService;
 /** Builds a fully-wired, in-memory swarm engine for deterministic unit tests. */
 public final class SwarmTestFactory {
 
+    /** Shared record-aware mapper for tests that construct a {@link PendingPatchStore} directly. */
+    public static final ObjectMapper TEST_MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
+
     private SwarmTestFactory() {
     }
 
@@ -70,7 +75,8 @@ public final class SwarmTestFactory {
             AgentPermissionResolver resolver,
             AgentActionGuard guard,
             SwarmCoordinator coordinator,
-            SwarmProperties props) {}
+            SwarmProperties props,
+            PendingPatchStore pendingPatches) {}
 
     public static SwarmProperties props(Path sandboxDir) {
         return props(sandboxDir, "");
@@ -109,6 +115,17 @@ public final class SwarmTestFactory {
      */
     public static Engine engine(Path sandboxDir, String grantedCsv, ExecutorService executor,
                                 List<RoleExecutor> executorsOverride, AgentTaskStore storeOverride) {
+        return engine(sandboxDir, grantedCsv, executor, executorsOverride, storeOverride, null);
+    }
+
+    /**
+     * Widest builder: additionally allows overriding the {@link PendingPatchStore} (e.g. a
+     * fresh disk-backed instance pointed at the same directory as a prior one, to simulate
+     * a process restart in a persistence test).
+     */
+    public static Engine engine(Path sandboxDir, String grantedCsv, ExecutorService executor,
+                                List<RoleExecutor> executorsOverride, AgentTaskStore storeOverride,
+                                PendingPatchStore pendingPatchesOverride) {
         SwarmProperties props = props(sandboxDir);
         ProcessRunner runner = new ProcessRunner();
         SandboxManager sandbox = new SandboxManager(props, runner);
@@ -134,10 +151,14 @@ public final class SwarmTestFactory {
         RoleExecutorRegistry registry = new RoleExecutorRegistry(roleExecutors);
 
         AgentTaskStore store = storeOverride != null ? storeOverride : new InMemoryAgentTaskStore();
+        PendingPatchStore pendingPatches = pendingPatchesOverride != null
+                ? pendingPatchesOverride
+                : new PendingPatchStore(TEST_MAPPER, sandboxDir.resolve("pending-patches").toString());
         AgentTaskService taskService = new AgentTaskService(store, executor, Clock.systemUTC(), catalog,
-                resolver, sandbox, guard, registry, audit, metrics, props, new PendingPatchStore());
+                resolver, sandbox, guard, registry, audit, metrics, props, pendingPatches);
         SwarmCoordinator coordinator = new SwarmCoordinator(taskService, store, registry, props);
 
-        return new Engine(taskService, store, panic, sandbox, catalog, resolver, guard, coordinator, props);
+        return new Engine(taskService, store, panic, sandbox, catalog, resolver, guard, coordinator, props,
+                pendingPatches);
     }
 }

@@ -11,13 +11,14 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Thread-safe in-memory task store. The MVP avoids a database so the service stays
- * isolated (no migrations, no NetworkPolicy allowlist). Tasks are ephemeral and reset
- * on restart — documented as a known limitation. Set {@code jarvis.agent.task-store=file}
- * to opt into {@link FileBackedAgentTaskStore} instead, which survives a pod restart.
+ * Thread-safe in-memory task store. Fully ephemeral: every task (including one sitting
+ * in AWAITING_APPROVAL with a pending CODER patch) is lost on restart. Because that loses
+ * real work, this is opt-in only — set {@code jarvis.agent.task-store=memory} explicitly
+ * (e.g. for fast local dev). The effective default for a real deployment is now {@link
+ * FileBackedAgentTaskStore}, which survives a pod restart without a database.
  */
 @Repository
-@ConditionalOnProperty(name = "jarvis.agent.task-store", havingValue = "memory", matchIfMissing = true)
+@ConditionalOnProperty(name = "jarvis.agent.task-store", havingValue = "memory")
 public class InMemoryAgentTaskStore implements AgentTaskStore {
 
     private final Map<String, AgentTask> tasks = new ConcurrentHashMap<>();

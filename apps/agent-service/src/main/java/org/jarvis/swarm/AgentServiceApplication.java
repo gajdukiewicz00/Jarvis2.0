@@ -18,10 +18,11 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  * role+user grants, and the system permission backstop before any side effect.</p>
  *
  * <p>DataSource/JPA/Flyway/Transaction auto-configuration is excluded UNCONDITIONALLY
- * here: the default {@code AgentTaskStore} is in-memory (or file-backed), and neither
- * needs a database. {@code org.jarvis.swarm.task.jpa.PostgresTaskStoreAutoConfiguration}
- * re-imports exactly these four, but only when {@code jarvis.agent.task-store=postgres}
- * is explicitly set — so by default this service never attempts a DB connection.</p>
+ * here: the default {@code AgentTaskStore} is the file-backed JSON store (durable, no
+ * database), with an opt-in ephemeral in-memory store for local dev. {@code
+ * org.jarvis.swarm.task.jpa.PostgresTaskStoreAutoConfiguration} re-imports exactly these
+ * four, but only when {@code jarvis.agent.task-store=postgres} is explicitly set — so by
+ * default this service never attempts a DB connection.</p>
  */
 @SpringBootApplication(exclude = {
         DataSourceAutoConfiguration.class,

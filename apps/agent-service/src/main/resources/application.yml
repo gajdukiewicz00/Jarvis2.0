@@ -5,7 +5,7 @@ spring:
     name: agent-service
   # Only consulted when jarvis.agent.task-store=postgres re-imports DataSource/JPA/Flyway
   # auto-configuration (see AgentServiceApplication + PostgresTaskStoreAutoConfiguration).
-  # Inert otherwise — the default in-memory store never touches a datasource.
+  # Inert otherwise — the default file-backed store never touches a datasource.
   datasource:
     url: ${SWARM_DB_URL:}
     username: ${SWARM_DB_USERNAME:}
@@ -34,9 +34,18 @@ server:
     key-store-password: ${JARVIS_AGENT_KEYSTORE_PASSWORD:changeit}
     key-store-type: ${JARVIS_AGENT_KEYSTORE_TYPE:PKCS12}
 
-# jarvis.agent.task-store selects the AgentTaskStore implementation: "memory" (default,
-# ephemeral), "file" (JSON-per-task, survives a pod restart, no database), or "postgres"
-# (JPA + Flyway; also survives a pod restart and requires spring.datasource.* above).
+# jarvis.agent.task-store selects the AgentTaskStore implementation: "file" (default —
+# JSON-per-task under jarvis.agent.task-store.dir, survives a pod restart, no database),
+# "memory" (ephemeral, opt-in only, e.g. fast local dev — a queued or AWAITING_APPROVAL
+# task is silently lost on restart), or "postgres" (JPA + Flyway; also survives a pod
+# restart and requires spring.datasource.* above). The default "file" dir is
+# /tmp/jarvis-agent-tasks, which sits on the same writable /tmp volume the deployment
+# already mounts for the sandbox workspace — see k8s/base/agent-service — so it survives
+# a container restart within the same pod. It does NOT survive a pod reschedule/eviction
+# without a PersistentVolumeClaim; use "postgres" if that durability guarantee matters.
+# A pending CODER patch proposal (task sitting AWAITING_APPROVAL) is persisted the same
+# way, alongside the task store, under jarvis.agent.task-store.dir/pending-patches — see
+# PendingPatchStore — so approve/reject keep working after a restart too.
 # Role-based agent swarm (House Party Protocol) — feature-flagged, safe-by-default.
 swarm:
   enabled: ${SWARM_ENABLED:true}

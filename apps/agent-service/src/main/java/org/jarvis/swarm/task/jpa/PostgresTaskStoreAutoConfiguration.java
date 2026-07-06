@@ -16,7 +16,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  * <p>{@code AgentServiceApplication} excludes {@link DataSourceAutoConfiguration},
  * {@link HibernateJpaAutoConfiguration}, {@link FlywayAutoConfiguration}, and
  * {@link TransactionAutoConfiguration} UNCONDITIONALLY, so the default deployment (the
- * in-memory task store) never attempts a database connection, never runs Flyway, and
+ * file-backed task store) never attempts a database connection, never runs Flyway, and
  * needs no {@code spring.datasource.*} configuration at all.
  *
  * <p>This class re-imports exactly those four auto-configurations, but ONLY when

@@ -1,6 +1,9 @@
+import asyncio
 import os
 import sys
+import time
 
+import httpx
 import numpy as np
 import pytest
 from fastapi.testclient import TestClient
@@ -101,3 +104,59 @@ def test_batch_endpoint_handles_multiple_values(client):
     payload = response.json()
     assert payload["count"] == 2
     assert len(payload["embeddings"]) == 2
+
+
+class SlowFakeSentenceTransformer(FakeSentenceTransformer):
+    """Fake transformer whose encode() blocks synchronously, simulating the
+    real CPU-bound SentenceTransformer.encode() call."""
+
+    ENCODE_DELAY_SECONDS = 0.4
+
+    def encode(self, inputs, convert_to_numpy=True, batch_size=None, normalize_embeddings=False):
+        time.sleep(self.ENCODE_DELAY_SECONDS)
+        return super().encode(
+            inputs,
+            convert_to_numpy=convert_to_numpy,
+            batch_size=batch_size,
+            normalize_embeddings=normalize_embeddings,
+        )
+
+
+def test_embed_batch_does_not_block_event_loop_for_concurrent_requests(monkeypatch):
+    """Regression test for finding #36 (main.py:179): the /embed handler must
+    offload the blocking SentenceTransformer.encode() call to a worker thread
+    instead of calling it inline on the event loop. If it blocks the loop, a
+    concurrent /health request cannot even start executing until the full
+    encode duration has elapsed.
+    """
+    monkeypatch.setattr(embedder_module, "SentenceTransformer", SlowFakeSentenceTransformer)
+    service = Embedder()
+    service.load()
+    monkeypatch.setattr(main_module, "embedder", service)
+
+    async def run_concurrent_requests():
+        transport = httpx.ASGITransport(app=main_module.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as async_client:
+            start = time.time()
+
+            embed_task = asyncio.create_task(
+                async_client.post("/embed", json={"texts": ["Denis builds backend systems"]})
+            )
+            # Give the embed request a chance to start its (blocking) encode call
+            # before we issue the concurrent health check.
+            await asyncio.sleep(0.05)
+
+            health_response = await async_client.get("/health")
+            health_elapsed = time.time() - start
+
+            embed_response = await embed_task
+            return embed_response, health_response, health_elapsed
+
+    embed_response, health_response, health_elapsed = asyncio.run(run_concurrent_requests())
+
+    assert embed_response.status_code == 200
+    assert health_response.status_code == 200
+    # A healthy event loop answers /health well before the /embed request's
+    # encode() call finishes. If /embed blocks the loop inline, /health cannot
+    # complete until after the full ENCODE_DELAY_SECONDS has elapsed.
+    assert health_elapsed < SlowFakeSentenceTransformer.ENCODE_DELAY_SECONDS * 0.75

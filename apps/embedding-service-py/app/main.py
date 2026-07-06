@@ -2,6 +2,7 @@
 FastAPI application for Embedding Service
 Provides vector embeddings using multilingual-e5-small
 """
+import asyncio
 from enum import Enum
 import logging
 import time
@@ -175,9 +176,12 @@ async def embed_batch(
     
     try:
         start_time = time.time()
-        
-        embeddings = embedder.embed_batch(request.texts, request.input_type.value)
-        
+
+        loop = asyncio.get_running_loop()
+        embeddings = await loop.run_in_executor(
+            None, embedder.embed_batch, request.texts, request.input_type.value
+        )
+
         processing_time = int((time.time() - start_time) * 1000)
         
         logger.info(f"[{correlation_id}] Embed complete: {len(embeddings)} embeddings in {processing_time}ms")
@@ -211,9 +215,12 @@ async def embed_single(
     
     try:
         start_time = time.time()
-        
-        embedding = embedder.embed_single(request.text, request.input_type.value)
-        
+
+        loop = asyncio.get_running_loop()
+        embedding = await loop.run_in_executor(
+            None, embedder.embed_single, request.text, request.input_type.value
+        )
+
         processing_time = int((time.time() - start_time) * 1000)
         
         return SingleEmbedResponse(

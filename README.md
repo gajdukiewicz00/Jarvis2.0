@@ -1,6 +1,7 @@
 # Jarvis 2.0
 
-[![Reactor Test Suite](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/reactor-tests.yml/badge.svg)](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/reactor-tests.yml)
+[![Reactor Test Suite](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/reactor-tests.yml/badge.svg?branch=main)](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/reactor-tests.yml)
+[![Quality Gate](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/quality.yml)
 
 A **local-first, single-user personal AI assistant** styled after the film J.A.R.V.I.S.:
 Java 21 / Spring Boot microservices running on a **k3s** cluster (`jarvis-prod`), a

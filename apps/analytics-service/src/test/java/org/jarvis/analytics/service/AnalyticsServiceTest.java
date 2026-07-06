@@ -307,7 +307,13 @@ class AnalyticsServiceTest {
 
     @Test
     void getCalendarStatisticsCountsAllDayUpcomingAndPastEvents() {
-        LocalDateTime now = LocalDateTime.now();
+        // Fixture events are built relative to the injected fixed clock (not the
+        // real wall-clock) so this test exercises the same "now" the service
+        // itself should use. Before the clock-injection fix, the service derived
+        // "now" from LocalDateTime.now() (real host time), which is nowhere near
+        // this fixture's 2026-03-13 clock date, so every event here would be
+        // misclassified as "past" relative to the real current date.
+        LocalDateTime now = LocalDateTime.now(clock);
         when(lifeTrackerClient.getCalendarEvents()).thenReturn(List.of(
                 new CalendarEventDTO(1L, "Past meeting", "desc", now.minusDays(1), now.minusDays(1).plusHours(1), false),
                 new CalendarEventDTO(2L, "Future meeting", "desc", now.plusDays(1), now.plusDays(1).plusHours(1), false),

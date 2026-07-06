@@ -257,7 +257,7 @@ public class AnalyticsService {
             log.info("Calculating calendar statistics");
             List<org.jarvis.analytics.dto.CalendarEventDTO> events = safeList(lifeTrackerClient.getCalendarEvents());
 
-            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime now = LocalDateTime.now(clock);
             int total = events.size();
             int upcoming = 0;
             int past = 0;

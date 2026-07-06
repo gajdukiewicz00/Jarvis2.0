@@ -83,6 +83,30 @@ class ChangeAnalysisServiceTest {
     }
 
     @Test
+    void workChangeFlagsWorseForModerateOvertimeIncreaseBelowJumpThreshold() {
+        // previous week total = 40.0h, current week total = 42.9h -> delta = +2.9h.
+        // This is well above FLAT_DELTA_THRESHOLD (0.05) but below the old
+        // "overtime jump" threshold (3.0h), so the buggy asymmetric logic
+        // classified it as FLAT instead of WORSE.
+        List<TimeRecordDTO> workRecords = List.of(
+                workRecordSeconds(LocalDate.of(2026, 3, 2), 144000L),
+                workRecordSeconds(LocalDate.of(2026, 3, 9), 154440L));
+        when(lifeTrackerClient.getTimeRecords()).thenReturn(workRecords);
+        when(lifeTrackerClient.getWellnessTrend("SLEEP")).thenReturn(List.of());
+        when(lifeTrackerClient.getExpenses()).thenReturn(List.of());
+
+        Map<String, Object> result = changeAnalysisService.whatChanged();
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> changes = (List<Map<String, Object>>) result.get("changes");
+        Map<String, Object> work = findByMetric(changes, "workHoursTotal");
+        assertEquals(40.0, work.get("previous"));
+        assertEquals(42.9, work.get("current"));
+        assertEquals(2.9, work.get("delta"));
+        assertEquals("WORSE", work.get("verdict"));
+    }
+
+    @Test
     void whyWeekWentBadReassuresWhenNothingGotWorse() {
         List<TimeRecordDTO> workRecords = new ArrayList<>();
         List<WellnessLogDTO> sleepLogs = new ArrayList<>();
@@ -131,6 +155,10 @@ class ChangeAnalysisServiceTest {
 
     private TimeRecordDTO workRecord(LocalDate day, int hours) {
         long durationSeconds = hours * 3600L;
+        return workRecordSeconds(day, durationSeconds);
+    }
+
+    private TimeRecordDTO workRecordSeconds(LocalDate day, long durationSeconds) {
         return new TimeRecordDTO(1L, "Coding", "Work", day.atTime(9, 0), day.atTime(9, 0).plusSeconds(durationSeconds),
                 durationSeconds);
     }

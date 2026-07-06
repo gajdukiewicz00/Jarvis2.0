@@ -22,7 +22,6 @@ public class ChangeAnalysisService {
 
     private static final int WEEK_DAYS = 7;
     private static final double FLAT_DELTA_THRESHOLD = 0.05;
-    private static final double OVERTIME_JUMP_THRESHOLD_HOURS = 3.0;
 
     private final TrendSeriesService trendSeriesService;
     private final Clock clock;
@@ -84,8 +83,7 @@ public class ChangeAnalysisService {
 
     private Map<String, Object> workChange(double previous, double current) {
         double delta = round(current - previous);
-        String verdict = Math.abs(delta) < FLAT_DELTA_THRESHOLD ? "FLAT"
-                : delta > OVERTIME_JUMP_THRESHOLD_HOURS ? "WORSE" : "FLAT";
+        String verdict = Math.abs(delta) < FLAT_DELTA_THRESHOLD ? "FLAT" : delta > 0 ? "WORSE" : "BETTER";
         String explanation = "Рабочие часы за неделю изменились с " + round(previous) + " до " + round(current)
                 + " ч (" + signed(delta) + ").";
         return entry("workHoursTotal", previous, current, delta, verdict, explanation);

@@ -138,6 +138,23 @@ class AnalyticsControllerTest {
     }
 
     @Test
+    void overviewSkipsTimeRecordsWithNullDurationInsteadOfThrowing() throws Exception {
+        // An in-progress/unstopped timer has a null durationSeconds (realistic upstream state).
+        TimeRecordDTO inProgress = new TimeRecordDTO(1L, "Coding", "Work",
+                LocalDateTime.of(2026, 3, 13, 9, 0), null, null);
+        TimeRecordDTO completed = new TimeRecordDTO(2L, "Reading", "Leisure",
+                LocalDateTime.of(2026, 3, 13, 10, 0), LocalDateTime.of(2026, 3, 13, 11, 0), 3600L);
+        when(lifeTrackerClient.getExpenses()).thenReturn(List.of());
+        when(lifeTrackerClient.getTimeRecords()).thenReturn(List.of(inProgress, completed));
+
+        mockMvc.perform(get("/api/v1/analytics/overview").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalTimeTrackedSeconds").value(3600))
+                .andExpect(jsonPath("$.timeRecordCount").value(2))
+                .andExpect(jsonPath("$.timeError").doesNotExist());
+    }
+
+    @Test
     void rawExpensesReturnsListFromClient() throws Exception {
         ExpenseDTO expense = new ExpenseDTO();
         expense.setId(1L);

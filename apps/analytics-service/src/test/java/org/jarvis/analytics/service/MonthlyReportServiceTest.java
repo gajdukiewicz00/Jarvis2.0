@@ -95,6 +95,33 @@ class MonthlyReportServiceTest {
     }
 
     @Test
+    void refinedOverspendForecastExcludesPreviousMonthAnomaliesNearMonthStart() {
+        // Day 2 of the month: Math.max(MIN_ANOMALY_WINDOW=3, dayOfMonth=2) widens the trailing
+        // anomaly-detection window to 3 days, which reaches back into the previous month
+        // (2026-03-31). spentSoFar/dayOfMonth are strictly current-month (April) figures, so a
+        // previous-month anomaly must NOT be subtracted from the current month's total.
+        Clock earlyMonthClock = Clock.fixed(Instant.parse("2026-04-02T12:00:00Z"), ZoneOffset.UTC);
+        MonthlyReportService service = new MonthlyReportService(
+                analyticsService, insightService, anomalyDetectionService, consistencyService, earlyMonthClock);
+        when(insightService.budgetForecast()).thenReturn(Map.of(
+                "month", "2026-04", "spentSoFar", 100.0, "dayOfMonth", 2,
+                "daysInMonth", 30, "dailyRate", 50.0, "projectedMonthEnd", 1500.0));
+        when(anomalyDetectionService.detectExpenseAnomalies(3, 2.0)).thenReturn(List.of(
+                new AnomalyDTO("dailyExpenseTotal", LocalDate.of(2026, 3, 31), 1000.0, 50.0, 80.0, "prev-month"),
+                new AnomalyDTO("dailyExpenseTotal", LocalDate.of(2026, 4, 1), 10.0, 50.0, 80.0, "current-month")));
+
+        Map<String, Object> refined = service.refinedOverspendForecast();
+
+        @SuppressWarnings("unchecked")
+        List<AnomalyDTO> excluded = (List<AnomalyDTO>) refined.get("excludedAnomalies");
+        assertEquals(1, excluded.size());
+        assertEquals(LocalDate.of(2026, 4, 1), excluded.get(0).day());
+        // adjustedSpent = max(0, 100.0 - 10.0) = 90.0; adjustedDailyRate = 90.0 / max(1, 2-1) = 90.0
+        assertEquals(90.0, refined.get("adjustedDailyRate"));
+        assertEquals(2700.0, refined.get("adjustedProjectedMonthEnd"));
+    }
+
+    @Test
     void refinedOverspendForecastMatchesNaiveWhenNoAnomalies() {
         when(insightService.budgetForecast()).thenReturn(Map.of(
                 "month", "2026-03", "spentSoFar", 130.0, "dayOfMonth", 13,

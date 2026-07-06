@@ -82,6 +82,7 @@ public class AnalyticsController {
             List<TimeRecordDTO> timeRecords = lifeTrackerClient.getTimeRecords();
             if (timeRecords != null && !timeRecords.isEmpty()) {
                 long totalDuration = timeRecords.stream()
+                        .filter(record -> record.getDurationSeconds() != null)
                         .mapToLong(TimeRecordDTO::getDurationSeconds)
                         .sum();
                 builder.totalTimeTrackedSeconds(totalDuration);

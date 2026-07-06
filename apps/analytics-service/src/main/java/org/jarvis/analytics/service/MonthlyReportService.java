@@ -70,9 +70,16 @@ public class MonthlyReportService {
         int dayOfMonth = ((Number) naive.get("dayOfMonth")).intValue();
         int daysInMonth = ((Number) naive.get("daysInMonth")).intValue();
         double spentSoFar = ((Number) naive.get("spentSoFar")).doubleValue();
+        YearMonth currentMonth = YearMonth.from(LocalDate.now(clock));
 
+        // Only count anomalies that fall within the current month: spentSoFar/dayOfMonth are
+        // strictly current-month figures, but the trailing detection window (widened to at
+        // least MIN_ANOMALY_WINDOW days) can reach back into the previous month near month start.
         List<AnomalyDTO> anomalies = anomalyDetectionService.detectExpenseAnomalies(
-                Math.max(MIN_ANOMALY_WINDOW, dayOfMonth), ANOMALY_K);
+                        Math.max(MIN_ANOMALY_WINDOW, dayOfMonth), ANOMALY_K)
+                .stream()
+                .filter(a -> YearMonth.from(a.day()).equals(currentMonth))
+                .toList();
         double excludedTotal = anomalies.stream().mapToDouble(AnomalyDTO::value).sum();
         double adjustedSpent = Math.max(0.0, spentSoFar - excludedTotal);
         double adjustedDailyRate = adjustedSpent / Math.max(1, dayOfMonth - anomalies.size());

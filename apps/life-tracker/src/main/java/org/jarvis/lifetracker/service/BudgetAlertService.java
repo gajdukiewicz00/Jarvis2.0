@@ -48,7 +48,7 @@ public class BudgetAlertService {
         double percentBudgetUsed = percentBudgetUsed(limit, spent);
         BigDecimal projectedSpend = projectedSpend(spent, totalDays, elapsedDays);
 
-        boolean overBudget = limit.signum() > 0 && spent.compareTo(limit) > 0;
+        boolean overBudget = spent.compareTo(limit) > 0;
         boolean overPace = !overBudget && elapsedDays > 0 && percentBudgetUsed > percentPeriodElapsed;
         boolean alert = overBudget || overPace;
         String currency = budget.getCurrency() != null ? budget.getCurrency() : DEFAULT_CURRENCY;

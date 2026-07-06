@@ -140,6 +140,22 @@ class BudgetAlertServiceTest {
     }
 
     @Test
+    void flagsOverBudgetWhenLimitIsZeroAndAnySpendOccurs() {
+        YearMonth month = YearMonth.of(2026, 3);
+        Budget zeroBudget = budget("Alcohol", "0", "EUR");
+        Expense spent = expense("Alcohol", "5.00", LocalDateTime.of(2026, 3, 10, 12, 0));
+        LocalDate today = LocalDate.of(2026, 3, 15);
+
+        List<BudgetAlertDTO> alerts = service.computeAlerts(month, List.of(zeroBudget), List.of(spent), today);
+
+        BudgetAlertDTO alert = alerts.get(0);
+        assertThat(alert.isOverBudget()).isTrue();
+        assertThat(alert.isAlert()).isTrue();
+        assertThat(alert.getMessage()).contains("exceeded");
+        assertThat(alert.getMessage()).doesNotContain("Infinity");
+    }
+
+    @Test
     void defaultsCurrencyWhenBudgetHasNone() {
         YearMonth month = YearMonth.of(2026, 3);
         Budget foodBudget = budget("Food", "100.00", null);

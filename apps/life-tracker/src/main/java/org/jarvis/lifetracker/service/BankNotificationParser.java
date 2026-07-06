@@ -8,7 +8,6 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -112,11 +111,16 @@ public class BankNotificationParser {
         boolean needsReview = !"HIGH".equals(confidence) || !valid; // US-BANK-005
 
         // --- dedup key (US-BANK-006) ---
-        String dateBucket = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHH"));
+        // Derived purely from the notification content (never wall-clock time): re-parsing the
+        // identical raw text must always yield the identical dedup key, regardless of when the
+        // parse happens, so retries/re-imports of the same push notification are correctly
+        // caught by the (user_id, dedup_key) unique constraint instead of bypassing it whenever
+        // the wall-clock hour rolls over between attempts.
+        String normalizedRaw = lower.replaceAll("\\s+", " ").trim();
         String dedupKey = sha16((amount == null ? "?" : amount.toPlainString())
                 + "|" + (currency == null ? "?" : currency)
                 + "|" + (merchant == null ? "?" : merchant.toLowerCase(Locale.ROOT))
-                + "|" + dateBucket);
+                + "|" + normalizedRaw);
 
         // --- mask raw (US-BANK-009): never keep full card digits ---
         String rawMasked = text.replaceAll("\\b(\\d{4})[ -]?(\\d{4})[ -]?(\\d{4})[ -]?(\\d{4})\\b", "**** **** **** ****")

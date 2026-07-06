@@ -38,6 +38,24 @@ class CsvUtilsTest {
     }
 
     @Test
+    void parseCsvKeepsQuotedFieldWithEmbeddedNewlineAsOneRow() {
+        List<List<String>> rows = CsvUtils.parseCsv("\"Payment\nof 25,00 PLN\nLidl\",HIGH");
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0)).containsExactly("Payment\nof 25,00 PLN\nLidl", "HIGH");
+    }
+
+    @Test
+    void parseCsvHandlesMultipleRowsWithOneContainingEmbeddedNewlines() {
+        List<List<String>> rows = CsvUtils.parseCsv(
+                "date,text\n2026-01-01,\"line one\nline two\"\n2026-01-02,plain\n");
+
+        assertThat(rows).hasSize(3);
+        assertThat(rows.get(1)).containsExactly("2026-01-01", "line one\nline two");
+        assertThat(rows.get(2)).containsExactly("2026-01-02", "plain");
+    }
+
+    @Test
     void parseCsvSkipsBlankLinesBetweenRows() {
         List<List<String>> rows = CsvUtils.parseCsv("a,b\n\n  \nc,d\n");
 

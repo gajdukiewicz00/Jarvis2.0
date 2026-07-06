@@ -3,8 +3,11 @@ package org.jarvis.lifetracker.service;
 import org.jarvis.lifetracker.domain.TransactionType;
 import org.jarvis.lifetracker.dto.ParsedTransactionDTO;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -156,6 +159,36 @@ class BankNotificationParserTest {
         ParsedTransactionDTO second = parser.parse("Platnosc 12.00 PLN Lidl Warszawa");
 
         assertThat(first.dedupKey()).isNotEqualTo(second.dedupKey());
+    }
+
+    @Test
+    void parseDedupKeyIsStableAcrossWallClockHourBoundaryForIdenticalText() {
+        String text = "Platnosc 45.99 PLN Lidl Warszawa";
+        // Precompute the fixed clock values BEFORE opening the static mock: calling
+        // LocalDateTime.of(...) while LocalDateTime is mocked would itself be a stubbed
+        // static call and break the when(LocalDateTime::now) stubbing (UnfinishedStubbing).
+        // CALLS_REAL_METHODS keeps every other LocalDateTime static intact so parse() runs normally.
+        LocalDateTime beforeMidnight = LocalDateTime.of(2026, 7, 4, 23, 58);
+        LocalDateTime afterMidnightNextHour = LocalDateTime.of(2026, 7, 5, 0, 2);
+
+        String dedupJustBeforeMidnight;
+        try (MockedStatic<LocalDateTime> mocked =
+                     Mockito.mockStatic(LocalDateTime.class, Mockito.CALLS_REAL_METHODS)) {
+            mocked.when(LocalDateTime::now).thenReturn(beforeMidnight);
+            dedupJustBeforeMidnight = parser.parse(text).dedupKey();
+        }
+
+        String dedupJustAfterMidnightNextHour;
+        try (MockedStatic<LocalDateTime> mocked =
+                     Mockito.mockStatic(LocalDateTime.class, Mockito.CALLS_REAL_METHODS)) {
+            mocked.when(LocalDateTime::now).thenReturn(afterMidnightNextHour);
+            dedupJustAfterMidnightNextHour = parser.parse(text).dedupKey();
+        }
+
+        // Re-parsing the exact same notification text must dedupe to the same key even
+        // when the wall-clock hour rolls over between the two calls (retry / re-import),
+        // otherwise the (user_id, dedup_key) unique constraint is silently bypassed.
+        assertThat(dedupJustAfterMidnightNextHour).isEqualTo(dedupJustBeforeMidnight);
     }
 
     @Test

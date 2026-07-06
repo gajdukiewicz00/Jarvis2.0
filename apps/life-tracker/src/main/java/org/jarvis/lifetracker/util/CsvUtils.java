@@ -19,13 +19,43 @@ public final class CsvUtils {
         if (csv == null || csv.isBlank()) {
             return rows;
         }
-        for (String rawLine : csv.split("\r\n|\r|\n")) {
+        for (String rawLine : splitRowsQuoteAware(csv)) {
             if (rawLine.isBlank()) {
                 continue;
             }
             rows.add(parseLine(rawLine));
         }
         return rows;
+    }
+
+    /**
+     * Splits a raw CSV document into row strings, tracking quote state across the whole
+     * document so that {@code \r\n}/{@code \r}/{@code \n} sequences inside a quoted field
+     * are kept as part of the row instead of being treated as a row boundary. Field-level
+     * parsing (including escaped-quote handling) is left to {@link #parseLine(String)}.
+     */
+    private static List<String> splitRowsQuoteAware(String csv) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder currentLine = new StringBuilder();
+        boolean inQuotes = false;
+        int length = csv.length();
+        for (int i = 0; i < length; i++) {
+            char c = csv.charAt(i);
+            if (c == '"') {
+                inQuotes = !inQuotes;
+                currentLine.append(c);
+            } else if (!inQuotes && (c == '\r' || c == '\n')) {
+                lines.add(currentLine.toString());
+                currentLine.setLength(0);
+                if (c == '\r' && i + 1 < length && csv.charAt(i + 1) == '\n') {
+                    i++;
+                }
+            } else {
+                currentLine.append(c);
+            }
+        }
+        lines.add(currentLine.toString());
+        return lines;
     }
 
     /** Splits a single CSV line into fields, respecting quoted commas and escaped quotes. */

@@ -8,6 +8,8 @@ import org.jarvis.smarthome.model.SmartHomeDeviceType;
 import org.jarvis.smarthome.model.SmartHomeDeviceView;
 import org.jarvis.smarthome.model.SmartHomeDiscoveryResult;
 import org.jarvis.smarthome.model.SmartHomeGroup;
+import org.jarvis.smarthome.model.IntentMatchStatus;
+import org.jarvis.smarthome.model.SmartHomeIntentResolution;
 import org.jarvis.smarthome.model.SmartHomeRoom;
 import org.jarvis.smarthome.model.SmartHomeScene;
 import org.jarvis.smarthome.model.SmartHomeSceneActivation;
@@ -18,6 +20,7 @@ import org.jarvis.smarthome.service.SmartHomeDeviceCatalog;
 import org.jarvis.smarthome.service.SmartHomeDeviceDiscoveryService;
 import org.jarvis.smarthome.service.SmartHomeDeviceNotFoundException;
 import org.jarvis.smarthome.service.SmartHomeGroupService;
+import org.jarvis.smarthome.service.SmartHomeIntentService;
 import org.jarvis.smarthome.service.SmartHomeRoomService;
 import org.jarvis.smarthome.service.SmartHomeSceneHistoryService;
 import org.jarvis.smarthome.service.SmartHomeSceneService;
@@ -74,6 +77,9 @@ class SmartHomeControllerTest {
 
     @Mock
     private SmartHomeDeviceDiscoveryService discoveryService;
+
+    @Mock
+    private SmartHomeIntentService intentService;
 
     @Mock
     private Clock clock;
@@ -260,6 +266,32 @@ class SmartHomeControllerTest {
         assertEquals(List.of("TOGGLE", "LOCK"), response.getBody().get("supportedActions"));
         assertEquals("Stateful smart-home control with local mock and MQTT transport support",
                 response.getBody().get("description"));
+    }
+
+    @Test
+    void resolveIntentDelegatesToIntentServiceAndReturnsResolution() {
+        SmartHomeIntentResolution resolution = new SmartHomeIntentResolution(
+                "turn on the kitchen light", IntentMatchStatus.RESOLVED, 0.9, "TURN_ON", null,
+                deviceDefinition(), List.of(), "Resolved device and action; not executed (planning only)");
+        when(intentService.resolve("turn on the kitchen light")).thenReturn(resolution);
+
+        ResponseEntity<SmartHomeIntentResolution> response =
+                controller.resolveIntent(new SmartHomeController.IntentQuery("turn on the kitchen light"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(resolution, response.getBody());
+    }
+
+    @Test
+    void resolveIntentHandlesNullBodyGracefully() {
+        SmartHomeIntentResolution resolution = new SmartHomeIntentResolution(
+                "", IntentMatchStatus.UNKNOWN, 0.0, null, null, null, List.of(), "Empty utterance");
+        when(intentService.resolve(null)).thenReturn(resolution);
+
+        ResponseEntity<SmartHomeIntentResolution> response = controller.resolveIntent(null);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(resolution, response.getBody());
     }
 
     @Test

@@ -10,6 +10,7 @@ import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
 import org.jarvis.smarthome.model.SmartHomeDeviceType;
 import org.jarvis.smarthome.model.SmartHomeDiscoveryResult;
 import org.jarvis.smarthome.model.SmartHomeGroup;
+import org.jarvis.smarthome.model.SmartHomeIntentResolution;
 import org.jarvis.smarthome.model.SmartHomeRoom;
 import org.jarvis.smarthome.model.SmartHomeScene;
 import org.jarvis.smarthome.model.SmartHomeSceneActivation;
@@ -18,6 +19,7 @@ import org.jarvis.smarthome.service.SmartHomeAutomationRuleRegistry;
 import org.jarvis.smarthome.service.SmartHomeDeviceCatalog;
 import org.jarvis.smarthome.service.SmartHomeDeviceDiscoveryService;
 import org.jarvis.smarthome.service.SmartHomeGroupService;
+import org.jarvis.smarthome.service.SmartHomeIntentService;
 import org.jarvis.smarthome.service.SmartHomeRoomService;
 import org.jarvis.smarthome.service.SmartHomeSceneHistoryService;
 import org.jarvis.smarthome.service.SmartHomeSceneService;
@@ -53,12 +55,17 @@ public class SmartHomeController {
     private final SmartHomeSensorService sensorService;
     private final SmartHomeAutomationRuleRegistry automationRuleRegistry;
     private final SmartHomeDeviceDiscoveryService discoveryService;
+    private final SmartHomeIntentService intentService;
     private final Clock clock;
 
     /** Request body for runtime device registration. */
     public record DeviceRegistration(String id, String name, String room,
                                      SmartHomeDeviceType type, List<String> supportedActions,
                                      Map<String, Object> state) {
+    }
+
+    /** Request body for natural-language intent parsing, e.g. {@code "turn on the kitchen light"}. */
+    public record IntentQuery(String utterance) {
     }
 
     /** Request body for creating/renaming a room. */
@@ -150,6 +157,17 @@ public class SmartHomeController {
             "supportedActions", smartHomeService.supportedActions(),
             "description", "Stateful smart-home control with local mock and MQTT transport support"
         ));
+    }
+
+    /**
+     * Parse a natural-language command (EN or RU) and resolve it against the device registry.
+     *
+     * <p>This only plans the command — it never actuates hardware. To act on the plan, call
+     * {@link #executeAction} with the resolved {@code deviceId} and {@code action}.
+     */
+    @PostMapping("/intent")
+    public ResponseEntity<SmartHomeIntentResolution> resolveIntent(@RequestBody IntentQuery body) {
+        return ResponseEntity.ok(intentService.resolve(body == null ? null : body.utterance()));
     }
 
     /** List all scenes. */

@@ -26,13 +26,15 @@ public final class LogSanitizer {
 
     /**
      * Sanitizes user/session identifiers.
-     * Returns a short stable hash in PII-safe mode.
+     * Redacts to a short stable hash unless raw PII logging has been
+     * explicitly enabled (piiEnabled=true). The safe default (piiEnabled=false,
+     * i.e. LOG_PII_ENABLED unset) always redacts.
      */
     public String sanitizeId(String id) {
         if (id == null || id.isBlank()) {
             return EMPTY_VALUE;
         }
-        if (!piiEnabled) {
+        if (piiEnabled) {
             return id;
         }
         return shortHash(id);
@@ -40,13 +42,14 @@ public final class LogSanitizer {
 
     /**
      * Sanitizes free-form user text.
-     * By default does not reveal text, only length and hash.
+     * By default does not reveal text, only length and hash, unless raw PII
+     * logging has been explicitly enabled (piiEnabled=true).
      */
     public String sanitizeText(String text) {
         if (text == null) {
             return "len=0, hash=" + NULL_HASH;
         }
-        if (!piiEnabled) {
+        if (piiEnabled) {
             return text;
         }
 

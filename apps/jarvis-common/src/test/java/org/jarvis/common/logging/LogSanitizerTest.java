@@ -10,8 +10,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LogSanitizerTest {
 
     @Test
-    void sanitizeIdReturnsShortHashWhenPiiEnabled() {
-        LogSanitizer sanitizer = new LogSanitizer(true, false, 32);
+    void sanitizeIdReturnsShortHashByDefaultWhenPiiDisabled() {
+        // piiEnabled=false is the real-world default (LOG_PII_ENABLED unset).
+        LogSanitizer sanitizer = new LogSanitizer(false, false, 32);
 
         String sanitized = sanitizer.sanitizeId("user-123");
 
@@ -20,8 +21,8 @@ class LogSanitizerTest {
     }
 
     @Test
-    void sanitizeTextHidesRawQueryByDefault() {
-        LogSanitizer sanitizer = new LogSanitizer(true, false, 32);
+    void sanitizeTextHidesRawQueryByDefaultWhenPiiDisabled() {
+        LogSanitizer sanitizer = new LogSanitizer(false, false, 32);
 
         String sanitized = sanitizer.sanitizeText("my private question");
 
@@ -32,8 +33,8 @@ class LogSanitizerTest {
     }
 
     @Test
-    void sanitizeTextAddsSnippetWhenEnabled() {
-        LogSanitizer sanitizer = new LogSanitizer(true, true, 5);
+    void sanitizeTextAddsSnippetWhenEnabledAndPiiDisabled() {
+        LogSanitizer sanitizer = new LogSanitizer(false, true, 5);
 
         String sanitized = sanitizer.sanitizeText("hello world");
 
@@ -43,8 +44,8 @@ class LogSanitizerTest {
     }
 
     @Test
-    void sanitizerCanBeDisabledForLocalDebug() {
-        LogSanitizer sanitizer = new LogSanitizer(false, false, 32);
+    void sanitizerAllowsRawValuesOnlyWhenPiiExplicitlyEnabled() {
+        LogSanitizer sanitizer = new LogSanitizer(true, false, 32);
 
         assertEquals("user-123", sanitizer.sanitizeId("user-123"));
         assertEquals("raw query", sanitizer.sanitizeText("raw query"));
@@ -61,7 +62,7 @@ class LogSanitizerTest {
     }
 
     @Test
-    void sanitizeTextReturnsNullMarkerForNullTextEvenWhenPiiDisabled() {
+    void sanitizeTextReturnsNullMarkerForNullTextEvenWhenPiiEnabled() {
         LogSanitizer piiEnabled = new LogSanitizer(true, false, 32);
         LogSanitizer piiDisabled = new LogSanitizer(false, false, 32);
 
@@ -71,7 +72,7 @@ class LogSanitizerTest {
 
     @Test
     void snippetNormalizesWhitespaceAndQuotesAndCanBeEmpty() {
-        LogSanitizer sanitizer = new LogSanitizer(true, true, 32);
+        LogSanitizer sanitizer = new LogSanitizer(false, true, 32);
 
         String withInternalWhitespace = sanitizer.sanitizeText("hello\n\tworld  \"quoted\"");
         assertTrue(withInternalWhitespace.contains("snippet=\"hello world 'quoted'\""));
@@ -82,10 +83,36 @@ class LogSanitizerTest {
 
     @Test
     void negativeSnippetMaxLengthIsClampedToZero() {
-        LogSanitizer sanitizer = new LogSanitizer(true, true, -5);
+        LogSanitizer sanitizer = new LogSanitizer(false, true, -5);
 
         String sanitized = sanitizer.sanitizeText("hello");
 
         assertTrue(sanitized.contains("snippet=\"...\""));
+    }
+
+    @Test
+    void defaultConfigurationRedactsUserIdSessionIdAndRequestText() {
+        // Regression test for the critical PII-leak finding: with the real
+        // production default (LOG_PII_ENABLED unset -> piiEnabled=false),
+        // sanitizeId/sanitizeText must NEVER return raw PII.
+        LogSanitizer defaultSanitizer = new LogSanitizer(false, false, 32);
+
+        String sanitizedUserId = defaultSanitizer.sanitizeId("user-42");
+        String sanitizedSessionId = defaultSanitizer.sanitizeId("session-abc-999");
+        String sanitizedText = defaultSanitizer.sanitizeText("my SSN is 123-45-6789");
+
+        assertNotEquals("user-42", sanitizedUserId);
+        assertNotEquals("session-abc-999", sanitizedSessionId);
+        assertFalse(sanitizedText.contains("123-45-6789"));
+        assertTrue(sanitizedUserId.matches("[0-9a-f]{12}"));
+        assertTrue(sanitizedSessionId.matches("[0-9a-f]{12}"));
+    }
+
+    @Test
+    void explicitlyEnablingPiiLoggingPassesThroughRawValues() {
+        LogSanitizer optedInSanitizer = new LogSanitizer(true, false, 32);
+
+        assertEquals("user-42", optedInSanitizer.sanitizeId("user-42"));
+        assertEquals("my SSN is 123-45-6789", optedInSanitizer.sanitizeText("my SSN is 123-45-6789"));
     }
 }

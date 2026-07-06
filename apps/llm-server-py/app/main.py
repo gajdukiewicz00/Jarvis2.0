@@ -264,9 +264,39 @@ async def chat(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Sentinel used to detect exhaustion of a blocking generator without
+# letting a StopIteration cross a thread-pool future boundary.
+_STREAM_EXHAUSTED = object()
+
+
+async def _bridge_blocking_stream(loop: asyncio.AbstractEventLoop, sync_iterator):
+    """
+    Bridge a blocking (thread-blocking) synchronous token generator to an
+    async generator.
+
+    Backend token generation (llama.cpp / transformers) is a synchronous,
+    CPU/GPU-bound call. Iterating it directly inside an `async def` freezes
+    the asyncio event loop for the entire response, blocking every other
+    request (including /health) until the stream ends. Instead, each
+    `next()` call is executed in the shared thread-pool executor and
+    awaited, so the event loop stays free between tokens.
+    """
+    def _advance():
+        try:
+            return next(sync_iterator)
+        except StopIteration:
+            return _STREAM_EXHAUSTED
+
+    while True:
+        token = await loop.run_in_executor(executor, _advance)
+        if token is _STREAM_EXHAUSTED:
+            return
+        yield token
+
+
 async def _handle_streaming_chat(request: ChatRequest, correlation_id: str):
     """Handle streaming chat response using SSE"""
-    
+
     async def generate_stream():
         start_time = time.time()
         total_tokens = 0
@@ -278,7 +308,10 @@ async def _handle_streaming_chat(request: ChatRequest, correlation_id: str):
         logger.info(f"[{correlation_id}] Streaming chat: messages={len(messages)}, max_tokens={max_tokens}")
         
         try:
-            # Yield SSE events
+            # Build the (synchronous) backend token generator. Constructing
+            # it is cheap/non-blocking - generator bodies don't run until
+            # the first `next()` call, which is dispatched off the event
+            # loop below via `_bridge_blocking_stream`.
             stream = (
                 model_loader.chat_stream(
                     messages=messages,
@@ -294,7 +327,10 @@ async def _handle_streaming_chat(request: ChatRequest, correlation_id: str):
                     top_p=config.TOP_P
                 )
             )
-            for token in stream:
+            loop = asyncio.get_event_loop()
+            # Yield SSE events without blocking the event loop: each token
+            # is generated in the thread-pool executor.
+            async for token in _bridge_blocking_stream(loop, stream):
                 total_tokens += 1
                 # SSE format: data: {json}\n\n
                 yield f"data: {token}\n\n"

@@ -51,6 +51,13 @@ pc-control:
   stub-mode: ${PC_CONTROL_STUB_MODE:false}
   file-root: ${PC_CONTROL_FILE_ROOT:/var/jarvis/shared}
   file-extensions: ${PC_CONTROL_FILE_EXTENSIONS:txt,log,md,json,yml,yaml,csv}
+  # Per-command wall-clock timeout enforced by ProcessCommandExecutor. A command
+  # (and any descendant processes it spawned) that overruns this budget is killed
+  # via destroyForcibly() and reported as a failure rather than hanging the caller.
+  command-timeout-seconds: ${PC_CONTROL_COMMAND_TIMEOUT_SECONDS:30}
+  # Directory that SCREENSHOT output paths are confined to (canonicalized +
+  # containment-checked); traversal outside this directory is rejected.
+  screenshot-dir: ${PC_CONTROL_SCREENSHOT_DIR:/tmp}
   desktop:
     application-dirs:
       - /usr/share/applications

@@ -9,6 +9,7 @@ import org.jarvis.pccontrol.model.PcActionStepResult;
 import org.jarvis.pccontrol.model.PcScenarioDefinition;
 import org.jarvis.pccontrol.model.PcScenarioStep;
 import org.jarvis.pccontrol.security.CommandValidator;
+import org.jarvis.pccontrol.service.ActionAuditService;
 import org.jarvis.pccontrol.service.PcActionExecutionService;
 import org.jarvis.pccontrol.service.PcScenarioRegistry;
 import org.jarvis.pccontrol.service.SystemControlService;
@@ -34,6 +35,7 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
     private final TimerSchedulerService timerSchedulerService;
     private final CommandValidator commandValidator;
     private final PcScenarioRegistry scenarioRegistry;
+    private final ActionAuditService auditService;
 
     @Override
     public PcActionResult execute(PcActionRequest request) {
@@ -361,6 +363,15 @@ public class DefaultPcActionExecutionService implements PcActionExecutionService
 
     private PcActionStepResult executeStep(String stepId, String actionType, Map<String, String> parameters,
                                            ThrowingAction action, String successMessage, Map<String, Object> details) {
+        PcActionStepResult step = runStep(stepId, actionType, action, successMessage, details);
+        // Every attempted execution is audited here, win or lose - this is the single
+        // choke point through which all primitive PC-control actions actually run.
+        auditService.record(step.stepId(), step.actionType(), step.status(), step.message());
+        return step;
+    }
+
+    private PcActionStepResult runStep(String stepId, String actionType, ThrowingAction action,
+                                       String successMessage, Map<String, Object> details) {
         try {
             action.run();
             return new PcActionStepResult(stepId, actionType, PcActionExecutionStatus.SUCCESS, successMessage, details);

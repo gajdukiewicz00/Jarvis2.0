@@ -3,11 +3,17 @@ package org.jarvis.pccontrol.service.impl;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.pccontrol.model.OpenAppRequest;
 import org.jarvis.pccontrol.model.OpenUrlRequest;
+import org.jarvis.pccontrol.service.CommandExecutor;
+import org.jarvis.pccontrol.service.CommandResult;
+import org.jarvis.pccontrol.service.DesktopControlService;
 import org.jarvis.pccontrol.service.SystemControlService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -22,7 +28,6 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
-@lombok.RequiredArgsConstructor
 @ConditionalOnProperty(name = "pc-control.stub-mode", havingValue = "false", matchIfMissing = true)
 public class LinuxSystemControlService implements SystemControlService {
 
@@ -31,6 +36,7 @@ public class LinuxSystemControlService implements SystemControlService {
     // Disallow ASCII control characters (newlines, escapes, etc.) so xdotool
     // never receives anything that could be interpreted as extra key events.
     private static final Pattern UNSAFE_TEXT_CONTROL_CHARS = Pattern.compile("[\\x00-\\x1F\\x7F]");
+    private static final String DEFAULT_SCREENSHOT_FILENAME = "jarvis-screenshot.png";
 
     private static final Map<String, List<String>> APP_COMMANDS = Map.ofEntries(
             Map.entry("browser", List.of("xdg-open", "https://google.com")),
@@ -48,7 +54,20 @@ public class LinuxSystemControlService implements SystemControlService {
     );
 
     private final LinuxAudioControl audioControl;
-    private final org.jarvis.pccontrol.service.DesktopControlService desktopControlService;
+    private final DesktopControlService desktopControlService;
+    private final CommandExecutor commandExecutor;
+    private final Path screenshotDir;
+
+    public LinuxSystemControlService(
+            LinuxAudioControl audioControl,
+            DesktopControlService desktopControlService,
+            CommandExecutor commandExecutor,
+            @Value("${pc-control.screenshot-dir:/tmp}") String screenshotDir) {
+        this.audioControl = audioControl;
+        this.desktopControlService = desktopControlService;
+        this.commandExecutor = commandExecutor;
+        this.screenshotDir = Paths.get(screenshotDir).toAbsolutePath().normalize();
+    }
 
     @Override
     public void changeVolume(int deltaPercent, String direction) throws IOException, InterruptedException {
@@ -123,7 +142,7 @@ public class LinuxSystemControlService implements SystemControlService {
                 throw e;
             }
             log.info("Fallback app launch for {} with {}", appName, fallbackCommand);
-            startProcess(fallbackCommand);
+            commandExecutor.start(fallbackCommand);
         }
     }
 
@@ -261,68 +280,59 @@ public class LinuxSystemControlService implements SystemControlService {
 
     @Override
     public void takeScreenshot(String path) throws IOException, InterruptedException {
-        String target = (path == null || path.isBlank()) ? "/tmp/jarvis-screenshot.png" : path;
-        execWithFallback(List.of("gnome-screenshot", "-f", target), "Screenshot");
+        Path target = resolveScreenshotPath(path);
+        execWithFallback(List.of("gnome-screenshot", "-f", target.toString()), "Screenshot");
     }
 
     /**
-     * Execute command with graceful error handling.
-     * Logs warning instead of throwing for non-critical failures.
+     * Confines a caller-supplied screenshot path to {@link #screenshotDir}: relative
+     * paths are resolved inside it, absolute paths are only accepted if they already
+     * fall inside it once canonicalized, and any {@code ..} traversal that would
+     * escape the directory is rejected outright.
+     */
+    private Path resolveScreenshotPath(String path) {
+        String candidate = (path == null || path.isBlank()) ? DEFAULT_SCREENSHOT_FILENAME : path.trim();
+        Path requested = Paths.get(candidate);
+        Path resolved = (requested.isAbsolute() ? requested : screenshotDir.resolve(requested)).normalize();
+        if (!resolved.startsWith(screenshotDir)) {
+            throw new IllegalArgumentException("Screenshot path escapes the allowed directory: " + path);
+        }
+        return resolved;
+    }
+
+    /**
+     * Executes a command and maps a non-zero exit code to a thrown IOException -
+     * callers (and ultimately DefaultPcActionExecutionService) must see this as the
+     * FAILURE it is rather than a silently-successful no-op.
      */
     private void execWithFallback(List<String> cmd, String operation) throws IOException, InterruptedException {
-        try {
-            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-            int code = p.waitFor();
-            if (code != 0) {
-                log.warn("⚠️ {} command returned non-zero exit code: {} for cmd: {}", operation, code, cmd);
-                // Don't throw for non-critical commands - just log
-            } else {
-                log.debug("✅ {} completed successfully", operation);
-            }
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            log.error("❌ {} failed: {}", operation, e.getMessage());
-            throw e;
+        CommandResult result = commandExecutor.execute(cmd);
+        if (result.exitCode() != 0) {
+            log.warn("⚠️ {} command returned non-zero exit code: {} for cmd: {}", operation, result.exitCode(), cmd);
+            throw new IOException(operation + " failed with exit code " + result.exitCode()
+                    + ": " + result.stdout());
         }
+        log.debug("✅ {} completed successfully", operation);
     }
 
     /**
      * Execute playerctl command with special handling for "No players found" case.
-     * This is a common edge case that should not crash the service.
+     * That specific case is a common, non-erroneous edge case (nothing is playing)
+     * and must not fail the action; every other non-zero exit is a real failure.
      */
     private void execPlayerctl(List<String> cmd, String operation) throws IOException, InterruptedException {
-        try {
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-
-            // Read output for error checking
-            String output = new String(p.getInputStream().readAllBytes()).trim();
-            int code = p.waitFor();
-
-            if (code != 0) {
-                if (output.contains("No players found") || output.contains("No player could handle")) {
-                    log.warn("⚠️ {} skipped: no media players running", operation);
-                    // This is not an error - just no players available
-                    return;
-                }
-                log.warn("⚠️ {} command returned non-zero: {} (output: {})", operation, code, output);
-            } else {
-                log.debug("✅ {} completed successfully", operation);
-            }
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            log.error("❌ {} failed: {}", operation, e.getMessage());
-            // Don't throw for playerctl - just log the error
+        CommandResult result = commandExecutor.execute(cmd);
+        if (result.exitCode() == 0) {
+            log.debug("✅ {} completed successfully", operation);
+            return;
         }
-    }
-
-    private static void startProcess(List<String> cmd) throws IOException {
-        new ProcessBuilder(cmd).start();
+        String output = result.stdout();
+        if (output.contains("No players found") || output.contains("No player could handle")) {
+            log.warn("⚠️ {} skipped: no media players running", operation);
+            return;
+        }
+        log.warn("⚠️ {} command returned non-zero: {} (output: {})", operation, result.exitCode(), output);
+        throw new IOException(operation + " failed with exit code " + result.exitCode() + ": " + output);
     }
 
     private void execWindowCommand(String title, List<String> actionArgs, String operation)

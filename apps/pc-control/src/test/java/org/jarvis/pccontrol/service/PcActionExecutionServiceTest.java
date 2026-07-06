@@ -6,6 +6,7 @@ import org.jarvis.pccontrol.model.PcActionResult;
 import org.jarvis.pccontrol.model.PcScenarioDefinition;
 import org.jarvis.pccontrol.model.PcScenarioStep;
 import org.jarvis.pccontrol.security.CommandValidator;
+import org.jarvis.pccontrol.service.ActionAuditService;
 import org.jarvis.pccontrol.service.impl.DefaultPcActionExecutionService;
 import org.jarvis.pccontrol.service.impl.InMemoryPcScenarioRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,9 @@ class PcActionExecutionServiceTest {
     @Mock
     private TimerSchedulerService timerSchedulerService;
 
+    @Mock
+    private ActionAuditService auditService;
+
     private CommandValidator commandValidator;
 
     private DefaultPcActionExecutionService service;
@@ -82,7 +86,8 @@ class PcActionExecutionServiceTest {
                 systemControlService,
                 timerSchedulerService,
                 commandValidator,
-                new InMemoryPcScenarioRegistry());
+                new InMemoryPcScenarioRegistry(),
+                auditService);
     }
 
     // --- Top-level validation / routing ---
@@ -721,7 +726,7 @@ class PcActionExecutionServiceTest {
         when(customRegistry.findByName("custom_close")).thenReturn(Optional.of(definition));
 
         DefaultPcActionExecutionService customService = new DefaultPcActionExecutionService(
-                systemControlService, timerSchedulerService, commandValidator, customRegistry);
+                systemControlService, timerSchedulerService, commandValidator, customRegistry, auditService);
 
         PcActionResult result = customService.execute(new PcActionRequest("SCENARIO", Map.of("name", "custom_close")));
 
@@ -743,7 +748,7 @@ class PcActionExecutionServiceTest {
         when(customRegistry.findByName("bad_mouse_move")).thenReturn(Optional.of(definition));
 
         DefaultPcActionExecutionService customService = new DefaultPcActionExecutionService(
-                systemControlService, timerSchedulerService, commandValidator, customRegistry);
+                systemControlService, timerSchedulerService, commandValidator, customRegistry, auditService);
 
         assertThrows(IllegalArgumentException.class, () ->
                 customService.execute(new PcActionRequest("SCENARIO", Map.of("name", "bad_mouse_move"))));
@@ -757,5 +762,36 @@ class PcActionExecutionServiceTest {
         assertEquals(PcActionExecutionStatus.SUCCESS, result.status());
         assertEquals(15, result.details().get("delta"));
         assertEquals("+", result.details().get("direction"));
+    }
+
+    // --- Audit trail ---
+
+    @Test
+    void executeRecordsAuditEntryForSuccessfulAction() throws Exception {
+        service.execute(new PcActionRequest("MUTE", Map.of()));
+
+        verify(auditService).record(eq("mute"), eq("MUTE"), eq(PcActionExecutionStatus.SUCCESS), any());
+    }
+
+    @Test
+    void executeRecordsAuditEntryForFailedAction() throws Exception {
+        doThrow(new IOException("no audio backend")).when(systemControlService).mute();
+
+        PcActionResult result = service.execute(new PcActionRequest("MUTE", Map.of()));
+
+        assertEquals(PcActionExecutionStatus.FAILED, result.status());
+        verify(auditService).record(eq("mute"), eq("MUTE"), eq(PcActionExecutionStatus.FAILED), any());
+    }
+
+    @Test
+    void executeAuditEntryForTypeTextNeverIncludesLiteralTypedText() throws Exception {
+        String secretLookingText = "hunter2-password-do-not-log";
+
+        service.execute(new PcActionRequest("TYPE_TEXT", Map.of("text", secretLookingText)));
+
+        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+        verify(auditService).record(eq("type-text"), eq("TYPE_TEXT"), eq(PcActionExecutionStatus.SUCCESS),
+                messageCaptor.capture());
+        assertFalse(messageCaptor.getValue().contains(secretLookingText));
     }
 }

@@ -35,6 +35,38 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
+  # Device state-history persistence
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${SMART_HOME_DATASOURCE_MAX_POOL_SIZE:10}
+      minimum-idle: ${SMART_HOME_DATASOURCE_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1200000
+      validation-timeout: 5000
+      connection-test-query: SELECT 1
+      pool-name: smart-home-service-pool
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    schemas: public
+    clean-disabled: true
+
 jarvis:
   mqtt:
     broker-url: ${MQTT_BROKER_URL:tcp://mosquitto:1883}
@@ -59,7 +91,7 @@ smarthome:
   provider: ${SMART_HOME_PROVIDER:mqtt}
 
 security:
-  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:TURN_ON,TURN_OFF,TOGGLE,DIM,BRIGHTEN,SET_COLOR,SET_TEMPERATURE,SET_BRIGHTNESS,LOCK,UNLOCK}
+  allowed-actions: ${SECURITY_ALLOWED_ACTIONS:TURN_ON,TURN_OFF,TOGGLE,DIM,BRIGHTEN,SET_COLOR,SET_TEMPERATURE,SET_BRIGHTNESS,LOCK,UNLOCK,OPEN,CLOSE}
 
 # Actuator & Observability
 management:

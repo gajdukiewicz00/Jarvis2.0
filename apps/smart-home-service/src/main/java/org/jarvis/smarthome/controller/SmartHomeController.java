@@ -2,9 +2,12 @@ package org.jarvis.smarthome.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.smarthome.history.DeviceStateHistoryEntry;
+import org.jarvis.smarthome.history.DeviceStateHistoryService;
 import org.jarvis.smarthome.model.SmartHomeActionRequest;
 import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeAutomationRule;
+import org.jarvis.smarthome.model.SmartHomeAutomationSimulation;
 import org.jarvis.smarthome.model.SmartHomeDeviceView;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
 import org.jarvis.smarthome.model.SmartHomeDeviceType;
@@ -14,7 +17,9 @@ import org.jarvis.smarthome.model.SmartHomeIntentResolution;
 import org.jarvis.smarthome.model.SmartHomeRoom;
 import org.jarvis.smarthome.model.SmartHomeScene;
 import org.jarvis.smarthome.model.SmartHomeSceneActivation;
+import org.jarvis.smarthome.model.SmartHomeSceneSimulation;
 import org.jarvis.smarthome.model.SmartHomeSensorReading;
+import org.jarvis.smarthome.service.SmartHomeAutomationEngine;
 import org.jarvis.smarthome.service.SmartHomeAutomationRuleRegistry;
 import org.jarvis.smarthome.service.SmartHomeDeviceCatalog;
 import org.jarvis.smarthome.service.SmartHomeDeviceDiscoveryService;
@@ -23,6 +28,7 @@ import org.jarvis.smarthome.service.SmartHomeIntentService;
 import org.jarvis.smarthome.service.SmartHomeRoomService;
 import org.jarvis.smarthome.service.SmartHomeSceneHistoryService;
 import org.jarvis.smarthome.service.SmartHomeSceneService;
+import org.jarvis.smarthome.service.SmartHomeSceneSimulationService;
 import org.jarvis.smarthome.service.SmartHomeSensorService;
 import org.jarvis.smarthome.service.SmartHomeService;
 import org.jarvis.smarthome.service.SmartHomeDeviceNotFoundException;
@@ -54,6 +60,9 @@ public class SmartHomeController {
     private final SmartHomeRoomService roomService;
     private final SmartHomeSensorService sensorService;
     private final SmartHomeAutomationRuleRegistry automationRuleRegistry;
+    private final SmartHomeAutomationEngine automationEngine;
+    private final SmartHomeSceneSimulationService sceneSimulationService;
+    private final DeviceStateHistoryService stateHistoryService;
     private final SmartHomeDeviceDiscoveryService discoveryService;
     private final SmartHomeIntentService intentService;
     private final Clock clock;
@@ -133,19 +142,71 @@ public class SmartHomeController {
     public ResponseEntity<?> executeAction(
             @RequestHeader(value = "X-User-Id", required = false) String userId,
             @PathVariable String deviceId,
-            @RequestBody SmartHomeActionRequest request) {
+            @RequestBody SmartHomeActionRequest request,
+            @RequestParam(defaultValue = "false") boolean confirm) {
 
-        log.info("Executing action for user={} device {}: action={}, payload={}",
-                userId, deviceId, request.action(), request.payload());
+        log.info("Executing action for user={} device {}: action={}, payload={}, confirm={}",
+                userId, deviceId, request.action(), request.payload(), confirm);
 
         try {
-            SmartHomeActionResult result = smartHomeService.executeAction(requireUserId(userId), deviceId, request);
+            String uid = requireUserId(userId);
+            SmartHomeActionResult result = smartHomeService.executeAction(uid, deviceId, request, confirm);
+            if (result.success()) {
+                recordStateHistory(uid, deviceId, result, request.payload());
+            }
             return ResponseEntity.ok(result);
         } catch (SmartHomeDeviceNotFoundException e) {
             return ResponseEntity.status(404).body(error("DEVICE_NOT_FOUND", e.getMessage()));
         } catch (SmartHomeValidationException e) {
             return ResponseEntity.badRequest().body(error("INVALID_ACTION", e.getMessage()));
         }
+    }
+
+    /** Best-effort audit trail write; a persistence hiccup must not fail an already-applied action. */
+    private void recordStateHistory(String userId, String deviceId, SmartHomeActionResult result, String payload) {
+        try {
+            Map<String, Object> state = result.device() == null ? Map.of() : result.device().state();
+            stateHistoryService.record(userId, deviceId, result.action(), payload, state, true);
+        } catch (RuntimeException e) {
+            log.warn("Failed to persist state history for device {}: {}", deviceId, e.getMessage());
+        }
+    }
+
+    /**
+     * Dry-run: evaluate automation rules against the current (or supplied) sensor
+     * reading for a device — no devices are actuated. Mirrors
+     * {@link #ingestSensorReading}'s request shape; when no body is supplied, the
+     * latest known reading(s) for the device are used instead.
+     */
+    @PostMapping("/devices/{deviceId}/automation/simulate")
+    public ResponseEntity<List<SmartHomeAutomationSimulation>> simulateAutomation(
+            @PathVariable String deviceId,
+            @RequestBody(required = false) SensorReadingRequest body) {
+        List<SmartHomeSensorReading> readings = body != null && body.metric() != null && !body.metric().isBlank()
+                ? List.of(new SmartHomeSensorReading(deviceId, body.metric(), body.value(), body.unit(), clock.instant()))
+                : sensorService.latestForDevice(deviceId);
+
+        List<SmartHomeAutomationSimulation> results = new ArrayList<>();
+        for (SmartHomeSensorReading reading : readings) {
+            results.addAll(automationEngine.simulate(reading));
+        }
+        return ResponseEntity.ok(results);
+    }
+
+    /** Dry-run: the actions a scene activation would take, without executing any of them. */
+    @PostMapping("/scenes/{name}/simulate")
+    public ResponseEntity<SmartHomeSceneSimulation> simulateScene(
+            @PathVariable String name,
+            @RequestParam(defaultValue = "false") boolean confirm) {
+        return ResponseEntity.ok(sceneSimulationService.simulate(name, confirm));
+    }
+
+    /** Bounded, most-recent-first page of persisted state changes for a device. */
+    @GetMapping("/devices/{deviceId}/state-history")
+    public List<DeviceStateHistoryEntry> deviceStateHistory(
+            @PathVariable String deviceId,
+            @RequestParam(required = false, defaultValue = "50") int limit) {
+        return stateHistoryService.history(deviceId, limit);
     }
 
     /**

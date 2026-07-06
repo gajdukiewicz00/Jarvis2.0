@@ -1,8 +1,11 @@
 package org.jarvis.smarthome.controller;
 
+import org.jarvis.smarthome.history.DeviceStateHistoryEntry;
+import org.jarvis.smarthome.history.DeviceStateHistoryService;
 import org.jarvis.smarthome.model.SmartHomeActionRequest;
 import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeAutomationRule;
+import org.jarvis.smarthome.model.SmartHomeAutomationSimulation;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
 import org.jarvis.smarthome.model.SmartHomeDeviceType;
 import org.jarvis.smarthome.model.SmartHomeDeviceView;
@@ -13,8 +16,11 @@ import org.jarvis.smarthome.model.SmartHomeIntentResolution;
 import org.jarvis.smarthome.model.SmartHomeRoom;
 import org.jarvis.smarthome.model.SmartHomeScene;
 import org.jarvis.smarthome.model.SmartHomeSceneActivation;
+import org.jarvis.smarthome.model.SmartHomeSceneSimulation;
 import org.jarvis.smarthome.model.SmartHomeSensorReading;
+import org.jarvis.smarthome.model.SmartHomeSimulatedAction;
 import org.jarvis.smarthome.model.SmartHomeTriggerEvent;
+import org.jarvis.smarthome.service.SmartHomeAutomationEngine;
 import org.jarvis.smarthome.service.SmartHomeAutomationRuleRegistry;
 import org.jarvis.smarthome.service.SmartHomeDeviceCatalog;
 import org.jarvis.smarthome.service.SmartHomeDeviceDiscoveryService;
@@ -24,6 +30,7 @@ import org.jarvis.smarthome.service.SmartHomeIntentService;
 import org.jarvis.smarthome.service.SmartHomeRoomService;
 import org.jarvis.smarthome.service.SmartHomeSceneHistoryService;
 import org.jarvis.smarthome.service.SmartHomeSceneService;
+import org.jarvis.smarthome.service.SmartHomeSceneSimulationService;
 import org.jarvis.smarthome.service.SmartHomeSensorService;
 import org.jarvis.smarthome.service.SmartHomeService;
 import org.jarvis.smarthome.service.SmartHomeValidationException;
@@ -43,8 +50,11 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -76,6 +86,15 @@ class SmartHomeControllerTest {
     private SmartHomeAutomationRuleRegistry automationRuleRegistry;
 
     @Mock
+    private SmartHomeAutomationEngine automationEngine;
+
+    @Mock
+    private SmartHomeSceneSimulationService sceneSimulationService;
+
+    @Mock
+    private DeviceStateHistoryService stateHistoryService;
+
+    @Mock
     private SmartHomeDeviceDiscoveryService discoveryService;
 
     @Mock
@@ -102,12 +121,31 @@ class SmartHomeControllerTest {
 
     @Test
     void executeActionReturnsUpdatedDeviceSnapshot() {
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null)))
-                .thenReturn(new SmartHomeActionResult(true, "user-1", "TOGGLE", "ok", deviceView(), Instant.now()));
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null), false))
+                .thenReturn(new SmartHomeActionResult(true, "user-1", "TOGGLE", "ok", deviceView(), Instant.now(), false));
 
-        ResponseEntity<?> response = controller.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null));
+        ResponseEntity<?> response = controller.executeAction(
+                "user-1", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null), false);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(stateHistoryService).record("user-1", "kitchen_light", "TOGGLE", null,
+                deviceView().state(), true);
+    }
+
+    @Test
+    void executeActionDoesNotRecordHistoryWhenNeedsConfirmation() {
+        SmartHomeActionResult blocked = new SmartHomeActionResult(
+                false, "user-1", "UNLOCK", "Confirmation required", deviceView(), Instant.now(), true);
+        when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), false))
+                .thenReturn(blocked);
+
+        ResponseEntity<?> response = controller.executeAction(
+                "user-1", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), false);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(blocked, response.getBody());
+        verify(stateHistoryService, never())
+                .record(any(), any(), any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -141,10 +179,11 @@ class SmartHomeControllerTest {
 
     @Test
     void executeActionReturnsBadRequestForValidationError() {
-        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "500")))
+        when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "500"), false))
                 .thenThrow(new SmartHomeValidationException("brightness must be between 0 and 100"));
 
-        ResponseEntity<?> response = controller.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "500"));
+        ResponseEntity<?> response = controller.executeAction(
+                "user-1", "kitchen_light", new SmartHomeActionRequest("SET_BRIGHTNESS", "500"), false);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertEquals("INVALID_ACTION", ((Map<?, ?>) response.getBody()).get("error"));
@@ -152,10 +191,11 @@ class SmartHomeControllerTest {
 
     @Test
     void executeActionReturnsNotFoundForUnknownDevice() {
-        when(smartHomeService.executeAction("user-1", "missing", new SmartHomeActionRequest("TOGGLE", null)))
+        when(smartHomeService.executeAction("user-1", "missing", new SmartHomeActionRequest("TOGGLE", null), false))
                 .thenThrow(new SmartHomeDeviceNotFoundException("missing"));
 
-        ResponseEntity<?> response = controller.executeAction("user-1", "missing", new SmartHomeActionRequest("TOGGLE", null));
+        ResponseEntity<?> response = controller.executeAction(
+                "user-1", "missing", new SmartHomeActionRequest("TOGGLE", null), false);
 
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals("DEVICE_NOT_FOUND", ((Map<?, ?>) response.getBody()).get("error"));
@@ -375,7 +415,7 @@ class SmartHomeControllerTest {
         when(sceneService.find("night")).thenReturn(Optional.of(scene));
 
         SmartHomeActionResult okResult = new SmartHomeActionResult(
-                true, "user-1", "TURN_OFF", "ok", deviceView(), Instant.now());
+                true, "user-1", "TURN_OFF", "ok", deviceView(), Instant.now(), false);
         when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null)))
                 .thenReturn(okResult);
         when(smartHomeService.executeAction("user-1", "front_door_lock", new SmartHomeActionRequest("LOCK", null)))
@@ -430,7 +470,7 @@ class SmartHomeControllerTest {
         SmartHomeScene scene = new SmartHomeScene("night", List.of(step));
         when(sceneService.find("night")).thenReturn(Optional.of(scene));
         when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null)))
-                .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_ON", "ok", deviceView(), Instant.now()));
+                .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_ON", "ok", deviceView(), Instant.now(), false));
         when(clock.instant()).thenReturn(Instant.parse("2026-03-14T10:30:00Z"));
 
         controller.activateScene("user-1", "night");
@@ -504,7 +544,7 @@ class SmartHomeControllerTest {
         SmartHomeGroup group = new SmartHomeGroup("lights", "Lights", List.of("kitchen_light", "desk_lamp"));
         when(groupService.find("lights")).thenReturn(Optional.of(group));
         when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_OFF", null)))
-                .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_OFF", "ok", deviceView(), Instant.now()));
+                .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_OFF", "ok", deviceView(), Instant.now(), false));
         when(smartHomeService.executeAction("user-1", "desk_lamp", new SmartHomeActionRequest("TURN_OFF", null)))
                 .thenThrow(new SmartHomeValidationException("boom"));
 
@@ -588,7 +628,7 @@ class SmartHomeControllerTest {
         SmartHomeRoom room = new SmartHomeRoom("kitchen", "Kitchen", List.of("kitchen_light"));
         when(roomService.find("kitchen")).thenReturn(Optional.of(room));
         when(smartHomeService.executeAction("user-1", "kitchen_light", new SmartHomeActionRequest("TURN_ON", null)))
-                .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_ON", "ok", deviceView(), Instant.now()));
+                .thenReturn(new SmartHomeActionResult(true, "user-1", "TURN_ON", "ok", deviceView(), Instant.now(), false));
 
         ResponseEntity<?> response = controller.actOnRoom("user-1", "kitchen", new SmartHomeActionRequest("TURN_ON", null));
 
@@ -721,6 +761,65 @@ class SmartHomeControllerTest {
         when(discoveryService.scan()).thenReturn(result);
 
         assertEquals(result, controller.scanForDevices());
+    }
+
+    @Test
+    void simulateAutomationUsesSuppliedReadingWhenGiven() {
+        SmartHomeSimulatedAction predicted = new SmartHomeSimulatedAction(
+                "kitchen_light", "TURN_ON", null, true, true, false, true, "Would execute TURN_ON (simulation only)");
+        SmartHomeAutomationSimulation simulation = new SmartHomeAutomationSimulation(
+                "rule-1", "Motion turns on kitchen light", true, predicted, predicted.message());
+        when(automationEngine.simulate(any())).thenReturn(List.of(simulation));
+
+        ResponseEntity<List<SmartHomeAutomationSimulation>> response = controller.simulateAutomation(
+                "hall_motion", new SmartHomeController.SensorReadingRequest("MOTION", 1.0, null));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(List.of(simulation), response.getBody());
+        verify(sensorService, never()).latestForDevice(any());
+    }
+
+    @Test
+    void simulateAutomationFallsBackToLatestReadingsWhenNoBodySupplied() {
+        SmartHomeSensorReading latest = new SmartHomeSensorReading("hall_motion", "MOTION", 1.0, null, Instant.now());
+        when(sensorService.latestForDevice("hall_motion")).thenReturn(List.of(latest));
+        when(automationEngine.simulate(latest)).thenReturn(List.of());
+
+        ResponseEntity<List<SmartHomeAutomationSimulation>> response =
+                controller.simulateAutomation("hall_motion", null);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isEmpty());
+        verify(automationEngine).simulate(latest);
+    }
+
+    @Test
+    void simulateSceneDelegatesToSimulationService() {
+        SmartHomeSceneSimulation simulation = new SmartHomeSceneSimulation("night", true, List.of(), "Simulated 0 step(s); 0 would execute");
+        when(sceneSimulationService.simulate("night", true)).thenReturn(simulation);
+
+        ResponseEntity<SmartHomeSceneSimulation> response = controller.simulateScene("night", true);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(simulation, response.getBody());
+    }
+
+    @Test
+    void deviceStateHistoryDelegatesToStateHistoryService() {
+        DeviceStateHistoryEntry entry = DeviceStateHistoryEntry.builder()
+                .id(1L)
+                .deviceId("kitchen_light")
+                .userId("user-1")
+                .action("TOGGLE")
+                .stateJson("{}")
+                .success(true)
+                .recordedAt(Instant.now())
+                .build();
+        when(stateHistoryService.history("kitchen_light", 25)).thenReturn(List.of(entry));
+
+        List<DeviceStateHistoryEntry> result = controller.deviceStateHistory("kitchen_light", 25);
+
+        assertEquals(List.of(entry), result);
     }
 
     private static SmartHomeAutomationRule automationRule() {

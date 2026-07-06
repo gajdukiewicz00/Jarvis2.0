@@ -6,6 +6,7 @@ import org.jarvis.smarthome.model.SmartHomeActionResult;
 import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
 import org.jarvis.smarthome.model.SmartHomeDeviceView;
 import org.jarvis.smarthome.security.ActionValidator;
+import org.jarvis.smarthome.security.SafetyPolicy;
 import org.jarvis.smarthome.service.SmartHomeCommandTransport;
 import org.jarvis.smarthome.service.SmartHomeDeviceCatalog;
 import org.jarvis.smarthome.service.SmartHomeDeviceNotFoundException;
@@ -25,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class StatefulSmartHomeService implements SmartHomeService {
 
     private final ActionValidator actionValidator;
+    private final SafetyPolicy safetyPolicy;
     private final SmartHomeDeviceCatalog catalog;
     private final SmartHomeCommandTransport commandTransport;
     private final Clock clock;
@@ -48,7 +50,8 @@ public class StatefulSmartHomeService implements SmartHomeService {
     }
 
     @Override
-    public SmartHomeActionResult executeAction(String userId, String deviceId, SmartHomeActionRequest request) {
+    public SmartHomeActionResult executeAction(String userId, String deviceId, SmartHomeActionRequest request,
+            boolean confirmed) {
         if (request == null || request.action() == null || request.action().isBlank()) {
             throw new SmartHomeValidationException("Action is required");
         }
@@ -62,6 +65,19 @@ public class StatefulSmartHomeService implements SmartHomeService {
         if (!device.supportedActions().contains(normalizedAction)) {
             throw new SmartHomeValidationException(
                     "Action " + normalizedAction + " is not supported for device " + deviceId);
+        }
+
+        if (safetyPolicy.requiresConfirmation(device.type(), confirmed)) {
+            SmartHomeDeviceView currentView = toView(scopedUserId, device);
+            return new SmartHomeActionResult(
+                    false,
+                    scopedUserId,
+                    normalizedAction,
+                    "Confirmation required: " + device.type() + " is a security-critical device type. "
+                            + "Retry with an explicit confirmation flag to proceed.",
+                    currentView,
+                    clock.instant(),
+                    true);
         }
 
         commandTransport.dispatch(scopedUserId, device, new SmartHomeActionRequest(normalizedAction, request.payload()));
@@ -81,7 +97,8 @@ public class StatefulSmartHomeService implements SmartHomeService {
                 normalizedAction,
                 message,
                 updatedDevice,
-                clock.instant());
+                clock.instant(),
+                false);
     }
 
     @Override
@@ -119,6 +136,7 @@ public class StatefulSmartHomeService implements SmartHomeService {
             case THERMOSTAT -> applyThermostatAction(state, action, payload);
             case LOCK -> applyLockAction(state, action);
             case SWITCH -> applySwitchAction(state, action);
+            case DOOR, GARAGE -> applyOpenableAction(state, action);
             case TEMPERATURE_SENSOR, HUMIDITY_SENSOR, MOTION_SENSOR, DOOR_SENSOR -> throw new SmartHomeValidationException(
                     "Sensors are read-only; report readings via the sensor-ingestion endpoint instead of an action");
         }
@@ -175,6 +193,14 @@ public class StatefulSmartHomeService implements SmartHomeService {
             case "LOCK" -> state.put("locked", true);
             case "UNLOCK" -> state.put("locked", false);
             default -> throw new SmartHomeValidationException("Unsupported lock action: " + action);
+        }
+    }
+
+    private void applyOpenableAction(Map<String, Object> state, String action) {
+        switch (action) {
+            case "OPEN" -> state.put("open", true);
+            case "CLOSE" -> state.put("open", false);
+            default -> throw new SmartHomeValidationException("Unsupported action: " + action);
         }
     }
 

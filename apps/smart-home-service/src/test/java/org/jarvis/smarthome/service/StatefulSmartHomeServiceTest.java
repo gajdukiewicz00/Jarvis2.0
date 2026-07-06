@@ -6,6 +6,7 @@ import org.jarvis.smarthome.model.SmartHomeDeviceDefinition;
 import org.jarvis.smarthome.model.SmartHomeDeviceType;
 import org.jarvis.smarthome.model.SmartHomeDeviceView;
 import org.jarvis.smarthome.security.ActionValidator;
+import org.jarvis.smarthome.security.SafetyPolicy;
 import org.jarvis.smarthome.service.impl.StatefulSmartHomeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,11 +37,12 @@ class StatefulSmartHomeServiceTest {
         ActionValidator validator = new ActionValidator();
         ReflectionTestUtils.setField(validator, "allowedActions", List.of(
                 "TURN_ON", "TURN_OFF", "TOGGLE", "DIM", "BRIGHTEN", "SET_COLOR",
-                "SET_TEMPERATURE", "SET_BRIGHTNESS", "LOCK", "UNLOCK"));
+                "SET_TEMPERATURE", "SET_BRIGHTNESS", "LOCK", "UNLOCK", "OPEN", "CLOSE"));
         transport = new RecordingTransport();
         catalog = new SmartHomeDeviceCatalog();
         service = new StatefulSmartHomeService(
                 validator,
+                new SafetyPolicy(),
                 catalog,
                 transport,
                 Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC));
@@ -281,20 +283,95 @@ class StatefulSmartHomeServiceTest {
     }
 
     @Test
-    void executeActionLocksAndUnlocksDoor() {
+    void executeActionLocksAndUnlocksDoorWhenConfirmed() {
         SmartHomeActionResult locked = service.executeAction(
-                "user-a", "front_door_lock", new SmartHomeActionRequest("LOCK", null));
+                "user-a", "front_door_lock", new SmartHomeActionRequest("LOCK", null), true);
+        assertTrue(locked.success());
+        assertFalse(locked.needsConfirmation());
         assertTrue((Boolean) locked.device().state().get("locked"));
 
         SmartHomeActionResult unlocked = service.executeAction(
-                "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null));
+                "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), true);
+        assertTrue(unlocked.success());
         assertFalse((Boolean) unlocked.device().state().get("locked"));
+    }
+
+    @Test
+    void executeActionBlocksUnconfirmedLockAction() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null), false);
+
+        assertFalse(result.success());
+        assertTrue(result.needsConfirmation());
+        assertTrue(result.message().toLowerCase().contains("confirmation"));
+        // Device state is unchanged — the action was never applied.
+        assertTrue((Boolean) result.device().state().get("locked"));
+    }
+
+    @Test
+    void executeActionDefaultThreeArgOverloadTreatsActionAsUnconfirmed() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "front_door_lock", new SmartHomeActionRequest("UNLOCK", null));
+
+        assertFalse(result.success());
+        assertTrue(result.needsConfirmation());
+    }
+
+    @Test
+    void executeActionBlocksUnconfirmedDoorAction() {
+        catalog.register(new SmartHomeDeviceDefinition(
+                "front_door", "Front Door", "Entrance", SmartHomeDeviceType.DOOR,
+                List.of("OPEN", "CLOSE"), new LinkedHashMap<>(Map.of("open", false))));
+
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "front_door", new SmartHomeActionRequest("OPEN", null), false);
+
+        assertFalse(result.success());
+        assertTrue(result.needsConfirmation());
+        assertFalse((Boolean) result.device().state().get("open"));
+    }
+
+    @Test
+    void executeActionOpensDoorWhenConfirmed() {
+        catalog.register(new SmartHomeDeviceDefinition(
+                "front_door", "Front Door", "Entrance", SmartHomeDeviceType.DOOR,
+                List.of("OPEN", "CLOSE"), new LinkedHashMap<>(Map.of("open", false))));
+
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "front_door", new SmartHomeActionRequest("OPEN", null), true);
+
+        assertTrue(result.success());
+        assertFalse(result.needsConfirmation());
+        assertTrue((Boolean) result.device().state().get("open"));
+    }
+
+    @Test
+    void executeActionBlocksUnconfirmedGarageAction() {
+        catalog.register(new SmartHomeDeviceDefinition(
+                "main_garage", "Main Garage", "Garage", SmartHomeDeviceType.GARAGE,
+                List.of("OPEN", "CLOSE"), new LinkedHashMap<>(Map.of("open", false))));
+
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "main_garage", new SmartHomeActionRequest("OPEN", null), false);
+
+        assertFalse(result.success());
+        assertTrue(result.needsConfirmation());
+    }
+
+    @Test
+    void executeActionDoesNotRequireConfirmationForNonCriticalDevice() {
+        SmartHomeActionResult result = service.executeAction(
+                "user-a", "kitchen_light", new SmartHomeActionRequest("TOGGLE", null), false);
+
+        assertTrue(result.success());
+        assertFalse(result.needsConfirmation());
     }
 
     @Test
     void executeActionReturnsLocalMessageWhenProviderIsMock() {
         StatefulSmartHomeService mockProviderService = new StatefulSmartHomeService(
                 validatorWithDefaults(),
+                new SafetyPolicy(),
                 new SmartHomeDeviceCatalog(),
                 new RecordingTransport("mock"),
                 Clock.fixed(Instant.parse("2026-03-14T10:30:00Z"), ZoneOffset.UTC));

@@ -1,5 +1,6 @@
 package org.jarvis.desktop.runtime
 
+import org.jarvis.desktop.features.status.StatusLevel
 import org.jarvis.desktop.model.VoiceRuntimeState
 import java.time.Clock
 import java.time.Instant
@@ -236,4 +237,23 @@ class DesktopRuntimeMonitor(
     ): List<RuntimeEvent> {
         return listOf(event) + current.take(maxEvents - 1)
     }
+}
+
+/**
+ * Canonical mapping from [DesktopRuntimeMonitor.ConnectionState] onto the
+ * shared [StatusLevel] vocabulary, so the top bar's tone for backend/voice/PC
+ * control connections agrees with every other status-bearing screen.
+ *
+ * [DesktopRuntimeMonitor.ConnectionState.CONNECTING] intentionally maps to
+ * [StatusLevel.UNKNOWN] rather than a bespoke "in progress" tone: until a
+ * check resolves to a confirmed healthy or unhealthy answer, this codebase
+ * says so plainly instead of guessing.
+ */
+fun DesktopRuntimeMonitor.ConnectionState.toStatusLevel(): StatusLevel = when (this) {
+    DesktopRuntimeMonitor.ConnectionState.CONNECTED -> StatusLevel.UP
+    DesktopRuntimeMonitor.ConnectionState.CONNECTING -> StatusLevel.UNKNOWN
+    DesktopRuntimeMonitor.ConnectionState.DEGRADED -> StatusLevel.DEGRADED
+    DesktopRuntimeMonitor.ConnectionState.DISCONNECTED -> StatusLevel.DOWN
+    DesktopRuntimeMonitor.ConnectionState.ERROR -> StatusLevel.DOWN
+    DesktopRuntimeMonitor.ConnectionState.UNKNOWN -> StatusLevel.UNKNOWN
 }

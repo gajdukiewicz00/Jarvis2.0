@@ -17,7 +17,10 @@ import org.jarvis.desktop.auth.TokenManager
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.jarvis.desktop.features.panic.PanicControlService
 import org.jarvis.desktop.features.status.ServiceStatusReadModel
+import org.jarvis.desktop.features.status.StatusLevel
+import org.jarvis.desktop.features.status.toStatusLevel
 import org.jarvis.desktop.runtime.DesktopRuntimeMonitor
+import org.jarvis.desktop.runtime.toStatusLevel
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -114,15 +117,9 @@ class ShellTopBar(
         }
 
         backendStatusPill.styleClass.removeIf { it.startsWith("shell-status-tone-") }
-        val modifier = when (snapshot.backend.state) {
-            DesktopRuntimeMonitor.ConnectionState.CONNECTED -> "shell-status-tone-success"
-            DesktopRuntimeMonitor.ConnectionState.CONNECTING -> "shell-status-tone-info"
-            DesktopRuntimeMonitor.ConnectionState.DEGRADED -> "shell-status-tone-warning"
-            DesktopRuntimeMonitor.ConnectionState.DISCONNECTED,
-            DesktopRuntimeMonitor.ConnectionState.ERROR -> "shell-status-tone-error"
-            DesktopRuntimeMonitor.ConnectionState.UNKNOWN -> "shell-status-tone-muted"
-        }
-        backendStatusPill.styleClass += modifier
+        // Tone comes from the shared StatusLevel vocabulary so the backend pill can never
+        // disagree with Service Status / Diagnostics about what counts as healthy.
+        backendStatusPill.styleClass += snapshot.backend.state.toStatusLevel().toneStyleClass
         notificationsLabel.text = "Alerts: ${snapshot.events.count { it.severity == DesktopRuntimeMonitor.EventSeverity.ERROR }}"
     }
 
@@ -133,13 +130,13 @@ class ShellTopBar(
         servicesStatusPill.text = "Services: $healthy/$total up"
         servicesStatusPill.styleClass.removeIf { it.startsWith("shell-status-tone-") }
         val downServices = snapshot.downServices
-        val down = downServices.count { it.status == StatusAggregator.ProbeStatus.DOWN }
-        val degraded = downServices.count { it.status == StatusAggregator.ProbeStatus.DEGRADED }
+        val down = downServices.count { it.status.toStatusLevel() == StatusLevel.DOWN }
+        val degraded = downServices.count { it.status.toStatusLevel() == StatusLevel.DEGRADED }
         servicesStatusPill.styleClass += when {
-            down > 0 -> "shell-status-tone-error"
-            degraded > 0 -> "shell-status-tone-warning"
-            total > 0 -> "shell-status-tone-success"
-            else -> "shell-status-tone-muted"
+            down > 0 -> StatusLevel.DOWN.toneStyleClass
+            degraded > 0 -> StatusLevel.DEGRADED.toneStyleClass
+            total > 0 -> StatusLevel.UP.toneStyleClass
+            else -> StatusLevel.UNKNOWN.toneStyleClass
         }
         servicesStatusPill.tooltip = if (downServices.isEmpty()) {
             Tooltip("All $total service(s) reachable. Click to open Service Status.")

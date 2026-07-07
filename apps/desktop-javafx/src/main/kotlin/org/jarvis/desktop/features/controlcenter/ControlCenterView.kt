@@ -195,6 +195,11 @@ class ControlCenterView(
         val name = Label(feature.title).apply {
             style = "-fx-text-fill: #eaf2ff; -fx-font-size: 15px; -fx-font-weight: bold;"
         }
+        val maturity = FeatureMaturityRegistry.of(feature.route)
+        val spacer = Region().also { HBox.setHgrow(it, Priority.ALWAYS) }
+        val header = HBox(10.0, statusDot(feature.accent), name, spacer, maturityBadge(maturity)).apply {
+            alignment = Pos.CENTER_LEFT
+        }
         val detail = Label(feature.detail).apply {
             style = "-fx-text-fill: #8aa0c0; -fx-font-size: 12px;"
             isWrapText = true
@@ -205,17 +210,30 @@ class ControlCenterView(
                 "-fx-background-radius: 8; -fx-padding: 6 14 6 14; -fx-font-weight: bold;"
             setOnAction { onNavigate(feature.route) }
         }
-        val tile = VBox(
-            10.0,
-            HBox(10.0, statusDot(feature.accent), name).apply { alignment = Pos.CENTER_LEFT },
-            detail,
-            open
-        )
+        val tile = VBox(10.0, header, detail, open)
         tile.padding = Insets(16.0)
         tile.prefWidth = 248.0
         tile.style = "-fx-background-color: #131a27; -fx-background-radius: 14; " +
             "-fx-border-color: ${feature.accent}33; -fx-border-radius: 14; -fx-border-width: 1;"
         return tile
+    }
+
+    /**
+     * Small "REAL vs SKELETON" indicator rendered on every feature tile — see
+     * [FeatureMaturity] and [FeatureMaturityRegistry] for the honesty rationale.
+     */
+    private fun maturityBadge(maturity: FeatureMaturity): Node = Label(maturity.label).apply {
+        style = "-fx-background-color: ${maturity.color}22; -fx-text-fill: ${maturity.color}; " +
+            "-fx-background-radius: 6; -fx-padding: 2 7 2 7; -fx-font-size: 9px; -fx-font-weight: bold;"
+        tooltip = Tooltip(maturityTooltip(maturity))
+    }
+
+    private fun maturityTooltip(maturity: FeatureMaturity): String = when (maturity) {
+        FeatureMaturity.READY -> "Verified end-to-end against real services."
+        FeatureMaturity.BETA -> "Functional today, still rough or lightly tested."
+        FeatureMaturity.MOCK -> "UI/flow present, but backed by synthetic or stubbed data."
+        FeatureMaturity.EXPERIMENTAL -> "Exploratory — behavior may change or regress without notice."
+        FeatureMaturity.UNAVAILABLE -> "Needs a prerequisite this runtime doesn't currently have."
     }
 
     // ---- status cards -------------------------------------------------------

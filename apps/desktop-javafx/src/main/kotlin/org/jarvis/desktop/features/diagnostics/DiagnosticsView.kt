@@ -15,6 +15,7 @@ import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
+import org.jarvis.desktop.features.status.StatusLevel
 import org.jarvis.desktop.shell.ShellRouteContent
 import org.jarvis.desktop.service.DesktopServiceHealthChecker
 import org.jarvis.launcher.HealthCheckService
@@ -601,16 +602,31 @@ class DiagnosticsView(
         return "Online $online  |  Unauthorized $unauthorized  |  Offline $offline"
     }
 
-    private fun buildEndpointHeadline(checks: List<DesktopServiceHealthChecker.ServiceCheck>): String {
-        val online = checks.count { it.status == DesktopServiceHealthChecker.Status.ONLINE }
-        val unauthorized = checks.count { it.status == DesktopServiceHealthChecker.Status.UNAUTHORIZED }
-        val offline = checks.count { it.status == DesktopServiceHealthChecker.Status.OFFLINE }
+    /**
+     * Single derivation point for the endpoint summary pill/headline/tone.
+     *
+     * A 401/403 ([DesktopServiceHealthChecker.Status.UNAUTHORIZED]) means the
+     * endpoint is reachable — it must not be treated as a warning-worthy
+     * condition, matching how Service Status already classifies the same HTTP
+     * signal as [org.jarvis.desktop.features.status.StatusLevel.PROTECTED] (healthy).
+     */
+    private enum class EndpointSummary { EMPTY, OFFLINE, PROTECTED_ONLY, ALL_ONLINE }
 
+    private fun endpointSummary(checks: List<DesktopServiceHealthChecker.ServiceCheck>): EndpointSummary {
         return when {
-            offline > 0 -> "Endpoints degraded"
-            unauthorized > 0 -> "Auth required"
-            checks.isNotEmpty() && online == checks.size -> "Endpoints reachable"
-            else -> "Endpoints checking"
+            checks.isEmpty() -> EndpointSummary.EMPTY
+            checks.any { it.status == DesktopServiceHealthChecker.Status.OFFLINE } -> EndpointSummary.OFFLINE
+            checks.all { it.status == DesktopServiceHealthChecker.Status.ONLINE } -> EndpointSummary.ALL_ONLINE
+            else -> EndpointSummary.PROTECTED_ONLY
+        }
+    }
+
+    private fun buildEndpointHeadline(checks: List<DesktopServiceHealthChecker.ServiceCheck>): String {
+        return when (endpointSummary(checks)) {
+            EndpointSummary.EMPTY -> "Endpoints checking"
+            EndpointSummary.OFFLINE -> "Endpoints degraded"
+            EndpointSummary.ALL_ONLINE -> "Endpoints reachable"
+            EndpointSummary.PROTECTED_ONLY -> "Endpoints reachable (protected)"
         }
     }
 
@@ -625,11 +641,11 @@ class DiagnosticsView(
     }
 
     private fun endpointHeadline(checks: List<DesktopServiceHealthChecker.ServiceCheck>): String {
-        return when (buildEndpointHeadline(checks)) {
-            "Endpoints reachable" -> "Desktop/client endpoints are reachable"
-            "Auth required" -> "Desktop/client layer needs authentication"
-            "Endpoints degraded" -> "Desktop/client layer has connectivity issues"
-            else -> "Desktop/client endpoint probes are still settling"
+        return when (endpointSummary(checks)) {
+            EndpointSummary.EMPTY -> "Desktop/client endpoint probes are still settling"
+            EndpointSummary.OFFLINE -> "Desktop/client layer has connectivity issues"
+            EndpointSummary.ALL_ONLINE -> "Desktop/client endpoints are reachable"
+            EndpointSummary.PROTECTED_ONLY -> "Desktop/client endpoints are reachable — some require authentication"
         }
     }
 
@@ -678,46 +694,23 @@ class DiagnosticsView(
         label.styleClass.addAll("shell-status-pill", "diagnostics-status-pill", toneClass)
     }
 
-    private fun toneForRuntime(status: HealthCheckService.ServiceHealthStatus.OverallStatus): String {
-        return when (status) {
-            HealthCheckService.ServiceHealthStatus.OverallStatus.READY -> "shell-status-tone-success"
-            HealthCheckService.ServiceHealthStatus.OverallStatus.DEGRADED -> "shell-status-tone-warning"
-            HealthCheckService.ServiceHealthStatus.OverallStatus.STARTING -> "shell-status-tone-info"
-            HealthCheckService.ServiceHealthStatus.OverallStatus.ERROR -> "shell-status-tone-error"
-            HealthCheckService.ServiceHealthStatus.OverallStatus.IDLE -> "shell-status-tone-muted"
-        }
-    }
+    private fun toneForRuntime(status: HealthCheckService.ServiceHealthStatus.OverallStatus): String =
+        status.toStatusLevel().toneStyleClass
 
-    private fun toneForRuntimeCheck(check: HealthCheckService.ServiceHealthStatus.ServiceCheck): String {
-        return when (check.status) {
-            HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UP -> "shell-status-tone-success"
-            HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN -> "shell-status-tone-error"
-            HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN -> {
-                if (check.isDisabled) "shell-status-tone-muted" else "shell-status-tone-warning"
-            }
-        }
-    }
+    private fun toneForRuntimeCheck(check: HealthCheckService.ServiceHealthStatus.ServiceCheck): String =
+        check.toStatusLevel().toneStyleClass
 
     private fun toneForEndpoint(checks: List<DesktopServiceHealthChecker.ServiceCheck>): String {
-        val offline = checks.any { it.status == DesktopServiceHealthChecker.Status.OFFLINE }
-        val unauthorized = checks.any { it.status == DesktopServiceHealthChecker.Status.UNAUTHORIZED }
-        val online = checks.isNotEmpty() && checks.all { it.status == DesktopServiceHealthChecker.Status.ONLINE }
-
-        return when {
-            online -> "shell-status-tone-success"
-            offline -> "shell-status-tone-error"
-            unauthorized -> "shell-status-tone-warning"
-            else -> "shell-status-tone-muted"
+        return when (endpointSummary(checks)) {
+            EndpointSummary.EMPTY -> StatusLevel.UNKNOWN.toneStyleClass
+            EndpointSummary.OFFLINE -> StatusLevel.DOWN.toneStyleClass
+            EndpointSummary.ALL_ONLINE -> StatusLevel.UP.toneStyleClass
+            EndpointSummary.PROTECTED_ONLY -> StatusLevel.PROTECTED.toneStyleClass
         }
     }
 
-    private fun toneForEndpointCheck(status: DesktopServiceHealthChecker.Status): String {
-        return when (status) {
-            DesktopServiceHealthChecker.Status.ONLINE -> "shell-status-tone-success"
-            DesktopServiceHealthChecker.Status.UNAUTHORIZED -> "shell-status-tone-warning"
-            DesktopServiceHealthChecker.Status.OFFLINE -> "shell-status-tone-error"
-        }
-    }
+    private fun toneForEndpointCheck(status: DesktopServiceHealthChecker.Status): String =
+        status.toStatusLevel().toneStyleClass
 
     private fun toneForLogs(previews: List<DiagnosticsReadModel.LogPreview>): String {
         val existing = previews.count { it.exists }

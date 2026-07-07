@@ -14,6 +14,7 @@ import javafx.scene.layout.Priority
 import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.auth.TokenManager
+import org.jarvis.desktop.features.status.StatusLevel
 import org.jarvis.desktop.shell.ShellRouteContent
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -452,11 +453,7 @@ class AiView(
 
     private fun renderLlm(llm: AiReadModel.LlmStatus) {
         llmStatusPill.text = if (llm.available) "Ready" else if (llm.enabled) "Down" else "Disabled"
-        applyTone(llmStatusPill, when {
-            llm.available -> "shell-status-tone-success"
-            !llm.enabled -> "shell-status-tone-muted"
-            else -> "shell-status-tone-error"
-        })
+        applyTone(llmStatusPill, llm.toStatusLevel().toneStyleClass)
         llmProviderLabel.text = llm.provider
         llmBaseUrlLabel.text = llm.baseUrl.ifBlank { "Not configured" }
         llmReasonLabel.text = llm.reason.ifBlank { if (llm.available) "Healthy" else "No details" }
@@ -493,18 +490,14 @@ class AiView(
             !memory.serviceEnabled -> "Disabled"
             else -> "Down"
         }
-        applyTone(memoryStatusPill, when {
-            memory.available -> "shell-status-tone-success"
-            !memory.enabled || !memory.serviceEnabled -> "shell-status-tone-muted"
-            else -> "shell-status-tone-error"
-        })
+        applyTone(memoryStatusPill, memory.toStatusLevel().toneStyleClass)
         memoryDetailLabel.text = "Status: ${memory.status}  |  Service: ${if (memory.serviceEnabled) "enabled" else "disabled"}"
         memoryReasonLabel.text = memory.reason.ifBlank { if (memory.available) "Healthy" else "No details" }
     }
 
     private fun renderEmbedding(embedding: AiReadModel.EmbeddingStatus) {
         embeddingStatusPill.text = if (embedding.available) "Ready" else "Down"
-        applyTone(embeddingStatusPill, if (embedding.available) "shell-status-tone-success" else "shell-status-tone-error")
+        applyTone(embeddingStatusPill, embedding.toStatusLevel().toneStyleClass)
         embeddingModelLabel.text = buildString {
             append(embedding.model)
             embedding.dimension?.let { append("  (dim=$it)") }
@@ -513,26 +506,25 @@ class AiView(
     }
 
     private fun renderGpu(gpu: AiReadModel.GpuStatus) {
-        // GPU truthfulness: when the backend genuinely does not know GPU status (the
-        // authoritative /runtime endpoint was unreachable and only the limited /health
-        // fallback answered), say so explicitly instead of collapsing into "Unavailable" —
-        // "unknown" and "unavailable" are different claims and must not be conflated.
-        val statusUnknown = gpu.device.equals("unknown", ignoreCase = true) ||
-            gpu.readinessStatus.equals("unknown", ignoreCase = true)
+        // GPU truthfulness: pill text and pill tone both come from the exact same
+        // derived StatusLevel (see AiReadModel.GpuStatus.toStatusLevel) so they can
+        // never contradict each other — no other card on this screen (or elsewhere)
+        // can claim GPU presence while this one says "not detected", because there is
+        // only one place that decides the answer.
+        val level = gpu.toStatusLevel()
+        val statusUnknown = level == StatusLevel.UNKNOWN
         gpuStatusPill.text = when {
+            // Both "available" and "readinessStatus == verified" map to StatusLevel.UP —
+            // keep available's more specific "Active" wording taking priority, matching
+            // the same precedence AiReadModel.GpuStatus.toStatusLevel() uses.
             gpu.available -> "Active"
-            gpu.readinessStatus == "verified" -> "Verified"
-            statusUnknown -> "Unknown"
-            gpu.device == "cpu" || gpu.device == "n/a" -> "CPU only"
-            else -> "Unavailable"
+            level == StatusLevel.UP -> "Verified"
+            level == StatusLevel.UNKNOWN -> "Unknown"
+            level == StatusLevel.DISABLED -> "CPU only"
+            level == StatusLevel.UNAVAILABLE -> "Unavailable"
+            else -> level.label
         }
-        applyTone(gpuStatusPill, when {
-            gpu.available -> "shell-status-tone-success"
-            gpu.readinessStatus == "verified" -> "shell-status-tone-success"
-            statusUnknown -> "shell-status-tone-muted"
-            gpu.device == "cpu" -> "shell-status-tone-muted"
-            else -> "shell-status-tone-warning"
-        })
+        applyTone(gpuStatusPill, level.toneStyleClass)
         gpuDeviceLabel.text = when {
             gpu.device.isBlank() -> "Not detected"
             gpu.device.equals("unknown", ignoreCase = true) -> "Unknown"
@@ -610,15 +602,7 @@ class AiView(
         label.styleClass.addAll("shell-status-pill", toneClass)
     }
 
-    private fun toneForAiStatus(status: AiReadModel.AiStatus): String {
-        return when (status) {
-            AiReadModel.AiStatus.READY -> "shell-status-tone-success"
-            AiReadModel.AiStatus.STARTING -> "shell-status-tone-info"
-            AiReadModel.AiStatus.DEGRADED -> "shell-status-tone-warning"
-            AiReadModel.AiStatus.DOWN, AiReadModel.AiStatus.ERROR -> "shell-status-tone-error"
-            AiReadModel.AiStatus.DISABLED -> "shell-status-tone-muted"
-        }
-    }
+    private fun toneForAiStatus(status: AiReadModel.AiStatus): String = status.toStatusLevel().toneStyleClass
 
     private fun AiReadModel.AiStatus.displayName(): String {
         return name.lowercase().replaceFirstChar(Char::titlecase)

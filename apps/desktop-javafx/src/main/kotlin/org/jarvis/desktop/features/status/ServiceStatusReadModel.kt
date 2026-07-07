@@ -24,13 +24,17 @@ class ServiceStatusReadModel(
          * Count of services that are actually reachable — UP or PROTECTED
          * (alive, just gated behind auth). This is the number the top bar and
          * summary pill should present as "healthy", not a strict UP-only count.
+         *
+         * Delegates to [StatusLevel.isHealthy] (via [toStatusLevel]) rather than
+         * re-deciding "healthy" locally, so this agrees with every other screen
+         * that classifies the same [StatusAggregator.ProbeStatus] values.
          */
         val healthyCount: Int
-            get() = services.count { it.status.isReachable }
+            get() = services.count { it.status.toStatusLevel().isHealthy }
 
         /** Services that are genuinely unhealthy (DEGRADED or DOWN) — excludes PROTECTED. */
         val downServices: List<StatusAggregator.ServiceStatus>
-            get() = services.filterNot { it.status.isReachable }
+            get() = services.filterNot { it.status.toStatusLevel().isHealthy }
     }
 
     @Volatile private var aggregator: StatusAggregator? = null
@@ -52,4 +56,18 @@ class ServiceStatusReadModel(
             aggregatorBaseUrl = baseUrl
         }
     }
+}
+
+/**
+ * Canonical mapping from [StatusAggregator.ProbeStatus] onto the shared
+ * [StatusLevel] vocabulary. This is what [ServiceStatusReadModel.Snapshot] and
+ * [ServiceStatusView] both go through, so "is this service healthy?" and
+ * "what color does it render in?" can never disagree between the two.
+ */
+fun StatusAggregator.ProbeStatus.toStatusLevel(): StatusLevel = when (this) {
+    StatusAggregator.ProbeStatus.UP -> StatusLevel.UP
+    // Reachable, just gated behind auth — never DEGRADED/DOWN. See StatusLevel.PROTECTED.
+    StatusAggregator.ProbeStatus.PROTECTED -> StatusLevel.PROTECTED
+    StatusAggregator.ProbeStatus.DEGRADED -> StatusLevel.DEGRADED
+    StatusAggregator.ProbeStatus.DOWN -> StatusLevel.DOWN
 }

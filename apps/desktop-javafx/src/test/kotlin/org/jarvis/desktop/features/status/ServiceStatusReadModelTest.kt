@@ -134,4 +134,26 @@ class ServiceStatusReadModelTest {
         assertEquals(2, snapshot.healthyCount)
         assertTrue(snapshot.downServices.isEmpty())
     }
+
+    @Test
+    fun `toStatusLevel maps every ProbeStatus onto the canonical vocabulary`() {
+        assertEquals(StatusLevel.UP, StatusAggregator.ProbeStatus.UP.toStatusLevel())
+        assertEquals(StatusLevel.PROTECTED, StatusAggregator.ProbeStatus.PROTECTED.toStatusLevel())
+        assertEquals(StatusLevel.DEGRADED, StatusAggregator.ProbeStatus.DEGRADED.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, StatusAggregator.ProbeStatus.DOWN.toStatusLevel())
+    }
+
+    @Test
+    fun `toStatusLevel agrees with ProbeStatus isReachable on what counts as healthy`() {
+        // The two systems must never contradict: whatever ProbeStatus.isReachable
+        // already treats as "alive", StatusLevel must treat as "healthy".
+        StatusAggregator.ProbeStatus.values().forEach { status ->
+            assertEquals(
+                status.isReachable,
+                status.toStatusLevel().isHealthy,
+                "ProbeStatus.$status: isReachable=${status.isReachable} but " +
+                    "toStatusLevel()=${status.toStatusLevel()} isHealthy=${status.toStatusLevel().isHealthy}"
+            )
+        }
+    }
 }

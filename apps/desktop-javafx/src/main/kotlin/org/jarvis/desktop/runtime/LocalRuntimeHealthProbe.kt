@@ -72,11 +72,15 @@ class LocalRuntimeHealthProbe(
 
     /**
      * A 401/403 from the gateway's health endpoint means the gateway process is up and
-     * answering — it is just gated behind auth. In k8s runtime mode there is no local
-     * backend PID and no kubectl dependency for this check, so a protected-but-reachable
-     * gateway must be reported CONNECTED, not DEGRADED/ERROR. Outside k8s mode we keep a
-     * more cautious DEGRADED (reachable, but not confirmed healthy) since an unauthenticated
-     * actuator endpoint is unexpected for a local dev runtime.
+     * answering — it is just gated behind auth (this is exactly [org.jarvis.desktop.features.status.StatusLevel.PROTECTED],
+     * the same fact [org.jarvis.desktop.features.status.ServiceStatusReadModel] reports for other
+     * services). In k8s runtime mode there is no local backend PID and no kubectl dependency
+     * for this check, so a protected-but-reachable gateway must be reported CONNECTED
+     * (PROTECTED is healthy), not DEGRADED/ERROR — otherwise this card would
+     * contradict Service Status, which already treats the same HTTP 401/403 as healthy.
+     * Outside k8s mode we keep a more cautious DEGRADED (reachable, but not confirmed
+     * healthy) since an unauthenticated actuator endpoint is unexpected for a local dev
+     * runtime.
      */
     private fun protectedStatus(uri: String, statusCode: Int, isK8sMode: Boolean): DesktopRuntimeMonitor.ConnectionStatus {
         return if (isK8sMode) {

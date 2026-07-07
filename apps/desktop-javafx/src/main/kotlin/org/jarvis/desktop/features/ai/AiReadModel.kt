@@ -2,6 +2,7 @@ package org.jarvis.desktop.features.ai
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import org.jarvis.desktop.features.status.StatusLevel
 import org.jarvis.launcher.JarvisPaths
 import org.jarvis.launcher.LauncherConfig
 import org.jarvis.launcher.LauncherSettings
@@ -565,4 +566,65 @@ class AiReadModel(
         return if (child.isMissingNode || child.isNull) null else child.asInt()
     }
 
+}
+
+/**
+ * Canonical mapping from [AiReadModel.AiStatus] onto the shared [StatusLevel]
+ * vocabulary, so the AI Runtime overview pill agrees with Service Status and
+ * Diagnostics about what counts as healthy.
+ */
+fun AiReadModel.AiStatus.toStatusLevel(): StatusLevel = when (this) {
+    AiReadModel.AiStatus.READY -> StatusLevel.UP
+    // Starting is a transient, unresolved state — say UNKNOWN rather than guessing.
+    AiReadModel.AiStatus.STARTING -> StatusLevel.UNKNOWN
+    AiReadModel.AiStatus.DEGRADED -> StatusLevel.DEGRADED
+    AiReadModel.AiStatus.DOWN -> StatusLevel.DOWN
+    AiReadModel.AiStatus.ERROR -> StatusLevel.DOWN
+    AiReadModel.AiStatus.DISABLED -> StatusLevel.DISABLED
+}
+
+/** Canonical mapping for the LLM inference card. */
+fun AiReadModel.LlmStatus.toStatusLevel(): StatusLevel = when {
+    available -> StatusLevel.UP
+    !enabled -> StatusLevel.DISABLED
+    else -> StatusLevel.DOWN
+}
+
+/** Canonical mapping for the long-term memory card. */
+fun AiReadModel.MemoryStatus.toStatusLevel(): StatusLevel = when {
+    available -> StatusLevel.UP
+    !enabled || !serviceEnabled -> StatusLevel.DISABLED
+    else -> StatusLevel.DOWN
+}
+
+/** Canonical mapping for the embedding card. */
+fun AiReadModel.EmbeddingStatus.toStatusLevel(): StatusLevel = if (available) StatusLevel.UP else StatusLevel.DOWN
+
+/**
+ * Canonical mapping for the GPU acceleration card.
+ *
+ * This is the single derivation point for "is GPU acceleration working?" — the
+ * pill tone and the pill text must both come from the same [StatusLevel] value
+ * so they can never contradict each other (e.g. one saying "GPU not detected"
+ * while the other implies GPU presence). The distinct levels here are load-
+ * bearing:
+ *  - [StatusLevel.UP]: GPU is confirmed active or readiness-verified.
+ *  - [StatusLevel.UNKNOWN]: the authoritative `/runtime` endpoint could not be
+ *    reached, so device/readiness came back as the literal string "unknown" —
+ *    say so rather than claiming CPU-only or unavailable.
+ *  - [StatusLevel.DISABLED]: GPU acceleration is intentionally off (CPU-only
+ *    configuration) — not a failure.
+ *  - [StatusLevel.UNAVAILABLE]: GPU was expected but the backend confirmed it
+ *    is not present/usable.
+ */
+fun AiReadModel.GpuStatus.toStatusLevel(): StatusLevel {
+    val statusUnknown = device.equals("unknown", ignoreCase = true) ||
+        readinessStatus.equals("unknown", ignoreCase = true)
+    return when {
+        available -> StatusLevel.UP
+        readinessStatus.equals("verified", ignoreCase = true) -> StatusLevel.UP
+        statusUnknown -> StatusLevel.UNKNOWN
+        device.equals("cpu", ignoreCase = true) || device.equals("n/a", ignoreCase = true) -> StatusLevel.DISABLED
+        else -> StatusLevel.UNAVAILABLE
+    }
 }

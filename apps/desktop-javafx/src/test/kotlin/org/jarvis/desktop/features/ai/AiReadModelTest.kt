@@ -2,6 +2,7 @@ package org.jarvis.desktop.features.ai
 
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import org.jarvis.desktop.features.status.StatusLevel
 import org.jarvis.launcher.LauncherSettings
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -269,5 +270,107 @@ class AiReadModelTest {
 
         val snapshot = model.refresh()
         assertEquals(AiReadModel.AiStatus.DOWN, snapshot.overallStatus)
+    }
+
+    @Test
+    fun `AiStatus toStatusLevel maps every value onto the canonical vocabulary`() {
+        assertEquals(StatusLevel.UP, AiReadModel.AiStatus.READY.toStatusLevel())
+        assertEquals(StatusLevel.UNKNOWN, AiReadModel.AiStatus.STARTING.toStatusLevel())
+        assertEquals(StatusLevel.DEGRADED, AiReadModel.AiStatus.DEGRADED.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, AiReadModel.AiStatus.DOWN.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, AiReadModel.AiStatus.ERROR.toStatusLevel())
+        assertEquals(StatusLevel.DISABLED, AiReadModel.AiStatus.DISABLED.toStatusLevel())
+    }
+
+    private fun gpu(
+        available: Boolean = false,
+        device: String = "unknown",
+        readinessStatus: String = "unknown",
+        gpuName: String = ""
+    ) = AiReadModel.GpuStatus(
+        available = available,
+        device = device,
+        configuredGpuLayers = null,
+        effectiveGpuLayers = null,
+        gpuName = gpuName,
+        driverVersion = "",
+        cudaVersion = "",
+        readinessStatus = readinessStatus,
+        readinessReason = ""
+    )
+
+    @Test
+    fun `GpuStatus toStatusLevel reports UP when the backend confirms the GPU is active`() {
+        assertEquals(StatusLevel.UP, gpu(available = true, device = "cuda:0", readinessStatus = "READY").toStatusLevel())
+    }
+
+    @Test
+    fun `GpuStatus toStatusLevel reports UP when readiness is verified even if not yet marked available`() {
+        assertEquals(
+            StatusLevel.UP,
+            gpu(available = false, device = "cuda:0", readinessStatus = "verified").toStatusLevel()
+        )
+    }
+
+    @Test
+    fun `GpuStatus toStatusLevel reports UNKNOWN rather than UNAVAILABLE when the runtime endpoint could not be reached`() {
+        // "unknown" (no confirmed answer) must never be conflated with "unavailable"
+        // (a confirmed negative answer) — that conflation is exactly the GPU
+        // contradiction this mapping exists to prevent.
+        val level = gpu(available = false, device = "unknown", readinessStatus = "unknown").toStatusLevel()
+        assertEquals(StatusLevel.UNKNOWN, level)
+        assertFalse(level.isHealthy)
+    }
+
+    @Test
+    fun `GpuStatus toStatusLevel reports DISABLED for an intentional cpu-only configuration`() {
+        val level = gpu(available = false, device = "cpu", readinessStatus = "not_checked").toStatusLevel()
+        assertEquals(StatusLevel.DISABLED, level)
+        assertTrue(level.isHealthy, "CPU-only is an intentional configuration, not a failure")
+    }
+
+    @Test
+    fun `GpuStatus toStatusLevel reports UNAVAILABLE when a GPU was expected but confirmed absent`() {
+        val level = gpu(available = false, device = "cuda:0", readinessStatus = "failed").toStatusLevel()
+        assertEquals(StatusLevel.UNAVAILABLE, level)
+        assertFalse(level.isHealthy)
+    }
+
+    @Test
+    fun `LlmStatus toStatusLevel treats disabled-by-config as healthy, unavailable-while-enabled as DOWN`() {
+        assertEquals(
+            StatusLevel.UP,
+            AiReadModel.LlmStatus(true, true, "ready", "", "llama-cpp", "").toStatusLevel()
+        )
+        assertEquals(
+            StatusLevel.DISABLED,
+            AiReadModel.LlmStatus(false, false, "disabled", "", "n/a", "").toStatusLevel()
+        )
+        assertEquals(
+            StatusLevel.DOWN,
+            AiReadModel.LlmStatus(false, true, "down", "", "llama-cpp", "").toStatusLevel()
+        )
+    }
+
+    @Test
+    fun `MemoryStatus toStatusLevel treats disabled-by-config as healthy, unavailable-while-enabled as DOWN`() {
+        assertEquals(
+            StatusLevel.UP,
+            AiReadModel.MemoryStatus(true, true, true, "ready", "").toStatusLevel()
+        )
+        assertEquals(
+            StatusLevel.DISABLED,
+            AiReadModel.MemoryStatus(false, false, false, "disabled", "").toStatusLevel()
+        )
+        assertEquals(
+            StatusLevel.DOWN,
+            AiReadModel.MemoryStatus(true, true, false, "down", "").toStatusLevel()
+        )
+    }
+
+    @Test
+    fun `EmbeddingStatus toStatusLevel is UP when available and DOWN otherwise`() {
+        assertEquals(StatusLevel.UP, AiReadModel.EmbeddingStatus(true, "bge-small", 384, "").toStatusLevel())
+        assertEquals(StatusLevel.DOWN, AiReadModel.EmbeddingStatus(false, "unknown", null, "").toStatusLevel())
     }
 }

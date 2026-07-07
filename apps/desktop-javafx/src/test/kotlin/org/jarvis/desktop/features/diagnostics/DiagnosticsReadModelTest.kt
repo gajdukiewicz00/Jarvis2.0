@@ -5,8 +5,12 @@ import okhttp3.mockwebserver.MockWebServer
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.config.ConfigSource
 import org.jarvis.desktop.config.ResolvedDesktopConfig
+import org.jarvis.desktop.features.status.StatusLevel
+import org.jarvis.desktop.service.DesktopServiceHealthChecker
+import org.jarvis.launcher.HealthCheckService
 import org.jarvis.launcher.LauncherSettings
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -87,5 +91,71 @@ class DiagnosticsReadModelTest {
         } finally {
             endpointServer.shutdown()
         }
+    }
+
+    @Test
+    fun `OverallStatus toStatusLevel maps every value onto the canonical vocabulary`() {
+        assertEquals(StatusLevel.UP, HealthCheckService.ServiceHealthStatus.OverallStatus.READY.toStatusLevel())
+        assertEquals(StatusLevel.DEGRADED, HealthCheckService.ServiceHealthStatus.OverallStatus.DEGRADED.toStatusLevel())
+        assertEquals(StatusLevel.UNKNOWN, HealthCheckService.ServiceHealthStatus.OverallStatus.STARTING.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, HealthCheckService.ServiceHealthStatus.OverallStatus.ERROR.toStatusLevel())
+        assertEquals(StatusLevel.UNKNOWN, HealthCheckService.ServiceHealthStatus.OverallStatus.IDLE.toStatusLevel())
+    }
+
+    @Test
+    fun `ServiceCheck toStatusLevel treats an intentionally-disabled UNKNOWN check as healthy`() {
+        val disabled = HealthCheckService.ServiceHealthStatus.ServiceCheck(
+            name = "llm-service",
+            status = HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN,
+            message = "Disabled by flag",
+            isDisabled = true
+        )
+
+        val level = disabled.toStatusLevel()
+        assertEquals(StatusLevel.DISABLED, level)
+        assertTrue(level.isHealthy)
+    }
+
+    @Test
+    fun `ServiceCheck toStatusLevel treats a non-disabled UNKNOWN check as a real, unhealthy signal`() {
+        val errored = HealthCheckService.ServiceHealthStatus.ServiceCheck(
+            name = "voice-gateway",
+            status = HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UNKNOWN,
+            message = "kubectl unavailable: timeout",
+            isDisabled = false
+        )
+
+        val level = errored.toStatusLevel()
+        assertEquals(StatusLevel.DEGRADED, level)
+        assertFalse(level.isHealthy)
+    }
+
+    @Test
+    fun `ServiceCheck toStatusLevel maps UP and DOWN directly`() {
+        val up = HealthCheckService.ServiceHealthStatus.ServiceCheck(
+            name = "api-gateway",
+            status = HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.UP,
+            message = "UP"
+        )
+        val down = HealthCheckService.ServiceHealthStatus.ServiceCheck(
+            name = "api-gateway",
+            status = HealthCheckService.ServiceHealthStatus.ServiceCheck.CheckStatus.DOWN,
+            message = "Connection refused"
+        )
+
+        assertEquals(StatusLevel.UP, up.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, down.toStatusLevel())
+    }
+
+    @Test
+    fun `DesktopServiceHealthChecker Status toStatusLevel treats UNAUTHORIZED as PROTECTED (healthy)`() {
+        // This is the concrete cross-screen reconciliation: Service Status already
+        // treats HTTP 401/403 as healthy (PROTECTED). Diagnostics' endpoint probes
+        // must reach the exact same conclusion for the exact same HTTP signal.
+        assertEquals(StatusLevel.UP, DesktopServiceHealthChecker.Status.ONLINE.toStatusLevel())
+        val protectedLevel = DesktopServiceHealthChecker.Status.UNAUTHORIZED.toStatusLevel()
+        assertEquals(StatusLevel.PROTECTED, protectedLevel)
+        assertTrue(protectedLevel.isHealthy)
+        assertEquals(StatusLevel.DOWN, DesktopServiceHealthChecker.Status.OFFLINE.toStatusLevel())
     }
 }

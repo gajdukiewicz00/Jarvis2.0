@@ -1,5 +1,6 @@
 package org.jarvis.desktop.runtime
 
+import org.jarvis.desktop.features.status.StatusLevel
 import org.jarvis.desktop.model.VoiceRuntimeState
 import org.jarvis.desktop.model.VoiceState
 import org.junit.jupiter.api.Assertions.*
@@ -98,5 +99,23 @@ class DesktopRuntimeMonitorTest {
         val snapshot = monitor.currentSnapshot()
         assertEquals(DesktopRuntimeMonitor.ConnectionState.DEGRADED, snapshot.voice.state)
         assertTrue(snapshot.events.first().title.contains("authentication expired"))
+    }
+
+    @Test
+    fun `toStatusLevel maps every ConnectionState onto the canonical vocabulary`() {
+        assertEquals(StatusLevel.UP, DesktopRuntimeMonitor.ConnectionState.CONNECTED.toStatusLevel())
+        assertEquals(StatusLevel.UNKNOWN, DesktopRuntimeMonitor.ConnectionState.CONNECTING.toStatusLevel())
+        assertEquals(StatusLevel.DEGRADED, DesktopRuntimeMonitor.ConnectionState.DEGRADED.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, DesktopRuntimeMonitor.ConnectionState.DISCONNECTED.toStatusLevel())
+        assertEquals(StatusLevel.DOWN, DesktopRuntimeMonitor.ConnectionState.ERROR.toStatusLevel())
+        assertEquals(StatusLevel.UNKNOWN, DesktopRuntimeMonitor.ConnectionState.UNKNOWN.toStatusLevel())
+    }
+
+    @Test
+    fun `only CONNECTED maps to a healthy StatusLevel`() {
+        val healthyStates = DesktopRuntimeMonitor.ConnectionState.values()
+            .filter { it.toStatusLevel().isHealthy }
+
+        assertEquals(listOf(DesktopRuntimeMonitor.ConnectionState.CONNECTED), healthyStates)
     }
 }

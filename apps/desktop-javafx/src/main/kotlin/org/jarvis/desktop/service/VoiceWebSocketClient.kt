@@ -39,6 +39,23 @@ class VoiceWebSocketClient(
 ) : WebSocketListener() {
     companion object {
         private const val PRECONNECT_REFRESH_WINDOW_SECONDS = 30L
+
+        /**
+         * Server-reported response/error codes that describe a normal *idle*
+         * outcome rather than a real failure — e.g. a voice session ending
+         * because the user never spoke (`NO_AUDIO_RECEIVED`). These must never
+         * be translated into an STT/TTS availability change or a
+         * connection-level DEGRADED/error state: doing so is exactly the
+         * "connected but DEGRADED" contradiction voice status must avoid.
+         * See the `ERROR` branch of [onMessage] below and
+         * `org.jarvis.desktop.features.voice.VoiceChannelStatusMapper`, which
+         * intentionally ignores free-text error messages for the same reason.
+         */
+        val IDLE_RESPONSE_CODES = setOf("NO_AUDIO_RECEIVED")
+
+        /** True when [code] represents an idle outcome, not a failure. */
+        fun isIdleResponseCode(code: String?): Boolean =
+            code != null && code in IDLE_RESPONSE_CODES
     }
 
     private val client = OkHttpClient.Builder()
@@ -534,11 +551,16 @@ class VoiceWebSocketClient(
                             ?: "Voice request failed"
                         logger.warn("⚠️ Voice protocol error: code={}, message='{}', correlationId={}",
                             code, message, msgCorrelationId)
-                        if (code == "STT_UNAVAILABLE") {
-                            onSttStatusChanged(false, message)
-                        }
-                        if (code == "TTS_UNAVAILABLE") {
-                            onTtsStatusChanged(false, message)
+                        when {
+                            isIdleResponseCode(code) -> {
+                                // Idle outcome (e.g. session ended before any audio
+                                // arrived) — NOT a failure. Deliberately skip any
+                                // STT/TTS availability or connection-state change so
+                                // this can never surface as "connected but DEGRADED".
+                                logger.debug("Voice WS idle response code={}, no status change applied", code)
+                            }
+                            code == "STT_UNAVAILABLE" -> onSttStatusChanged(false, message)
+                            code == "TTS_UNAVAILABLE" -> onTtsStatusChanged(false, message)
                         }
                         onResponse(message, code, false)
                     }

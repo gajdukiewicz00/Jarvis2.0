@@ -240,7 +240,9 @@ class ServiceStatusView(
                     val spacer = Region()
                     HBox.setHgrow(spacer, Priority.ALWAYS)
                     children += spacer
-                    children += statusPill(service.status.name).apply { applyTone(this, toneFor(service.status)) }
+                    children += statusPill(service.status.toStatusLevel().label).apply {
+                        applyTone(this, service.status.toStatusLevel().toneStyleClass)
+                    }
                 }
                 service.detail?.let { detail ->
                     children += Label(detail).apply {
@@ -250,14 +252,6 @@ class ServiceStatusView(
                 }
             }
         }
-    }
-
-    private fun toneFor(status: StatusAggregator.ProbeStatus): String = when (status) {
-        StatusAggregator.ProbeStatus.UP -> "shell-status-tone-success"
-        // Reachable and alive, just gated behind auth — not a degraded/down state.
-        StatusAggregator.ProbeStatus.PROTECTED -> "shell-status-tone-info"
-        StatusAggregator.ProbeStatus.DEGRADED -> "shell-status-tone-warning"
-        StatusAggregator.ProbeStatus.DOWN -> "shell-status-tone-error"
     }
 
     private fun statusPill(text: String): Label {

@@ -14,9 +14,13 @@ import java.nio.charset.StandardCharsets
  *  - recent notes    -> GET    /api/v1/memory/notes?scope=&limit=
  *  - edit note       -> PUT    /api/v1/memory/notes/{memoryId}
  *  - forget note      -> DELETE /api/v1/memory/notes/{memoryId}?actor=&reason=
+ *  - forget by query -> DELETE /api/v1/memory/notes/by-query?query=&scope=&actor=&reason=
  *  - why remembered  -> GET    /api/v1/memory/notes/{memoryId}/why
  *  - pin/unpin note  -> PUT/DELETE /api/v1/memory/notes/{memoryId}/pin
  *  - change scope    -> PUT    /api/v1/memory/notes/{memoryId}/scope?scope=
+ *  - encrypted export -> GET   /api/v1/memory/notes/export/encrypted-or-plain?scope=
+ *  - conflict-aware import -> POST /api/v1/memory/notes/import/resolve?mode=
+ *                              (or /import/encrypted/resolve?mode= for an encrypted envelope)
  *
  * Endpoints are relative to the desktop client's `/api/v1` base URL. Result
  * shapes vary by deployment, so parsing probes several common container keys
@@ -30,6 +34,15 @@ class MemoryReadModel(
     /** Mirrors `org.jarvis.memory.obsidian.MemoryScope` on the memory-service side. */
     companion object {
         val SCOPES: List<String> = listOf("USER_PROFILE", "PROJECT", "SESSION", "FINANCE", "HEALTH", "TEMPORARY")
+
+        /** Mirrors `org.jarvis.memory.obsidian.ImportConflictMode` on the memory-service side. */
+        val IMPORT_CONFLICT_MODES: List<String> = listOf("skip", "overwrite", "keep-both")
+
+        /** Mirrors `org.jarvis.memory.obsidian.MemoryNoteRequest`'s fields — see [sanitizeNoteArray]. */
+        private val NOTE_REQUEST_FIELDS: Set<String> = setOf(
+            "memoryId", "category", "title", "summary", "body", "source", "privacy",
+            "confidence", "tags", "linkedEntities", "scope", "expiresAt", "ttlSeconds"
+        )
     }
 
     data class MemoryItem(
@@ -144,6 +157,148 @@ class MemoryReadModel(
     /** Roadmap #11 — dedicated "change scope" op; re-applies the finance/health privacy guard server-side. */
     fun changeScope(memoryId: String, scope: String) {
         apiClient.put("/memory/notes/${encode(memoryId)}/scope?scope=${encode(scope)}", "{}")
+    }
+
+    /** Outcome of a conflict-aware bulk import (mirrors `MemoryExportService.ConflictImportSummary`). */
+    data class ImportResult(
+        val received: Int,
+        val created: Int,
+        val overwritten: Int,
+        val skipped: Int,
+        val failed: Int,
+        val errors: List<String>
+    )
+
+    /** Result of a "forget by query" sweep (mirrors `MemoryForgetService.ForgetByQueryResult`). */
+    data class ForgetByQueryResult(val count: Int, val memoryIds: List<String>)
+
+    /** Outcome of a client-side bulk "forget" loop (no batch-by-id endpoint exists server-side). */
+    data class BulkForgetResult(val requested: Int, val forgotten: List<String>, val failed: List<String>)
+
+    /**
+     * Bulk takeout for the export button: AES-256/GCM-encrypted when the
+     * memory-service has an encryption key configured, otherwise the plain
+     * takeout with an explicit `encrypted:false` flag — never fails just
+     * because no key is configured. Returns the raw JSON body so the caller
+     * can write it to disk unchanged (round-trips through [importFile]).
+     */
+    fun exportEncryptedOrPlain(scope: String? = null): String {
+        val endpoint = buildString {
+            append("/memory/notes/export/encrypted-or-plain")
+            scope?.trim()?.takeIf { it.isNotEmpty() }?.let { append("?scope=").append(encode(it)) }
+        }
+        return apiClient.get(endpoint)
+    }
+
+    /**
+     * Bulk import from a file previously produced by [exportEncryptedOrPlain] (or the raw
+     * `/export`, `/export/encrypted` responses). Detects the payload shape and posts to the
+     * matching conflict-aware endpoint:
+     *  - a bare JSON array -> plaintext notes -> `POST /import/resolve?mode=`
+     *  - `{algorithm, ivBase64, ciphertextBase64}` -> an encrypted envelope -> `POST /import/encrypted/resolve?mode=`
+     *  - `{encrypted, envelope, notes}` (the [exportEncryptedOrPlain] wrapper) -> unwrapped and routed to
+     *    whichever of the two above applies.
+     *
+     * [mode] is one of [IMPORT_CONFLICT_MODES] ("skip" / "overwrite" / "keep-both").
+     */
+    fun importFile(content: String, mode: String): ImportResult {
+        val node = objectMapper.readTree(content)
+        val modeParam = encode(mode)
+        return when {
+            node.isArray ->
+                postImportResolve("/memory/notes/import/resolve?mode=$modeParam", sanitizeNoteArray(node))
+            node.has("ciphertextBase64") ->
+                postImportResolve("/memory/notes/import/encrypted/resolve?mode=$modeParam", node)
+            node.has("envelope") || node.has("notes") -> {
+                val isEncrypted = node.path("encrypted").let { it.isBoolean && it.asBoolean() }
+                val envelope = node.path("envelope")
+                if (isEncrypted && !envelope.isMissingNode && !envelope.isNull) {
+                    postImportResolve("/memory/notes/import/encrypted/resolve?mode=$modeParam", envelope)
+                } else {
+                    val notes = node.path("notes").takeIf { it.isArray } ?: objectMapper.createArrayNode()
+                    postImportResolve("/memory/notes/import/resolve?mode=$modeParam", sanitizeNoteArray(notes))
+                }
+            }
+            else -> throw IllegalArgumentException("Unrecognized memory export file format.")
+        }
+    }
+
+    /**
+     * `/export` (plaintext) and the plaintext branch of `/export/encrypted-or-plain` both serialize the
+     * full `MemoryNoteEntity` read-model (extra DB-only fields like `status`/`contentHash`/`embedding`
+     * alongside the write-model fields). Unlike the encrypted-import path (which the memory-service
+     * decodes with a lenient, unknown-properties-tolerant reader), `/import/resolve` binds straight to
+     * `MemoryNoteRequest` with no such tolerance — so a straight export-then-import round trip of a
+     * plaintext takeout would otherwise 400. Trim each entry down to just the `MemoryNoteRequest` fields
+     * before posting.
+     */
+    private fun sanitizeNoteArray(notes: JsonNode): JsonNode {
+        if (!notes.isArray) return notes
+        val sanitized = objectMapper.createArrayNode()
+        notes.forEach { note ->
+            if (!note.isObject) {
+                sanitized.add(note)
+                return@forEach
+            }
+            val clean = objectMapper.createObjectNode()
+            NOTE_REQUEST_FIELDS.forEach { field ->
+                if (note.has(field)) clean.replace(field, note.path(field))
+            }
+            sanitized.add(clean)
+        }
+        return sanitized
+    }
+
+    private fun postImportResolve(endpoint: String, body: JsonNode): ImportResult {
+        val response = apiClient.post(endpoint, objectMapper.writeValueAsString(body))
+        val node = objectMapper.readTree(response)
+        return ImportResult(
+            received = node.path("received").asInt(0),
+            created = node.path("created").asInt(0),
+            overwritten = node.path("overwritten").asInt(0),
+            skipped = node.path("skipped").asInt(0),
+            failed = node.path("failed").asInt(0),
+            errors = node.path("errors").takeIf { it.isArray }?.map { it.asText() } ?: emptyList()
+        )
+    }
+
+    /**
+     * Roadmap #11 — "forget by query": soft-deletes every ACTIVE note matching a text query
+     * and/or scope filter in one call. Backs the "forget by query" input in the Memory panel.
+     */
+    fun forgetByQuery(query: String?, scope: String?, actor: String?, reason: String?): ForgetByQueryResult {
+        val endpoint = buildString {
+            append("/memory/notes/by-query")
+            val params = mutableListOf<String>()
+            query?.trim()?.takeIf { it.isNotEmpty() }?.let { params += "query=${encode(it)}" }
+            scope?.trim()?.takeIf { it.isNotEmpty() }?.let { params += "scope=${encode(it)}" }
+            actor?.takeIf { it.isNotBlank() }?.let { params += "actor=${encode(it)}" }
+            reason?.takeIf { it.isNotBlank() }?.let { params += "reason=${encode(it)}" }
+            if (params.isNotEmpty()) append('?').append(params.joinToString("&"))
+        }
+        val node = objectMapper.readTree(apiClient.delete(endpoint))
+        return ForgetByQueryResult(
+            count = node.path("count").asInt(0),
+            memoryIds = node.path("memoryIds").takeIf { it.isArray }?.map { it.asText() } ?: emptyList()
+        )
+    }
+
+    /**
+     * Bulk "forget" for multi-select delete. There is no batch-by-id endpoint server-side, so this
+     * loops [forgetNote] per id; one failure does not abort the rest of the batch.
+     */
+    fun forgetMany(memoryIds: List<String>, actor: String?, reason: String?): BulkForgetResult {
+        val forgotten = mutableListOf<String>()
+        val failed = mutableListOf<String>()
+        memoryIds.forEach { memoryId ->
+            try {
+                forgetNote(memoryId, actor, reason)
+                forgotten += memoryId
+            } catch (e: Exception) {
+                failed += memoryId
+            }
+        }
+        return BulkForgetResult(memoryIds.size, forgotten, failed)
     }
 
     private fun encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)

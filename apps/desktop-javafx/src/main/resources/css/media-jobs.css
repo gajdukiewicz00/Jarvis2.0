@@ -1,0 +1,28 @@
+/*
+ * View-local styling for MediaJobsView's per-job progress indicator.
+ * Loaded only on MediaJobsView's own node subtree (see
+ * MediaJobsView.stylesheets) — never on the Scene — so it cannot affect any
+ * other feature screen. `-jarvis-*` are JavaFX "looked-up colors" defined on
+ * `.root` by the always-on shell.css (and optionally re-themed by
+ * stark-lab.css); the lookup walks up the scene graph regardless of which
+ * stylesheet a rule came from, so referencing them here keeps this in sync
+ * with whichever theme is active.
+ */
+
+.shell-media-jobs-view .media-job-progress-bar {
+    -fx-pref-height: 8px;
+    -fx-max-width: infinity;
+}
+
+.shell-media-jobs-view .media-job-progress-bar > .track {
+    -fx-background-color: -jarvis-surface, rgba(79, 224, 255, 0.14);
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 6px;
+}
+
+.shell-media-jobs-view .media-job-progress-bar > .bar {
+    -fx-background-color: -jarvis-primary;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6px;
+    -fx-padding: 0.25em;
+}

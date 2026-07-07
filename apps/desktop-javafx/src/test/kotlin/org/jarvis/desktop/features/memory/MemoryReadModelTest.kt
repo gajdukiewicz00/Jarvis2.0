@@ -7,6 +7,7 @@ import org.jarvis.desktop.config.ConfigSource
 import org.jarvis.desktop.config.ResolvedDesktopConfig
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.Locale
@@ -361,6 +362,230 @@ class MemoryReadModelTest {
             assertEquals(1, items.size)
             assertTrue(items[0].pinned)
             assertEquals("FINANCE", items[0].scope)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `exportEncryptedOrPlain appends the scope query parameter when a scope is given`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"encrypted":false,"notes":[]}"""))
+
+        try {
+            server.start()
+            modelFor(server).exportEncryptedOrPlain(scope = "FINANCE")
+
+            val request = server.takeRequest()
+            assertEquals("GET", request.method)
+            assertTrue(request.path!!.contains("/memory/notes/export/encrypted-or-plain"))
+            assertTrue(request.path!!.contains("scope=FINANCE"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `exportEncryptedOrPlain omits the scope query parameter and returns the raw body when scope is null`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"encrypted":false,"notes":[]}"""))
+
+        try {
+            server.start()
+            val payload = modelFor(server).exportEncryptedOrPlain()
+
+            val request = server.takeRequest()
+            assertFalse(request.path!!.contains("scope="))
+            assertTrue(payload.contains("\"encrypted\":false"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `importFile posts a bare note array to import-resolve with the encoded mode and strips unknown fields`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"received":1,"created":1,"overwritten":0,"skipped":0,"failed":0,"errors":[]}""")
+        )
+
+        try {
+            server.start()
+            val content = """
+                [
+                  {"memoryId":"m-1","title":"Note","body":"text","status":"ACTIVE","contentHash":"abc","embedding":[0.1,0.2]}
+                ]
+            """.trimIndent()
+            val result = modelFor(server).importFile(content, "keep-both")
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/memory/notes/import/resolve"))
+            assertTrue(request.path!!.contains("mode=keep-both"))
+            val sentBody = request.body.readUtf8()
+            assertTrue(sentBody.contains("\"memoryId\":\"m-1\""))
+            assertFalse(sentBody.contains("contentHash"))
+            assertFalse(sentBody.contains("embedding"))
+            assertFalse(sentBody.contains("status"))
+
+            assertEquals(1, result.received)
+            assertEquals(1, result.created)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `importFile routes a raw encrypted envelope to import-encrypted-resolve`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"received":2,"created":2,"overwritten":0,"skipped":0,"failed":0,"errors":[]}""")
+        )
+
+        try {
+            server.start()
+            val content = """{"algorithm":"AES/GCM/NoPadding","ivBase64":"aaaa","ciphertextBase64":"bbbb"}"""
+            val result = modelFor(server).importFile(content, "skip")
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/memory/notes/import/encrypted/resolve"))
+            assertTrue(request.path!!.contains("mode=skip"))
+            assertTrue(request.body.readUtf8().contains("ciphertextBase64"))
+            assertEquals(2, result.received)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `importFile unwraps an encrypted export-wrapper envelope to import-encrypted-resolve`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setBody("""{"received":0,"created":0,"overwritten":0,"skipped":0,"failed":0,"errors":[]}""")
+        )
+
+        try {
+            server.start()
+            val content = """
+                {"encrypted":true,"envelope":{"algorithm":"AES/GCM/NoPadding","ivBase64":"aaaa","ciphertextBase64":"bbbb"},"notes":null}
+            """.trimIndent()
+            modelFor(server).importFile(content, "overwrite")
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/memory/notes/import/encrypted/resolve"))
+            val sentBody = request.body.readUtf8()
+            assertTrue(sentBody.contains("ciphertextBase64"))
+            assertFalse(sentBody.contains("\"envelope\""))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `importFile unwraps a plaintext export-wrapper notes array to import-resolve and sanitizes fields`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setBody("""{"received":1,"created":0,"overwritten":1,"skipped":0,"failed":0,"errors":[]}""")
+        )
+
+        try {
+            server.start()
+            val content = """
+                {"encrypted":false,"envelope":null,"notes":[
+                  {"memoryId":"m-9","title":"T","body":"B","vaultRelativePath":"x/y.md","pinned":true}
+                ]}
+            """.trimIndent()
+            val result = modelFor(server).importFile(content, "overwrite")
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/memory/notes/import/resolve"))
+            val sentBody = request.body.readUtf8()
+            assertTrue(sentBody.contains("\"memoryId\":\"m-9\""))
+            assertFalse(sentBody.contains("vaultRelativePath"))
+            assertFalse(sentBody.contains("pinned"))
+            assertEquals(1, result.overwritten)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `importFile throws for an unrecognized payload shape`() {
+        val server = MockWebServer()
+
+        try {
+            server.start()
+            val model = modelFor(server)
+            assertThrows(IllegalArgumentException::class.java) {
+                model.importFile("""{"foo":"bar"}""", "skip")
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `forgetByQuery appends query, scope, actor and reason and parses the count and memoryIds`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"count":2,"memoryIds":["m-1","m-2"]}""")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).forgetByQuery("old notes", "FINANCE", "owner", "cleanup")
+
+            val request = server.takeRequest()
+            assertEquals("DELETE", request.method)
+            assertTrue(request.path!!.contains("/memory/notes/by-query"))
+            assertTrue(request.path!!.contains("query="))
+            assertTrue(request.path!!.contains("scope=FINANCE"))
+            assertTrue(request.path!!.contains("actor=owner"))
+            assertTrue(request.path!!.contains("reason="))
+
+            assertEquals(2, result.count)
+            assertEquals(listOf("m-1", "m-2"), result.memoryIds)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `forgetByQuery omits query and scope params when both are null`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setBody("""{"count":0,"memoryIds":[]}"""))
+
+        try {
+            server.start()
+            modelFor(server).forgetByQuery(null, null, null, null)
+
+            val request = server.takeRequest()
+            assertFalse(request.path!!.contains("?"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `forgetMany aggregates forgotten and failed ids across sequential per-id requests`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(404).setBody("{}"))
+        server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
+
+        try {
+            server.start()
+            val result = modelFor(server).forgetMany(listOf("m-1", "m-2", "m-3"), "owner", "bulk cleanup")
+
+            assertEquals(3, result.requested)
+            assertEquals(listOf("m-1", "m-3"), result.forgotten)
+            assertEquals(listOf("m-2"), result.failed)
         } finally {
             server.shutdown()
         }

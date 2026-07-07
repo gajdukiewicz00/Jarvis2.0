@@ -1,0 +1,95 @@
+/*
+ * View-local dark theme for the Analytics dashboard's JavaFX charts
+ * (BarChart / PieChart / LineChart). Loaded only on AnalyticsView's own
+ * node subtree (see AnalyticsView.stylesheets) — never on the Scene — so
+ * it cannot affect any other feature screen. `-jarvis-*` are JavaFX
+ * "looked-up colors" defined on `.root` by the always-on shell.css (and
+ * optionally re-themed by stark-lab.css); the lookup walks up the scene
+ * graph regardless of which stylesheet a given node's rule came from, so
+ * referencing them here keeps the charts in sync with whichever theme is
+ * currently active.
+ */
+
+.analytics-chart {
+    -fx-background-color: transparent;
+    -fx-padding: 4px 8px 8px 8px;
+}
+
+.analytics-chart .chart-title {
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.analytics-chart .chart-content {
+    -fx-padding: 6px;
+}
+
+.analytics-chart .chart-plot-background {
+    -fx-background-color: transparent;
+}
+
+.analytics-chart .axis {
+    -fx-tick-label-fill: -jarvis-text-secondary;
+    -fx-font-size: 11px;
+}
+
+.analytics-chart .axis-label {
+    -fx-text-fill: -jarvis-text-secondary;
+}
+
+.analytics-chart .axis-tick-mark,
+.analytics-chart .axis-minor-tick-mark {
+    -fx-stroke: -jarvis-outline;
+}
+
+.analytics-chart .chart-vertical-grid-lines {
+    -fx-stroke: rgba(127, 166, 196, 0.12);
+}
+
+.analytics-chart .chart-horizontal-grid-lines {
+    -fx-stroke: rgba(127, 166, 196, 0.12);
+}
+
+.analytics-chart .chart-alternative-row-fill,
+.analytics-chart .chart-alternative-column-fill {
+    -fx-fill: transparent;
+    -fx-stroke: transparent;
+}
+
+.analytics-chart .chart-legend {
+    -fx-background-color: transparent;
+}
+
+.analytics-chart .chart-legend-item-symbol {
+    -fx-background-radius: 4px;
+}
+
+.analytics-chart .chart-legend-item {
+    -fx-text-fill: -jarvis-text-primary;
+}
+
+/* Bar / line / pie series colors, cycling through the shell's semantic
+   palette; the last three extend past it for categories 6-8. */
+.analytics-chart .default-color0.chart-bar { -fx-bar-fill: -jarvis-primary; }
+.analytics-chart .default-color1.chart-bar { -fx-bar-fill: -jarvis-secondary; }
+.analytics-chart .default-color2.chart-bar { -fx-bar-fill: -jarvis-success; }
+.analytics-chart .default-color3.chart-bar { -fx-bar-fill: -jarvis-warning; }
+.analytics-chart .default-color4.chart-bar { -fx-bar-fill: -jarvis-error; }
+
+.analytics-chart .default-color0.chart-series-line { -fx-stroke: -jarvis-primary; -fx-stroke-width: 2.5px; }
+.analytics-chart .default-color0.chart-line-symbol { -fx-background-color: -jarvis-primary, -jarvis-bg; }
+
+.analytics-chart .default-color0.chart-pie { -fx-pie-color: -jarvis-primary; }
+.analytics-chart .default-color1.chart-pie { -fx-pie-color: -jarvis-secondary; }
+.analytics-chart .default-color2.chart-pie { -fx-pie-color: -jarvis-success; }
+.analytics-chart .default-color3.chart-pie { -fx-pie-color: -jarvis-warning; }
+.analytics-chart .default-color4.chart-pie { -fx-pie-color: -jarvis-error; }
+.analytics-chart .default-color5.chart-pie { -fx-pie-color: #8B7CF6; }
+.analytics-chart .default-color6.chart-pie { -fx-pie-color: #34C6E8; }
+.analytics-chart .default-color7.chart-pie { -fx-pie-color: #F27FB0; }
+
+.analytics-chart-empty {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+}

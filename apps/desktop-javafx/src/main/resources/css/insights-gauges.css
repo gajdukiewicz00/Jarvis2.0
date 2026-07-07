@@ -1,0 +1,69 @@
+/*
+ * View-local styling for InsightsView's typed day-score / forecast /
+ * insights cards (gauges + item cards), replacing raw label rows for
+ * those three sections. Loaded only on InsightsView's own node subtree
+ * (see InsightsView.stylesheets) — never on the Scene — so it cannot
+ * affect any other feature screen. `-jarvis-*` are JavaFX "looked-up
+ * colors" defined on `.root` by the always-on shell.css (and optionally
+ * re-themed by stark-lab.css); the lookup walks up the scene graph
+ * regardless of which stylesheet a rule came from, so referencing them
+ * here keeps these cards in sync with whichever theme is active.
+ */
+
+.insights-score-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 14px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 14px;
+    -fx-padding: 14px 16px;
+}
+
+.insights-score-value {
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+}
+
+.insights-score-caption {
+    -fx-text-fill: -jarvis-text-secondary;
+    -fx-font-size: 12px;
+}
+
+.insights-gauge {
+    -fx-pref-height: 14px;
+    -fx-max-width: infinity;
+}
+
+.insights-gauge > .track {
+    -fx-background-color: -jarvis-surface, rgba(127, 166, 196, 0.18);
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 8px;
+}
+
+.insights-gauge > .bar {
+    -fx-background-insets: 0;
+    -fx-background-radius: 8px;
+    -fx-padding: 6px;
+}
+
+.insights-gauge-info > .bar { -fx-background-color: -jarvis-primary; }
+.insights-gauge-success > .bar { -fx-background-color: -jarvis-success; }
+.insights-gauge-warning > .bar { -fx-background-color: -jarvis-warning; }
+.insights-gauge-error > .bar { -fx-background-color: -jarvis-error; }
+
+.insights-item-card {
+    -fx-background-color: -jarvis-surface-elevated;
+    -fx-background-radius: 12px;
+    -fx-border-color: -jarvis-outline;
+    -fx-border-radius: 12px;
+    -fx-padding: 10px 12px;
+}
+
+.insights-item-title {
+    -fx-text-fill: -jarvis-text-primary;
+    -fx-font-weight: bold;
+}
+
+.insights-item-detail {
+    -fx-text-fill: -jarvis-text-secondary;
+}

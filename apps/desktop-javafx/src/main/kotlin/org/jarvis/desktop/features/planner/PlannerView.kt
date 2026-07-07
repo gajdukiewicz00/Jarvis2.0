@@ -5,7 +5,11 @@ import javafx.geometry.Insets
 import javafx.geometry.Pos
 import javafx.scene.Node
 import javafx.scene.control.Button
+import javafx.scene.control.ButtonBar
+import javafx.scene.control.ButtonType
 import javafx.scene.control.ComboBox
+import javafx.scene.control.DatePicker
+import javafx.scene.control.Dialog
 import javafx.scene.control.Label
 import javafx.scene.control.ScrollPane
 import javafx.scene.control.TextField
@@ -16,6 +20,8 @@ import javafx.scene.layout.Region
 import javafx.scene.layout.VBox
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.shell.ShellRouteContent
+import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
@@ -62,6 +68,9 @@ class PlannerView(
         items.addAll("LOW", "MEDIUM", "HIGH", "URGENT")
         value = "MEDIUM"
     }
+    private val dueDatePicker = DatePicker().apply {
+        promptText = "Due date (optional)"
+    }
     private val addButton = Button("Create task").apply {
         styleClass += "shell-action-button"
         setOnAction { createTask() }
@@ -69,6 +78,19 @@ class PlannerView(
 
     private val tasksContainer = VBox(12.0).apply {
         styleClass += "planner-task-list"
+    }
+
+    private val planModeCombo = ComboBox<PlannerReadModel.PlanModeOption>().apply {
+        items.addAll(PlannerReadModel.PLAN_MODE_OPTIONS)
+        value = PlannerReadModel.PLAN_MODE_OPTIONS.first()
+    }
+    private val applyPlanModeButton = Button("Apply plan mode").apply {
+        styleClass += "shell-action-button"
+        setOnAction { applyPlanMode() }
+    }
+    private val planByModeLabel = Label("Loading plan-mode ranking…").apply {
+        styleClass += "shell-section-subtitle"
+        isWrapText = true
     }
 
     private val focusLabel = Label("Loading today's focus…").apply {
@@ -147,8 +169,23 @@ class PlannerView(
                 isWrapText = true
             }
             children += FlowPane(12.0, 12.0).apply {
-                children.addAll(titleField, descriptionField, priorityCombo, addButton)
+                children.addAll(titleField, descriptionField, priorityCombo, dueDatePicker, addButton)
             }
+        }
+
+        val planModeSection = VBox(12.0).apply {
+            styleClass += "shell-section-card"
+            children += Label("Plan mode").apply { styleClass += "shell-section-title" }
+            children += Label(
+                "Set the day's plan mode via `POST /api/v1/planner/plan/mode`, ranked by `/plan/by-mode`."
+            ).apply {
+                styleClass += "shell-section-subtitle"
+                isWrapText = true
+            }
+            children += FlowPane(12.0, 12.0).apply {
+                children.addAll(planModeCombo, applyPlanModeButton)
+            }
+            children += planByModeLabel
         }
 
         val tasksSection = VBox(12.0).apply {
@@ -196,7 +233,10 @@ class PlannerView(
         return VBox(18.0).apply {
             styleClass += "shell-planner-view"
             padding = Insets(24.0)
-            children.addAll(header, feedbackRow, summary, briefSection, outlookSection, quickCapture, tasksSection)
+            children.addAll(
+                header, feedbackRow, summary, briefSection, outlookSection,
+                planModeSection, quickCapture, tasksSection
+            )
         }
     }
 
@@ -218,12 +258,17 @@ class PlannerView(
                 val eveningReview = readModel.loadEveningReview()
                 val weeklyPlan = readModel.loadWeeklyPlan()
                 val tomorrowPlan = readModel.loadTomorrowPlan()
+                val currentPlanMode = readModel.loadPlanMode()
+                val planByMode = readModel.loadPlanByMode()
                 Platform.runLater {
                     renderSnapshot(snapshot)
                     renderBrief(focusLabel, focus)
                     renderBrief(eveningReviewLabel, eveningReview)
                     renderBrief(weeklyPlanLabel, weeklyPlan)
                     renderBrief(tomorrowPlanLabel, tomorrowPlan)
+                    planModeCombo.value = PlannerReadModel.PLAN_MODE_OPTIONS.firstOrNull { it.code == currentPlanMode }
+                        ?: planModeCombo.value
+                    renderBrief(planByModeLabel, planByMode)
                     feedbackPill.text = "Ready"
                     applyTone(feedbackPill, "shell-status-tone-success")
                     feedbackLabel.text = "Planner tasks loaded from the gateway-backed todo tool flow."
@@ -268,14 +313,17 @@ class PlannerView(
         applyTone(feedbackPill, "shell-status-tone-info")
         feedbackLabel.text = "Creating planner task..."
 
+        val dueDate = dueDatePicker.value?.toDueInstant()
+
         worker.execute {
             try {
-                readModel.createTodo(title, descriptionField.text, priorityCombo.value ?: "MEDIUM")
+                readModel.createTodo(title, descriptionField.text, priorityCombo.value ?: "MEDIUM", dueDate)
                 val snapshot = readModel.loadSnapshot()
                 Platform.runLater {
                     titleField.clear()
                     descriptionField.clear()
                     priorityCombo.value = "MEDIUM"
+                    dueDatePicker.value = null
                     renderSnapshot(snapshot)
                     feedbackPill.text = "Saved"
                     applyTone(feedbackPill, "shell-status-tone-success")
@@ -296,6 +344,233 @@ class PlannerView(
             }
         }
     }
+
+    private fun applyPlanMode() {
+        val option = planModeCombo.value ?: return
+        if (!actionInFlight.compareAndSet(false, true)) {
+            return
+        }
+
+        applyPlanModeButton.isDisable = true
+        feedbackPill.text = "Saving"
+        applyTone(feedbackPill, "shell-status-tone-info")
+        feedbackLabel.text = "Applying plan mode..."
+
+        worker.execute {
+            try {
+                readModel.setPlanMode(option.code)
+                val planByMode = readModel.loadPlanByMode()
+                Platform.runLater {
+                    renderBrief(planByModeLabel, planByMode)
+                    feedbackPill.text = "Saved"
+                    applyTone(feedbackPill, "shell-status-tone-success")
+                    feedbackLabel.text = "Plan mode set to ${option.label}."
+                    updatedLabel.text = "Updated ${timeFormatter.format(java.time.Instant.now())}"
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    feedbackPill.text = "Error"
+                    applyTone(feedbackPill, "shell-status-tone-error")
+                    feedbackLabel.text = e.message ?: "Applying plan mode failed."
+                }
+            } finally {
+                actionInFlight.set(false)
+                Platform.runLater {
+                    applyPlanModeButton.isDisable = false
+                }
+            }
+        }
+    }
+
+    private fun editTask(task: PlannerReadModel.TodoTask) {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Edit task"
+        dialog.headerText = "Editing \"${task.title}\""
+
+        val editTitleField = TextField(task.title)
+        val editDescriptionField = TextField(task.description.orEmpty())
+        val editPriorityCombo = ComboBox<String>().apply {
+            items.addAll("LOW", "MEDIUM", "HIGH", "URGENT")
+            value = task.priority
+        }
+        val editDueDatePicker = DatePicker(task.dueDate?.atZone(ZoneId.systemDefault())?.toLocalDate())
+
+        dialog.dialogPane.content = VBox(10.0).apply {
+            padding = Insets(12.0)
+            children += Label("Title")
+            children += editTitleField
+            children += Label("Description")
+            children += editDescriptionField
+            children += Label("Priority")
+            children += editPriorityCombo
+            children += Label("Due date")
+            children += editDueDatePicker
+        }
+        val saveButtonType = ButtonType("Save", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(saveButtonType, ButtonType.CANCEL)
+
+        dialog.showAndWait().ifPresent { result ->
+            if (result != saveButtonType) return@ifPresent
+            val newTitle = editTitleField.text?.trim().orEmpty()
+            if (newTitle.isBlank()) {
+                feedbackPill.text = "Input needed"
+                applyTone(feedbackPill, "shell-status-tone-warning")
+                feedbackLabel.text = "Task title is required before Planner can save an edit."
+                return@ifPresent
+            }
+            submitEdit(
+                task.id,
+                newTitle,
+                editDescriptionField.text,
+                editPriorityCombo.value ?: task.priority,
+                editDueDatePicker.value?.toDueInstant()
+            )
+        }
+    }
+
+    private fun submitEdit(id: Long, title: String, description: String?, priority: String, dueDate: Instant?) {
+        if (!actionInFlight.compareAndSet(false, true)) {
+            return
+        }
+
+        feedbackPill.text = "Saving"
+        applyTone(feedbackPill, "shell-status-tone-info")
+        feedbackLabel.text = "Updating planner task..."
+
+        worker.execute {
+            try {
+                readModel.updateTodo(id, title, description, priority, dueDate)
+                val snapshot = readModel.loadSnapshot()
+                Platform.runLater {
+                    renderSnapshot(snapshot)
+                    feedbackPill.text = "Saved"
+                    applyTone(feedbackPill, "shell-status-tone-success")
+                    feedbackLabel.text = "Planner task updated."
+                    updatedLabel.text = "Updated ${timeFormatter.format(java.time.Instant.now())}"
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    feedbackPill.text = "Error"
+                    applyTone(feedbackPill, "shell-status-tone-error")
+                    feedbackLabel.text = e.message ?: "Planner task update failed."
+                }
+            } finally {
+                actionInFlight.set(false)
+            }
+        }
+    }
+
+    private fun deleteTask(task: PlannerReadModel.TodoTask) {
+        if (!confirmDeletion(task.title)) {
+            return
+        }
+        if (!actionInFlight.compareAndSet(false, true)) {
+            return
+        }
+
+        feedbackPill.text = "Deleting"
+        applyTone(feedbackPill, "shell-status-tone-info")
+        feedbackLabel.text = "Deleting planner task..."
+
+        worker.execute {
+            try {
+                readModel.deleteTodo(task.id)
+                val snapshot = readModel.loadSnapshot()
+                Platform.runLater {
+                    renderSnapshot(snapshot)
+                    feedbackPill.text = "Deleted"
+                    applyTone(feedbackPill, "shell-status-tone-success")
+                    feedbackLabel.text = "Planner task deleted."
+                    updatedLabel.text = "Updated ${timeFormatter.format(java.time.Instant.now())}"
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    feedbackPill.text = "Error"
+                    applyTone(feedbackPill, "shell-status-tone-error")
+                    feedbackLabel.text = e.message ?: "Planner task deletion failed."
+                }
+            } finally {
+                actionInFlight.set(false)
+            }
+        }
+    }
+
+    private fun confirmDeletion(taskTitle: String): Boolean {
+        val dialog = Dialog<ButtonType>()
+        dialog.title = "Delete task"
+        dialog.headerText = "Delete \"$taskTitle\"?"
+        dialog.dialogPane.content = Label(
+            "This permanently removes the task. This cannot be undone."
+        ).apply { isWrapText = true }
+        val deleteButton = ButtonType("Delete", ButtonBar.ButtonData.OK_DONE)
+        dialog.dialogPane.buttonTypes.setAll(deleteButton, ButtonType.CANCEL)
+        return dialog.showAndWait().orElse(ButtonType.CANCEL) == deleteButton
+    }
+
+    private fun skipOccurrence(taskId: Long) {
+        runOccurrenceAction("Skipping occurrence...", "Occurrence skipped.", "Skipping occurrence failed.") {
+            readModel.skipOccurrence(taskId)
+        }
+    }
+
+    private fun completeOccurrence(taskId: Long) {
+        runOccurrenceAction(
+            "Completing occurrence...",
+            "Occurrence completed.",
+            "Completing occurrence failed."
+        ) {
+            readModel.completeOccurrence(taskId)
+        }
+    }
+
+    private fun generateNextOccurrences(taskId: Long) {
+        runOccurrenceAction(
+            "Generating next occurrences...",
+            "Generated the next occurrences.",
+            "Generating next occurrences failed."
+        ) {
+            readModel.generateNextOccurrences(taskId)
+        }
+    }
+
+    private fun runOccurrenceAction(
+        inProgressMessage: String,
+        successMessage: String,
+        failureMessage: String,
+        action: () -> Unit
+    ) {
+        if (!actionInFlight.compareAndSet(false, true)) {
+            return
+        }
+
+        feedbackPill.text = "Updating"
+        applyTone(feedbackPill, "shell-status-tone-info")
+        feedbackLabel.text = inProgressMessage
+
+        worker.execute {
+            try {
+                action()
+                val snapshot = readModel.loadSnapshot()
+                Platform.runLater {
+                    renderSnapshot(snapshot)
+                    feedbackPill.text = "Updated"
+                    applyTone(feedbackPill, "shell-status-tone-success")
+                    feedbackLabel.text = successMessage
+                    updatedLabel.text = "Updated ${timeFormatter.format(java.time.Instant.now())}"
+                }
+            } catch (e: Exception) {
+                Platform.runLater {
+                    feedbackPill.text = "Error"
+                    applyTone(feedbackPill, "shell-status-tone-error")
+                    feedbackLabel.text = e.message ?: failureMessage
+                }
+            } finally {
+                actionInFlight.set(false)
+            }
+        }
+    }
+
+    private fun LocalDate.toDueInstant(): Instant = atStartOfDay(ZoneId.systemDefault()).toInstant()
 
     private fun completeTask(taskId: Long) {
         if (!actionInFlight.compareAndSet(false, true)) {
@@ -369,6 +644,11 @@ class PlannerView(
                 val spacer = Region()
                 HBox.setHgrow(spacer, Priority.ALWAYS)
                 children += spacer
+                if (task.isRecurringOccurrence || task.isRecurringTemplate) {
+                    children += statusPill("↻ Recurring").apply {
+                        applyTone(this, "shell-status-tone-info")
+                    }
+                }
                 children += statusPill(task.status).apply {
                     applyTone(this, when (task.status) {
                         "DONE" -> "shell-status-tone-success"
@@ -389,11 +669,39 @@ class PlannerView(
                     isWrapText = true
                 }
             }
-            if (task.status != "DONE" && task.status != "CANCELLED") {
-                children += FlowPane(12.0, 12.0).apply {
-                    children += Button("Complete task").apply {
+            children += FlowPane(12.0, 12.0).apply {
+                children += Button("Edit").apply {
+                    styleClass += "shell-action-button"
+                    setOnAction { editTask(task) }
+                }
+                children += Button("Delete").apply {
+                    styleClass += "shell-action-button-danger"
+                    setOnAction { deleteTask(task) }
+                }
+                if (task.status != "DONE" && task.status != "CANCELLED") {
+                    when {
+                        task.isRecurringOccurrence -> {
+                            children += Button("Skip occurrence").apply {
+                                styleClass += "shell-action-button"
+                                setOnAction { skipOccurrence(task.id) }
+                            }
+                            children += Button("Complete occurrence").apply {
+                                styleClass += "shell-action-button"
+                                setOnAction { completeOccurrence(task.id) }
+                            }
+                        }
+                        else -> {
+                            children += Button("Complete task").apply {
+                                styleClass += "shell-action-button"
+                                setOnAction { completeTask(task.id) }
+                            }
+                        }
+                    }
+                }
+                if (task.isRecurringTemplate) {
+                    children += Button("Generate next occurrences").apply {
                         styleClass += "shell-action-button"
-                        setOnAction { completeTask(task.id) }
+                        setOnAction { generateNextOccurrences(task.id) }
                     }
                 }
             }

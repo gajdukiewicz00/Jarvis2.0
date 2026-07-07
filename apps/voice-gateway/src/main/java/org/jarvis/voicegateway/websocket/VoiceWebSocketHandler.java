@@ -27,6 +27,8 @@ import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
@@ -54,6 +56,18 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
+
+    /**
+     * How long a STARTED session is allowed to sit idle (connected, no audio
+     * bytes streamed yet) before an END with zero audio is treated as a real
+     * failure. Below this window, ending without audio is a normal "connected
+     * and waiting" outcome (mic not streaming yet, user cancelled quickly,
+     * client-side listen-timeout firing early) and must be reported as
+     * healthy/waiting rather than a protocol error. Configurable via
+     * jarvis.voice.no-audio-timeout-ms (default 8s).
+     */
+    @Value("${jarvis.voice.no-audio-timeout-ms:8000}")
+    private long noAudioTimeoutMs;
 
     private enum SessionPhase {
         IDLE,
@@ -136,6 +150,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     return;
                 }
                 ctx.phase = SessionPhase.STARTED;
+                ctx.startedAt = Instant.now();
                 log.info("🎤 Voice command started, correlationId={}, session={}, requestedLanguage={}, effectiveRecognitionLanguage={}",
                         correlationId, session.getId(), requestedLanguage, ctx.language);
                 sendState(ctx, "STARTED");
@@ -164,10 +179,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     ctx.correlationId = correlationId; // Ensure it's set
                 }
                 if (ctx.phase == SessionPhase.STARTED && ctx.receivedAudioBytes == 0) {
-                    protocolError(ctx, "NO_AUDIO_RECEIVED", "Voice session ended before any audio was received.");
-                    resetSession(ctx, true);
-                    ctx.phase = SessionPhase.DONE;
-                    sendState(ctx, "DONE");
+                    handleEndWithoutAudio(ctx, session);
                     return;
                 }
                 if (ctx.phase != SessionPhase.STREAMING) {
@@ -806,6 +818,37 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
+    /**
+     * Client sent END while the session was STARTED but never streamed any
+     * audio bytes. This is common and expected while the session is still
+     * within the configured no-audio grace window (mic capture hasn't
+     * started streaming yet, the user cancelled almost immediately, or a
+     * client-side listen-timeout fired) — the socket itself is healthy and
+     * simply idle/waiting, so it must be reported as such and not as a
+     * protocol error. Only once the grace window has fully elapsed with zero
+     * audio do we treat the session as a genuine no-audio failure.
+     */
+    private void handleEndWithoutAudio(SessionContext ctx, WebSocketSession session) {
+        long elapsedMs = ctx.startedAt != null
+                ? Duration.between(ctx.startedAt, Instant.now()).toMillis()
+                : Long.MAX_VALUE;
+        boolean withinGraceWindow = elapsedMs < noAudioTimeoutMs;
+        if (withinGraceWindow) {
+            log.info("🕒 Voice WS idle session ended within no-audio grace window (healthy/waiting): session={}, elapsedMs={}, windowMs={}, correlationId={}",
+                    session.getId(), elapsedMs, noAudioTimeoutMs, ctx.correlationId);
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "WAITING_FOR_AUDIO");
+            return;
+        }
+        log.warn("Voice WS no-audio grace window elapsed: session={}, elapsedMs={}, windowMs={}, correlationId={}",
+                session.getId(), elapsedMs, noAudioTimeoutMs, ctx.correlationId);
+        protocolError(ctx, "NO_AUDIO_RECEIVED", "Voice session ended before any audio was received.");
+        resetSession(ctx, true);
+        ctx.phase = SessionPhase.DONE;
+        sendState(ctx, "DONE");
+    }
+
     private void finalizeRecognition(WebSocketSession session) {
         SessionContext ctx = sessions.get(session.getId());
         if (ctx == null || ctx.recognitionSession == null) {
@@ -1040,6 +1083,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         int chunkCounter;
         long receivedAudioBytes;
         String lastErrorCode;
+        Instant startedAt;
 
         SessionContext(WebSocketSession session, StreamingRecognitionSession recognitionSession, String language,
                 String userId) {

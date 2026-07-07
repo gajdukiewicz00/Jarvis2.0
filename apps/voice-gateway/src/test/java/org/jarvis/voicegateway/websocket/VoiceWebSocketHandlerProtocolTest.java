@@ -91,6 +91,11 @@ class VoiceWebSocketHandlerProtocolTest {
         lenient().when(voiceOutputService.resolveAndGetAudio(any(), any(), any(), any(), any()))
                 .thenReturn(new byte[] {1, 2, 3});
         ReflectionTestUtils.setField(handler, "defaultLanguage", "ru-RU");
+        // The handler is built by hand here (no Spring), so the @Value default
+        // (8s) for the no-audio grace window is not applied — set it explicitly
+        // so "END before any audio" is treated as WAITING_FOR_AUDIO. The
+        // grace-window-elapsed error test overrides this to 0L on its own.
+        ReflectionTestUtils.setField(handler, "noAudioTimeoutMs", 8000L);
 
         prepareSession(session, "voice-session-1");
         prepareSession(replacementSession, "voice-session-2");
@@ -140,7 +145,32 @@ class VoiceWebSocketHandlerProtocolTest {
     }
 
     @Test
-    void endWithoutAudioEmitsNoAudioReceivedAndDoneState() throws Exception {
+    void endWithoutAudioWithinGraceWindowIsReportedAsWaitingNotError() throws Exception {
+        handler.afterConnectionEstablished(session);
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"START","correlationId":"corr-end","language":"en-US"}
+                """.trim()));
+
+        // END arrives immediately after START — well within the default
+        // no-audio grace window — so this is a healthy "connected & idle/
+        // waiting" outcome, not a protocol error.
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"END","correlationId":"corr-end"}
+                """.trim()));
+
+        assertPayloadContains(
+                session,
+                "\"type\":\"STATE\"",
+                "\"state\":\"WAITING_FOR_AUDIO\"");
+        assertNoPayloadContains(session, "\"code\":\"NO_AUDIO_RECEIVED\"");
+    }
+
+    @Test
+    void endWithoutAudioAfterGraceWindowElapsesEmitsNoAudioReceivedAndDoneState() throws Exception {
+        // Force the grace window to zero so any elapsed time counts as expired,
+        // simulating a session that genuinely sat idle past the configured window.
+        ReflectionTestUtils.setField(handler, "noAudioTimeoutMs", 0L);
+
         handler.afterConnectionEstablished(session);
         handler.handleTextMessage(session, new TextMessage("""
                 {"type":"START","correlationId":"corr-end","language":"en-US"}
@@ -229,5 +259,19 @@ class VoiceWebSocketHandlerProtocolTest {
                     payloads.stream().anyMatch(payload -> payload.contains(fragment)),
                     "Expected fragment not found: " + fragment + " in " + payloads);
         }
+    }
+
+    private void assertNoPayloadContains(WebSocketSession webSocketSession, String fragment) throws Exception {
+        ArgumentCaptor<WebSocketMessage<?>> messageCaptor = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(webSocketSession, atLeastOnce()).sendMessage(messageCaptor.capture());
+        List<String> payloads = messageCaptor.getAllValues().stream()
+                .filter(TextMessage.class::isInstance)
+                .map(TextMessage.class::cast)
+                .map(TextMessage::getPayload)
+                .toList();
+
+        assertTrue(
+                payloads.stream().noneMatch(payload -> payload.contains(fragment)),
+                "Unexpected fragment found: " + fragment + " in " + payloads);
     }
 }

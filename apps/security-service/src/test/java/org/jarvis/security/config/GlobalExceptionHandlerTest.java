@@ -234,6 +234,24 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void handlesGenericExceptionNeverEchoesATokenFromTheExceptionMessage() {
+        // Defense-in-depth: even if some unanticipated exception's message ever
+        // embedded a raw token, the catch-all handler must still only return the
+        // fixed, generic client message - never ex.getMessage() itself.
+        String jwtLikeToken =
+                "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+        Exception exception = new RuntimeException("unexpected failure while handling " + jwtLikeToken);
+
+        ResponseEntity<Map<String, Object>> response = handler.handleGenericException(
+                exception, requestFor("/auth/refresh"));
+
+        assertThat(response.getBody().values())
+                .as("no field of the response body may contain the raw token")
+                .noneMatch(value -> value != null && value.toString().contains(jwtLikeToken));
+        assertThat(response.getBody()).containsEntry("message", "An unexpected error occurred");
+    }
+
+    @Test
     void authenticationExceptionExposesErrorCode() {
         AuthenticationException ex = new AuthenticationException("TOKEN_EXPIRED", "Token has expired");
 

@@ -62,12 +62,15 @@ public class JwtUtil {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (ExpiredJwtException e) {
-            // Log expired tokens at DEBUG level - this is expected behavior
-            log.debug("JWT token expired: {}", e.getMessage());
+            // Log expired tokens at DEBUG level - this is expected behavior.
+            // Message is passed through TokenMaskingUtil as defense-in-depth: jjwt
+            // exception messages are not expected to embed the raw token, but this
+            // ensures one never reaches the logs even if that assumption is violated.
+            log.debug("JWT token expired: {}", TokenMaskingUtil.maskTokensInText(e.getMessage()));
             throw e;
         } catch (JwtException e) {
             // Log other JWT errors at WARN level
-            log.warn("JWT validation failed: {}", e.getMessage());
+            log.warn("JWT validation failed: {}", TokenMaskingUtil.maskTokensInText(e.getMessage()));
             throw e;
         }
     }

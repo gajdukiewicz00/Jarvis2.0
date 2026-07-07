@@ -28,10 +28,12 @@ import java.net.ConnectException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GlobalExceptionHandlerTest {
@@ -251,6 +253,57 @@ class GlobalExceptionHandlerTest {
         assertEquals("/api/v1/tasks", response.getBody().get("upstreamPath"));
         assertEquals(502, response.getBody().get("upstreamStatus"));
         assertEquals("boom", response.getBody().get("upstreamBody"));
+    }
+
+    @Test
+    void handleUpstreamProxyExceptionMasksTokenValueInStructuredBody() {
+        // security-service (and any other proxied downstream) error bodies are
+        // forwarded verbatim by DownstreamProxyService; a token embedded in one
+        // must never reach the client as-is.
+        String jwtLikeToken =
+                "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEiLCJyb2xlIjoiT1dORVIifQ.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU";
+        Map<String, Object> upstreamBody = new LinkedHashMap<>();
+        upstreamBody.put("error", "SOME_ERROR");
+        upstreamBody.put("accessToken", jwtLikeToken);
+
+        UpstreamProxyException exception = new UpstreamProxyException(
+                HttpStatus.CONFLICT,
+                "PROXY_ERROR",
+                "proxy failed",
+                "security-service",
+                "/auth/login",
+                409,
+                upstreamBody,
+                null);
+
+        ResponseEntity<Map<String, Object>> response =
+                handler.handleUpstreamProxyException(exception, webRequest("/auth/login"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> maskedUpstreamBody = (Map<String, Object>) response.getBody().get("upstreamBody");
+        assertEquals("SOME_ERROR", maskedUpstreamBody.get("error"));
+        String maskedToken = (String) maskedUpstreamBody.get("accessToken");
+        assertFalse(maskedToken.contains(jwtLikeToken), "response must never echo the full token value");
+        assertTrue(maskedToken.contains("len=" + jwtLikeToken.length()));
+    }
+
+    @Test
+    void handleFeignExceptionMasksJwtLikeSubstringInUpstreamMessage() {
+        String jwtLikeToken =
+                "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEiLCJyb2xlIjoiT1dORVIifQ.dGhpc2lzbm90YXJlYWxzaWduYXR1cmU";
+        String upstreamContent = "{\"error\":\"invalid refresh token\",\"refreshToken\":\"" + jwtLikeToken + "\"}";
+        FeignException exception = new StubFeignException(
+                400,
+                "[400] during [POST] to [http://security-service/auth/refresh] [AuthClient#refresh()]: [" + upstreamContent + "]",
+                feignRequest("http://security-service/auth/refresh"),
+                upstreamContent.getBytes(StandardCharsets.UTF_8));
+
+        ResponseEntity<Map<String, Object>> response =
+                handler.handleFeignException(exception, webRequest("/auth/refresh"));
+
+        String upstreamMessage = (String) response.getBody().get("upstreamMessage");
+        assertFalse(upstreamMessage.contains(jwtLikeToken), "response must never echo the full token value");
+        assertTrue(upstreamMessage.contains("len=" + jwtLikeToken.length()));
     }
 
     @Test

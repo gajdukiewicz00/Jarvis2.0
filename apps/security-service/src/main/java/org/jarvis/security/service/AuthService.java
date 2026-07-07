@@ -14,6 +14,7 @@ import org.jarvis.security.model.RefreshToken;
 import org.jarvis.security.model.User;
 import org.jarvis.security.repository.RefreshTokenRepository;
 import org.jarvis.security.repository.UserRepository;
+import org.jarvis.security.util.TokenMaskingUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -250,7 +251,9 @@ public class AuthService {
         } catch (AuthenticationException e) {
             throw e;
         } catch (RuntimeException e) {
-            log.warn("Failed to extract user from token: {}", e.getMessage());
+            // Message is passed through TokenMaskingUtil as defense-in-depth against a
+            // raw token ever ending up embedded in an exception message.
+            log.warn("Failed to extract user from token: {}", TokenMaskingUtil.maskTokensInText(e.getMessage()));
             throw new AuthenticationException("INVALID_TOKEN", "Invalid token");
         }
     }

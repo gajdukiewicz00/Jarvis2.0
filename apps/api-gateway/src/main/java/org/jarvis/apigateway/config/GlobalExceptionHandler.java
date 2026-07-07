@@ -5,6 +5,7 @@ import feign.RetryableException;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.apigateway.capability.CapabilityUnavailableException;
 import org.jarvis.apigateway.proxy.UpstreamProxyException;
+import org.jarvis.apigateway.security.TokenMaskingUtil;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -97,7 +98,10 @@ public class GlobalExceptionHandler {
             body.put("upstreamStatus", ex.upstreamStatus());
         }
         if (ex.upstreamBody() != null) {
-            body.put("upstreamBody", ex.upstreamBody());
+            // The upstream body is proxied verbatim from a downstream service (including
+            // security-service auth routes) — never echo a token it might contain back
+            // to the caller. See TokenMaskingUtil.
+            body.put("upstreamBody", TokenMaskingUtil.maskTokensInStructure(ex.upstreamBody()));
         }
         body.put("service", "api-gateway");
         body.put("path", extractRequestPath(request));
@@ -208,9 +212,14 @@ public class GlobalExceptionHandler {
             log.error("Unexpected upstream status [{}]: {}", serviceName, upstreamStatus);
         }
         
-        // Try to parse upstream response body
+        // Try to parse upstream response body. Never echo a token it might contain
+        // back to the caller — mask any JWT-shaped substring before it is included
+        // in the response (see TokenMaskingUtil).
         String upstreamMessage = parseUpstreamMessage(ex);
-        
+        if (upstreamMessage != null) {
+            upstreamMessage = TokenMaskingUtil.maskTokensInText(upstreamMessage);
+        }
+
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", LocalDateTime.now().toString());
         body.put("status", status.value());

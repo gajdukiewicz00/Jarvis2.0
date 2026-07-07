@@ -177,22 +177,29 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     "JWT token has expired");
 
         } catch (SignatureException e) {
-            log.warn("JwtAuthFilter: JWT signature validation failed: {}", e.getMessage());
+            // Exception messages are logged through TokenMaskingUtil as defense-in-depth:
+            // library messages are not expected to embed the raw token, but this ensures
+            // one never reaches the logs even if that assumption is ever violated.
+            log.warn("JwtAuthFilter: JWT signature validation failed: {}",
+                    TokenMaskingUtil.maskTokensInText(e.getMessage()));
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "INVALID_SIGNATURE",
                     "Invalid token signature");
 
         } catch (MalformedJwtException e) {
-            log.warn("JwtAuthFilter: Malformed JWT token: {}", e.getMessage());
+            log.warn("JwtAuthFilter: Malformed JWT token: {}",
+                    TokenMaskingUtil.maskTokensInText(e.getMessage()));
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "MALFORMED_TOKEN",
                     "Malformed JWT token");
 
         } catch (IllegalArgumentException e) {
-            log.warn("JwtAuthFilter: Invalid JWT argument: {}", e.getMessage());
+            log.warn("JwtAuthFilter: Invalid JWT argument: {}",
+                    TokenMaskingUtil.maskTokensInText(e.getMessage()));
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "INVALID_TOKEN",
                     "Invalid token format");
 
         } catch (RuntimeException e) {
-            log.error("JwtAuthFilter: Unexpected JWT validation error: {}", e.getMessage(), e);
+            log.error("JwtAuthFilter: Unexpected JWT validation error: {}",
+                    TokenMaskingUtil.maskTokensInText(e.getMessage()), e);
             sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, "JWT_ERROR",
                     "An error occurred validating the token");
         }

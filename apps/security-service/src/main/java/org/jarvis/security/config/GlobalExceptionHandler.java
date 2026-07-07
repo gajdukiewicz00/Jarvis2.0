@@ -1,6 +1,7 @@
 package org.jarvis.security.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.security.util.TokenMaskingUtil;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -228,9 +229,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(
             Exception ex, WebRequest request) {
-        
-        log.error("Unexpected error in security-service: {}", ex.getMessage(), ex);
-        
+
+        // Message is passed through TokenMaskingUtil as defense-in-depth: no
+        // exception message in this service is expected to embed a raw token, but
+        // this is the catch-all path for every unanticipated exception, so it must
+        // never be the place a token slips into the logs.
+        log.error("Unexpected error in security-service: {}", TokenMaskingUtil.maskTokensInText(ex.getMessage()), ex);
+
         return buildErrorResponse(
             HttpStatus.INTERNAL_SERVER_ERROR,
             "INTERNAL_ERROR",

@@ -9,6 +9,7 @@ import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.security.config.GlobalExceptionHandler.AuthenticationException;
 import org.jarvis.security.repository.RevokedTokenRepository;
+import org.jarvis.security.util.TokenMaskingUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -154,8 +155,12 @@ public class JwtService {
             claims = validateAccessToken(token);
             tokenType = "access";
         } catch (AuthenticationException accessValidationFailure) {
+            // Message is passed through TokenMaskingUtil as defense-in-depth: these
+            // messages are static/derived from jjwt exceptions and are not expected to
+            // embed the raw token, but this ensures one never reaches the logs even if
+            // that assumption is ever violated.
             log.debug("Token failed access-token validation ({}), retrying as refresh token",
-                    accessValidationFailure.getMessage());
+                    TokenMaskingUtil.maskTokensInText(accessValidationFailure.getMessage()));
             claims = validateRefreshToken(token);
             tokenType = "refresh";
         }
@@ -186,7 +191,7 @@ public class JwtService {
         } catch (ExpiredJwtException e) {
             throw new AuthenticationException("TOKEN_EXPIRED", "Token has expired");
         } catch (JwtException e) {
-            log.warn("JWT validation failed: {}", e.getMessage());
+            log.warn("JWT validation failed: {}", TokenMaskingUtil.maskTokensInText(e.getMessage()));
             throw new AuthenticationException("INVALID_TOKEN", "Invalid JWT token");
         }
 

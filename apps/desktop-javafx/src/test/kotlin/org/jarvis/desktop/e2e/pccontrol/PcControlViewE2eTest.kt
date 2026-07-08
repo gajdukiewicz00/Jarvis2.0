@@ -1,6 +1,8 @@
 package org.jarvis.desktop.e2e.pccontrol
 
+import javafx.scene.Node
 import javafx.scene.control.Button
+import javafx.scene.control.ScrollPane
 import javafx.scene.control.TextField
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -32,11 +34,23 @@ class PcControlViewE2eTest {
 
     private val sendButtonLabel = "Send to Orchestrator"
 
+    /**
+     * The real controls live inside the ScrollPane that [PcControlView] hosts as
+     * its BorderPane center (the legacy PcControlTab wraps its VBox in a
+     * ScrollPane). A headless ScrollPane never builds its skin, so its `content`
+     * is absent from `childrenUnmodifiable` and a plain scene-graph walk of the
+     * view finds nothing. The ScrollPane itself IS a direct child of the layout
+     * BorderPane, so reach through it to the content VBox — every button, field
+     * and status label is a direct descendant of that VBox.
+     */
+    private fun contentRoot(view: PcControlView): Node =
+        E2eFx.find<ScrollPane>(view)?.content ?: view
+
     private fun sendButton(view: PcControlView): Button =
-        E2eFx.findAll<Button>(view).first { it.text == sendButtonLabel }
+        E2eFx.findAll<Button>(contentRoot(view)).first { it.text == sendButtonLabel }
 
     private fun commandField(view: PcControlView): TextField =
-        requireNotNull(E2eFx.find<TextField>(view)) { "PC Control text-command field not found" }
+        requireNotNull(E2eFx.find<TextField>(contentRoot(view))) { "PC Control text-command field not found" }
 
     @Test
     fun `text command happy path posts to orchestrator and status label confirms`() {
@@ -59,7 +73,7 @@ class PcControlViewE2eTest {
 
             // Handler runs synchronously on the FX thread, but poll to stay robust.
             E2eFx.waitForFx(description = "status label confirms command sent") {
-                E2eFx.hasText(view, "Command sent")
+                E2eFx.hasText(contentRoot(view), "Command sent")
             }
 
             // Backend received the right call.
@@ -75,7 +89,7 @@ class PcControlViewE2eTest {
 
             // Visible scene graph reacted: success status shown and field cleared.
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "increase volume") || E2eFx.hasText(view, "Command sent"))
+                assertTrue(E2eFx.hasText(contentRoot(view), "increase volume") || E2eFx.hasText(contentRoot(view), "Command sent"))
                 assertEquals("", commandField(view).text, "field should clear after a successful send")
             }
         } finally {
@@ -98,7 +112,7 @@ class PcControlViewE2eTest {
 
             // The handler catches the ApiClient exception and renders a failure.
             E2eFx.waitForFx(description = "status label shows failure") {
-                E2eFx.hasText(view, "Failed")
+                E2eFx.hasText(contentRoot(view), "Failed")
             }
 
             val request = server.takeRequest()
@@ -108,7 +122,7 @@ class PcControlViewE2eTest {
             // On failure the success confirmation must NOT appear and the typed
             // command is preserved so the user can retry.
             E2eFx.onFx {
-                assertFalse(E2eFx.hasText(view, "Command sent"), "must not show success on 500")
+                assertFalse(E2eFx.hasText(contentRoot(view), "Command sent"), "must not show success on 500")
                 assertEquals("trigger error", commandField(view).text, "field must not clear on failure")
             }
         } finally {
@@ -132,7 +146,7 @@ class PcControlViewE2eTest {
             // No async work is triggered; assert the guard held.
             E2eFx.onFx {
                 assertEquals(0, server.requestCount, "blank command must not hit the backend")
-                assertFalse(E2eFx.hasText(view, "Command sent"), "no success status for a blank command")
+                assertFalse(E2eFx.hasText(contentRoot(view), "Command sent"), "no success status for a blank command")
             }
         } finally {
             server.shutdown()

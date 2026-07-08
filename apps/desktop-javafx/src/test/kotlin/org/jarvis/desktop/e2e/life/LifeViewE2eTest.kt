@@ -53,6 +53,12 @@ class LifeViewE2eTest {
                     """.trimIndent()
                 )
         )
+        // 4) onRouteActivated() -> refresh() fires one more GET; feed it so the FX
+        //    thread doesn't stall on an empty MockWebServer queue until read timeout.
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json")
+                .setBody("""[{"amount":"12.50","currency":"€","category":"Food","description":"Lunch"}]""")
+        )
         server.start()
         try {
             // Constructor synchronously loads the recent expenses via GET.
@@ -76,8 +82,10 @@ class LifeViewE2eTest {
                 E2eFx.findAll<Button>(body(view)).first { it.text == "Add Expense" }.fire()
             }
 
-            E2eFx.waitForFx(description = "expense added confirmation") {
-                E2eFx.hasText(body(view), "Expense added")
+            // The handler flashes "✓ Expense added" then immediately reloads, so the
+            // final observable status is the reloaded count ("✓ Loaded 2 expenses").
+            E2eFx.waitForFx(description = "expense added then list reloaded") {
+                E2eFx.hasText(body(view), "Loaded 2 expenses")
             }
             E2eFx.onFx {
                 val items = E2eFx.find<ListView<*>>(body(view))!!.items.map { it.toString() }

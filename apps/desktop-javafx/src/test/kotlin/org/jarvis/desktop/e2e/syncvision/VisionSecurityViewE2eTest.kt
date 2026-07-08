@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.syncvision
 
+import javafx.scene.Scene
 import javafx.scene.control.Button
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -75,6 +76,21 @@ class VisionSecurityViewE2eTest {
         .setHeader("Content-Type", "application/json")
         .setBody(body)
 
+    /**
+     * Build the real view on the FX thread and force skin/layout so the
+     * [javafx.scene.control.ScrollPane] content (header, cards, incident list)
+     * is mounted into the scene graph and therefore reachable via [E2eFx.hasText].
+     * Without a Scene + applyCss + layout the ScrollPane skin is never created and
+     * its content subtree stays invisible to the traversal helpers.
+     */
+    private fun buildView(server: MockWebServer): VisionSecurityView = E2eFx.onFx {
+        val view = VisionSecurityView(E2eFx.apiClientFor(server))
+        Scene(view)
+        view.applyCss()
+        view.layout()
+        view
+    }
+
     @Test
     fun `status snapshot renders on route activation`() {
         val server = MockWebServer()
@@ -82,7 +98,7 @@ class VisionSecurityViewE2eTest {
         server.enqueue(jsonResponse(incidentsBody))
         server.start()
         try {
-            val view = E2eFx.onFx { VisionSecurityView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "status snapshot rendered") {
@@ -127,7 +143,7 @@ class VisionSecurityViewE2eTest {
         server.enqueue(jsonResponse(incidentsBody))
         server.start()
         try {
-            val view = E2eFx.onFx { VisionSecurityView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             // Wait until the initial snapshot enables the Start Monitoring button.
@@ -167,7 +183,7 @@ class VisionSecurityViewE2eTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("backend unhealthy"))
         server.start()
         try {
-            val view = E2eFx.onFx { VisionSecurityView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "failure state rendered") {

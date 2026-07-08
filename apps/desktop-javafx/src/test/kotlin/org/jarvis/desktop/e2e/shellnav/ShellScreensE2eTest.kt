@@ -45,6 +45,11 @@ class ShellScreensE2eTest {
         }
         try {
             val checkBox = E2eFx.onFx {
+                // SettingsView is a ScrollPane: its content is only attached to the
+                // scene graph once the skin is built, which requires a CSS pass.
+                // The Scene is never shown, so force it here before looking up controls.
+                view.applyCss()
+                view.layout()
                 E2eFx.findAll<CheckBox>(view).first { it.text.contains("Stark Lab", ignoreCase = true) }
             }
 

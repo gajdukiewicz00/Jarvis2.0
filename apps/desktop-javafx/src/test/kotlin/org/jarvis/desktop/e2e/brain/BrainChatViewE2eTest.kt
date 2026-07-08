@@ -26,10 +26,10 @@ class BrainChatViewE2eTest {
      * (Send + Clear). Must be called on the FX thread.
      */
     private fun sendButton(view: BrainChatView): Button =
-        E2eFx.findAll<Button>(view).first { it.text == "Send" }
+        E2eFx.findAll<Button>(view.content).first { it.text == "Send" }
 
     private fun promptArea(view: BrainChatView): TextArea =
-        E2eFx.find<TextArea>(view)!!
+        E2eFx.find<TextArea>(view.content)!!
 
     @Test
     fun `happy path - typing a prompt and sending renders the assistant reply bubble`() {
@@ -55,7 +55,7 @@ class BrainChatViewE2eTest {
             // Placeholder is shown before any turn.
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "Начни разговор"),
+                    E2eFx.hasText(view.content, "Начни разговор"),
                     "empty-state placeholder should be visible before first turn"
                 )
             }
@@ -69,30 +69,30 @@ class BrainChatViewE2eTest {
             // The user's message bubble renders synchronously on the FX thread.
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "What is our status?"),
+                    E2eFx.hasText(view.content, "What is our status?"),
                     "user bubble should echo the typed prompt"
                 )
-                assertTrue(E2eFx.hasText(view, "Thinking"), "status pill should flip to Thinking")
+                assertTrue(E2eFx.hasText(view.content, "Thinking"), "status pill should flip to Thinking")
             }
 
             // Assistant reply arrives async via worker thread + Platform.runLater.
             E2eFx.waitForFx(description = "assistant reply bubble rendered") {
-                E2eFx.hasText(view, "Systems nominal, sir.")
+                E2eFx.hasText(view.content, "Systems nominal, sir.")
             }
 
             E2eFx.onFx {
                 // Reply body + model attribution surfaced in the scene graph.
-                assertTrue(E2eFx.hasText(view, "Systems nominal, sir."))
+                assertTrue(E2eFx.hasText(view.content, "Systems nominal, sir."))
                 assertTrue(
-                    E2eFx.hasText(view, "qwen3-14b"),
+                    E2eFx.hasText(view.content, "qwen3-14b"),
                     "model name should appear in the reply bubble speaker / status"
                 )
-                assertTrue(E2eFx.hasText(view, "Ready"), "status pill should settle on Ready")
+                assertTrue(E2eFx.hasText(view.content, "Ready"), "status pill should settle on Ready")
                 // Prompt field cleared after send, Send re-enabled.
                 assertEquals("", promptArea(view).text)
                 assertFalse(sendButton(view).isDisable, "Send button should be re-enabled")
                 // Placeholder is gone once a real turn exists.
-                assertFalse(E2eFx.hasText(view, "Начни разговор"))
+                assertFalse(E2eFx.hasText(view.content, "Начни разговор"))
             }
 
             // Backend received the correct chat call with our prompt.
@@ -127,18 +127,18 @@ class BrainChatViewE2eTest {
             }
 
             // User bubble still renders immediately, even on the failing turn.
-            E2eFx.onFx { assertTrue(E2eFx.hasText(view, "Are you there?")) }
+            E2eFx.onFx { assertTrue(E2eFx.hasText(view.content, "Are you there?")) }
 
             // Failure surfaces as an error status pill + Russian error bubble.
             E2eFx.waitForFx(description = "error status + error bubble rendered") {
-                E2eFx.hasText(view, "Error") && E2eFx.hasText(view, "Не удалось получить ответ")
+                E2eFx.hasText(view.content, "Error") && E2eFx.hasText(view.content, "Не удалось получить ответ")
             }
 
             E2eFx.onFx {
                 // ApiClient maps 5xx to a "Server error (500)" message shown in status label.
                 assertTrue(
-                    E2eFx.hasText(view, "Server error (500)"),
-                    "status label should show the mapped 5xx error: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(view.content, "Server error (500)"),
+                    "status label should show the mapped 5xx error: ${E2eFx.visibleText(view.content)}"
                 )
                 // Send button recovered so the operator can retry.
                 assertFalse(sendButton(view).isDisable, "Send button should be re-enabled after failure")
@@ -167,13 +167,13 @@ class BrainChatViewE2eTest {
             }
 
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Input needed"), "status pill should warn on blank input")
+                assertTrue(E2eFx.hasText(view.content, "Input needed"), "status pill should warn on blank input")
                 assertTrue(
-                    E2eFx.hasText(view, "Type a message before sending"),
-                    "status label should prompt for input: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(view.content, "Type a message before sending"),
+                    "status label should prompt for input: ${E2eFx.visibleText(view.content)}"
                 )
                 // No bubbles were appended — placeholder remains.
-                assertTrue(E2eFx.hasText(view, "Начни разговор"), "empty-state placeholder should remain")
+                assertTrue(E2eFx.hasText(view.content, "Начни разговор"), "empty-state placeholder should remain")
             }
 
             // Confirm the backend never received a request.

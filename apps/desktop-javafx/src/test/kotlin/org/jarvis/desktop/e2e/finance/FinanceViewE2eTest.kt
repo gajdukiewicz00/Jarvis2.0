@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.finance
 
+import javafx.scene.Node
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
 import okhttp3.mockwebserver.MockResponse
@@ -18,6 +19,11 @@ import org.junit.jupiter.api.Test
  * expected life-tracker finance request reached the backend AND that the
  * visible transaction cards / status text reacted.
  *
+ * [FinanceView] is a [javafx.scene.control.ScrollPane]; in a headless/unskinned
+ * state its `content` node is not exposed through `childrenUnmodifiable`, so all
+ * scene-graph lookups traverse from `view.content` (the built VBox tree) which
+ * holds the header, form fields, status pill/label and transaction cards.
+ *
  * ApiClient prefixes endpoints with `/api/v1`, so requests hit
  * `/api/v1/life/finance/expenses`.
  */
@@ -26,11 +32,15 @@ class FinanceViewE2eTest {
     private fun jsonResponse(body: String): MockResponse =
         MockResponse().setHeader("Content-Type", "application/json").setBody(body)
 
-    private fun buttonNamed(view: FinanceView, label: String): Button =
-        E2eFx.findAll<Button>(view).first { it.text == label }
+    /** The built content subtree of the ScrollPane, where every real control lives. */
+    private fun contentOf(view: FinanceView): Node =
+        requireNotNull(view.content) { "FinanceView content was not built" }
 
-    private fun fieldWithPrompt(view: FinanceView, prompt: String): TextField =
-        E2eFx.findAll<TextField>(view).first { it.promptText == prompt }
+    private fun buttonNamed(root: Node, label: String): Button =
+        E2eFx.findAll<Button>(root).first { it.text == label }
+
+    private fun fieldWithPrompt(root: Node, prompt: String): TextField =
+        E2eFx.findAll<TextField>(root).first { it.promptText == prompt }
 
     // ---------------------------------------------------------------------
     // Basic load
@@ -51,10 +61,11 @@ class FinanceViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceView(E2eFx.apiClientFor(server)) }
+            val root = E2eFx.onFx { contentOf(view) }
 
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "Refresh to load recent transactions"),
+                    E2eFx.hasText(root, "Refresh to load recent transactions"),
                     "transactions placeholder should be visible before activation"
                 )
             }
@@ -62,13 +73,13 @@ class FinanceViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "transaction card rendered") {
-                E2eFx.hasText(view, "12.30 EUR")
+                E2eFx.hasText(root, "12.30 EUR")
             }
 
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Uber"), "description should surface in the card meta")
-                assertTrue(E2eFx.hasText(view, "transport"), "category pill should surface")
-                assertTrue(E2eFx.hasText(view, "Done."), "status label should settle after load")
+                assertTrue(E2eFx.hasText(root, "Uber"), "description should surface in the card meta")
+                assertTrue(E2eFx.hasText(root, "transport"), "category pill should surface")
+                assertTrue(E2eFx.hasText(root, "Done."), "status label should settle after load")
             }
 
             val req = server.takeRequest()
@@ -95,17 +106,18 @@ class FinanceViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceView(E2eFx.apiClientFor(server)) }
+            val root = E2eFx.onFx { contentOf(view) }
 
             // Fill the add-expense form and fire the real Add button.
             E2eFx.onFx {
-                fieldWithPrompt(view, "Amount").text = "19.99"
-                fieldWithPrompt(view, "Category").text = "food"
-                fieldWithPrompt(view, "Description (optional)").text = "Coffee"
-                buttonNamed(view, "Add expense").fire()
+                fieldWithPrompt(root, "Amount").text = "19.99"
+                fieldWithPrompt(root, "Category").text = "food"
+                fieldWithPrompt(root, "Description (optional)").text = "Coffee"
+                buttonNamed(root, "Add expense").fire()
             }
 
             E2eFx.waitForFx(description = "added expense reflected in the list") {
-                E2eFx.hasText(view, "19.99 RUB") && E2eFx.hasText(view, "Coffee")
+                E2eFx.hasText(root, "19.99 RUB") && E2eFx.hasText(root, "Coffee")
             }
 
             val add = server.takeRequest()
@@ -138,16 +150,17 @@ class FinanceViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceView(E2eFx.apiClientFor(server)) }
+            val root = E2eFx.onFx { contentOf(view) }
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "error status surfaced") {
-                E2eFx.hasText(view, "Unavailable")
+                E2eFx.hasText(root, "Unavailable")
             }
 
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "Server error (500)"),
-                    "status label should show the mapped 5xx error: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "Server error (500)"),
+                    "status label should show the mapped 5xx error: ${E2eFx.visibleText(root)}"
                 )
             }
 
@@ -170,17 +183,18 @@ class FinanceViewE2eTest {
         try {
             // Do NOT activate the route, so no load fires; isolate the add validation.
             val view = E2eFx.onFx { FinanceView(E2eFx.apiClientFor(server)) }
+            val root = E2eFx.onFx { contentOf(view) }
 
             E2eFx.onFx {
-                fieldWithPrompt(view, "Amount").text = "   "
-                buttonNamed(view, "Add expense").fire()
+                fieldWithPrompt(root, "Amount").text = "   "
+                buttonNamed(root, "Add expense").fire()
             }
 
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Input needed"), "status pill should warn on invalid amount")
+                assertTrue(E2eFx.hasText(root, "Input needed"), "status pill should warn on invalid amount")
                 assertTrue(
-                    E2eFx.hasText(view, "Enter a valid numeric amount"),
-                    "status label should explain the validation failure: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "Enter a valid numeric amount"),
+                    "status label should explain the validation failure: ${E2eFx.visibleText(root)}"
                 )
             }
 

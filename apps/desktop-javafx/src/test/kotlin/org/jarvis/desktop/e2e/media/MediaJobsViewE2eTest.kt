@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.media
 
+import javafx.scene.Node
 import javafx.scene.control.Button
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -28,8 +29,18 @@ import org.junit.jupiter.api.Test
  * and then opens a native FileChooser save dialog. That byte-fetch + save cannot
  * run against the mock / headlessly, so the download journey here asserts the
  * download LINK renders for a completed job; the actual fetch+save is recorded in notes.
+ *
+ * Traversal note: [MediaJobsView] is a [javafx.scene.control.ScrollPane]. Headlessly
+ * (no Scene / CSS pass) its skin never builds, so its `childrenUnmodifiable` — the
+ * sequence [E2eFx.allNodes] walks — is empty and no rendered text is reachable from
+ * the view node itself. Every scene-graph assertion therefore traverses from
+ * `view.content` (the built VBox tree), exactly as the Finance/Brain E2E suites do.
  */
 class MediaJobsViewE2eTest {
+
+    /** The built content tree of the ScrollPane view — the traversable scene graph. */
+    private fun contentOf(view: MediaJobsView): Node =
+        E2eFx.onFx { requireNotNull(view.content) { "MediaJobsView content was not built" } }
 
     /** media-service mode/status probe fired by onRouteActivated() right after the jobs load. */
     private fun statusResponse(): MockResponse = MockResponse()
@@ -65,17 +76,18 @@ class MediaJobsViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { MediaJobsView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "dub job cards populated") {
-                E2eFx.hasText(view, "RUSSIAN_DUB_AUDIO · dub-1") && E2eFx.hasText(view, "dub-2")
+                E2eFx.hasText(root, "RUSSIAN_DUB_AUDIO · dub-1") && E2eFx.hasText(root, "dub-2")
             }
             // Visible scene reacted: both jobs rendered, status pill flipped to Ready, count reported.
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "COMPLETED"), "completed job status pill visible")
-                assertTrue(E2eFx.hasText(view, "RUNNING"), "running job status pill visible")
-                assertTrue(E2eFx.hasText(view, "Ready"), "header status pill shows Ready")
-                assertTrue(E2eFx.hasText(view, "2 job(s)"), "status label reports job count")
+                assertTrue(E2eFx.hasText(root, "COMPLETED"), "completed job status pill visible")
+                assertTrue(E2eFx.hasText(root, "RUNNING"), "running job status pill visible")
+                assertTrue(E2eFx.hasText(root, "Ready"), "header status pill shows Ready")
+                assertTrue(E2eFx.hasText(root, "2 job(s)"), "status label reports job count")
             }
 
             // Backend received the list call.
@@ -113,21 +125,22 @@ class MediaJobsViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { MediaJobsView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "running job card populated") {
-                E2eFx.hasText(view, "RUSSIAN_DUB_AUDIO · dub-9") && E2eFx.hasText(view, "RUNNING")
+                E2eFx.hasText(root, "RUSSIAN_DUB_AUDIO · dub-9") && E2eFx.hasText(root, "RUNNING")
             }
 
             // Fire the real, enabled Cancel button on the job card.
             E2eFx.onFx {
-                val cancel = E2eFx.findAll<Button>(view).first { it.text == "Cancel" && !it.isDisable }
+                val cancel = E2eFx.findAll<Button>(root).first { it.text == "Cancel" && !it.isDisable }
                 cancel.fire()
             }
 
             // Visible scene reacted: the job's status pill flipped from RUNNING to CANCELLED.
             E2eFx.waitForFx(description = "job status flipped to CANCELLED") {
-                E2eFx.hasText(view, "CANCELLED")
+                E2eFx.hasText(root, "CANCELLED")
             }
 
             // Backend calls: list, status, cancel POST, re-list.
@@ -169,19 +182,20 @@ class MediaJobsViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { MediaJobsView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "completed job card populated") {
-                E2eFx.hasText(view, "RUSSIAN_DUB_AUDIO · dub-7")
+                E2eFx.hasText(root, "RUSSIAN_DUB_AUDIO · dub-7")
             }
 
             // The artifact row renders its descriptor label AND an enabled Download button.
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "dub-audio (audio/wav, 4096 bytes)"),
+                    E2eFx.hasText(root, "dub-audio (audio/wav, 4096 bytes)"),
                     "artifact descriptor label visible"
                 )
-                val download = E2eFx.findAll<Button>(view).firstOrNull { it.text == "Download" }
+                val download = E2eFx.findAll<Button>(root).firstOrNull { it.text == "Download" }
                 assertTrue(download != null, "Download button present for the completed job's artifact")
                 assertTrue(!download!!.isDisable, "Download button is enabled")
             }
@@ -201,11 +215,12 @@ class MediaJobsViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { MediaJobsView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             // Visible scene reacted: error placeholder + Unavailable status pill.
             E2eFx.waitForFx(description = "unavailable placeholder shown") {
-                E2eFx.hasText(view, "Медиа-сервис временно недоступен") && E2eFx.hasText(view, "Unavailable")
+                E2eFx.hasText(root, "Медиа-сервис временно недоступен") && E2eFx.hasText(root, "Unavailable")
             }
 
             val listReq = server.takeRequest()
@@ -224,14 +239,15 @@ class MediaJobsViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { MediaJobsView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "empty-jobs placeholder shown") {
-                E2eFx.hasText(view, "No media jobs yet")
+                E2eFx.hasText(root, "No media jobs yet")
             }
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Ready"), "header status pill shows Ready")
-                assertTrue(E2eFx.hasText(view, "0 job(s)"), "status label reports zero jobs")
+                assertTrue(E2eFx.hasText(root, "Ready"), "header status pill shows Ready")
+                assertTrue(E2eFx.hasText(root, "0 job(s)"), "status label reports zero jobs")
             }
 
             val listReq = server.takeRequest()

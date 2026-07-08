@@ -3,8 +3,15 @@ package org.jarvis.desktop.e2e
 import javafx.application.Platform
 import javafx.scene.Node
 import javafx.scene.Parent
+import javafx.scene.control.Accordion
 import javafx.scene.control.Labeled
+import javafx.scene.control.ScrollPane
+import javafx.scene.control.SplitPane
+import javafx.scene.control.TabPane
 import javafx.scene.control.TextInputControl
+import javafx.scene.control.TitledPane
+import javafx.scene.control.ToolBar
+import java.util.IdentityHashMap
 import okhttp3.mockwebserver.MockWebServer
 import org.jarvis.desktop.api.ApiClient
 import org.jarvis.desktop.config.ConfigSource
@@ -58,6 +65,13 @@ object E2eFx {
             System.setProperty("glass.platform", "Monocle")
             System.setProperty("monocle.platform", "Headless")
             System.setProperty("java.awt.headless", "true")
+            // Views auto-load from the (real) ApiClient on a background thread during
+            // construction. HttpURLConnection keep-alive can pool a connection to a
+            // MockWebServer that a prior test has since shut down; a later reuse then
+            // stalls for the full 10s connect/read timeout, backing up the FX thread.
+            // Disable pooling so every test's request opens a fresh socket.
+            System.setProperty("http.keepAlive", "false")
+            System.setProperty("http.maxConnections", "1")
 
             val latch = CountDownLatch(1)
             try {
@@ -136,12 +150,43 @@ object E2eFx {
 
     // ---- scene-graph helpers (call within onFx { } or waitForFx { }) ----
 
-    /** Depth-first walk of the scene graph rooted at [root]. */
+    /**
+     * Depth-first walk of the scene graph rooted at [root], deduplicated by identity.
+     *
+     * Also descends into container "content" nodes that a headless (unskinned)
+     * JavaFX control does NOT expose through [Parent.getChildrenUnmodifiable]:
+     * [ScrollPane], [TitledPane], [TabPane] tab content, [SplitPane] items,
+     * [Accordion] panes, and [ToolBar] items. Without this, a test rooted at a
+     * View that extends ScrollPane would see zero descendants unless a real
+     * Scene/skin were attached (which can hang under Monocle).
+     */
     fun allNodes(root: Node): Sequence<Node> = sequence {
-        yield(root)
-        if (root is Parent) {
-            for (child in root.childrenUnmodifiable) yieldAll(allNodes(child))
+        val seen = java.util.Collections.newSetFromMap(IdentityHashMap<Node, Boolean>())
+        val stack = ArrayDeque<Node>()
+        stack.addLast(root)
+        while (stack.isNotEmpty()) {
+            val node = stack.removeLast()
+            if (!seen.add(node)) continue
+            yield(node)
+            // Push children in reverse so they pop in document order (pre-order DFS),
+            // keeping `first {}` / `find {}` deterministic and matching visual order.
+            for (child in childrenOf(node).asReversed()) stack.addLast(child)
         }
+    }
+
+    /** Children of [node], including content nodes hidden when a control is unskinned. */
+    private fun childrenOf(node: Node): List<Node> {
+        val kids = ArrayList<Node>()
+        if (node is Parent) kids.addAll(node.childrenUnmodifiable)
+        when (node) {
+            is ScrollPane -> node.content?.let(kids::add)
+            is TitledPane -> node.content?.let(kids::add)
+            is TabPane -> node.tabs.forEach { tab -> tab.content?.let(kids::add) }
+            is SplitPane -> kids.addAll(node.items)
+            is Accordion -> kids.addAll(node.panes)
+            is ToolBar -> kids.addAll(node.items)
+        }
+        return kids
     }
 
     /** All nodes of type [T] under [root]. */

@@ -22,6 +22,11 @@ import org.junit.jupiter.api.Test
  * controls (checkboxes, text areas, buttons), then asserts BOTH that the visible
  * widget tree reacted AND that the backend received the expected HTTP request(s).
  *
+ * [AgentSwarmView] is a [javafx.scene.control.ScrollPane]; headlessly (no Scene /
+ * no skin) its content node is NOT reachable through `childrenUnmodifiable`, so —
+ * exactly like the sibling BrainChat E2E — every scene-graph lookup is rooted at
+ * `view.content` (the real inner VBox), which is a plain traversable Parent.
+ *
  * Endpoints exercised (all under apiBaseUrl = <server>/api/v1):
  *   - POST /agents/tasks                         (submit a real, approval-gated task)
  *   - GET  /agents/roles, GET /agents/tasks      (refresh)
@@ -33,6 +38,9 @@ import org.junit.jupiter.api.Test
 class AgentSwarmViewE2eTest {
 
     // ---- scene-graph helpers (only invoked inside onFx/waitForFx) ----
+
+    /** The traversable content root of the ScrollPane-based view. */
+    private fun root(view: AgentSwarmView): Node = view.content
 
     private fun button(root: Node, exactText: String): Button =
         E2eFx.findAll<Button>(root).first { it.text == exactText }
@@ -65,26 +73,26 @@ class AgentSwarmViewE2eTest {
             // The user types a goal, selects the CODER role, flips on "require approval",
             // then presses the (now relabelled) submit button.
             E2eFx.onFx {
-                goalArea(view).text = "Add input validation"
-                checkBox(view, "CODER").isSelected = true
-                checkBox(view, "Real run — require approval (no dry-run)").isSelected = true
+                goalArea(root(view)).text = "Add input validation"
+                checkBox(root(view), "CODER").isSelected = true
+                checkBox(root(view), "Real run — require approval (no dry-run)").isSelected = true
             }
             // The toggle relabels the start button from "Start dry-run swarm" to "Submit real task(s)".
             E2eFx.waitForFx(description = "start button relabels for real run") {
-                E2eFx.findAll<Button>(view).any { it.text == "Submit real task(s)" }
+                E2eFx.findAll<Button>(root(view)).any { it.text == "Submit real task(s)" }
             }
-            E2eFx.onFx { button(view, "Submit real task(s)").fire() }
+            E2eFx.onFx { button(root(view), "Submit real task(s)").fire() }
 
             // The task card renders with role, id, and the AWAITING_APPROVAL status pill.
             E2eFx.waitForFx(description = "new task card appears") {
-                E2eFx.hasText(view, "task-77") && E2eFx.hasText(view, "AWAITING_APPROVAL")
+                E2eFx.hasText(root(view), "task-77") && E2eFx.hasText(root(view), "AWAITING_APPROVAL")
             }
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "CODER"), "role visible on card")
-                assertTrue(E2eFx.hasText(view, "Submitted 1 real task(s)"), "submit result summary shown")
+                assertTrue(E2eFx.hasText(root(view), "CODER"), "role visible on card")
+                assertTrue(E2eFx.hasText(root(view), "Submitted 1 real task(s)"), "submit result summary shown")
                 // The awaiting-approval card exposes Approve/Reject controls.
-                assertTrue(E2eFx.findAll<Button>(view).any { it.text == "Approve" }, "Approve button present")
-                assertTrue(E2eFx.findAll<Button>(view).any { it.text == "Reject" }, "Reject button present")
+                assertTrue(E2eFx.findAll<Button>(root(view)).any { it.text == "Approve" }, "Approve button present")
+                assertTrue(E2eFx.findAll<Button>(root(view)).any { it.text == "Reject" }, "Reject button present")
             }
 
             // Backend assertions: first the real (non-dry-run, approval-gated) submission...
@@ -123,21 +131,21 @@ class AgentSwarmViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "awaiting-approval card loads") {
-                E2eFx.findAll<Button>(view).any { it.text == "Approve" }
+                E2eFx.findAll<Button>(root(view)).any { it.text == "Approve" }
             }
             // Drain the two refresh requests before firing so the next takeRequest is the approve.
             server.takeRequest() // GET /agents/roles
             server.takeRequest() // GET /agents/tasks
 
-            E2eFx.onFx { button(view, "Approve").fire() }
+            E2eFx.onFx { button(root(view), "Approve").fire() }
 
             E2eFx.waitForFx(description = "status flips to COMPLETED") {
-                E2eFx.hasText(view, "COMPLETED") && E2eFx.hasText(view, "patch applied")
+                E2eFx.hasText(root(view), "COMPLETED") && E2eFx.hasText(root(view), "patch applied")
             }
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Approved task task-9"), "approval status text shown")
+                assertTrue(E2eFx.hasText(root(view), "Approved task task-9"), "approval status text shown")
                 // Once completed it is terminal and no longer awaiting -> Approve button gone.
-                assertFalse(E2eFx.findAll<Button>(view).any { it.text == "Approve" }, "Approve button removed after completion")
+                assertFalse(E2eFx.findAll<Button>(root(view)).any { it.text == "Approve" }, "Approve button removed after completion")
             }
 
             val approve = server.takeRequest()
@@ -169,18 +177,18 @@ class AgentSwarmViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "awaiting-approval card loads") {
-                E2eFx.findAll<Button>(view).any { it.text == "Reject" }
+                E2eFx.findAll<Button>(root(view)).any { it.text == "Reject" }
             }
             server.takeRequest() // GET /agents/roles
             server.takeRequest() // GET /agents/tasks
 
-            E2eFx.onFx { button(view, "Reject").fire() }
+            E2eFx.onFx { button(root(view), "Reject").fire() }
 
             E2eFx.waitForFx(description = "reject confirmation appears") {
-                E2eFx.hasText(view, "nothing was applied") && E2eFx.hasText(view, "CANCELLED")
+                E2eFx.hasText(root(view), "nothing was applied") && E2eFx.hasText(root(view), "CANCELLED")
             }
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Rejected task task-3"), "reject status text shown")
+                assertTrue(E2eFx.hasText(root(view), "Rejected task task-3"), "reject status text shown")
             }
 
             val reject = server.takeRequest()
@@ -208,15 +216,15 @@ class AgentSwarmViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "completed task card loads") {
-                E2eFx.findAll<Button>(view).any { it.text == "View diff" }
+                E2eFx.findAll<Button>(root(view)).any { it.text == "View diff" }
             }
             server.takeRequest() // GET /agents/roles
             server.takeRequest() // GET /agents/tasks
 
-            E2eFx.onFx { button(view, "View diff").fire() }
+            E2eFx.onFx { button(root(view), "View diff").fire() }
 
             E2eFx.waitForFx(description = "diff content becomes visible") {
-                E2eFx.findAll<TextArea>(view).any { it.isVisible && it.text?.contains("+++ b/login.kt") == true }
+                E2eFx.findAll<TextArea>(root(view)).any { it.isVisible && it.text?.contains("+++ b/login.kt") == true }
             }
 
             val artifact = server.takeRequest()
@@ -244,15 +252,15 @@ class AgentSwarmViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "completed task card loads") {
-                E2eFx.findAll<Button>(view).any { it.text == "View report" }
+                E2eFx.findAll<Button>(root(view)).any { it.text == "View report" }
             }
             server.takeRequest() // GET /agents/roles
             server.takeRequest() // GET /agents/tasks
 
-            E2eFx.onFx { button(view, "View report").fire() }
+            E2eFx.onFx { button(root(view), "View report").fire() }
 
             E2eFx.waitForFx(description = "report content becomes visible") {
-                E2eFx.findAll<TextArea>(view).any { it.isVisible && it.text?.contains("all green") == true }
+                E2eFx.findAll<TextArea>(root(view)).any { it.isVisible && it.text?.contains("all green") == true }
             }
 
             val artifact = server.takeRequest()
@@ -276,11 +284,11 @@ class AgentSwarmViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "error surfaces in the panel") {
-                E2eFx.hasText(view, "Unavailable") && E2eFx.hasText(view, "Server error")
+                E2eFx.hasText(root(view), "Unavailable") && E2eFx.hasText(root(view), "Server error")
             }
             E2eFx.onFx {
                 // The role/task placeholders stay put because nothing loaded.
-                assertTrue(E2eFx.hasText(view, "Refresh to load the role catalog."), "roles placeholder retained")
+                assertTrue(E2eFx.hasText(root(view), "Refresh to load the role catalog."), "roles placeholder retained")
             }
 
             val req = server.takeRequest()
@@ -304,11 +312,11 @@ class AgentSwarmViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "empty-state placeholders render") {
-                E2eFx.hasText(view, "No roles returned by the agent service.") &&
-                    E2eFx.hasText(view, "No agent tasks yet.")
+                E2eFx.hasText(root(view), "No roles returned by the agent service.") &&
+                    E2eFx.hasText(root(view), "No agent tasks yet.")
             }
             E2eFx.onFx {
-                assertFalse(E2eFx.findAll<Button>(view).any { it.text == "View diff" }, "no task cards -> no artifact buttons")
+                assertFalse(E2eFx.findAll<Button>(root(view)).any { it.text == "View diff" }, "no task cards -> no artifact buttons")
             }
 
             assertEquals("/api/v1/agents/roles", server.takeRequest().path)
@@ -328,12 +336,12 @@ class AgentSwarmViewE2eTest {
             val view = E2eFx.onFx { AgentSwarmView(E2eFx.apiClientFor(server)) }
             // Select a role but leave the goal empty, then press the default (dry-run) button.
             E2eFx.onFx {
-                checkBox(view, "CODER").isSelected = true
-                button(view, "Start dry-run swarm").fire()
+                checkBox(root(view), "CODER").isSelected = true
+                button(root(view), "Start dry-run swarm").fire()
             }
 
             E2eFx.waitForFx(description = "goal validation message shows") {
-                E2eFx.hasText(view, "Enter a goal first.")
+                E2eFx.hasText(root(view), "Enter a goal first.")
             }
             // No network activity should have occurred (validation returns before runBusy).
             assertEquals(0, server.requestCount)

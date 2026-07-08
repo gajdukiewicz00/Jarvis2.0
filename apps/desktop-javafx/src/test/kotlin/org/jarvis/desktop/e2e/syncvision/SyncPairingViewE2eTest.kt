@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.syncvision
 
+import javafx.scene.Node
 import javafx.scene.control.Button
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -20,6 +21,14 @@ import org.junit.jupiter.api.Test
  */
 class SyncPairingViewE2eTest {
 
+    /**
+     * The View is a [javafx.scene.control.ScrollPane]. Headless (no Scene shown),
+     * its skin is never built, so the content subtree is NOT reachable through the
+     * ScrollPane's own [javafx.scene.Parent.getChildrenUnmodifiable]. Traverse the
+     * content node the View builds directly — every control lives under it.
+     */
+    private fun contentOf(view: SyncPairingView): Node = E2eFx.onFx { view.content }
+
     @Test
     fun `reachable pairing endpoint renders code and status in the raw area`() {
         val server = MockWebServer()
@@ -31,20 +40,21 @@ class SyncPairingViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { SyncPairingView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             // Route activation kicks off the async pairing-status probe.
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "reachable state rendered") {
-                E2eFx.hasText(view, "Pairing endpoint reachable") &&
-                    E2eFx.hasText(view, "JARVIS-4821")
+                E2eFx.hasText(root, "Pairing endpoint reachable") &&
+                    E2eFx.hasText(root, "JARVIS-4821")
             }
 
             // Visible scene graph reacted: success pill + headline + raw code.
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Reachable"), "status pill should read Reachable")
-                assertTrue(E2eFx.hasText(view, "Pairing endpoint reachable"), "headline should confirm reachability")
-                assertTrue(E2eFx.hasText(view, "JARVIS-4821"), "raw status area should show the pairing code")
-                assertTrue(E2eFx.hasText(view, "WAITING"), "raw status area should show the pairing status")
+                assertTrue(E2eFx.hasText(root, "Reachable"), "status pill should read Reachable")
+                assertTrue(E2eFx.hasText(root, "Pairing endpoint reachable"), "headline should confirm reachability")
+                assertTrue(E2eFx.hasText(root, "JARVIS-4821"), "raw status area should show the pairing code")
+                assertTrue(E2eFx.hasText(root, "WAITING"), "raw status area should show the pairing status")
             }
 
             // Backend received the pairing-status probe.
@@ -65,22 +75,23 @@ class SyncPairingViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { SyncPairingView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
 
             // Drive the actual Refresh control instead of route activation.
             E2eFx.onFx {
-                val refresh = E2eFx.findAll<Button>(view).first { it.text == "Refresh" }
+                val refresh = E2eFx.findAll<Button>(root).first { it.text == "Refresh" }
                 refresh.fire()
             }
 
             E2eFx.waitForFx(description = "degraded state rendered") {
-                E2eFx.hasText(view, "Pairing временно недоступно")
+                E2eFx.hasText(root, "Pairing временно недоступно")
             }
 
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Unavailable"), "status pill should read Unavailable")
-                assertTrue(E2eFx.hasText(view, "Pairing временно недоступно"), "headline should show degraded state")
+                assertTrue(E2eFx.hasText(root, "Unavailable"), "status pill should read Unavailable")
+                assertTrue(E2eFx.hasText(root, "Pairing временно недоступно"), "headline should show degraded state")
                 assertTrue(
-                    E2eFx.hasText(view, "not reachable yet"),
+                    E2eFx.hasText(root, "not reachable yet"),
                     "detail should explain the sync route is not wired yet"
                 )
             }

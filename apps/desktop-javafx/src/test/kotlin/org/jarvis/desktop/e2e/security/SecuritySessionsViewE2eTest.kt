@@ -1,6 +1,7 @@
 package org.jarvis.desktop.e2e.security
 
 import javafx.scene.Node
+import javafx.scene.Scene
 import javafx.scene.control.Button
 import javafx.scene.control.TextField
 import okhttp3.mockwebserver.MockResponse
@@ -44,6 +45,21 @@ class SecuritySessionsViewE2eTest {
     private fun fieldByPrompt(root: Node, prompt: String): TextField =
         E2eFx.findAll<TextField>(root).first { it.promptText == prompt }
 
+    /**
+     * Build the real view on the FX thread and force skin/layout so the
+     * [javafx.scene.control.ScrollPane] content (revoke controls, audit rows)
+     * is reachable via the scene graph. Without this the ScrollPane never
+     * builds its skin, its content stays detached from childrenUnmodifiable,
+     * and every findAll/hasText lookup comes back empty.
+     */
+    private fun buildView(server: MockWebServer): SecuritySessionsView = E2eFx.onFx {
+        val view = SecuritySessionsView(E2eFx.apiClientFor(server))
+        Scene(view)
+        view.applyCss()
+        view.layout()
+        view
+    }
+
     @Test
     fun `audit trail loads on route activation and renders events`() {
         val server = MockWebServer()
@@ -65,7 +81,7 @@ class SecuritySessionsViewE2eTest {
         )
         server.start()
         try {
-            val view = E2eFx.onFx { SecuritySessionsView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "audit rows rendered") {
@@ -93,7 +109,7 @@ class SecuritySessionsViewE2eTest {
         )
         server.start()
         try {
-            val view = E2eFx.onFx { SecuritySessionsView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "empty placeholder rendered") {
@@ -114,7 +130,7 @@ class SecuritySessionsViewE2eTest {
         server.enqueue(MockResponse().setResponseCode(403).setBody("""{"error":"forbidden"}"""))
         server.start()
         try {
-            val view = E2eFx.onFx { SecuritySessionsView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "forbidden guidance rendered") {
@@ -150,7 +166,7 @@ class SecuritySessionsViewE2eTest {
         )
         server.start()
         try {
-            val view = E2eFx.onFx { SecuritySessionsView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx {
                 fieldByPrompt(view, "Access or refresh token to revoke").text = "tok-123"
                 buttonByText(view, "Revoke token").fire()
@@ -183,7 +199,7 @@ class SecuritySessionsViewE2eTest {
         val server = MockWebServer()
         server.start()
         try {
-            val view = E2eFx.onFx { SecuritySessionsView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             // Do not type a token; fire revoke.
             E2eFx.onFx { buttonByText(view, "Revoke token").fire() }
 
@@ -210,7 +226,7 @@ class SecuritySessionsViewE2eTest {
         )
         server.start()
         try {
-            val view = E2eFx.onFx { SecuritySessionsView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx {
                 fieldByPrompt(view, "User id").text = "user-7"
                 buttonByText(view, "Revoke all sessions").fire()

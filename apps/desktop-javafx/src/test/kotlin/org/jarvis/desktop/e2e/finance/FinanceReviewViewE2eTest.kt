@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.finance
 
+import javafx.scene.Node
 import javafx.scene.control.Button
 import javafx.scene.control.TextArea
 import okhttp3.mockwebserver.MockResponse
@@ -18,6 +19,13 @@ import org.junit.jupiter.api.Test
  * button) against a [MockWebServer] standing in for the api-gateway, then
  * asserts BOTH that the expected HTTP request(s) reached the backend AND that
  * the visible widget tree reacted (inbox draft cards, status labels, placeholders).
+ *
+ * [FinanceReviewView] is a [javafx.scene.control.ScrollPane]. Headlessly (no
+ * Scene, so no skin is ever built) the ScrollPane never re-parents its
+ * `content` under `childrenUnmodifiable`, so a scene-graph walk that starts at
+ * the ScrollPane itself reaches nothing. We therefore traverse from
+ * `view.content` — the VBox the View constructs and mutates in place — which
+ * holds the full parser card / review queue / persisted-inbox subtree.
  *
  * ApiClient prefixes every endpoint with `/api/v1`, so the persisted-inbox
  * surface hits `/api/v1/life/finance/review-inbox...`.
@@ -53,9 +61,16 @@ class FinanceReviewViewE2eTest {
     private fun jsonResponse(body: String): MockResponse =
         MockResponse().setHeader("Content-Type", "application/json").setBody(body)
 
+    /**
+     * The View's content subtree — the real widget tree the user sees. Captured
+     * on the FX thread because it is where every label/button/textarea lives.
+     */
+    private fun contentOf(view: FinanceReviewView): Node =
+        E2eFx.onFx { requireNotNull(view.content) { "FinanceReviewView content was not built" } }
+
     /** Find a wired action button by its exact label. Call on the FX thread. */
-    private fun buttonNamed(view: FinanceReviewView, label: String): Button =
-        E2eFx.findAll<Button>(view).first { it.text == label }
+    private fun buttonNamed(root: Node, label: String): Button =
+        E2eFx.findAll<Button>(root).first { it.text == label }
 
     // ---------------------------------------------------------------------
     // Persisted review-inbox: happy load
@@ -68,11 +83,12 @@ class FinanceReviewViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
 
             // Before activation the inbox shows its refresh placeholder.
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "Refresh to load the persisted review inbox"),
+                    E2eFx.hasText(root, "Refresh to load the persisted review inbox"),
                     "inbox placeholder should be visible before activation"
                 )
             }
@@ -81,16 +97,16 @@ class FinanceReviewViewE2eTest {
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "persisted inbox draft card rendered") {
-                E2eFx.hasText(view, "Lidl") && E2eFx.hasText(view, "awaiting review")
+                E2eFx.hasText(root, "Lidl") && E2eFx.hasText(root, "awaiting review")
             }
 
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "45.00 PLN"), "amount+currency should surface in the card title")
-                assertTrue(E2eFx.hasText(view, "groceries"), "category should surface in the card subtitle")
-                assertTrue(E2eFx.hasText(view, "low confidence parse"), "notes should surface")
+                assertTrue(E2eFx.hasText(root, "45.00 PLN"), "amount+currency should surface in the card title")
+                assertTrue(E2eFx.hasText(root, "groceries"), "category should surface in the card subtitle")
+                assertTrue(E2eFx.hasText(root, "low confidence parse"), "notes should surface")
                 assertTrue(
-                    E2eFx.hasText(view, "1 draft(s) awaiting review"),
-                    "inbox status label should report the count: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "1 draft(s) awaiting review"),
+                    "inbox status label should report the count: ${E2eFx.visibleText(root)}"
                 )
             }
 
@@ -122,26 +138,27 @@ class FinanceReviewViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
             E2eFx.waitForFx(description = "inbox draft loaded before approve") {
-                E2eFx.hasText(view, "Lidl")
+                E2eFx.hasText(root, "Lidl")
             }
 
             // Fire the real Approve button on the draft card.
-            E2eFx.onFx { buttonNamed(view, "Approve").fire() }
+            E2eFx.onFx { buttonNamed(root, "Approve").fire() }
 
             E2eFx.waitForFx(description = "approve outcome + reload settled") {
-                E2eFx.hasText(view, "Approved and stored as an expense")
+                E2eFx.hasText(root, "Approved and stored as an expense")
             }
 
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "45.00 PLN Lidl"),
-                    "approval status should echo the persisted expense summary: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "45.00 PLN Lidl"),
+                    "approval status should echo the persisted expense summary: ${E2eFx.visibleText(root)}"
                 )
                 // Reloaded queue is empty -> placeholder replaces the card.
                 assertTrue(
-                    E2eFx.hasText(view, "No persisted drafts awaiting review"),
+                    E2eFx.hasText(root, "No persisted drafts awaiting review"),
                     "empty-queue placeholder should show after reload"
                 )
             }
@@ -178,23 +195,24 @@ class FinanceReviewViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
             E2eFx.waitForFx(description = "inbox draft loaded before reject") {
-                E2eFx.hasText(view, "Lidl")
+                E2eFx.hasText(root, "Lidl")
             }
 
-            E2eFx.onFx { buttonNamed(view, "Reject").fire() }
+            E2eFx.onFx { buttonNamed(root, "Reject").fire() }
 
             E2eFx.waitForFx(description = "reject settled") {
-                E2eFx.hasText(view, "Draft rejected")
+                E2eFx.hasText(root, "Draft rejected")
             }
 
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "nothing was persisted"),
-                    "reject status should stress that nothing was stored: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "nothing was persisted"),
+                    "reject status should stress that nothing was stored: ${E2eFx.visibleText(root)}"
                 )
-                assertTrue(E2eFx.hasText(view, "No persisted drafts awaiting review"))
+                assertTrue(E2eFx.hasText(root, "No persisted drafts awaiting review"))
             }
 
             server.takeRequest() // initial GET
@@ -229,17 +247,18 @@ class FinanceReviewViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "error placeholder rendered") {
-                E2eFx.hasText(view, "Unable to load the review inbox")
+                E2eFx.hasText(root, "Unable to load the review inbox")
             }
 
             E2eFx.onFx {
                 // ApiClient maps 5xx to a "Server error (500)" message shown in the status label.
                 assertTrue(
-                    E2eFx.hasText(view, "Server error (500)"),
-                    "status label should show the mapped 5xx error: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "Server error (500)"),
+                    "status label should show the mapped 5xx error: ${E2eFx.visibleText(root)}"
                 )
             }
 
@@ -262,16 +281,17 @@ class FinanceReviewViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "empty-inbox placeholder rendered") {
-                E2eFx.hasText(view, "No persisted drafts awaiting review")
+                E2eFx.hasText(root, "No persisted drafts awaiting review")
             }
 
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "0 draft(s) awaiting review"),
-                    "status label should report zero drafts: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "0 draft(s) awaiting review"),
+                    "status label should report zero drafts: ${E2eFx.visibleText(root)}"
                 )
             }
 
@@ -320,37 +340,38 @@ class FinanceReviewViewE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
 
             // Type raw notifications into the batch TextArea and fire Parse batch.
             E2eFx.onFx {
-                E2eFx.find<TextArea>(view)!!.text = "Płatność 12.30 EUR Uber ****5678\nПокупка 45,00 zł w Lidl karta *1234"
-                buttonNamed(view, "Parse batch").fire()
+                E2eFx.find<TextArea>(root)!!.text = "Płatność 12.30 EUR Uber ****5678\nПокупка 45,00 zł w Lidl karta *1234"
+                buttonNamed(root, "Parse batch").fire()
             }
 
             E2eFx.waitForFx(description = "parsed draft card rendered in the review queue") {
-                E2eFx.hasText(view, "Uber") && E2eFx.hasText(view, "need review")
+                E2eFx.hasText(root, "Uber") && E2eFx.hasText(root, "need review")
             }
 
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "12.30 EUR"), "parsed amount+currency should surface")
+                assertTrue(E2eFx.hasText(root, "12.30 EUR"), "parsed amount+currency should surface")
                 assertTrue(
-                    E2eFx.hasText(view, "Imported 1/2 automatically"),
-                    "parse summary should report imported vs review counts: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "Imported 1/2 automatically"),
+                    "parse summary should report imported vs review counts: ${E2eFx.visibleText(root)}"
                 )
             }
 
             // Approve the parsed (client-queue) draft -> POST /life/finance/expenses.
-            E2eFx.onFx { buttonNamed(view, "Approve").fire() }
+            E2eFx.onFx { buttonNamed(root, "Approve").fire() }
 
             E2eFx.waitForFx(description = "client-queue approve settled") {
-                E2eFx.hasText(view, "Approved and stored as an expense")
+                E2eFx.hasText(root, "Approved and stored as an expense")
             }
 
             E2eFx.onFx {
                 // Queue drained back to its empty placeholder after approve.
                 assertTrue(
-                    E2eFx.hasText(view, "No drafts awaiting review"),
-                    "review queue should drain after approving the only draft: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "No drafts awaiting review"),
+                    "review queue should drain after approving the only draft: ${E2eFx.visibleText(root)}"
                 )
             }
 
@@ -387,16 +408,17 @@ class FinanceReviewViewE2eTest {
         server.start() // no response enqueued: any request would prove a leak
         try {
             val view = E2eFx.onFx { FinanceReviewView(E2eFx.apiClientFor(server)) }
+            val root = contentOf(view)
 
             E2eFx.onFx {
-                E2eFx.find<TextArea>(view)!!.text = "   "
-                buttonNamed(view, "Parse batch").fire()
+                E2eFx.find<TextArea>(root)!!.text = "   "
+                buttonNamed(root, "Parse batch").fire()
             }
 
             E2eFx.onFx {
                 assertTrue(
-                    E2eFx.hasText(view, "Paste at least one notification first"),
-                    "blank batch should warn in the parse result: ${E2eFx.visibleText(view)}"
+                    E2eFx.hasText(root, "Paste at least one notification first"),
+                    "blank batch should warn in the parse result: ${E2eFx.visibleText(root)}"
                 )
             }
 

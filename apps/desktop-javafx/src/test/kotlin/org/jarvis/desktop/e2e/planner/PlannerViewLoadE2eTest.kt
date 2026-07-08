@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.planner
 
+import javafx.scene.Scene
 import javafx.scene.control.Button
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -59,6 +60,22 @@ class PlannerViewLoadE2eTest {
         return out
     }
 
+    /**
+     * Build the REAL [PlannerView] on the FX thread. [PlannerView] extends
+     * [javafx.scene.control.ScrollPane], so its `content` (the VBox holding every
+     * label, metric card and task card) is only wired into the scene graph once
+     * the control is placed in a [Scene] and its skin is created via applyCss +
+     * layout. Without this the E2eFx traversal helpers would only ever see the
+     * empty ScrollPane shell and never any rendered status/label text.
+     */
+    private fun buildView(server: MockWebServer): PlannerView = E2eFx.onFx {
+        val view = PlannerView(E2eFx.apiClientFor(server))
+        Scene(view)
+        view.applyCss()
+        view.layout()
+        view
+    }
+
     @Test
     fun `route activation loads weekly, tomorrow and adjusted plan, and renders tasks`() {
         assumeTrue(E2eFx.toolkitAvailable(), "JavaFX toolkit unavailable — skipping")
@@ -77,7 +94,7 @@ class PlannerViewLoadE2eTest {
         enqueueBriefBundle(server)
         server.start()
         try {
-            val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             // The final Platform.runLater sets the adjusted-plan label last, so waiting
@@ -120,7 +137,7 @@ class PlannerViewLoadE2eTest {
         enqueueBriefBundle(server)
         server.start()
         try {
-            val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "empty-state placeholder shown") {
@@ -144,7 +161,7 @@ class PlannerViewLoadE2eTest {
         server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"boom"}"""))
         server.start()
         try {
-            val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "error state rendered") {
@@ -176,7 +193,7 @@ class PlannerViewLoadE2eTest {
         enqueueBriefBundle(server)
         server.start()
         try {
-            val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val view = buildView(server)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "recurring occurrence card rendered") {

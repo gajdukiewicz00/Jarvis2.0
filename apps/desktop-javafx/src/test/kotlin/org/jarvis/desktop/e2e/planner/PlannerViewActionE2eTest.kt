@@ -1,5 +1,6 @@
 package org.jarvis.desktop.e2e.planner
 
+import javafx.scene.Node
 import javafx.scene.control.Button
 import javafx.scene.control.ComboBox
 import javafx.scene.control.TextField
@@ -24,6 +25,12 @@ import java.util.concurrent.TimeUnit
  * runs first; the only backend traffic is the action under test (except the
  * generate-occurrences journey, which intentionally loads first so the template
  * card exists to click).
+ *
+ * NOTE: [PlannerView] is a [javafx.scene.control.ScrollPane]. Its widget tree
+ * lives in the `content` property, and because these views are never attached
+ * to a Scene the ScrollPane skin is never built — so walking the ScrollPane's
+ * own `childrenUnmodifiable` finds nothing. Every scene-graph lookup here roots
+ * at `view.content` (a plain Pane tree whose children ARE directly reachable).
  */
 class PlannerViewActionE2eTest {
 
@@ -48,6 +55,9 @@ class PlannerViewActionE2eTest {
         return out
     }
 
+    /** The real widget tree root — the ScrollPane's content, not the (unskinned) ScrollPane itself. */
+    private fun rootOf(view: PlannerView): Node = E2eFx.onFx { view.content }
+
     @Test
     fun `applying a plan mode posts the selection and refreshes the adjusted ranking`() {
         assumeTrue(E2eFx.toolkitAvailable(), "JavaFX toolkit unavailable — skipping")
@@ -57,22 +67,23 @@ class PlannerViewActionE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val root = rootOf(view)
 
             val deepWork = PlannerReadModel.PLAN_MODE_OPTIONS.first { it.code == "DEEP_WORK" }
             E2eFx.onFx {
                 @Suppress("UNCHECKED_CAST")
-                val combo = E2eFx.findAll<ComboBox<*>>(view)
+                val combo = E2eFx.findAll<ComboBox<*>>(root)
                     .first { it.items.any { item -> item is PlannerReadModel.PlanModeOption } }
                         as ComboBox<PlannerReadModel.PlanModeOption>
                 combo.value = deepWork
-                E2eFx.findAll<Button>(view).first { it.text == "Apply plan mode" }.fire()
+                E2eFx.findAll<Button>(root).first { it.text == "Apply plan mode" }.fire()
             }
 
             E2eFx.waitForFx(description = "adjusted ranking refreshed after apply") {
-                E2eFx.hasText(view, "Mode: DEEP_WORK") && E2eFx.hasText(view, "Deep task")
+                E2eFx.hasText(root, "Mode: DEEP_WORK") && E2eFx.hasText(root, "Deep task")
             }
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Plan mode set to Deep work"), "success feedback shown")
+                assertTrue(E2eFx.hasText(root, "Plan mode set to Deep work"), "success feedback shown")
             }
 
             val requests = drain(server, 2)
@@ -99,14 +110,15 @@ class PlannerViewActionE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val root = rootOf(view)
 
             E2eFx.onFx {
-                E2eFx.findAll<TextField>(view).first { it.promptText == "Add a task title" }.text = "Draft release notes"
-                E2eFx.findAll<Button>(view).first { it.text == "Create task" }.fire()
+                E2eFx.findAll<TextField>(root).first { it.promptText == "Add a task title" }.text = "Draft release notes"
+                E2eFx.findAll<Button>(root).first { it.text == "Create task" }.fire()
             }
 
             E2eFx.waitForFx(description = "created task appears in the list") {
-                E2eFx.hasText(view, "Draft release notes") && E2eFx.hasText(view, "Planner task created")
+                E2eFx.hasText(root, "Draft release notes") && E2eFx.hasText(root, "Planner task created")
             }
 
             val requests = drain(server, 2)
@@ -128,17 +140,18 @@ class PlannerViewActionE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val root = rootOf(view)
 
             E2eFx.onFx {
                 // Leave the title field blank.
-                E2eFx.findAll<Button>(view).first { it.text == "Create task" }.fire()
+                E2eFx.findAll<Button>(root).first { it.text == "Create task" }.fire()
             }
 
             E2eFx.waitForFx(description = "validation warning shown") {
-                E2eFx.hasText(view, "Task title is required")
+                E2eFx.hasText(root, "Task title is required")
             }
             E2eFx.onFx {
-                assertTrue(E2eFx.hasText(view, "Input needed"), "warning pill shown")
+                assertTrue(E2eFx.hasText(root, "Input needed"), "warning pill shown")
             }
 
             // No request should have been dispatched.
@@ -163,21 +176,22 @@ class PlannerViewActionE2eTest {
         server.start()
         try {
             val view = E2eFx.onFx { PlannerView(E2eFx.apiClientFor(server)) }
+            val root = rootOf(view)
             E2eFx.onFx { view.onRouteActivated() }
 
             E2eFx.waitForFx(description = "recurring template card rendered") {
-                E2eFx.hasText(view, "Weekly review") &&
-                    E2eFx.findAll<Button>(view).any { it.text == "Generate next occurrences" }
+                E2eFx.hasText(root, "Weekly review") &&
+                    E2eFx.findAll<Button>(root).any { it.text == "Generate next occurrences" }
             }
             // Drain the seven initial load requests so the queue holds only action traffic.
             drain(server, 7)
 
             E2eFx.onFx {
-                E2eFx.findAll<Button>(view).first { it.text == "Generate next occurrences" }.fire()
+                E2eFx.findAll<Button>(root).first { it.text == "Generate next occurrences" }.fire()
             }
 
             E2eFx.waitForFx(description = "generate-occurrences success feedback") {
-                E2eFx.hasText(view, "next occurrences")
+                E2eFx.hasText(root, "next occurrences")
             }
 
             val actionRequests = drain(server, 2)

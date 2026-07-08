@@ -100,4 +100,107 @@ class RuleBasedVoiceCommandServiceTest {
         assertTrue(match.isPresent());
         assertEquals("OPEN_URL", match.get().actionName());
     }
+
+    // --- P0.1 Planner routing: these MUST resolve to PLANNER, not fall through to LLM chat ---
+
+    @Test
+    void routesKakiePlanyNaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какие планы на сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void routesChtoUMenyaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("что у меня сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void routesZadachiNaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("джарвис какие задачи на сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void routesFokusNaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какой фокус на сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+    }
+
+    // --- P0.2 Media next: phrase-coverage gap that used to fall through to LLM ---
+
+    @Test
+    void routesSleduyushchiyTrekToNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("следующий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    @Test
+    void routesSleduyushchayaPesnyaToNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("следующая песня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    @Test
+    void routesPereklyuchiTrekToNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("переключи трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    // --- P0.3 Volume regression: "тише" must keep routing to volume_down ---
+
+    @Test
+    void routesSdelatTisheToVolumeDown() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сделай тише", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertTrue(
+                isVolumeDown(match.get().actionName()),
+                "expected a volume-down action but got " + match.get().actionName());
+    }
+
+    @Test
+    void routesTisheToVolumeDown() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("тише", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertTrue(
+                isVolumeDown(match.get().actionName()),
+                "expected a volume-down action but got " + match.get().actionName());
+    }
+
+    // --- P0.4 Fallback: an unknown phrase yields no rule (handler then routes to LLM) ---
+
+    @Test
+    void unknownPhraseProducesNoRuleMatch() {
+        Optional<VoiceCommandCatalog.Match> match =
+                service.match("расскажи что-нибудь про квантовую запутанность", "ru-RU");
+
+        assertTrue(match.isEmpty());
+    }
+
+    private static boolean isVolumeDown(String action) {
+        if (action == null) {
+            return false;
+        }
+        String normalized = action.toUpperCase(java.util.Locale.ROOT);
+        return normalized.contains("VOLUME_DOWN") || normalized.equals("VOLUME_DOWN") || normalized.contains("QUIETER");
+    }
 }

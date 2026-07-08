@@ -141,13 +141,32 @@ class SystemControlService {
             else -> action.lowercase()
         }
         
+        // Coded, diagnosable failures so the voice layer can speak a useful reason instead of a
+        // generic "не удалось выполнить команду". The prefix (before ':') becomes the failureCode.
+        if (!isCommandAvailable("playerctl")) {
+            logger.warn("🎵 Media control: playerctl is not installed")
+            return Result.failure(IllegalStateException("PLAYERCTL_NOT_INSTALLED: playerctl is not installed on the host"))
+        }
+        val activePlayers = runCatching { executeProcess("playerctl", "-l").output.trim() }.getOrDefault("")
+        if (activePlayers.isBlank() || activePlayers.contains("No players found", ignoreCase = true)) {
+            logger.info("🎵 Media control '$playerctlAction': no active MPRIS player")
+            return Result.failure(IllegalStateException("NO_ACTIVE_PLAYER: no active media player (playerctl -l is empty)"))
+        }
+
         return try {
             executeCheckedCommand("playerctl", playerctlAction)
-            logger.info("🎵 Media $playerctlAction via playerctl")
+            logger.info("🎵 Media $playerctlAction via playerctl (players=$activePlayers)")
             Result.success(Unit)
         } catch (e: Exception) {
-            logger.error("Could not execute media control: ${e.message}")
-            Result.failure(e)
+            val msg = e.message ?: ""
+            val coded = when {
+                msg.contains("timed out", ignoreCase = true) -> "PLAYERCTL_TIMEOUT: $msg"
+                msg.contains("permission", ignoreCase = true) || msg.contains("denied", ignoreCase = true) -> "PERMISSION_DENIED: $msg"
+                msg.contains("No players found", ignoreCase = true) -> "NO_ACTIVE_PLAYER: $msg"
+                else -> "MEDIA_CONTROL_FAILED: $msg"
+            }
+            logger.error("Could not execute media control: $coded")
+            Result.failure(IllegalStateException(coded, e))
         }
     }
 
@@ -489,8 +508,17 @@ class SystemControlService {
             reader.forEachLine { output.appendLine(it) }
         }
 
-        val exitCode = process.waitFor()
-        val trimmed = output.toString().trim()
+        val finished = process.waitFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        val exitCode: Int
+        val trimmed: String
+        if (finished) {
+            exitCode = process.exitValue()
+            trimmed = output.toString().trim()
+        } else {
+            process.destroyForcibly()
+            exitCode = 124
+            trimmed = "command timed out"
+        }
         if (exitCode == 0) {
             logger.info("✅ Command succeeded: command='{}', output='{}'", command.joinToString(" "), trimmed)
         } else {

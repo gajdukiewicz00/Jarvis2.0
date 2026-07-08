@@ -72,6 +72,19 @@ commands:
         values:
           - "включи следующий трек"
           - "skip this song"
+          - "следующая песня"
+          - "переключи трек"
+          - "переключи песню"
+          - "next song"
+      - type: regex
+        # Input is normalized (lowercase, ё→е). Patterns are only lowercased, so \w
+        # does NOT match Cyrillic here — use explicit [а-я]* for Russian suffixes.
+        values:
+          - "следующ[а-я]*\\s+(трек[а-я]*|песн[а-я]*|композиц[а-я]*)"
+          - "переключи\\s+(трек[а-я]*|песн[а-я]*|музык[а-я]*|композиц[а-я]*)"
+          - "пропусти\\s+(трек[а-я]*|песн[а-я]*|композиц[а-я]*)"
+          - "\\bnext\\b.*\\b(track|song)\\b"
+          - "\\bskip\\b.*\\b(track|song)\\b"
     action:
       target: pc_control
       name: NEXT

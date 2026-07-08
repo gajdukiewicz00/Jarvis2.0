@@ -514,6 +514,10 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     dispatchResult.executionFailed(),
                     dispatchResult.failureReason())) {
                 responseText = commandFailureMessage(lang, dispatchResult.failureReason());
+            } else if (dispatchResult.responseTextOverride() != null
+                    && !dispatchResult.responseTextOverride().isBlank()) {
+                // Dynamic spoken text (e.g. real planner summary) overrides the static phrase.
+                responseText = dispatchResult.responseTextOverride();
             }
 
             CommandResponseOutcome outcome = new CommandResponseOutcome(
@@ -617,15 +621,57 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     }
 
     private String commandFailureMessage(String lang, String failureReason) {
+        boolean ru = lang.startsWith("ru");
         if (failureReason != null) {
-            String normalizedReason = failureReason.toUpperCase(Locale.ROOT);
-            if (normalizedReason.contains("CAPABILITY_UNAVAILABLE") || normalizedReason.contains("UNSUPPORTED")) {
+            String reason = failureReason.toUpperCase(Locale.ROOT);
+            if (reason.contains("CAPABILITY_UNAVAILABLE") || reason.contains("UNSUPPORTED")) {
                 return capabilityUnavailableMessage(lang);
             }
+            if (reason.contains("NO_ACTIVE_PLAYER") || reason.contains("NO PLAYERS FOUND")) {
+                return ru
+                        ? "Сэр, сейчас нет активного плеера. Откройте Spotify или YouTube Music, либо скажите «включи музыку»."
+                        : "Sir, there is no active media player. Open Spotify or YouTube Music, or say 'turn on music'.";
+            }
+            if (reason.contains("PLAYERCTL_NOT_INSTALLED")) {
+                return ru
+                        ? "Не удалось управлять плеером: playerctl не установлен, сэр."
+                        : "Media control failed: playerctl is not installed, sir.";
+            }
+            if (reason.contains("TIMED OUT") || reason.contains("TIMEOUT")) {
+                return ru
+                        ? "Команда не ответила вовремя, сэр."
+                        : "The command timed out, sir.";
+            }
+            if (reason.contains("PERMISSION") || reason.contains("DENIED")) {
+                return ru
+                        ? "Не удалось выполнить: недостаточно прав, сэр."
+                        : "Command failed: permission denied, sir.";
+            }
+            if (reason.contains("NO_CLIENTS") || reason.contains("NOT_CONNECTED")
+                    || reason.contains("DID NOT ACKNOWLEDGE")) {
+                return ru
+                        ? "Сэр, приложение на компьютере не подключено — не могу выполнить действие."
+                        : "Sir, the desktop app is not connected, so I can't run that action.";
+            }
         }
-        return lang.startsWith("ru")
+        return ru
                 ? "Не удалось выполнить команду."
                 : "I couldn't execute that command.";
+    }
+
+    private String commandStatus(CommandResponseOutcome outcome) {
+        if (outcome.handled()) {
+            return "SUCCESS";
+        }
+        String reason = outcome.failureReason();
+        if (reason != null) {
+            String upper = reason.toUpperCase(Locale.ROOT);
+            if (upper.contains("UNSUPPORTED") || upper.contains("NOT_SUPPORTED")
+                    || upper.contains("CAPABILITY_UNAVAILABLE")) {
+                return "NOT_SUPPORTED";
+            }
+        }
+        return "FAILED";
     }
 
     private void logCommandOutcome(String source, String action, CommandResponseOutcome outcome, String correlationId) {
@@ -657,10 +703,14 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             payload.put("executionSucceeded", outcome.executionSucceeded());
             payload.put("executionFailed", outcome.executionFailed());
             payload.put("text", outcome.responseText());
+            // P0.5 structured action result: UI shows userMessage; logs keep debugReason.
+            payload.put("status", commandStatus(outcome));
+            payload.put("userMessage", outcome.responseText());
             payload.put("correlationId", correlationId);
             if (outcome.failureReason() != null && !outcome.failureReason().isBlank()) {
                 payload.put("failureReason", outcome.failureReason());
                 payload.put("failureCode", reasonCode(outcome.failureReason()));
+                payload.put("debugReason", outcome.failureReason());
             }
             sendJsonMessage(session, payload);
         } catch (RuntimeException e) {

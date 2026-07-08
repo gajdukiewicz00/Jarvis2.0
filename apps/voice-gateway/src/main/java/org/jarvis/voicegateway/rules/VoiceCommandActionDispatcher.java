@@ -3,6 +3,7 @@ package org.jarvis.voicegateway.rules;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.client.PcControlActionGateway;
+import org.jarvis.voicegateway.client.PlannerActionGateway;
 import org.jarvis.voicegateway.client.SmartHomeActionGateway;
 import org.springframework.stereotype.Service;
 
@@ -16,6 +17,7 @@ public class VoiceCommandActionDispatcher {
 
     private final PcControlActionGateway pcControlActionGateway;
     private final SmartHomeActionGateway smartHomeActionGateway;
+    private final PlannerActionGateway plannerActionGateway;
 
     public DispatchResult dispatch(VoiceCommandCatalog.Match match, String userId, String correlationId) {
         VoiceCommandCatalog.Action action = match.action();
@@ -35,7 +37,8 @@ public class VoiceCommandActionDispatcher {
                         false,
                         null,
                         action.name(),
-                        Map.of());
+                        Map.of(),
+                        null);
             }
             case PC_CONTROL -> {
                 Map<String, Object> params = new LinkedHashMap<>(match.parameters());
@@ -58,7 +61,8 @@ public class VoiceCommandActionDispatcher {
                         gatewayResult.executionFailed(),
                         gatewayResult.failureReason(),
                         action.name(),
-                        Map.copyOf(params));
+                        Map.copyOf(params),
+                        null);
             }
             case SYSTEM -> {
                 Map<String, Object> params = new LinkedHashMap<>(match.parameters());
@@ -82,7 +86,8 @@ public class VoiceCommandActionDispatcher {
                         gatewayResult.executionFailed(),
                         gatewayResult.failureReason(),
                         "SYSTEM_COMMAND",
-                        Map.copyOf(params));
+                        Map.copyOf(params),
+                        null);
             }
             case SMART_HOME -> {
                 String scopedUserId = userId != null && !userId.isBlank() ? userId : "local-user";
@@ -108,7 +113,8 @@ public class VoiceCommandActionDispatcher {
                             action.name(),
                             Map.of(
                                     "deviceId", action.deviceId(),
-                                    "action", action.name()));
+                                    "action", action.name()),
+                            null);
                 } catch (RuntimeException e) {
                     log.warn(
                             "🏠 Smart-home capability unavailable for rule command: id={}, deviceId={}, action={}, correlationId={}, error={}",
@@ -127,8 +133,44 @@ public class VoiceCommandActionDispatcher {
                             action.name(),
                             Map.of(
                                     "deviceId", action.deviceId(),
-                                    "action", action.name()));
+                                    "action", action.name()),
+                            null);
                 }
+            }
+            case PLANNER -> {
+                String scopedUserId = userId != null && !userId.isBlank() ? userId : "local-user";
+                // Voice + desktop default to ru-RU; gateway still honours en-* if provided.
+                PlannerActionGateway.PlannerResult plannerResult =
+                        plannerActionGateway.summarizeDay(scopedUserId, "ru-RU", action.name());
+                log.info(
+                        "🗓️ Rule command routed to planner: id={}, action={}, correlationId={}, userId={}, success={}",
+                        match.command().id(),
+                        action.name(),
+                        correlationId,
+                        scopedUserId,
+                        plannerResult.success());
+                if (plannerResult.success()) {
+                    yield new DispatchResult(
+                            true,
+                            true,
+                            true,
+                            true,
+                            false,
+                            null,
+                            action.name(),
+                            Map.of("summary", plannerResult.spokenSummary()),
+                            plannerResult.spokenSummary());
+                }
+                yield new DispatchResult(
+                        true,
+                        true,
+                        true,
+                        false,
+                        true,
+                        plannerResult.failureReason(),
+                        action.name(),
+                        Map.of(),
+                        null);
             }
         };
     }
@@ -141,6 +183,7 @@ public class VoiceCommandActionDispatcher {
             boolean executionFailed,
             String failureReason,
             String routedAction,
-            Map<String, Object> routedParams) {
+            Map<String, Object> routedParams,
+            String responseTextOverride) {
     }
 }

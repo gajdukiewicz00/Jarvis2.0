@@ -1,6 +1,7 @@
 package org.jarvis.voicegateway.rules;
 
 import org.jarvis.voicegateway.client.PcControlActionGateway;
+import org.jarvis.voicegateway.client.PlannerActionGateway;
 import org.jarvis.voicegateway.client.SmartHomeActionGateway;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,10 +24,12 @@ class VoiceCommandActionDispatcherTest {
     private PcControlActionGateway pcControlActionGateway;
     @Mock
     private SmartHomeActionGateway smartHomeActionGateway;
+    @Mock
+    private PlannerActionGateway plannerActionGateway;
 
     @Test
     void dispatchesPcControlActionsWithStaticParams() {
-        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
         when(pcControlActionGateway.dispatch("OPEN_APP", Map.of("app", "browser"), "user-1", "corr-1"))
                 .thenReturn(new PcControlActionGateway.DispatchResult(
                         "executed",
@@ -54,7 +57,7 @@ class VoiceCommandActionDispatcherTest {
 
     @Test
     void dispatchesSystemActionsAsSystemCommand() {
-        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
         when(pcControlActionGateway.dispatch("SYSTEM_COMMAND", Map.of("command", "sleep"), "user-1", "corr-2"))
                 .thenReturn(new PcControlActionGateway.DispatchResult(
                         "executed",
@@ -82,7 +85,7 @@ class VoiceCommandActionDispatcherTest {
 
     @Test
     void dispatchesSmartHomeActionsWithFallbackUserScope() {
-        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
 
         dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
@@ -99,7 +102,7 @@ class VoiceCommandActionDispatcherTest {
 
     @Test
     void internalActionsDoNotCallExternalGateways() {
-        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
 
         VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
@@ -123,7 +126,7 @@ class VoiceCommandActionDispatcherTest {
 
     @Test
     void dispatchMarksRuleAsFailedWhenDesktopExecutionFailsBeforeAttempt() {
-        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway);
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
         when(pcControlActionGateway.dispatch("OPEN_APP", Map.of("app", "browser"), "user-1", "corr-5"))
                 .thenReturn(new PcControlActionGateway.DispatchResult(
                         "no_clients",
@@ -149,6 +152,58 @@ class VoiceCommandActionDispatcherTest {
         assertFalse(result.executionAttempted());
         assertTrue(result.executionFailed());
         assertEquals("No desktop executor is connected", result.failureReason());
+    }
+
+    @Test
+    void dispatchesPlannerAndSurfacesSpokenSummaryAsResponseOverride() {
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
+        when(plannerActionGateway.summarizeDay("user-1", "ru-RU", "PLANNER_TODAY"))
+                .thenReturn(new PlannerActionGateway.PlannerResult(
+                        true, "Сэр, сегодня у вас 4 задачи. Главный фокус: отчёт.", null));
+
+        VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
+                matchFor(new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PLANNER,
+                        "PLANNER_TODAY",
+                        null,
+                        null,
+                        Map.of())),
+                "user-1",
+                "corr-planner");
+
+        assertTrue(result.actionResolved());
+        assertTrue(result.executionSucceeded());
+        assertFalse(result.executionFailed());
+        assertEquals("PLANNER_TODAY", result.routedAction());
+        assertEquals("Сэр, сегодня у вас 4 задачи. Главный фокус: отчёт.", result.responseTextOverride());
+        verify(pcControlActionGateway, never()).dispatch(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyMap(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void dispatchMarksPlannerAsFailedWhenServiceUnavailable() {
+        VoiceCommandActionDispatcher dispatcher = new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway);
+        when(plannerActionGateway.summarizeDay("user-1", "ru-RU", "PLANNER_TODAY"))
+                .thenReturn(new PlannerActionGateway.PlannerResult(
+                        false, null, "PLANNER_UNAVAILABLE: connection refused"));
+
+        VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
+                matchFor(new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PLANNER,
+                        "PLANNER_TODAY",
+                        null,
+                        null,
+                        Map.of())),
+                "user-1",
+                "corr-planner-fail");
+
+        assertTrue(result.actionResolved());
+        assertFalse(result.executionSucceeded());
+        assertTrue(result.executionFailed());
+        assertEquals("PLANNER_UNAVAILABLE: connection refused", result.failureReason());
     }
 
     private VoiceCommandCatalog.Match matchFor(VoiceCommandCatalog.Action action) {

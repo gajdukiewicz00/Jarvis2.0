@@ -66,6 +66,8 @@ jarvis:
       required-for-readiness: ${JARVIS_VOICE_TTS_REQUIRED_FOR_READINESS:${JARVIS_VOICE_TTS_REQUIREDFORREADINESS:true}}
   orchestrator:
     url: ${JARVIS_ORCHESTRATOR_URL:http://orchestrator:8083}
+  planner:
+    url: ${JARVIS_PLANNER_URL:http://planner-service:8092}
 
 # Text-to-Speech Configuration
 tts:

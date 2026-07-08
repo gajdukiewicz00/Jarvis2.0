@@ -117,7 +117,8 @@ class VoiceWebSocketHandlerRuleCommandTest {
                         false,
                         null,
                         "OPEN_APP",
-                        Map.of("app", "browser")));
+                        Map.of("app", "browser"),
+                        null));
         when(wavResponseRegistry.lookupText("loading_sir", "ru")).thenReturn("Загружаю, сэр.");
         when(voiceOutputService.resolveRuleResponseAudio("loading_sir", "Загружаю, сэр.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
                 .thenReturn(new byte[]{1, 2, 3});
@@ -202,7 +203,8 @@ class VoiceWebSocketHandlerRuleCommandTest {
                         true,
                         "No desktop executor is connected",
                         "OPEN_APP",
-                        Map.of("app", "browser")));
+                        Map.of("app", "browser"),
+                        null));
         when(voiceOutputService.resolveRuleResponseAudio("loading_sir", "Не удалось выполнить команду.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
                 .thenReturn(new byte[]{7, 8, 9});
 

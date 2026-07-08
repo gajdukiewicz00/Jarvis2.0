@@ -410,11 +410,15 @@ class VoiceTab(
             // Try the repo-committed Russian model first, fallback to built-in English "jarvis"
             val modelPath = resolveWakeWordModelPath()
             
+            // Higher default sensitivity (0.65) makes "Jarvis" trigger more reliably on quieter
+            // / accented speech; 0.5 (Porcupine default) missed too much. Tune via JARVIS_WAKE_SENSITIVITY.
+            val wakeSensitivity = System.getenv("JARVIS_WAKE_SENSITIVITY")?.toFloatOrNull()?.coerceIn(0.0f, 1.0f) ?: 0.65f
             wakeWordDetector = if (modelPath != null) {
-                logger.info("Using custom Russian model: {}", modelPath)
+                logger.info("Using custom Russian model: {} (wake sensitivity={})", modelPath, wakeSensitivity)
                 WakeWordDetector(
                     accessKey = accessKey,
                     keywordPaths = listOf(modelPath),
+                    sensitivity = wakeSensitivity,
                     onWakeWordDetected = { keywordIndex ->
                         onWakeWordDetected(keywordIndex)
                     }
@@ -426,6 +430,7 @@ class VoiceTab(
                     val detector = WakeWordDetector.createWithBuiltInKeywords(
                         accessKey = accessKey,
                         keywords = listOf(BuiltInKeyword.JARVIS),
+                        sensitivity = wakeSensitivity,
                         onWakeWordDetected = { keywordIndex ->
                             onWakeWordDetected(keywordIndex)
                         }

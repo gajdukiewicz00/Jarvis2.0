@@ -167,6 +167,12 @@ class VoiceTab(
                 if (::voiceControlService.isInitialized) {
                     voiceControlService.onTtsAvailabilityChanged(available, reason)
                 }
+            },
+            onProtocolError = { code, message ->
+                // Diagnostics only — protocol ERROR frames (e.g. END_NOT_ALLOWED) are never
+                // rendered as a "Jarvis: …" response. STT/TTS availability is already handled
+                // via onSttStatusChanged/onTtsStatusChanged; everything else is just logged.
+                logger.debug("Voice protocol error (not surfaced as a response): code={}, message={}", code, message)
             }
         )
         
@@ -178,6 +184,18 @@ class VoiceTab(
         audioPlayer.onPlaybackFinished = {
             logger.info("🔊 TTS playback finished")
             voiceSession.onTtsPlaybackFinished()
+        }
+        audioPlayer.onPlaybackResult = { result ->
+            // Client-side playback outcome, kept independent of the server TTS status: a healthy
+            // gateway can still fail to speak if the local output device is missing/broken.
+            when (result) {
+                org.jarvis.desktop.audio.PlaybackResult.SUCCESS ->
+                    logger.debug("TTS playback result: spoke through the default output device")
+                org.jarvis.desktop.audio.PlaybackResult.NO_OUTPUT_DEVICE ->
+                    logger.warn("TTS playback result: NO_OUTPUT_DEVICE — no usable local speaker/line")
+                org.jarvis.desktop.audio.PlaybackResult.PLAYBACK_FAILED ->
+                    logger.warn("TTS playback result: PLAYBACK_FAILED — local audio playback error")
+            }
         }
         
         // Voice control service — single control surface for voice state/actions
@@ -330,6 +348,13 @@ class VoiceTab(
         pushToTalkBtn.isDisable = !(actions.canPushToTalkStart || actions.canPushToTalkRelease)
         cancelBtn.isDisable = !actions.canCancelSession
         toggleListeningBtn.isDisable = !actions.canToggleAlwaysListening
+        // Derive the toggle LABEL from the authoritative runtime flag, not the imperative
+        // shadow (isAlwaysListening) that start/stopAlwaysListening flip. Any out-of-band
+        // change (WS drop, session reset, disableAlwaysListening) now reconciles the label so
+        // it can never read "Stop Always Listening" while always-listening is actually off.
+        isAlwaysListening = vrs.alwaysListeningActive
+        toggleListeningBtn.text =
+            if (vrs.alwaysListeningActive) "Stop Always Listening" else "Start Always Listening"
         refreshDevicesBtn.isDisable = !actions.canRefreshDevices
     }
 

@@ -1,7 +1,9 @@
 package org.jarvis.desktop.audio
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -27,6 +29,24 @@ class AudioPlayerTest {
 
         assertTrue(startedLatch.await(5, TimeUnit.SECONDS), "onPlaybackStarted should fire")
         assertTrue(finishedLatch.await(5, TimeUnit.SECONDS), "onPlaybackFinished should fire even on decode failure")
+    }
+
+    @Test
+    fun `play reports a PLAYBACK_FAILED result distinct from server TTS status`() {
+        val player = AudioPlayer()
+        val resultLatch = CountDownLatch(1)
+        val results = CopyOnWriteArrayList<PlaybackResult>()
+        player.onPlaybackResult = { r ->
+            results += r
+            resultLatch.countDown()
+        }
+
+        // Unparsable bytes never reach a real output line, so this is a client-side
+        // playback failure — reported independently of whether the gateway TTS is healthy.
+        player.play(byteArrayOf(1, 2, 3, 4, 5))
+
+        assertTrue(resultLatch.await(5, TimeUnit.SECONDS), "onPlaybackResult should fire")
+        assertEquals(PlaybackResult.PLAYBACK_FAILED, results.single())
     }
 
     @Test

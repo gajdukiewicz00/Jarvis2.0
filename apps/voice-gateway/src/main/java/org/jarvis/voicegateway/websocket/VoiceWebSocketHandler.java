@@ -183,7 +183,15 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     return;
                 }
                 if (ctx.phase != SessionPhase.STREAMING) {
-                    protocolError(ctx, "END_NOT_ALLOWED", "END is only valid while audio is streaming.");
+                    // Idempotent END. The server auto-finalizes on silence detection
+                    // (STREAMING -> PROCESSING -> DONE), so a client END that races that
+                    // finalize — or a duplicate/late END, or an END on a session that
+                    // already completed — is benign, NOT a protocol error. Emitting an
+                    // ERROR frame here is what surfaced "END is only valid while audio is
+                    // streaming" as a bogus assistant response in the desktop. Swallow it
+                    // as a stream-lifecycle no-op (logged, no client-visible frame).
+                    log.debug("⏹️ Ignoring idempotent END: session={}, phase={}, correlationId={} (no active audio stream)",
+                            session.getId(), ctx.phase, correlationId);
                     return;
                 }
                 log.info("⏹️ End-of-speech received, correlationId={}, session={}",

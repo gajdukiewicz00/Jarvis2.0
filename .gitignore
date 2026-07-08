@@ -145,3 +145,11 @@ PHASE*_REPORT.log
 AGENTS.local.md
 .mcp.json
 .codex/config.local.toml
+
+# Real-media third-party binaries/models (fetched by scripts/product/build-real-media-binaries.sh)
+apps/media-service/docker/real-media-binaries/bin/*
+!apps/media-service/docker/real-media-binaries/bin/.gitkeep
+apps/media-service/docker/real-media-binaries/models/*
+!apps/media-service/docker/real-media-binaries/models/.gitkeep
+apps/media-service/docker/real-media-binaries/voices/*
+!apps/media-service/docker/real-media-binaries/voices/.gitkeep

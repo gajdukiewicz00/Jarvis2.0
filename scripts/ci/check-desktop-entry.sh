@@ -16,8 +16,12 @@ if command -v rg >/dev/null 2>&1; then
     MATCHES="$(rg -n "${PATTERN}" "${ROOT}/scripts" \
         --glob '!scripts/legacy/**' --glob '!scripts/ci/**' --glob '!**/target/**' || true)"
 else
+    # grep's --exclude-dir matches a directory BASENAME, not a path, so the
+    # value must be `ci`/`legacy`/`target`, not `scripts/ci`. The path form
+    # silently fails to exclude, which made the CI runner (no ripgrep -> grep
+    # fallback) scan this very script and flag its own PATTERN/echo lines.
     MATCHES="$(grep -RIn -E "${PATTERN}" "${ROOT}/scripts" \
-        --exclude-dir scripts/legacy --exclude-dir scripts/ci --exclude-dir target || true)"
+        --exclude-dir=legacy --exclude-dir=ci --exclude-dir=target || true)"
 fi
 
 if [[ -z "${MATCHES}" ]]; then

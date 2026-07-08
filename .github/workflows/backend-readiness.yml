@@ -71,8 +71,10 @@ on:
 permissions:
   contents: read
 
-env:
-  JARVIS_HOME: ${{ runner.temp }}/jarvis-home
+# NOTE: JARVIS_HOME is intentionally NOT set at the workflow top-level env: the
+# `runner` context (runner.temp) is only available inside a job/step, so a
+# top-level `${{ runner.temp }}` makes GitHub reject the whole workflow at parse
+# time (0s "workflow file issue"). It is set per-job below instead.
 
 jobs:
   release-wiring:
@@ -90,6 +92,7 @@ jobs:
       JARVIS_LOCAL_POSTGRES_CONTAINER: jarvis-ci-postgres-core-${{ github.run_id }}-${{ github.run_attempt }}
       JARVIS_RUNTIME_SMOKE_SKIP_LLM: "true"
       JARVIS_RUNTIME_SMOKE_STOP_ON_EXIT: "true"
+      JARVIS_HOME: ${{ runner.temp }}/jarvis-home
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -111,6 +114,7 @@ jobs:
       JARVIS_LOCAL_POSTGRES_CONTAINER: jarvis-ci-postgres-analytics-${{ github.run_id }}-${{ github.run_attempt }}
       JARVIS_RUNTIME_SMOKE_STOP_ON_EXIT: "true"
       JARVIS_SKIP_BUILD: "true"
+      JARVIS_HOME: ${{ runner.temp }}/jarvis-home
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

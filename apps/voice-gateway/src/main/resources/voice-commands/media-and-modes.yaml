@@ -9,6 +9,9 @@ commands:
         values:
           - "запусти музыку"
           - "turn on some music"
+          - "turn on music"
+          - "поставь музыку"
+          - "включи какую-нибудь музыку"
     action:
       target: pc_control
       name: OPEN_URL

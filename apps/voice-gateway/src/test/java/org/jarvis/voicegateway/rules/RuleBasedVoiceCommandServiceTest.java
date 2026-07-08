@@ -72,4 +72,24 @@ class RuleBasedVoiceCommandServiceTest {
         assertEquals(VoiceCommandCatalog.MatcherType.REGEX, match.get().matcherType());
         assertEquals("35", match.get().parameters().get("level"));
     }
+
+    @Test
+    void matchesOpenTelegramWithTrailingPolitenessWord() {
+        // "open telegram please" fails EXACT ("open telegram") but the CONTAINS matcher catches
+        // it, routing to PC-control app-launch instead of falling through to the LLM.
+        Optional<VoiceCommandCatalog.Match> match = service.match("open telegram please", "en-US");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void matchesTurnOnMusic() {
+        // "turn on music" previously matched nothing (only "turn on some music") and hit the LLM.
+        Optional<VoiceCommandCatalog.Match> match = service.match("turn on music", "en-US");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+    }
 }

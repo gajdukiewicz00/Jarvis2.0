@@ -156,7 +156,7 @@ public class TtsService {
         status.put("status", selection.status());
         status.put("available", selection.available());
         status.put("reason", selection.reason());
-        status.put("reasonCode", ttsReasonCode(selection.status()));
+        status.put("reasonCode", ttsReasonCode(selection));
         status.put("espeakAvailable", espeakAvailable);
         status.put("googleAvailable", googleTtsAvailable);
         status.put("googleStatus", googleInitStatus);
@@ -428,13 +428,34 @@ public class TtsService {
      * branch on the exact reason (provider unavailable vs degraded fallback vs disabled) without
      * string-matching the human-readable {@code reason}.
      */
-    private static String ttsReasonCode(String status) {
-        return switch (status == null ? "" : status) {
+    private String ttsReasonCode(ProviderSelection selection) {
+        return switch (selection.status() == null ? "" : selection.status()) {
             case "available" -> "TTS_READY";
             case "degraded" -> "TTS_DEGRADED_FALLBACK";
             case "disabled" -> "TTS_DISABLED";
-            default -> "TTS_PROVIDER_UNAVAILABLE";
+            default -> unavailableReasonCode(selection);
         };
+    }
+
+    /**
+     * Granular machine-readable code for WHY TTS is unavailable, so the desktop can show the exact
+     * server-side reason (service down vs not configured vs binary missing) rather than a generic
+     * "degraded". Client-side playback failures (no output device / playback failed / ALSA-Pulse)
+     * are reported separately by the desktop AudioPlayer's PlaybackResult.
+     */
+    private String unavailableReasonCode(ProviderSelection selection) {
+        String provider = selection.configuredProvider();
+        if (PROVIDER_PIPER.equals(provider)) {
+            String piperStatus = piperInitStatus == null ? "" : piperInitStatus.toLowerCase(Locale.ROOT);
+            if (piperStatus.contains("not configured")) {
+                return "TTS_NOT_CONFIGURED";
+            }
+            return "TTS_SERVICE_DOWN"; // Piper daemon unreachable / non-200 health
+        }
+        if (PROVIDER_ESPEAK.equals(provider)) {
+            return "TTS_BINARY_MISSING";
+        }
+        return "TTS_PROVIDER_UNAVAILABLE";
     }
 
     /**

@@ -190,7 +190,8 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     // ERROR frame here is what surfaced "END is only valid while audio is
                     // streaming" as a bogus assistant response in the desktop. Swallow it
                     // as a stream-lifecycle no-op (logged, no client-visible frame).
-                    log.debug("⏹️ Ignoring idempotent END: session={}, phase={}, correlationId={} (no active audio stream)",
+                    log.debug("voice.stream.invalid_end_without_active_stream session={} phase={} correlationId={} "
+                            + "(idempotent END ignored — no active audio stream; not surfaced to the user)",
                             session.getId(), ctx.phase, correlationId);
                     return;
                 }

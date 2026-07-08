@@ -41,6 +41,33 @@ commands:
     response:
       key: loading_sir
 
+  - id: rule_open_telegram
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой телеграм"
+          - "open telegram"
+          - "launch telegram"
+      - type: alias
+        values:
+          - "телеграм"
+          - "telegram"
+      - type: contains
+        values:
+          - "open telegram"
+          - "открой телеграм"
+          - "запусти телеграм"
+          - "открой телегу"
+          - "включи телеграм"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: telegram
+    response:
+      key: loading_sir
+
   - id: rule_open_google
     matchers:
       - type: exact

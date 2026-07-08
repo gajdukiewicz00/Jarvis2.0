@@ -177,7 +177,12 @@ class SystemControlService {
             "terminal", "konsole" -> listOf(listOf("konsole"), listOf("gnome-terminal"), listOf("x-terminal-emulator"))
             "file-manager", "dolphin", "nautilus" -> listOf(listOf("dolphin"), listOf("nautilus"))
             "vscode", "code" -> listOf(listOf("code"))
-            "spotify" -> listOf(listOf("spotify"))
+            "spotify" -> listOf(listOf("spotify"), listOf("flatpak", "run", "com.spotify.Client"))
+            "telegram", "telegram-desktop" -> listOf(
+                listOf("telegram-desktop"),
+                listOf("telegram"),
+                listOf("flatpak", "run", "org.telegram.desktop"),
+            )
             "vlc" -> listOf(listOf("vlc"))
             "notepad", "kate", "text-editor" -> listOf(listOf("kate"), listOf("gedit"))
             "settings" -> listOf(listOf("gnome-control-center"), listOf("systemsettings"), listOf("kcmshell6", "systemsettings"))

@@ -43,7 +43,14 @@ public class BlockingRoleExecutor implements RoleExecutor {
             try {
                 Thread.sleep(20);
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                // A cancel() sets the cancellation token AND interrupts this worker
+                // thread. If the interrupt lands during this sleep instead of at
+                // ctx.checkpoint() above, re-run the checkpoint so a pending cancel
+                // surfaces deterministically as CANCELLED (TaskCancelledException),
+                // rather than racing to RoleResult.success below (reported COMPLETED).
+                // A genuine (non-cancel) interrupt leaves the token unset, so
+                // checkpoint() returns and we break out to complete normally.
+                ctx.checkpoint();
                 break;
             }
         }

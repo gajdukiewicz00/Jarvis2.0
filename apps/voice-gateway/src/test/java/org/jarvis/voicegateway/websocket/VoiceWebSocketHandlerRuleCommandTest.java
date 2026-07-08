@@ -227,6 +227,104 @@ class VoiceWebSocketHandlerRuleCommandTest {
         assertFalse(payloads.stream().anyMatch(payload -> payload.contains("Загружаю, сэр.")));
     }
 
+    @Test
+    void confirmationRequiredIsReportedAsRequiresConfirmationNotGenericFailure() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-User-Id", "user-1");
+        when(session.getHandshakeHeaders()).thenReturn(headers);
+
+        VoiceCommandCatalog.Match match = buildMatch(
+                new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PC_CONTROL, "OPEN_APP", null, null,
+                        Map.of("app", "browser")),
+                new VoiceCommandCatalog.Response("loading_sir", Map.of()));
+        when(ruleBasedVoiceCommandService.match("открой браузер", "ru")).thenReturn(Optional.of(match));
+        when(voiceCommandActionDispatcher.dispatch(match, "user-1", "corr-confirm"))
+                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(
+                        true, true, true, false, true,
+                        "REQUIRES_CONFIRMATION: guarded action requires confirm=true",
+                        "OPEN_APP", Map.of("app", "browser"), null));
+        when(voiceOutputService.resolveRuleResponseAudio(
+                "loading_sir", "Сэр, это действие требует подтверждения.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
+                .thenReturn(new byte[]{1});
+
+        invokeHandleCommand("corr-confirm", "открой браузер");
+
+        List<String> payloads = captureTextPayloads();
+        assertTrue(payloads.stream().anyMatch(p ->
+                p.contains("\"status\":\"REQUIRES_CONFIRMATION\"")
+                        && p.contains("требует подтверждения")));
+        assertFalse(payloads.stream().anyMatch(p -> p.contains("Не удалось выполнить команду.")));
+    }
+
+    @Test
+    void http401IsReportedAsClearAccessDeniedNotGenericFailure() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-User-Id", "user-1");
+        when(session.getHandshakeHeaders()).thenReturn(headers);
+
+        VoiceCommandCatalog.Match match = buildMatch(
+                new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PC_CONTROL, "VOLUME_UP", null, null,
+                        Map.of("delta", 10)),
+                new VoiceCommandCatalog.Response("loading_sir", Map.of()));
+        when(ruleBasedVoiceCommandService.match("открой браузер", "ru")).thenReturn(Optional.of(match));
+        when(voiceCommandActionDispatcher.dispatch(match, "user-1", "corr-401"))
+                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(
+                        true, false, false, false, true,
+                        "HTTP_401: authentication rejected by pc-control dispatch",
+                        "VOLUME_UP", Map.of("delta", 10), null));
+        when(voiceOutputService.resolveRuleResponseAudio(
+                "loading_sir", "Не удалось выполнить: отказано в доступе, сэр.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
+                .thenReturn(new byte[]{1});
+
+        invokeHandleCommand("corr-401", "открой браузер");
+
+        List<String> payloads = captureTextPayloads();
+        assertTrue(payloads.stream().anyMatch(p -> p.contains("отказано в доступе")));
+        assertFalse(payloads.stream().anyMatch(p -> p.contains("Не удалось выполнить команду.")));
+    }
+
+    @Test
+    void endpointUnreachableIsReportedWithSpecificReasonNotGenericFailure() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-User-Id", "user-1");
+        when(session.getHandshakeHeaders()).thenReturn(headers);
+
+        VoiceCommandCatalog.Match match = buildMatch(
+                new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PC_CONTROL, "VOLUME_UP", null, null,
+                        Map.of("delta", 10)),
+                new VoiceCommandCatalog.Response("loading_sir", Map.of()));
+        when(ruleBasedVoiceCommandService.match("открой браузер", "ru")).thenReturn(Optional.of(match));
+        when(voiceCommandActionDispatcher.dispatch(match, "user-1", "corr-net"))
+                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(
+                        true, false, false, false, true,
+                        "ENDPOINT_UNREACHABLE: Connection refused",
+                        "VOLUME_UP", Map.of("delta", 10), null));
+        when(voiceOutputService.resolveRuleResponseAudio(
+                "loading_sir", "Сэр, не удалось связаться со службой управления компьютером.", "ru", "ru-RU",
+                "ru-RU-Wavenet-A"))
+                .thenReturn(new byte[]{1});
+
+        invokeHandleCommand("corr-net", "открой браузер");
+
+        List<String> payloads = captureTextPayloads();
+        assertTrue(payloads.stream().anyMatch(p ->
+                p.contains("не удалось связаться со службой") && p.contains("\"status\":\"FAILED\"")));
+        assertFalse(payloads.stream().anyMatch(p -> p.contains("Не удалось выполнить команду.")));
+    }
+
+    private List<String> captureTextPayloads() throws Exception {
+        ArgumentCaptor<WebSocketMessage<?>> messages = ArgumentCaptor.forClass(WebSocketMessage.class);
+        verify(session, org.mockito.Mockito.atLeastOnce()).sendMessage(messages.capture());
+        return messages.getAllValues().stream()
+                .filter(TextMessage.class::isInstance)
+                .map(TextMessage.class::cast)
+                .map(TextMessage::getPayload)
+                .toList();
+    }
+
     private void invokeHandleCommand(String correlationId, String text) throws Exception {
         handler.afterConnectionEstablished(session);
         Map<?, ?> sessions = (Map<?, ?>) ReflectionTestUtils.getField(handler, "sessions");

@@ -13,12 +13,13 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpMethod.POST;
+import static org.springframework.http.HttpStatus.FORBIDDEN;
 import static org.springframework.http.HttpStatus.OK;
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -26,9 +27,15 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withServerError;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
+/**
+ * Voice PC-control now dispatches through the orchestrator (NetworkPolicy allows
+ * voice-gateway → orchestrator → api-gateway, but blocks voice-gateway → api-gateway
+ * directly). HTTP/transport errors are preserved as coded DispatchResults instead of
+ * being rethrown, so the WS handler can speak a specific reason.
+ */
 class RestPcControlActionGatewayTest {
 
-    private static final String URL = "http://api-gateway:8080/internal/pc-control/action";
+    private static final String URL = "http://orchestrator:8083/internal/pc-control/action";
 
     private ServiceJwtProvider serviceJwtProvider;
     private RestPcControlActionGateway gateway;
@@ -44,12 +51,12 @@ class RestPcControlActionGatewayTest {
         server = MockRestServiceServer.bindTo(builder).build();
 
         gateway = new RestPcControlActionGateway(builder, serviceJwtProvider);
-        ReflectionTestUtils.setField(gateway, "apiGatewayUrl", "http://api-gateway:8080");
+        ReflectionTestUtils.setField(gateway, "pcDispatchUrl", "http://orchestrator:8083");
         ReflectionTestUtils.setField(gateway, "serviceName", "voice-gateway");
     }
 
     @Test
-    void dispatchSendsActionAndParamsAndParsesSuccessResult() {
+    void dispatchSendsActionAndParamsToOrchestratorAndParsesSuccessResult() {
         server.expect(requestTo(URL))
                 .andExpect(method(POST))
                 .andExpect(header("X-Service-Token", "svc-token"))
@@ -58,13 +65,13 @@ class RestPcControlActionGatewayTest {
                 .andExpect(jsonPath("$.correlationId").value("corr-1"))
                 .andRespond(withStatus(OK)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"status\":\"OK\",\"executorFound\":true,\"executionAttempted\":true,"
+                        .body("{\"status\":\"executed\",\"executorFound\":true,\"executionAttempted\":true,"
                                 + "\"executionSucceeded\":true,\"executionFailed\":false}"));
 
         PcControlActionGateway.DispatchResult result = gateway.dispatch(
                 "VOLUME_UP", Map.of("delta", 10), "user-1", "corr-1");
 
-        assertEquals("OK", result.status());
+        assertEquals("executed", result.status());
         assertTrue(result.executionSucceeded());
         assertFalse(result.executionFailed());
         server.verify();
@@ -77,7 +84,7 @@ class RestPcControlActionGatewayTest {
                 .andExpect(jsonPath("$.correlationId").doesNotExist())
                 .andRespond(withStatus(OK)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"status\":\"OK\",\"executorFound\":true,\"executionAttempted\":true,\"executionSucceeded\":true}"));
+                        .body("{\"status\":\"executed\",\"executorFound\":true,\"executionAttempted\":true,\"executionSucceeded\":true}"));
 
         gateway.dispatch("MUTE", null, "", "");
 
@@ -92,7 +99,7 @@ class RestPcControlActionGatewayTest {
 
         assertEquals("", result.status());
         assertTrue(result.executionFailed());
-        assertEquals("API Gateway returned an empty response", result.failureReason());
+        assertTrue(result.failureReason().contains("EMPTY_RESPONSE"));
     }
 
     @Test
@@ -100,7 +107,7 @@ class RestPcControlActionGatewayTest {
         server.expect(requestTo(URL))
                 .andRespond(withStatus(OK)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"status\":\"ERROR\",\"message\":\"boom\",\"executionFailed\":true}"));
+                        .body("{\"status\":\"execution_failed\",\"message\":\"boom\",\"executionFailed\":true}"));
 
         PcControlActionGateway.DispatchResult result = gateway.dispatch("MUTE", Map.of(), "user-1", "corr-1");
 
@@ -109,10 +116,34 @@ class RestPcControlActionGatewayTest {
     }
 
     @Test
-    void dispatchRethrowsRuntimeExceptionOnServerError() {
+    void dispatchServerErrorIsPreservedAsCodedFailureNotThrown() {
         server.expect(requestTo(URL)).andRespond(withServerError());
 
-        assertThrows(RuntimeException.class, () -> gateway.dispatch("MUTE", Map.of(), "user-1", "corr-1"));
+        PcControlActionGateway.DispatchResult result = gateway.dispatch("MUTE", Map.of(), "user-1", "corr-1");
+
+        assertTrue(result.executionFailed());
+        assertFalse(result.executionSucceeded());
+        assertTrue(result.failureReason().contains("HTTP_500"), result.failureReason());
+    }
+
+    @Test
+    void dispatchUnauthorizedIsPreservedAsHttp401() {
+        server.expect(requestTo(URL)).andRespond(withStatus(UNAUTHORIZED));
+
+        PcControlActionGateway.DispatchResult result = gateway.dispatch("VOLUME_UP", Map.of(), "user-1", "corr-1");
+
+        assertTrue(result.executionFailed());
+        assertTrue(result.failureReason().contains("HTTP_401"), result.failureReason());
+    }
+
+    @Test
+    void dispatchForbiddenIsPreservedAsHttp403() {
+        server.expect(requestTo(URL)).andRespond(withStatus(FORBIDDEN));
+
+        PcControlActionGateway.DispatchResult result = gateway.dispatch("VOLUME_UP", Map.of(), "user-1", "corr-1");
+
+        assertTrue(result.executionFailed());
+        assertTrue(result.failureReason().contains("HTTP_403"), result.failureReason());
     }
 
     @Test
@@ -120,7 +151,7 @@ class RestPcControlActionGatewayTest {
         server.expect(requestTo(URL))
                 .andRespond(withStatus(OK)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"status\":\"OK\",\"executorFound\":\"true\",\"executionAttempted\":\"true\",\"executionSucceeded\":\"true\"}"));
+                        .body("{\"status\":\"executed\",\"executorFound\":\"true\",\"executionAttempted\":\"true\",\"executionSucceeded\":\"true\"}"));
 
         PcControlActionGateway.DispatchResult result = gateway.dispatch("MUTE", Map.of(), "user-1", "corr-1");
 

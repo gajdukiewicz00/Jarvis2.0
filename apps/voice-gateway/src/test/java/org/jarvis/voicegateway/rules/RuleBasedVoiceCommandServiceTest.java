@@ -196,6 +196,47 @@ class RuleBasedVoiceCommandServiceTest {
         assertTrue(match.isEmpty());
     }
 
+    // --- Voice ↔ PC Control UI parity: voice builds the SAME action the working UI button uses ---
+    // (desktop PcControlTab: Vol +10 → SystemControlService.changeVolume(10,"+") ≡ VOLUME_UP;
+    //  Telegram button → openApp("telegram") ≡ OPEN_APP app=telegram; both converge on
+    //  SystemControlService via PcControlWebSocketClient's VOLUME_UP / OPEN_APP mapping.)
+
+    @Test
+    void voiceGromcheBuildsSameVolumeUpActionAsPcControlButton() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("громче", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("VOLUME_UP", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
+    }
+
+    @Test
+    void voiceSdelayGromcheBuildsSameVolumeUpAction() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сделай громче", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("VOLUME_UP", match.get().actionName());
+    }
+
+    @Test
+    void voiceOtkroyTelegramBuildsSameOpenAppActionAsPcControlButton() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой телеграм", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
+    }
+
+    @Test
+    void voiceVklyuchiMuzykuBuildsMediaOpenAction() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("включи музыку", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
+    }
+
     private static boolean isVolumeDown(String action) {
         if (action == null) {
             return false;

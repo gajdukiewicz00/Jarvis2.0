@@ -70,7 +70,9 @@ commands:
       params:
         app: telegram
     response:
-      key: loading_sir
+      text:
+        ru: "Открываю Telegram, сэр."
+        en: "Opening Telegram, sir."
 
   - id: rule_open_google
     matchers:
@@ -136,7 +138,9 @@ commands:
       params:
         delta: 10
     response:
-      key: yes_sir
+      text:
+        ru: "Делаю громче, сэр."
+        en: "Turning it up, sir."
 
   - id: rule_volume_down
     matchers:
@@ -159,7 +163,9 @@ commands:
       params:
         delta: 10
     response:
-      key: yes_sir
+      text:
+        ru: "Уменьшаю громкость, сэр."
+        en: "Turning it down, sir."
 
   - id: rule_mute
     matchers:

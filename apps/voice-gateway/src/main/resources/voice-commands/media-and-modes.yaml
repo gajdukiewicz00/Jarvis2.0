@@ -22,7 +22,9 @@ commands:
       params:
         url: "https://music.youtube.com/"
     response:
-      key: pleasant_listening_sir
+      text:
+        ru: "Включаю музыку, сэр."
+        en: "Playing music, sir."
 
   - id: rule_play_radio
     matchers:

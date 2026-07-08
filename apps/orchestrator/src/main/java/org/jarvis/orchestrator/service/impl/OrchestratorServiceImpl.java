@@ -266,6 +266,43 @@ public class OrchestratorServiceImpl implements OrchestratorService {
         }
     }
 
+    /**
+     * Voice/PC bridge: dispatch a RAW pc-control action (VOLUME_UP, VOLUME_DOWN, OPEN_APP,
+     * OPEN_URL, NEXT, ...) through the SAME working api-gateway → desktop WebSocket executor
+     * path the intent handlers use, reusing {@link #dispatchPcAction} (including its
+     * host-pc-control fallback). Returns the api-gateway-shaped response so a caller
+     * (voice-gateway, which is NetworkPolicy-blocked from calling api-gateway directly)
+     * can parse it exactly like a direct api-gateway dispatch instead of duplicating a
+     * separate, blocked path.
+     */
+    public Map<String, Object> dispatchPcActionForClient(
+            String action, Map<String, Object> params, String userId, String correlationId) {
+        executionMetadata.set(ExecutionMetadata.none());
+        try {
+            PcDispatchResult result = dispatchPcAction(
+                    action, params == null ? Map.of() : params, correlationId, userId);
+            boolean failed = !result.executionSucceeded()
+                    && (result.executionAttempted()
+                            || (result.failureReason() != null && !result.failureReason().isBlank()));
+            Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("action", action);
+            body.put("executorFound", result.executorFound());
+            body.put("executionAttempted", result.executionAttempted());
+            body.put("executionSucceeded", result.executionSucceeded());
+            body.put("executionFailed", failed);
+            body.put("status", result.executionSucceeded()
+                    ? "executed"
+                    : (failed ? "execution_failed" : "no_clients"));
+            if (result.failureReason() != null && !result.failureReason().isBlank()) {
+                body.put("failureReason", result.failureReason());
+                body.put("message", result.failureReason());
+            }
+            return body;
+        } finally {
+            executionMetadata.remove();
+        }
+    }
+
     @Override
     public String executeIntent(String intent, Map<String, String> slots, String language, String correlationId,
             String originalText, String userId) {

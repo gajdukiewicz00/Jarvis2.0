@@ -339,7 +339,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
         var ruleMatch = ruleBasedVoiceCommandService.match(text, lang);
         if (ruleMatch.isPresent()) {
-            handleRuleCommand(ctx, ruleMatch.get(), lang, correlationId);
+            handleRuleCommand(ctx, ruleMatch.get(), text, lang, correlationId);
             return;
         }
 
@@ -498,8 +498,11 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
-    private void handleRuleCommand(SessionContext ctx, VoiceCommandCatalog.Match match, String lang, String correlationId) {
+    private void handleRuleCommand(
+            SessionContext ctx, VoiceCommandCatalog.Match match, String recognizedText, String lang,
+            String correlationId) {
         String action = match.actionName() != null ? match.actionName() : "UNKNOWN";
+        String matchedRuleId = match.command() != null ? match.command().id() : "unknown";
         String responseText = resolveRuleResponseText(match, lang);
 
         try {
@@ -537,6 +540,17 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     dispatchResult.executionFailed(),
                     dispatchResult.failureReason());
             logCommandOutcome("rule", action, outcome, correlationId);
+            log.info(
+                    "🧾 Voice action dispatch: recognizedText='{}', matchedRuleId={}, intent={}, actionType={}, targetService={}, userId={}, correlationId={}, status={}, userMessage='{}'",
+                    recognizedText,
+                    matchedRuleId,
+                    action,
+                    action,
+                    match.action() != null ? match.action().target() : "INTERNAL",
+                    maskUserId(ctx.userId),
+                    correlationId,
+                    commandStatus(outcome),
+                    responseText);
             sendCommandResponse(ctx.session, outcome, correlationId);
 
             byte[] audio = voiceOutputService.resolveRuleResponseAudio(
@@ -624,6 +638,11 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         boolean ru = lang.startsWith("ru");
         if (failureReason != null) {
             String reason = failureReason.toUpperCase(Locale.ROOT);
+            if (isConfirmationReason(reason)) {
+                return ru
+                        ? "Сэр, это действие требует подтверждения."
+                        : "Sir, this action requires confirmation.";
+            }
             if (reason.contains("CAPABILITY_UNAVAILABLE") || reason.contains("UNSUPPORTED")) {
                 return capabilityUnavailableMessage(lang);
             }
@@ -637,18 +656,40 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                         ? "Не удалось управлять плеером: playerctl не установлен, сэр."
                         : "Media control failed: playerctl is not installed, sir.";
             }
-            if (reason.contains("TIMED OUT") || reason.contains("TIMEOUT")) {
+            if (reason.contains("APP_NOT_FOUND") || reason.contains("APP ALIAS")
+                    || reason.contains("UNKNOWN ACTION") || reason.contains("NO SUCH")) {
                 return ru
-                        ? "Команда не ответила вовремя, сэр."
-                        : "The command timed out, sir.";
+                        ? "Сэр, не нашёл это приложение на компьютере."
+                        : "Sir, I couldn't find that application on the computer.";
             }
-            if (reason.contains("PERMISSION") || reason.contains("DENIED")) {
+            if (reason.contains("ENDPOINT_UNREACHABLE") || reason.contains("CONNECTION REFUSED")
+                    || reason.contains("I/O ERROR") || reason.contains("CONNECT TO")) {
                 return ru
-                        ? "Не удалось выполнить: недостаточно прав, сэр."
-                        : "Command failed: permission denied, sir.";
+                        ? "Сэр, не удалось связаться со службой управления компьютером."
+                        : "Sir, I couldn't reach the PC-control service.";
             }
-            if (reason.contains("NO_CLIENTS") || reason.contains("NOT_CONNECTED")
-                    || reason.contains("DID NOT ACKNOWLEDGE")) {
+            if (reason.contains("HTTP_401") || reason.contains("HTTP_403")
+                    || reason.contains("PERMISSION") || reason.contains("DENIED")
+                    || reason.contains("AUTH")) {
+                return ru
+                        ? "Не удалось выполнить: отказано в доступе, сэр."
+                        : "Command failed: access denied, sir.";
+            }
+            if (reason.contains("INVALID_PAYLOAD") || reason.contains("BAD REQUEST")) {
+                return ru
+                        ? "Сэр, команда пришла с неверными параметрами."
+                        : "Sir, the command had invalid parameters.";
+            }
+            if (reason.contains("ACK_TIMEOUT") || reason.contains("DID NOT ACKNOWLEDGE")
+                    || reason.contains("TIMED OUT") || reason.contains("TIMEOUT")) {
+                return ru
+                        ? "Сэр, компьютер не ответил вовремя."
+                        : "Sir, the computer did not respond in time.";
+            }
+            if (reason.contains("NO_CLIENTS") || reason.contains("USER_NOT_CONNECTED")
+                    || reason.contains("NOT_CONNECTED") || reason.contains("NOT CONNECTED")
+                    || reason.contains("NO IDENTIFIED DESKTOP") || reason.contains("SESSION_NOT_FOUND")
+                    || reason.contains("SESSION IS NOT CONNECTED")) {
                 return ru
                         ? "Сэр, приложение на компьютере не подключено — не могу выполнить действие."
                         : "Sir, the desktop app is not connected, so I can't run that action.";
@@ -659,17 +700,39 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 : "I couldn't execute that command.";
     }
 
-    private String commandStatus(CommandResponseOutcome outcome) {
-        if (outcome.handled()) {
-            return "SUCCESS";
+    private String maskUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return "<none>";
         }
+        if (userId.length() <= 2) {
+            return "***";
+        }
+        return userId.charAt(0) + "***" + userId.charAt(userId.length() - 1);
+    }
+
+    private boolean isConfirmationReason(String upperReason) {
+        return upperReason != null
+                && (upperReason.contains("REQUIRES_CONFIRMATION")
+                        || upperReason.contains("REQUIRE_CONFIRM")
+                        || upperReason.contains("CONFIRMATION REQUIRED")
+                        || upperReason.contains("CONFIRM=TRUE"));
+    }
+
+    private String commandStatus(CommandResponseOutcome outcome) {
         String reason = outcome.failureReason();
         if (reason != null) {
             String upper = reason.toUpperCase(Locale.ROOT);
-            if (upper.contains("UNSUPPORTED") || upper.contains("NOT_SUPPORTED")
-                    || upper.contains("CAPABILITY_UNAVAILABLE")) {
+            if (isConfirmationReason(upper)) {
+                return "REQUIRES_CONFIRMATION";
+            }
+            if (!outcome.handled()
+                    && (upper.contains("UNSUPPORTED") || upper.contains("NOT_SUPPORTED")
+                            || upper.contains("CAPABILITY_UNAVAILABLE"))) {
                 return "NOT_SUPPORTED";
             }
+        }
+        if (outcome.handled()) {
+            return "SUCCESS";
         }
         return "FAILED";
     }

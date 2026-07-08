@@ -18,6 +18,10 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 # (api.jarvis.local resolves to the node IP via /etc/hosts). Override with
 # JARVIS_API_BASE_URL=... if your gateway is elsewhere.
 export JARVIS_API_BASE_URL="${JARVIS_API_BASE_URL:-https://api.jarvis.local}"
+# Default the voice recognition + response language to Russian (override with
+# JARVIS_VOICE_LANGUAGE=en-US). Without this the desktop's saved locale (en-US)
+# makes STT load the English Vosk model.
+export JARVIS_VOICE_LANGUAGE="${JARVIS_VOICE_LANGUAGE:-ru-RU}"
 # Make sure we don't fall into the local-runtime default (127.0.0.1:8080).
 unset JARVIS_RUNTIME_MODE 2>/dev/null || true
 

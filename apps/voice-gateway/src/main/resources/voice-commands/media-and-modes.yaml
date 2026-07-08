@@ -12,6 +12,10 @@ commands:
           - "turn on music"
           - "поставь музыку"
           - "включи какую-нибудь музыку"
+      - type: regex
+        values:
+          - "\\b(turn on|play|start|put on)\\b.*\\bmusic"
+          - "(включи|поставь|запусти|врубай|врубить).*музык"
     action:
       target: pc_control
       name: OPEN_URL

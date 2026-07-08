@@ -60,6 +60,10 @@ commands:
           - "запусти телеграм"
           - "открой телегу"
           - "включи телеграм"
+      - type: regex
+        values:
+          - "\\b(open|launch|start|run|show)\\b.*\\btelegram"
+          - "(открой|открыть|запусти|запустить|включи|покажи).*телегра"
     action:
       target: pc_control
       name: OPEN_APP

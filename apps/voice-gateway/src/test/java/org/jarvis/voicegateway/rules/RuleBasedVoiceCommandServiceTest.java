@@ -74,10 +74,10 @@ class RuleBasedVoiceCommandServiceTest {
     }
 
     @Test
-    void matchesOpenTelegramWithTrailingPolitenessWord() {
-        // "open telegram please" fails EXACT ("open telegram") but the CONTAINS matcher catches
-        // it, routing to PC-control app-launch instead of falling through to the LLM.
-        Optional<VoiceCommandCatalog.Match> match = service.match("open telegram please", "en-US");
+    void matchesOpenTelegramWithFillerWordsFromRealStt() {
+        // Real STT output has filler words ("could you open A telegram") that defeat EXACT/CONTAINS;
+        // the regex matcher catches the open+telegram keyword combo and routes to PC-control, not the LLM.
+        Optional<VoiceCommandCatalog.Match> match = service.match("could you open a telegram", "en-US");
 
         assertTrue(match.isPresent());
         assertEquals("OPEN_APP", match.get().actionName());
@@ -85,9 +85,17 @@ class RuleBasedVoiceCommandServiceTest {
     }
 
     @Test
-    void matchesTurnOnMusic() {
-        // "turn on music" previously matched nothing (only "turn on some music") and hit the LLM.
-        Optional<VoiceCommandCatalog.Match> match = service.match("turn on music", "en-US");
+    void matchesOpenTelegramRussian() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой мне телеграм пожалуйста", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void matchesTurnOnMusicWithFillerWords() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("please turn on the music now", "en-US");
 
         assertTrue(match.isPresent());
         assertEquals("OPEN_URL", match.get().actionName());

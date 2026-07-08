@@ -76,8 +76,8 @@ jobs:
           cache: maven
 
       - name: Run checkstyle across the reactor
-        # Advisory: config/quality/checkstyle-ci.xml sets failOnViolation=false,
-        # so this reports findings but does not fail the build on its own.
+        # Advisory: config/quality/checkstyle-ci.xml sets Checker severity=warning,
+        # so checkstyle:check surfaces findings (uploaded below) without failing.
         run: mvn -B -ntp -fae -Pci-quality checkstyle:check
 
       - name: Upload checkstyle reports
@@ -90,7 +90,7 @@ jobs:
           retention-days: 14
 
   pmd:
-    name: PMD (mvn -fae pmd:check)
+    name: PMD (mvn -fae pmd:pmd)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -104,9 +104,11 @@ jobs:
           cache: maven
 
       - name: Run PMD across the reactor
-        # Advisory: config/quality/pmd-ci.xml sets failOnViolation=false,
-        # so this reports findings but does not fail the build on its own.
-        run: mvn -B -ntp -fae -Pci-quality pmd:pmd pmd:check
+        # Advisory report-only: pmd:pmd generates target/pmd.xml (uploaded below)
+        # without failing. pmd:check is the enforcing goal and is intentionally
+        # NOT run here — SpotBugs is the single hard quality gate (see the
+        # quality-gate summary job), keeping this a report as designed.
+        run: mvn -B -ntp -fae -Pci-quality pmd:pmd
 
       - name: Upload PMD reports
         if: always()
@@ -157,22 +159,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install trivy
+        # Direct binary install; trivy-action's transitive setup-trivy@v0.2.2 pin
+        # no longer resolves (job-setup failure). See security-and-build.yml.
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
       - name: Run trivy filesystem scan (Maven dependencies)
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          vuln-type: library
-          format: table
-          output: trivy-dependency-report.txt
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          # Report-only, matching the existing Trivy fs job in
-          # security-and-build.yml. That job already owns the
-          # SARIF-to-Security-tab upload and its own gating decision for the
-          # whole repo; this job's output is a downloadable, human-readable
-          # report scoped to reactor (Maven) dependencies.
-          exit-code: "0"
+        # Report-only (advisory): --exit-code 0 (findings never fail) + continue-
+        # on-error (a transient DB-download hiccup can't red the build). The SARIF
+        # upload / repo-wide gating lives in security-and-build.yml; this job just
+        # produces a downloadable, human-readable report over Maven deps.
+        continue-on-error: true
+        run: >-
+          trivy fs --scanners vuln --pkg-types library --severity HIGH,CRITICAL
+          --ignore-unfixed --exit-code 0 --format table
+          --output trivy-dependency-report.txt .
 
       - name: Upload dependency scan report
         if: always()

@@ -71,10 +71,11 @@ on:
 permissions:
   contents: read
 
-# NOTE: JARVIS_HOME is intentionally NOT set at the workflow top-level env: the
-# `runner` context (runner.temp) is only available inside a job/step, so a
-# top-level `${{ runner.temp }}` makes GitHub reject the whole workflow at parse
-# time (0s "workflow file issue"). It is set per-job below instead.
+# NOTE: no workflow-level JARVIS_HOME env. The `runner` context (runner.temp) is
+# only available at STEP scope — not in a top-level OR job-level env: — so a
+# `${{ runner.temp }}` there makes GitHub reject the whole workflow at parse time
+# (0s "workflow file issue"). The smoke scripts already default JARVIS_HOME to
+# ${HOME}/.jarvis, so it is simply left unset here.
 
 jobs:
   release-wiring:
@@ -92,7 +93,6 @@ jobs:
       JARVIS_LOCAL_POSTGRES_CONTAINER: jarvis-ci-postgres-core-${{ github.run_id }}-${{ github.run_attempt }}
       JARVIS_RUNTIME_SMOKE_SKIP_LLM: "true"
       JARVIS_RUNTIME_SMOKE_STOP_ON_EXIT: "true"
-      JARVIS_HOME: ${{ runner.temp }}/jarvis-home
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -114,7 +114,6 @@ jobs:
       JARVIS_LOCAL_POSTGRES_CONTAINER: jarvis-ci-postgres-analytics-${{ github.run_id }}-${{ github.run_attempt }}
       JARVIS_RUNTIME_SMOKE_STOP_ON_EXIT: "true"
       JARVIS_SKIP_BUILD: "true"
-      JARVIS_HOME: ${{ runner.temp }}/jarvis-home
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

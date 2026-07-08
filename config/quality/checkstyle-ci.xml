@@ -3,6 +3,14 @@
         "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
         "https://checkstyle.org/dtds/configuration_1_3.dtd">
 <module name="Checker">
+    <!-- Advisory gate: emit findings as warnings, not errors, so checkstyle:check
+         and the checkstyle report goal surface issues (uploaded as artifacts /
+         PR annotations) without failing the build. SpotBugs is the one hard
+         quality gate (see .github/workflows/quality.yml). Checkstyle's default
+         Checker severity is "error", which fails both the check and report
+         goals on any finding; warning keeps it purely advisory as designed. -->
+    <property name="severity" value="warning"/>
+
     <module name="SuppressionFilter">
         <property name="file" value="${checkstyle.suppressions.file}"/>
         <property name="optional" value="true"/>

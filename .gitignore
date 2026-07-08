@@ -93,6 +93,13 @@ secrets*.yaml
 !**/src/**/data/**
 postgres/
 **/postgres/
+# ...but never ignore committed k8s postgres manifests in either k8s tree — the
+# broad **/postgres/ above was swallowing infra/k8s/base/postgres/statefulset.yaml,
+# which the base kustomization references (CI "accumulating resources" failure).
+!k8s/**/postgres/
+!k8s/**/postgres/**
+!infra/k8s/**/postgres/
+!infra/k8s/**/postgres/**
 *postgres-backup*
 .mvn/
 

@@ -106,4 +106,87 @@ class AnalyticsReadModelTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun `refresh treats a non-array expenses payload as an empty available list`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"error": "unexpected shape"}""")
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"error": "unexpected shape"}""")
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"labels":[],"values":[]}""")
+        )
+
+        try {
+            server.start()
+            val snapshot = modelFor(server).refresh()
+
+            val byMonth = snapshot.byMonth
+            check(byMonth is AnalyticsReadModel.Result.Available) { "expected byMonth to be Available, was $byMonth" }
+            assertTrue(byMonth.data.isEmpty())
+
+            val byCategory = snapshot.byCategory
+            check(byCategory is AnalyticsReadModel.Result.Available) {
+                "expected byCategory to be Available, was $byCategory"
+            }
+            assertTrue(byCategory.data.isEmpty())
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `refresh falls back to defaults for missing expense point and trend fields`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""[{"totalAmount": 10.0}]""")
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""[]""")
+        )
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{}""")
+        )
+
+        try {
+            server.start()
+            val snapshot = modelFor(server).refresh()
+
+            val byMonth = snapshot.byMonth
+            check(byMonth is AnalyticsReadModel.Result.Available) { "expected byMonth to be Available, was $byMonth" }
+            val point = byMonth.data.single()
+            assertEquals("—", point.label)
+            assertEquals("", point.currency)
+            assertEquals(0, point.count)
+
+            val trend = snapshot.trend
+            check(trend is AnalyticsReadModel.Result.Available) { "expected trend to be Available, was $trend" }
+            assertEquals("Expense trend", trend.data.title)
+            assertEquals("", trend.data.xAxisLabel)
+            assertEquals("", trend.data.yAxisLabel)
+            assertTrue(trend.data.points.isEmpty())
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `refresh degrades the trend probe when the endpoint is unreachable`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""[]"""))
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""[]"""))
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        try {
+            server.start()
+            val snapshot = modelFor(server).refresh()
+
+            assertTrue(snapshot.trend is AnalyticsReadModel.Result.Unavailable)
+        } finally {
+            server.shutdown()
+        }
+    }
 }

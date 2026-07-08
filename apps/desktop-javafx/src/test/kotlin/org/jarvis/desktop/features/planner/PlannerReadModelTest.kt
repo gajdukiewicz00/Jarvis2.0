@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.util.Locale
 
 class PlannerReadModelTest {
@@ -358,6 +359,274 @@ class PlannerReadModelTest {
             assertFalse(task.isRecurringTemplate)
             assertFalse(task.isRecurringOccurrence)
             assertNull(task.recurrenceSourceTaskId)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `completeTodo posts the task id and parses the completed task`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"id": 7, "title": "Ship report", "priority": "HIGH", "status": "DONE", "tags": []}""")
+        )
+
+        try {
+            server.start()
+            val completed = modelFor(server).completeTodo(7)
+
+            assertEquals("DONE", completed.status)
+
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            assertTrue(request.path!!.contains("/tools/todo/complete"))
+            assertTrue(request.body.readUtf8().contains("\"id\":7"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadFocus returns the direct focus field when present`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"focus": "Finish the report"}""")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadFocus()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            assertEquals("Finish the report", (result as PlannerReadModel.BriefResult.Available).text)
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/planner/focus"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadEveningReview formats a highlights list of objects when no direct field is present`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"highlights": [{"title": "Completed 3 tasks"}, {"title": "Skipped gym"}]}"""
+                )
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadEveningReview()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            val text = (result as PlannerReadModel.BriefResult.Available).text
+            assertEquals("• Completed 3 tasks\n• Skipped gym", text)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadEveningReview formats a plain string items list`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"items": ["one", "two"]}""")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadEveningReview()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            assertEquals("• one\n• two", (result as PlannerReadModel.BriefResult.Available).text)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadFocus falls back to the raw response body when it is not JSON`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "text/plain").setBody("Not valid json at all")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadFocus()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            assertEquals("Not valid json at all", (result as PlannerReadModel.BriefResult.Available).text)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadFocus degrades gracefully when the endpoint fails`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(503))
+
+        try {
+            server.start()
+            val result = modelFor(server).loadFocus()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Unavailable)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadWeeklyPlan formats each day's task titles in order`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """{"days": {"monday": ["Standup", "Write report"], "tuesday": []}}"""
+                )
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadWeeklyPlan()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            val text = (result as PlannerReadModel.BriefResult.Available).text
+            assertTrue(text.contains("Monday: Standup, Write report"))
+            assertTrue(text.contains("Tuesday:"))
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/planner/weekly"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadWeeklyPlan reports no breakdown when there are zero total tasks`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"totalTasks": 0}""")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadWeeklyPlan()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            assertEquals(
+                "No tasks distributed across this week yet.",
+                (result as PlannerReadModel.BriefResult.Available).text
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadWeeklyPlan reports the total task count when the day breakdown is unavailable`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody("""{"totalTasks": 7}""")
+        )
+
+        try {
+            server.start()
+            val result = modelFor(server).loadWeeklyPlan()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            val text = (result as PlannerReadModel.BriefResult.Available).text
+            assertTrue(text.contains("7 task(s) queued"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadWeeklyPlan degrades gracefully when the endpoint fails`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        try {
+            server.start()
+            assertTrue(modelFor(server).loadWeeklyPlan() is PlannerReadModel.BriefResult.Unavailable)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadTomorrowPlan formats the focus goal, non-empty blocks, and tasks for the day`() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {
+                      "focusGoal": "Ship the release",
+                      "blocks": {"morning": ["Standup", "Code review"], "work": ["Deploy"], "evening": []},
+                      "tasksForDay": [{"title": "Deploy v2"}, {"title": "Write changelog"}]
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        try {
+            server.start()
+            val tomorrow = LocalDate.now().plusDays(1)
+            val result = modelFor(server).loadTomorrowPlan()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            val text = (result as PlannerReadModel.BriefResult.Available).text
+            assertTrue(text.contains("Focus: Ship the release"))
+            assertTrue(text.contains("Morning: Standup; Code review"))
+            assertTrue(text.contains("Work: Deploy"))
+            assertFalse(text.contains("Evening:"))
+            assertTrue(text.contains("Tasks: Deploy v2, Write changelog"))
+
+            val request = server.takeRequest()
+            assertTrue(request.path!!.contains("/planner/daily?date=$tomorrow"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadTomorrowPlan reports no plan details when the payload is empty`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{}"""))
+
+        try {
+            server.start()
+            val result = modelFor(server).loadTomorrowPlan()
+
+            assertTrue(result is PlannerReadModel.BriefResult.Available)
+            assertEquals(
+                "No plan details available yet.",
+                (result as PlannerReadModel.BriefResult.Available).text
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `loadTomorrowPlan degrades gracefully when the endpoint fails`() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(500))
+
+        try {
+            server.start()
+            assertTrue(modelFor(server).loadTomorrowPlan() is PlannerReadModel.BriefResult.Unavailable)
         } finally {
             server.shutdown()
         }

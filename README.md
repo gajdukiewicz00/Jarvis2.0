@@ -3,440 +3,318 @@
 [![Reactor Test Suite](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/reactor-tests.yml/badge.svg?branch=main)](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/reactor-tests.yml)
 [![Quality Gate](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/gajdukiewicz00/Jarvis2.0/actions/workflows/quality.yml)
 
-A **local-first, single-user personal AI assistant** styled after the film J.A.R.V.I.S.:
-Java 21 / Spring Boot microservices running on a **k3s** cluster (`jarvis-prod`), a
-JavaFX desktop, a real voice loop (Vosk STT + **Piper neural TTS**), a local
+A **local-first, single-user personal AI assistant** styled after the film J.A.R.V.I.S.: a
+Java 21 / Spring Boot microservice backend running on a **k3s** cluster (`jarvis-prod`), a
+JavaFX desktop shell, a real voice loop (Vosk STT + **Piper** neural TTS), a local
 **Qwen3-14B** brain on GPU via `host-model-daemon` (llama.cpp), semantic memory
-(PostgreSQL + pgvector), and full observability (Prometheus + Loki + Tempo + Grafana +
-Alloy). One click on the desktop **Jarvis icon** (wired to
-`scripts/jarvis-oneclick.sh`) self-heals the cluster IP/endpoint, recovers stale pods,
-and opens the Control Center — or drive it by hand with the unified `./jarvis` CLI
-(`up / status / health / doctor / drift-check / reboot-verify / smoke-e2e / logs /
-backup / restore / update / stop`).
+(PostgreSQL + pgvector), and full observability (Prometheus + Loki + Tempo + Grafana + Alloy).
 
-> **Status (2026-07-05):** the live k3s cluster is healthy — 28/28 pods Ready, gateway
-> `/actuator/health` reports `UP`, the Qwen3-14B brain answers `/api/v1/llm/chat`,
-> `./jarvis doctor` is all-green, `smoke-e2e` passes 4/4 (login, LLM chat, memory,
-> planner), and `drift-check` shows 18/18 image tags clean against the canonical
-> `infra/k8s/overlays/prod` tree (see [docs/DEPLOYMENT_CANONICAL.md](docs/DEPLOYMENT_CANONICAL.md)).
-> This wave (80 commits) added full-reactor unit-test coverage — **18 of 20 tracked
-> Maven/Gradle modules ≥80% line coverage**; `desktop-javafx` (48%) and `android-app`
-> (30%) are UI-runtime coverage ceilings, not business-logic gaps — plus a "wave-1"
-> feature set across eight subsystems (agent swarm, memory, planner, life-tracker,
-> analytics, security roles, media pipeline, smart-home) that is **code-complete and
-> unit-tested but not yet rebuilt into the running cluster images**. See
-> [docs/STATUS.md](docs/STATUS.md) for the honest per-subsystem breakdown (what's
-> DONE / code-only / mock / hardware-gated) and [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
-> for a runnable walk-through of all of it.
->
-> **Status:** v1.0 in development. **Audience:** university defense + portfolio.
-> Backlog snapshot: [docs/audit/2026-07-04-status-reconciliation.md](docs/audit/2026-07-04-status-reconciliation.md)
-> (708-story tally, 334 DONE / 135 PARTIAL / 239 TODO — 47%/19%/34%; a directional
-> snapshot, not re-scored this wave). See also
-> [docs/audit/JARVIS_AUDIT_REPORT.md](docs/audit/JARVIS_AUDIT_REPORT.md) for the prior
-> component-level audit and [docs/architecture/JARVIS_TARGET_STATE.md](docs/architecture/JARVIS_TARGET_STATE.md)
-> for the v1.0 target. Operator paths: [docs/START_HERE.md](docs/START_HERE.md),
-> [docs/JARVIS_FINAL_RUNBOOK.md](docs/JARVIS_FINAL_RUNBOOK.md),
-> [docs/DEPLOYMENT_CANONICAL.md](docs/DEPLOYMENT_CANONICAL.md) — those two runbook
-> pages still carry an older "cluster DOWN" note from the 2026-07-04 reboot that this
-> README's status line above supersedes ([docs/DEMO.md](docs/DEMO.md) is the older,
-> superseded local-runtime demo).
+This README is written to be honest about maturity, not aspirational. For the
+authoritative, per-subsystem breakdown (what's deployed, what's code-only, what's
+mock, what needs hardware) see **[docs/STATUS.md](docs/STATUS.md)** — this file is a
+front-door summary of it.
 
-## At A Glance — What Works, What's Mock, What Needs Hardware
+## Status Snapshot (2026-07-08)
 
-Full detail (per-subsystem, with evidence): [docs/STATUS.md](docs/STATUS.md).
+- **Maven reactor:** 23 modules — 3 shared libraries (`libs/command-schema`,
+  `libs/event-schema`, `libs/sync-protocol`) + 20 modules under `apps/`: 18 deployable
+  Spring Boot services (including `cloud-relay`, off-prem only) plus the shared
+  `jarvis-common` library and the `desktop-javafx` UI shell. `apps/android-app/` is a
+  separate Gradle project, excluded from the Maven reactor. Source of truth: `pom.xml`.
+- **Cluster (`jarvis-prod`, k3s):** last full live verification pass **2026-07-06** —
+  28/28 pods Running, 24/24 Deployments Ready, `api-gateway` `/actuator/health` → `UP`,
+  the Qwen3-14B brain answers `/api/v1/llm/chat`, `./jarvis doctor` all green,
+  `./jarvis drift-check` **18/18** image tags matched the pinned overlay, `./jarvis
+  smoke-e2e` **4/4** (login, LLM chat, memory search, planner). Full transcript:
+  [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md).
+- **Prometheus scrape coverage:** the `agent-service`/`media-service`/`sync-service`
+  scrape gap flagged in that same 2026-07-06 pass has since been closed (NetworkPolicy
+  allowlist + `prometheus.io/scrape` patches applied) — **17/17** `jarvis-actuator`
+  targets report `up`. Re-verify with `./scripts/verify-observability.sh`.
+- **Deploy image tags** are pinned **per service** in
+  [`infra/k8s/overlays/prod/kustomization.yaml`](infra/k8s/overlays/prod/kustomization.yaml)
+  — currently a mix of `:w6`/`:w7`/`:w8` (plus `llm-server:local`), bumped most recently
+  2026-07-07 (`api-gateway`/`voice-gateway`/`security-service` → `:w8` for a token-masking
+  and status/voice fix). The overlay bump has **not yet been re-confirmed against a fresh
+  live snapshot** — run `./jarvis doctor && ./jarvis drift-check` before trusting this as
+  current-second truth.
+- **Brain + voice:** `host-model-daemon` (llama.cpp, Qwen3-14B, port `18080`) and
+  `host-tts-daemon` (Piper neural TTS, port `18090`) run as `systemd --user` services with
+  `loginctl` linger, so they survive reboot without a login session. STT is Vosk, inside
+  `voice-gateway`.
+- **`vision-security-service` runs as a HOST process on `:8094`, not a k8s pod.** It is
+  never deployed by `k8s/base` — it needs a physical webcam and stays workstation-local.
+- **Media pipeline:** the job queue and `ffmpeg`/`ffprobe` extraction/mux are real
+  (Postgres-backed async jobs). ASR/translation/dubbing default to **MOCK** providers
+  (`MockAsrProvider`, `MockTranslationProvider`, a placeholder TTS marker writer). Real
+  `WhisperCppAsrProvider`/`LlmTranslationProvider` exist behind `media.*.mode` flags but
+  need the opt-in `real-media-image` Maven profile (see `apps/media-service/README.md`) —
+  no real dubbing/TTS provider exists at all yet.
+- **CI exists but isn't gating anything yet.** 8 GitHub Actions workflows live under
+  [`.github/workflows/`](.github/workflows/) (reactor tests, quality gate, security/build
+  checks, k8s-tree drift, image-build validation, image signing, desktop-entry guard,
+  backend readiness). **Actions must be enabled and branch protection configured in the
+  GitHub UI** before any of this actually blocks a merge — nothing here does that
+  automatically today.
+- **Known issues:** a 2026-07-06 adversarial multi-agent audit
+  ([docs/audit/2026-07-06-bug-hunt.md](docs/audit/2026-07-06-bug-hunt.md)) found 56
+  confirmed bugs (12 CRITICAL / 24 HIGH / 19 MEDIUM / 1 LOW). The three highest-severity
+  findings (revoke-all not advancing the session floor, inverted PII-redaction polarity,
+  the panic kill-switch missing PC/agent routes) have since been fixed in follow-up
+  commits; the remaining backlog has not been fully reconciled against this pass.
 
-| Area | State | Notes |
+## Feature Maturity Matrix
+
+Mirrored directly from the desktop Control Center's own source of truth —
+[`FeatureMaturityRegistry`](apps/desktop-javafx/src/main/kotlin/org/jarvis/desktop/features/controlcenter/FeatureMaturity.kt).
+Every feature tile in the running desktop app renders one of these five badges next to
+its "Open" button, so the app itself makes the same honesty claims as this table.
+
+| Maturity | Meaning |
+| --- | --- |
+| **READY** | Works end-to-end against real services; safe to demo unattended. |
+| **BETA** | Functions today but is still rough, partially wired, or lightly tested. |
+| **MOCK DATA** | UI and flow exist, but the data or execution behind it is synthetic/stubbed. |
+| **EXPERIMENTAL** | Present for exploration only — behavior may change or regress without notice. |
+| **UNAVAILABLE** | Requires a prerequisite the current runtime doesn't have (e.g. a paired phone). |
+
+| Feature (Control Center tile) | Maturity | Reality |
 | --- | --- | --- |
-| Core platform (auth, gateway, orchestrator, voice, NLP) + k3s | DONE, deployed | 28/28 pods Ready |
-| Qwen3-14B brain + Piper neural TTS | DONE, deployed | `host-model-daemon`/`host-tts-daemon`, systemd-managed, survive reboot |
-| Memory (semantic search + Obsidian) | DONE, deployed | pgvector + embedding worker |
-| Wave-1: agent swarm (Postgres store, git-worktree sandbox, TESTER, patch proposals) | CODE-ONLY, not redeployed | unit-tested; panic kill-switch already live |
-| Wave-1: memory scopes/dedup/TTL/export, planner recurring/reschedule, life-tracker wellness/CSV, analytics forecast/anomaly, security roles/jti-revocation, smart-home sensors/groups/rules | CODE-ONLY, not redeployed | see [docs/STATUS.md](docs/STATUS.md) for the full per-service list |
-| Media pipeline (ffmpeg/job queue) | DONE, deployed | real `ffmpeg`/`ffprobe`, Postgres-backed async jobs |
-| Media ASR / translation / dubbing content | MOCK by default | real Whisper.cpp/LLM-translation providers exist behind flags; no real TTS/dubbing provider yet |
-| Android bank-notification capture | HARDWARE-GATED | needs a physical phone; the server-side parser is demoable without one |
-| Voice round trip (live take) | HARDWARE-GATED | mic/speakers for a live take; `--sample`/`--wav` fallback needs neither |
-| Vision-security (owner verification) | HARDWARE-GATED, host-only | needs a webcam; never deployed to `k8s/base` |
-| Smart-home real device actuation | HARDWARE-GATED | catalog/scene API is real; no MQTT/Home-Assistant bridge wired yet |
-| `pc-control` real actions | HOST-ONLY | stubbed in-cluster by design (`PC_CONTROL_STUB_MODE=true`) |
+| Brain / AI Chat | **READY** | Qwen3-14B via `host-model-daemon`, deployed, exercised by `smoke-e2e`. |
+| Memory | **READY** | pgvector semantic search + unified Obsidian search, deployed. |
+| Finance | **READY** | `life-tracker` finance CRUD, deployed. |
+| Planner | **READY** | Tasks/reminders/energy-aware ranking, deployed. (LLM-enhancement endpoints still `501`, see below.) |
+| Analytics | **READY** | `analytics-service` finance/calendar summaries, deployed. |
+| PC Control | **READY** | Real control (keyboard/mouse/volume/hotkeys) on the host; intentionally stubbed in the cluster (`PC_CONTROL_STUB_MODE=true`). |
+| Voice Commands (help) | **READY** | Static reference screen listing supported voice phrases. |
+| Diagnostics | **READY** | Live service/log/health view. |
+| AI Runtime | **READY** | AI runtime status and configuration. |
+| Service Status | **READY** | Cluster/pod health view. |
+| Settings | **READY** | App settings. |
+| Voice Control | **BETA** | Real Vosk STT + Piper TTS pipeline end to end; a *live* take needs a mic + speakers (hardware-gated) — `scripts/jarvis-voice-demo.sh --sample`/`--wav` exercises the same pipeline without either. |
+| Life | **BETA** | Wellness/habit tracking; wave-1 CSV import/export + rollups are code-complete and unit-tested but **not yet redeployed**. |
+| Insights | **BETA** | Forecast/correlation/anomaly-detection wave-1 features are code-complete but **not yet redeployed**. |
+| Security / Privacy | **BETA** | Auth roles UI; wave-1 OWNER/GUEST/SERVICE roles + per-jti revocation + audit log are code-complete but **not yet redeployed**. |
+| Sessions & Audit | **BETA** | Same wave-1 gap as above. |
+| Finance Review | **BETA** | Bank-notification review inbox; the server-side parser is deployable and demoable today, but the on-device Android capture path needs a physical phone (hardware-gated). |
+| Agent Swarm | **BETA** | Role swarm + task queue deployed; the wave-1 Postgres task store, git-worktree sandbox, real TESTER executor, and patch proposals are code-complete but **not yet redeployed**. Global panic kill-switch (`POST /api/v1/agent/panic`) is already live. |
+| Smart Home | **BETA** | Static device catalog + in-memory state; no MQTT/Home-Assistant bridge wired to real devices yet. |
+| Vision Security / CV | **BETA** | Real OCR/screen-context/CV code; runs as a **host-only process on `:8094`**, needs a physical webcam, never deployed to `k8s/base`. |
+| Media Jobs | **MOCK DATA** | Job queue + `ffmpeg`/`ffprobe` are real; ASR/translation/dubbing default to mock providers (see Status Snapshot above). |
+| Proactive | **EXPERIMENTAL** | Observes and reasons, but the full proactive speech loop is unproven end-to-end (needs speakers). |
+| Sync / Pairing | **UNAVAILABLE** | Requires a paired Android phone the current runtime does not have. |
 
-## Quickstart
+Any Control Center route not listed above defaults to **BETA** — the registry's own safe
+middle ground for anything not yet explicitly classified.
 
-### One-click (recommended, k3s already deployed)
+## How To Launch
+
+**Desktop icon (recommended):** double-click **Jarvis** — wired to
+`scripts/jarvis-oneclick.sh` via `scripts/jarvis.desktop`. It starts k3s if needed,
+self-heals the `host-model-daemon` endpoint and any stale pods (never a blind
+`kubectl apply`), waits for the gateway to report healthy, then opens the desktop
+Control Center.
+
+**Same thing by hand:**
 
 ```bash
 ./scripts/jarvis-oneclick.sh
-# or double-click the "Jarvis" desktop icon — same script, wired via scripts/jarvis.desktop
 ```
 
-This starts k3s if it isn't running, repairs the host-model-daemon endpoint and any
-stale pods (never a blind re-apply — see [docs/DEPLOYMENT_CANONICAL.md](docs/DEPLOYMENT_CANONICAL.md)),
-waits for the gateway to report healthy, then opens the desktop Control Center. Verify
-headlessly instead of watching the GUI: `./jarvis doctor`, `./jarvis smoke-e2e`.
-
-### Quickstart (local, 5 commands)
+**Headless verification** (no GUI):
 
 ```bash
-# 1. one-time environment check (java, maven, podman, vosk model paths)
-./scripts/check-local-env.sh
-
-# 2. one-time setup (downloads STT model, generates secrets, creates ~/.jarvis/)
-./scripts/setup-local.sh
-
-# 3. start the local stack (Postgres in podman + 12 Spring Boot services)
-./scripts/runtime-up.sh
-
-# 4. open the JavaFX desktop
-./scripts/product/jarvis-desktop-launch.sh
-
-# 5. when done
-./scripts/runtime-down.sh
+./jarvis doctor       # GPU, k3s, node, deployments, host-model-daemon endpoint, gateway
+./jarvis status       # pods/deployments/node IP/host brain+voice health at a glance
+./jarvis drift-check  # live image tags vs infra/k8s/overlays/prod (canonical)
+./jarvis smoke-e2e    # login, LLM chat, memory search, planner — PASS/FAIL
 ```
 
-Voice + LLM + Memory (optional but required for the full v1.0 demo):
+**Login:** username **`test1111`**, password **`test1111`** — the repo's standing local
+test account, seeded with role **`OWNER`** (the default role when none is specified; see
+`AuthService`/`BootstrapAdminInitializer`). It has access to every route, including
+OWNER-gated admin/audit endpoints.
 
 ```bash
-ENABLE_LLM=true ENABLE_MEMORY=true ./scripts/setup-ai-local.sh   # one-time, ~2 GB download
-ENABLE_LLM=true ENABLE_MEMORY=true ./scripts/runtime-up.sh
+NODE_IP="$(sudo k3s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
+curl -sk -H 'Host: api.jarvis.local' -X POST "https://${NODE_IP}/api/v1/security/auth/login" \
+  -H 'Content-Type: application/json' -d '{"username":"test1111","password":"test1111"}'
 ```
 
-K8s deployment (canonical from 2026-05-09 → `infra/k8s/`):
+Full runnable demo script (voice, memory recall, agent swarm dry run, media subtitles,
+analytics insight, planner reschedule, smart-home scene, panic button):
+[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+
+## How To Deploy
+
+The canonical Kubernetes source of truth is **`infra/k8s/overlays/prod`** — nothing
+else. Full rationale, the "what NOT to do" list, and the post-reboot runbook:
+[docs/DEPLOYMENT_CANONICAL.md](docs/DEPLOYMENT_CANONICAL.md).
 
 ```bash
-./scripts/product/jarvis-deploy-microk8s-prod.sh
-./scripts/verify-prod.sh
+./scripts/product/jarvis-deploy-microk8s-prod.sh   # canonical deploy
+./scripts/verify-prod.sh                           # canonical post-deploy verification
 ```
 
-For a concrete, runnable demo script covering the live cluster plus this wave's new
-features (one-click launch, voice, memory recall, bank-notification draft, agent swarm
-dry run, media subtitles, analytics insight, planner reschedule, smart-home scene,
-panic button): [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). The older, narrower
-local-runtime walkthrough (login → voice command → LLM answer → memory recall) is
-[docs/DEMO.md](docs/DEMO.md).
+Current per-service image tags (from `infra/k8s/overlays/prod/kustomization.yaml`,
+18 pinned entries — matches the `drift-check` count above):
 
-## What This Repo Actually Contains
+| Service | Tag | Service | Tag |
+| --- | --- | --- | --- |
+| `api-gateway` | `w8` | `orchestrator` | `w6` |
+| `security-service` | `w8` | `user-profile` | `w6` |
+| `voice-gateway` | `w8` | `planner-service` | `w6` |
+| `smart-home-service` | `w8` | `sync-service` | `w7` |
+| `pc-control` | `w7` | `llm-service` | `w6` |
+| `media-service` | `w7` | `llm-server` | `local` |
+| `agent-service` | `w7` | `embedding-service` | `w6` |
+| `life-tracker` | `w6` | `memory-service` | `w6` |
+| `analytics-service` | `w6` | `nlp-service` | `w6` |
 
-This is the canonical project overview for the repository.
+Reboot recovery is **surgical, never a blind re-apply**: `kubectl apply -k` re-renders
+kustomize and can silently revert these pins back to whatever `newTag:` says on disk.
+Use `./jarvis reboot-verify` then, if needed,
+`scripts/product/jarvis-recover-after-reboot.sh` (targeted `kubectl delete pod` only).
 
-Source of truth is the current code and runtime wiring: `pom.xml`, module `pom.xml` files, `application.yml` and `application*.yml`, controller/service classes, Flyway migrations, runtime scripts, and Kubernetes manifests. Older Markdown is only valid when it matches those artifacts.
+`k8s/` (the original tree) is **frozen** — quarantined by
+[`scripts/guards/reject-legacy-k8s-edits.sh`](scripts/guards/reject-legacy-k8s-edits.sh)
+— and kept only because the digest-pinned `k8s/overlays/prod-release/` release vehicle
+still targets it. See [docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md) for all seven
+supported runtime modes.
 
-## What This Repo Actually Contains
+## What Needs Hardware (honest gaps)
 
-Jarvis is a Maven multi-module workspace for a personal assistant platform with:
+| Capability | Needs | Without it |
+| --- | --- | --- |
+| Vision-security (owner verification, screen understanding) | A physical webcam; host-only, never in `k8s/base` | Service simply isn't reachable |
+| Voice round trip, live take | A microphone + speakers | `scripts/jarvis-voice-demo.sh --sample`/`--wav` exercises the same STT/TTS pipeline with neither |
+| Android bank-notification capture (on-device) | A physical Android phone | The server-side parser (`POST /api/v1/life/finance/parse-notification`) is demoable without one |
+| Sync / Pairing (E2E device sync) | A paired Android phone | Route is present but functionally `UNAVAILABLE` |
+| Smart-home real device actuation | An MQTT/Home-Assistant bridge (none wired) | Catalog/scene API is real; nothing actually switches a real light |
+| Media real ASR/translation/dubbing | The opt-in `real-media-image` Maven profile + Whisper.cpp binaries/models | Ships with mock ASR/translation/TTS by default |
 
-- Spring Boot backend services under `apps/`
-- JavaFX desktop applications under `apps/`
-- optional Python AI workers under `apps/embedding-service-py/` and `apps/llm-server-py/` (built with `Containerfile`, daemonless OCI; `apps/llm-server-py/` is the deprecated Phase-3 wrapper, see [docs/LEGACY_AND_CLEANUP.md](docs/LEGACY_AND_CLEANUP.md))
-- local runtime scripts under `scripts/`
-- Kubernetes manifests under [`infra/k8s/`](infra/k8s/) (**canonical from 2026-05-09**) and a legacy [`k8s/`](k8s/) tree retained for `jarvis-launch.sh` compatibility — see [docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md) and [docs/audit/JARVIS_AUDIT_REPORT.md](docs/audit/JARVIS_AUDIT_REPORT.md) finding P0-004
-- a Phase-12 mobile scaffold under `apps/android-app/` (Gradle subproject excluded from the Maven reactor)
+## Module & Service Catalog
 
-The repository contains real code for auth, gateway routing, voice I/O, NLP, orchestration, planning, personal-data tracking, analytics, smart-home actions, desktop control, and a workstation-local vision-security service.
+| Component | Runtime | Status |
+| --- | --- | --- |
+| `jarvis-common` | build-only shared library | implemented |
+| `api-gateway` | k3s | implemented, deployed (`:w8`) |
+| `voice-gateway` | k3s | implemented, deployed (`:w8`) |
+| `nlp-service` | k3s | implemented, rule-based, deployed (`:w6`) |
+| `orchestrator` | k3s | partial (bounded intent router), deployed (`:w6`) |
+| `pc-control` | k3s + host | real on host; stubbed in cluster by design, deployed (`:w7`) |
+| `vision-security-service` | **host only** | implemented, real CV; never deployed to `k8s/base` |
+| `life-tracker` | k3s | implemented; wave-1 wellness/CSV code-only-not-deployed (`:w6`) |
+| `analytics-service` | k3s | implemented; wave-1 forecast/anomaly code-only-not-deployed (`:w6`) |
+| `planner-service` | k3s | implemented; LLM-enhancement endpoints return `501`; wave-1 recurring/reschedule code-only-not-deployed (`:w6`) |
+| `user-profile` | k3s | implemented, deployed (`:w6`) |
+| `security-service` | k3s | implemented; wave-1 roles/jti-revocation code-only-not-deployed (`:w8`) |
+| `smart-home-service` | k3s | implemented, static catalog; wave-1 sensors/groups/rules code-only-not-deployed (`:w8`) |
+| `agent-service` | k3s | implemented, deployed; wave-1 Postgres task store code-only-not-deployed (`:w7`) |
+| `media-service` | k3s | implemented, deployed; ASR/translation/TTS mock by default (`:w7`) |
+| `llm-service` | k3s | implemented, fronts `host-model-daemon` (`:w6`) |
+| `memory-service` | k3s | implemented; wave-1 scopes/dedup/TTL code-only-not-deployed (`:w6`) |
+| `sync-service` | k3s | implemented, deployed (`:w7`) |
+| `cloud-relay` | off-prem only | implemented, opaque blob forwarder |
+| `desktop-javafx` | local desktop | implemented; unified launcher + shell |
+| `apps/android-app` | Android device | Phase-12 Gradle scaffold, **excluded from the Maven reactor**; bank-push capture code+unit-tested, not installed on a device |
+| `host-model-daemon` | **host only** | native llama.cpp inference (Qwen3-14B), `systemd --user`, port `18080` |
+| `host-tts-daemon` | **host only** | native Piper neural TTS, `systemd --user`, port `18090` |
+| `embedding-service` | k3s | implemented (`:w6`) |
+| `postgres` / `postgres-pgvector` | k3s | implemented infra |
+| `mosquitto` | k3s | implemented infra (MQTT broker; no real device bridge yet) |
+| Observability (Prometheus/Loki/Tempo/Grafana/Alloy) | k3s | implemented infra, deployed |
 
-Architecture alignment references:
-
-- [docs/architecture/SPEC-1-Jarvis-Local-AI-Operating-System.md](docs/architecture/SPEC-1-Jarvis-Local-AI-Operating-System.md)
-- [docs/architecture/phase-0-baseline-evidence.md](docs/architecture/phase-0-baseline-evidence.md)
-- [docs/architecture/ADR/](docs/architecture/ADR/)
-
-## Runtime Entry Points
-
-Local process runtime:
-
-- `./scripts/setup-local.sh`
-- `./scripts/setup-voice-local.sh`
-- `./scripts/setup-ai-local.sh`
-- `./scripts/runtime-up.sh`
-- `./scripts/runtime-status.sh`
-- `./scripts/runtime-down.sh`
-
-Kubernetes / product runtime:
-
-- `./scripts/product/jarvis-deploy-microk8s-prod.sh` — **canonical** (targets `infra/k8s/overlays/prod`)
-- `./scripts/verify-prod.sh` — canonical post-deploy verification
-- `./jarvis-launch.sh` — legacy k3s launcher (targets `k8s/overlays/prod`); see [k8s/README.md](k8s/README.md) deprecation banner
-- `./jarvis-stop.sh`
-- `./jarvis-logs.sh`
-- `./scripts/product/jarvis-*.sh`
-
-Desktop run paths:
-
-- `mvn -f apps/desktop-javafx/pom.xml org.openjfx:javafx-maven-plugin:0.0.8:run`
-
-## Native Desktop Agent
-
-`desktop-javafx` is the current Native Desktop Agent implementation.
-
-- It is the current official desktop/native module.
-- It is not deprecated in Phase 0.
-- It owns the JavaFX desktop shell, launcher/runtime UX, local auth bootstrap, desktop WebSocket clients, and host-present UI workflows.
-- `scripts/product/jarvis-launcher.sh` is a launcher/helper surface around the same native-host runtime path.
-- Some runtime payloads still use the label `desktop-client`; in current repo reality that label points at the `desktop-javafx` implementation rather than a separate supported module.
-
-Current reality notes:
-
-- `vision-security-service` is part of the local runtime, not `k8s/base`.
-- `pc-control` is real on a local workstation, but runs in stub mode in Kubernetes.
-- optional AI workloads exist in local scripts and `k8s/overlays/prod`, but they are not part of the minimum core runtime.
-- the mobile module exists at `apps/android-app/` (Phase 12 scaffold). It is a Gradle subproject excluded from the Maven reactor; build with `./gradlew assembleDebug` from inside that directory after running `gradle wrapper --gradle-version 8.5` once. APK install + device pairing are operator-side validation work, not covered by reactor tests.
-- `./jarvis-launch.sh` is the mutable local k3s launcher path. Reproducible release deploys must use a generated digest-pinned `k8s/overlays/prod-release` overlay, either via `./scripts/product/jarvis-deploy-prod.sh` or `./jarvis-launch.sh --release-overlay`.
-- Deprecated runtime path. Kept temporarily for compatibility and migration evidence. Production runtime target is native host + MicroK8s under `jarvis-prod`.
-
-## Module And Runtime Catalog
-
-| Component | Type | Runtime | Status | Doc |
-| --- | --- | --- | --- | --- |
-| `jarvis-common` | shared Java library | build-only | implemented | [docs/services/jarvis-common.md](docs/services/jarvis-common.md) |
-| `api-gateway` | backend gateway | local + k8s | implemented | [docs/services/api-gateway.md](docs/services/api-gateway.md) |
-| `voice-gateway` | backend voice service | local + k8s | implemented | [docs/services/voice-gateway.md](docs/services/voice-gateway.md) |
-| `nlp-service` | backend NLP service | local + k8s | implemented, rule-based | [docs/services/nlp-service.md](docs/services/nlp-service.md) |
-| `orchestrator` | orchestration service | local + k8s | partial, bounded intent router | [docs/services/orchestrator.md](docs/services/orchestrator.md) |
-| `pc-control` | desktop-control service | local + k8s | implemented locally, stubbed in k8s | [docs/services/pc-control.md](docs/services/pc-control.md) |
-| `vision-security-service` | workstation-local CV: owner verification + screen understanding (OCR, screen-context, local VLM ask-screen, Kafka → memory) | local only | implemented, local-only | [docs/services/vision-security-service.md](docs/services/vision-security-service.md) |
-| `life-tracker` | personal-data service | local + k8s | implemented; wave-1 weight/mood/habit trackers + CSV import/export + rollups code-only, not yet redeployed | [docs/services/life-tracker.md](docs/services/life-tracker.md) |
-| `analytics-service` | analytics/read-model service | local + k8s | implemented; wave-1 forecast/correlation/anomaly insight engine code-only, not yet redeployed | [docs/services/analytics-service.md](docs/services/analytics-service.md) |
-| `planner-service` | planning service | local + k8s | partial, planner-owned LLM endpoints return `501`; wave-1 recurring tasks/deadline pressure/plan modes/reschedule code-only, not yet redeployed | [docs/services/planner-service.md](docs/services/planner-service.md) |
-| `user-profile` | profile/context service | local + k8s | implemented | [docs/services/user-profile.md](docs/services/user-profile.md) |
-| `security-service` | auth service | local + k8s | implemented; wave-1 OWNER/GUEST/SERVICE roles + jti revocation + session timeout + audit code-only, not yet redeployed | [docs/services/security-service.md](docs/services/security-service.md) |
-| `smart-home-service` | smart-home API | local + k8s | implemented with static catalog; wave-1 sensors/groups/rooms/rules code-only, not yet redeployed | [docs/services/smart-home-service.md](docs/services/smart-home-service.md) |
-| `agent-service` | agent-swarm / task orchestration | local + k8s | implemented, deployed; wave-1 Postgres task store + git-worktree sandbox + real TESTER executor + patch proposals is code-only, not yet redeployed | [docs/STATUS.md](docs/STATUS.md) (no per-service doc page yet) |
-| `media-service` | media pipeline (ffmpeg extraction/mux, ASR, subtitles, dubbing) | local + k8s | implemented, deployed; ASR/translation/TTS are mock providers by default, real Whisper.cpp/LLM-translation providers exist behind `media.*.mode` flags | [docs/STATUS.md](docs/STATUS.md) (no per-service doc page yet) |
-| `llm-service` | authenticated AI facade | optional local + optional k8s | implemented, optional | [docs/services/llm-service.md](docs/services/llm-service.md) |
-| `memory-service` | semantic memory/vector service | optional local + optional k8s | implemented, optional; wave-1 typed scopes + dedup + TTL + export/import code-only, not yet redeployed | [docs/services/memory-service.md](docs/services/memory-service.md) |
-| `desktop-javafx` | unified desktop launcher + shell | local desktop | implemented | [docs/services/desktop-javafx.md](docs/services/desktop-javafx.md) |
-| `apps/android-app` | mobile client | Android device | Phase 12 Pass 1 scaffold (Gradle, not in Maven reactor); wave-1 bank-push `NotificationListener` + OTP-block + sanitizer + finance draft is code+unit-tested, not installed on a device this wave | [apps/android-app/README.md](apps/android-app/README.md) |
-| `sync-service` | E2E sync inbox for paired Android devices | local + k8s | implemented | (no doc page yet — see [ADR-0013](docs/architecture/ADR/ADR-0013-android-and-cloud-relay.md)) |
-| `cloud-relay` | off-prem opaque blob forwarder | off-prem only | implemented | (no doc page yet — see [ADR-0013](docs/architecture/ADR/ADR-0013-android-and-cloud-relay.md)) |
-| host model daemon | native llama.cpp inference worker | host only (Phase 3) | scripts/launchers under `infra/scripts/host-model-daemon/`; supersedes the legacy Python worker path | [docs/services/host-model-daemon.md](docs/services/host-model-daemon.md) |
-| host embedding daemon | native embedding worker | host only (Phase 9) | supersedes `apps/embedding-service-py/` (the older `docker/embedding-service/` tree was retired) | [docs/services/embedding-service.md](docs/services/embedding-service.md) |
-| `postgres` | runtime datastore | local managed container + k8s | implemented infra, optional pgvector overlay | [docs/services/postgres.md](docs/services/postgres.md) |
-| `mosquitto` | MQTT broker | k8s only | implemented infra | [docs/services/mosquitto.md](docs/services/mosquitto.md) |
-| `observability-stack` | Prometheus/Loki/Tempo/Grafana/Alloy | k8s only | implemented infra | [docs/services/observability-stack.md](docs/services/observability-stack.md) |
-
-## Actual Topology
-
-The repo is centered around `api-gateway`.
-
-- external clients authenticate through gateway-proxied `security-service` endpoints
-- `api-gateway` is the main REST and WebSocket edge
-- `voice-gateway` owns STT, TTS, voice WebSocket handling, and rule-based voice command dispatch
-- `orchestrator` routes normalized intents to `pc-control`, `smart-home-service`, and optional `llm-service`
-- `life-tracker` is the main source-of-record service for finance, calendar, and time tracking
-- `analytics-service` derives summaries from `life-tracker`
-- `planner-service` stores tasks/reminders in PostgreSQL and talks to analytics/profile/voice/gateway paths
-- `llm-service` fronts the `host-model-daemon` Service, which routes through manual Endpoints to llama.cpp on the Linux host, and can optionally integrate with `memory-service` and `user-profile`
-- `memory-service` uses `embedding-service` plus PostgreSQL/pgvector
-- `vision-security-service` is a separate local workstation service with gateway proxying
+Per-service docs live under [`docs/services/`](docs/services/). Full inventory with
+evidence: [docs/COMPONENT_STATUS.md](docs/COMPONENT_STATUS.md).
 
 ## Local Runtime Defaults
 
-Default local ports come from `scripts/runtime/common.sh`.
+For running the stack as local native processes instead of k3s (see
+[docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md), Mode 1). Ports come from
+`scripts/runtime/common.sh`.
 
-| Component | Port |
-| --- | --- |
-| `api-gateway` | `8080` |
-| `voice-gateway` | `8081` |
-| `nlp-service` | `8082` |
-| `orchestrator` | `8083` |
-| `pc-control` | `8084` |
-| `life-tracker` | `8085` |
-| `smart-home-service` | `8086` |
-| `analytics-service` | `8087` |
-| `security-service` | `8088` |
-| `user-profile` | `8089` |
-| `llm-service` | `8091` |
-| `planner-service` | `8092` |
-| `memory-service` | `8093` |
-| `vision-security-service` | `8094` |
-| `host-model-daemon` main channel | `18080` |
-| `embedding-service` | `15001` |
+| Component | Port | Component | Port |
+| --- | --- | --- | --- |
+| `api-gateway` | `8080` | `security-service` | `8088` |
+| `voice-gateway` | `8081` | `user-profile` | `8089` |
+| `nlp-service` | `8082` | `llm-service` | `8091` |
+| `orchestrator` | `8083` | `planner-service` | `8092` |
+| `pc-control` | `8084` | `memory-service` | `8093` |
+| `life-tracker` | `8085` | `vision-security-service` | `8094` |
+| `smart-home-service` | `8086` | `host-model-daemon` | `18080` |
+| `analytics-service` | `8087` | `embedding-service` | `15001` |
 
-Optional local AI flags:
-
-- `ENABLE_LLM=true`
-- `ENABLE_MEMORY=true`
-
-The local runtime can auto-start a managed Postgres container if external DB settings are not supplied.
-
-## Kubernetes Reality
-
-`k8s/base` contains:
-
-- core Spring services
-- `postgres`
-- `mosquitto`
-- selectorless `host-model-daemon` Service + manual Endpoints for host llama.cpp
-- ingress resources
-- observability manifests
-
-`k8s/overlays/prod` adds hardening and optional AI workloads:
-
-- `llm-service`
-- `embedding-service`
-- `memory-service`
-- `postgres-pgvector`
-
-Those optional AI workloads are present in manifests but default to `replicas: 0` in the prod overlay.
-
-Release rule:
-
-- `k8s/overlays/prod` is a workspace/local launcher input and is not the final release artifact because its image refs are mutable.
-- the honest release artifact is `k8s/overlays/prod-release/kustomization.yaml`, generated by `./scripts/product/jarvis-promote-images.sh` with immutable digest refs.
-- the repo's canonical `k8s/overlays/prod-release` artifact excludes the optional LLM stack by default; public AI in Kubernetes is only part of a release when the generated overlay is regenerated with an immutable `llm-service` digest. Model execution stays on the host via `host-model-daemon`.
-- production namespace is `jarvis-prod`
-- `k8s/overlays/staging` and `k8s/overlays/dev-hostpath` are non-production overlays and should not be confused with the production namespace contract
-
-## Current Constraints
-
-- the only mobile module is `apps/android-app/`, a Phase 12 Pass 1 Gradle scaffold excluded from the Maven reactor — no reactor build emits an APK and there is no production mobile client today
-- `vision-security-service` is not deployed by `k8s/base`
-- `pc-control` is intentionally stubbed in Kubernetes (`PC_CONTROL_STUB_MODE=true`)
-- `smart-home-service` uses a fixed device catalog and in-memory state
-- `nlp-service` is deterministic/rule-based
-- `orchestrator` is not a general workflow engine
-- `planner-service` core planner works, but planner-owned LLM endpoints return `501 Not Implemented` (see [`LlmEnhancementService.java`](apps/planner-service/src/main/java/org/jarvis/planner/service/LlmEnhancementService.java))
-- `apps/llm-server-py` is the deprecated Phase-3 Python wrapper retained for the local AI scripts; the production inference path is the native `host-model-daemon` (Phase 3) routed through a selectorless K8s Service in `k8s/base/host-model-daemon/`
-- `k8s/` and `infra/k8s/` are both currently live; the digest-pinned `k8s/overlays/prod-release/` artifact and `jarvis-launch.sh` target `k8s/`, while `scripts/product/jarvis-deploy-microk8s-prod.sh` and `scripts/verify-prod.sh` target `infra/k8s/`. Pick one explicitly per deployment (see [docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md))
+```bash
+./scripts/check-local-env.sh    # one-time environment check
+./scripts/setup-local.sh        # one-time setup (STT model, secrets, ~/.jarvis/)
+./scripts/runtime-up.sh         # start Postgres (podman) + Spring Boot services
+./scripts/product/jarvis-desktop-launch.sh
+./scripts/runtime-down.sh
+```
 
 ## Build And Verification
 
-Build or test from the repo root:
-
 ```bash
-mvn test
+mvn test                                    # default: Docker-free unit + Spring slice tests
+mvn verify -Pintegration                    # Testcontainers/Docker-backed tests
+mvn verify -Pmicrok8s                       # tests tagged @Tag("microk8s")
+mvn -pl apps/<module> -am test              # single module + its dependencies
 ```
-
-Default `mvn test` is the Docker-free lane. It runs unit tests and Spring slice tests, and excludes tests tagged `integration` or `microk8s`.
-
-Run container-backed or environment-backed tests explicitly:
-
-```bash
-mvn verify -Pintegration
-mvn verify -Pmicrok8s
-```
-
-The `integration` profile runs tests tagged `@Tag("integration")` through Failsafe during `verify`; these tests may require Docker/Testcontainers or a compatible PostgreSQL environment. The `microk8s` profile is reserved for tests tagged `@Tag("microk8s")` that validate a real MicroK8s/runtime deployment. CI should keep `mvn test` as the default fast lane and schedule profile-backed verification only in jobs where Docker or MicroK8s is available.
-
-Target one module with dependencies:
-
-```bash
-mvn -pl apps/<module> -am test
-```
-
-Typical verification commands for this repo:
 
 ```bash
 ./scripts/runtime-status.sh
 ./scripts/runtime-smoke.sh
 ./scripts/verify-observability.sh
 ./scripts/guards/reject-new-docker-runtime-files.sh --all
-./infra/scripts/microk8s/verify-no-docker-runtime.sh --strict
 ```
+
+CI (`.github/workflows/`): `reactor-tests.yml` runs the full `mvn -fae test` reactor +
+JaCoCo summary; `quality.yml` runs checkstyle/PMD/SpotBugs (SpotBugs is the one hard
+gate — checkstyle/PMD are advisory-only by the root `pom.xml`'s own design) plus a
+dependency vulnerability scan; `security-and-build.yml`, `k8s-tree-drift.yml`,
+`build-images.yml`, `prod-image-sign.yml`, `desktop-entry-guard.yml`, and
+`backend-readiness.yml` round out the set. **None of this is enforced yet** — GitHub
+Actions and branch protection need to be turned on in the repository's GitHub settings
+for these to actually gate a merge.
 
 ## Security
 
-Jarvis is designed for trusted **local / LAN** use. It is **not** ready for unrestricted public exposure today — see the open hardening items in [docs/security/SECURITY_HARDENING_PLAN.md](docs/security/SECURITY_HARDENING_PLAN.md).
+Jarvis is designed for trusted **local / LAN** use, not unrestricted public exposure —
+see [docs/security/SECURITY_HARDENING_PLAN.md](docs/security/SECURITY_HARDENING_PLAN.md)
+for the open hardening backlog.
 
-What the platform enforces today:
+Enforced today:
 
-- User auth via `security-service` (BCrypt, signed JWT access + refresh, server-side refresh rotation with reuse detection).
-- Internal service-to-service auth via `X-Service-Token` minted from `SERVICE_JWT_SECRET`; downstream services trust delegated `X-User-*` headers only when the request carries a valid service JWT.
-- Spring Method Security on internal-only endpoints (`hasAuthority('SVC_INTERNAL')`).
-- TLS-only ingress with `force-ssl-redirect`; only three hostnames are exposed (`api.jarvis.local`, `voice.jarvis.local`, `grafana.jarvis.local`).
-- Pod-Security Restricted profile: `runAsNonRoot`, `readOnlyRootFilesystem`, `allowPrivilegeEscalation: false`, all capabilities dropped, `RuntimeDefault` seccomp; enforced by Kyverno policies in `k8s/overlays/prod/kyverno/`.
-- Secrets sourced from a Kubernetes `Secret/jarvis-secrets`; never embedded in ConfigMaps.
+- JWT auth (BCrypt, signed access + refresh, server-side refresh rotation with reuse
+  detection) via `security-service`.
+- Internal service-to-service auth via `X-Service-Token`; downstream services trust
+  `X-User-*` headers only behind a valid service JWT.
+- TLS-only ingress (`force-ssl-redirect`); three exposed hostnames
+  (`api.jarvis.local`, `voice.jarvis.local`, `grafana.jarvis.local`).
+- Pod-Security Restricted profile (`runAsNonRoot`, `readOnlyRootFilesystem`, all
+  capabilities dropped, `RuntimeDefault` seccomp) enforced by Kyverno policies.
+- Secrets sourced from `Secret/jarvis-secrets`, never embedded in ConfigMaps.
 
-Local-only components — must not be exposed publicly:
+Local-only, must never be exposed publicly: `pc-control` real-control mode,
+`vision-security-service` (owner-verification camera), the host LLM daemon.
 
-- `pc-control` real-control mode — controls keyboard, mouse, file system on the host.
-- `vision-security-service` — owner-verification camera; deliberately absent from `k8s/base`.
-- Host-model daemon — local LLM runtime that backs `llm-service` in production.
+Reference docs: [docs/security/SECURITY.md](docs/security/SECURITY.md),
+[docs/security/SECURITY_AUDIT.md](docs/security/SECURITY_AUDIT.md),
+[docs/security/AUTH_MODEL.md](docs/security/AUTH_MODEL.md),
+[docs/security/SECRETS_POLICY.md](docs/security/SECRETS_POLICY.md),
+[docs/audit/2026-07-06-bug-hunt.md](docs/audit/2026-07-06-bug-hunt.md).
 
-Secrets handling:
+## Documentation Map
 
-- `secrets/secrets.example.env` is the only template tracked in git; real values live in `~/.jarvis/secrets/secrets.env` and `~/.jarvis/tls/`.
-- See [docs/security/SECRETS_POLICY.md](docs/security/SECRETS_POLICY.md) for the canonical rules.
-
-Reference documents:
-
-- [docs/security/SECURITY.md](docs/security/SECURITY.md) — security overview
-- [docs/security/SECURITY_AUDIT.md](docs/security/SECURITY_AUDIT.md) — last repo-first audit (2026-05-08)
-- [docs/security/SECURITY_HARDENING_PLAN.md](docs/security/SECURITY_HARDENING_PLAN.md) — P0/P1/P2 backlog
-- [docs/security/SECURITY_COMPONENT_STATUS.md](docs/security/SECURITY_COMPONENT_STATUS.md) — per-component status table
-- [docs/security/AUTH_MODEL.md](docs/security/AUTH_MODEL.md) — formal user-auth and service-auth model
-- [docs/security/SECRETS_POLICY.md](docs/security/SECRETS_POLICY.md) — secrets handling policy
-
-## Supplementary Docs Kept On Purpose
-
-Local or policy docs that remain intentionally outside the canonical overview:
-
-- [docs/STATUS.md](docs/STATUS.md) — current per-subsystem status (DONE / code-only-not-deployed / mock / hardware-gated), refreshed 2026-07-05
-- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) — runnable demo script for the current wave
-- [ARCHITECTURE.md](ARCHITECTURE.md) — runtime topology and data flows
-- [docs/COMPONENT_STATUS.md](docs/COMPONENT_STATUS.md) — full component inventory with status per module
-- [docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md) — supported runtime modes and their entry points
-- [docs/LEGACY_AND_CLEANUP.md](docs/LEGACY_AND_CLEANUP.md) — deprecated, legacy-candidate, and drift findings (audit dated 2026-05-08)
-- [k8s/README.md](k8s/README.md)
-- [infra/k8s/README.md](infra/k8s/README.md)
-- [docs/architecture/SPEC-1-Jarvis-Local-AI-Operating-System.md](docs/architecture/SPEC-1-Jarvis-Local-AI-Operating-System.md)
-- [docs/architecture/milestone-1-architecture-lock.md](docs/architecture/milestone-1-architecture-lock.md)
-- [apps/android-app/README.md](apps/android-app/README.md)
-- [docs/HTTPS_STANDARD.md](docs/HTTPS_STANDARD.md)
-- [docs/security/SECRETS_POLICY.md](docs/security/SECRETS_POLICY.md)
-
-Per-service and per-module documentation lives under [`docs/services/`](docs/services/).
-
----
-
-## Quick verify & Obsidian (2026-06-06)
-
-Run the whole stack health + memory + Obsidian + brain in one go:
-
-```bash
-./jarvis health                      # READY/DEGRADED verdict
-./jarvis doctor                      # GPU, k3s, host LLM/TTS, host-model-daemon endpoint
-./scripts/jarvis-smoke-verify.sh     # 8 end-to-end checks (brain, memory, unified search, planner, tests)
-```
-
-### Obsidian (host vault `~/JarvisVault`)
-```bash
-./jarvis obsidian status
-./jarvis obsidian note "Title" --body "text" --folder memory
-./jarvis obsidian daily --text "what I did"
-./jarvis obsidian index              # push vault notes into vector memory
-python3 scripts/tests/test_jarvis_obsidian.py   # 11 unit tests
-```
-Notes are written to `~/JarvisVault` (open it as an Obsidian vault). Secret-shaped
-content is redacted before write. See `docs/MEMORY_AND_MODELS.md`.
-
-### If the 14B brain goes silent (placeholder regression)
-The `host-model-daemon` Endpoints can reset to `192.0.2.1` on a cluster re-apply,
-making the GPU 14B unreachable. Detect + fix:
-```bash
-./scripts/jarvis-host-endpoint-check.sh          # reports host + slice + cluster reachability
-./scripts/jarvis-host-endpoint-check.sh --fix    # re-patch to node IP (also run by `jarvis up`)
-```
-Keep `llm-service` env `JARVIS_HOST_DAEMON_ENABLED=false` and
-`LLM_SERVER_URL=http://host-model-daemon...:18080` (true needs the unused
-coding/router daemons on :18081/:18082 and fails readiness). Details:
-`docs/MEMORY_AND_MODELS.md`, `docs/COMPONENT_STATUS.md`.
-
-### Unified memory search (conversations + screen-context + Obsidian notes)
-```bash
-# Never hardcode the cluster IP — it changes with DHCP. Resolve it live instead
-# (same pattern `./jarvis status`/`doctor` and scripts/jarvis-oneclick.sh use):
-NODE_IP="$(sudo k3s kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
-curl -sk -H 'Host: api.jarvis.local' -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' -X POST \
-  "https://${NODE_IP}/api/v1/memory/search/unified" -d '{"query":"coffee","topK":5}'
-# returns results tagged source=conversation|obsidian|memory, with file path + score.
-# Note search is SEMANTIC-first (pgvector, finds notes by meaning even without the exact
-# words) with keyword fallback; the response field `noteSearchMode` is "semantic"|"keyword".
-```
-More runnable examples (agent swarm, planner, analytics, smart-home, panic button, etc.):
-[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
-
-> **Android E2E sync** still requires a manual NodePort + phone pairing —
-> run `./scripts/jarvis-android-setup.sh` (read-only; prints the exact NodePort +
-> NetworkPolicy commands, since the agent guard blocks prod NodePort patches).
+- [docs/STATUS.md](docs/STATUS.md) — the authoritative per-subsystem status page.
+- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) — runnable walk-through of every capability above.
+- [docs/DEPLOYMENT_CANONICAL.md](docs/DEPLOYMENT_CANONICAL.md) — the one deploy/recover path.
+- [docs/LIVE_VERIFICATION.md](docs/LIVE_VERIFICATION.md) — raw output from the last live acceptance passes.
+- [ARCHITECTURE.md](ARCHITECTURE.md) — runtime topology and data flows.
+- [docs/COMPONENT_STATUS.md](docs/COMPONENT_STATUS.md) / [docs/CAPABILITIES.md](docs/CAPABILITIES.md) — broader capability matrices (2026-05-09 audit date; STATUS.md is the current wave's delta on top of these).
+- [docs/RUNTIME_MODES.md](docs/RUNTIME_MODES.md) — all seven supported runtime modes.
+- [docs/architecture/](docs/architecture/) — spec, ADRs, phase acceptance evidence.
+- [docs/security/](docs/security/) — security model, audit, hardening plan.
+- [apps/android-app/README.md](apps/android-app/README.md) — mobile scaffold.
+- Per-service docs: [docs/services/](docs/services/).

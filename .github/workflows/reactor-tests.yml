@@ -30,14 +30,11 @@ name: Reactor Test Suite
 on:
   workflow_dispatch:
   pull_request:
+    # No path filter: this is a REQUIRED branch-protection check, so it must
+    # report on every PR to main — a path-skipped required check stays pending
+    # and blocks merge forever. The push trigger below keeps its path filter.
     branches:
       - main
-    paths:
-      - "pom.xml"
-      - "apps/**"
-      - "libs/**"
-      - ".github/workflows/reactor-tests.yml"
-      - "scripts/ci/jacoco-coverage-summary.sh"
   push:
     branches:
       - main

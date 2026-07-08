@@ -38,14 +38,10 @@ name: Quality Gate
 on:
   workflow_dispatch:
   pull_request:
+    # No path filter: REQUIRED branch-protection check must report on every PR
+    # to main (a path-skipped required check blocks merge forever).
     branches:
       - main
-    paths:
-      - "pom.xml"
-      - "apps/**"
-      - "libs/**"
-      - "config/quality/**"
-      - ".github/workflows/quality.yml"
   push:
     branches:
       - main

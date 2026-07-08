@@ -7,17 +7,11 @@ name: Security and Build Validation
 on:
   workflow_dispatch:
   pull_request:
-    paths:
-      - "**/*.java"
-      - "**/*.kt"
-      - "**/*.yml"
-      - "**/*.yaml"
-      - "**/*.xml"
-      - "**/*.sh"
-      - "**/*.py"
-      - "k8s/**"
-      - "infra/k8s/**"
-      - ".github/workflows/security-and-build.yml"
+    # No path filter: REQUIRED branch-protection checks (compile gate, kustomize
+    # validate, gitleaks, shellcheck) must report on every PR to main (a
+    # path-skipped required check blocks merge forever).
+    branches:
+      - main
   push:
     branches:
       - main

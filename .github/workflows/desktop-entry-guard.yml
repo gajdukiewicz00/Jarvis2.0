@@ -2,11 +2,10 @@ name: Desktop Entry Guard
 
 on:
   pull_request:
-    paths:
-      - "scripts/**"
-      - "apps/**"
-      - "src/**"
-      - ".github/workflows/**"
+    # No path filter: REQUIRED branch-protection check must report on every PR
+    # to main (a path-skipped required check blocks merge forever).
+    branches:
+      - main
   push:
     paths:
       - "scripts/**"

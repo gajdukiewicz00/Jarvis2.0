@@ -72,8 +72,16 @@ jobs:
         # one module's tests fail, so a single flaky/broken module doesn't
         # hide failures elsewhere in the reactor. Maven still exits non-zero
         # (and this step, and the job, still fail) if ANY module failed.
+        #
+        # vision-security-service is EXCLUDED from the reactor test run: it is a
+        # host-only service whose tests need native OpenCV JNI libraries
+        # (jniopencv_*) and an on-disk dataset/ directory that are not present on
+        # GitHub-hosted runners (UnsatisfiedLinkError / missing dataset path). It
+        # is not deployed as a cluster pod; its tests run on the host box that
+        # owns the webcam. It still COMPILES in the reactor-compile-gate job.
         run: >-
           mvn -B -ntp -fae test
+          -pl '!apps/vision-security-service'
           -Dcheckstyle.skip=true
           -Dpmd.skip=true
           -Dspotbugs.skip=true

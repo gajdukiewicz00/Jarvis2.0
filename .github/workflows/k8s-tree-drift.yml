@@ -30,7 +30,9 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: 'v1.30.0'
+          # Match the local toolchain (kustomize v5.7.1); keeps multi-document
+          # strategic-merge patch paths renderable. See security-and-build.yml.
+          version: 'v1.35.2'
 
       - name: Check for un-allowlisted :local/:latest image tags
         run: |

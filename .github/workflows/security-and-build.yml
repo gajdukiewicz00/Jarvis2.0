@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0
         with:
           scan-type: fs
           scan-ref: .
@@ -87,7 +87,12 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: 'v1.30.0'
+          # kustomize bundled with kubectl >= v1.31 supports a single
+          # `patches: - path:` entry pointing at a MULTI-document strategic-merge
+          # file (e.g. k8s/base/observability/observability-env.patch.yaml, which
+          # patches ~10 Deployments in one file). v1.30's kustomize (~v5.0)
+          # rejects it. Pinned to match the local toolchain (kustomize v5.7.1).
+          version: 'v1.35.2'
       - name: Validate k8s/base
         run: kubectl kustomize k8s/base > /dev/null
       - name: Validate k8s/overlays/prod

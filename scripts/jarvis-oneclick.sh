@@ -12,7 +12,7 @@
 #   5. launch the desktop GUI (prebuilt jar) against the k3s ingress
 #
 # Progress is shown in a zenity splash; errors pop a zenity dialog with the
-# log path. No terminal required — safe to wire to a .desktop Exec=.
+# log path. No terminal required — safe to wire to a desktop-entry Exec=.
 # =============================================================================
 set -uo pipefail
 

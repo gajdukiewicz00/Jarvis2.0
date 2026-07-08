@@ -69,13 +69,17 @@ jobs:
         uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
       - name: Run trivy filesystem scan
         # Advisory: --exit-code 0 (findings never fail) + continue-on-error so a
-        # transient DB-download hiccup can't red the build. SARIF still uploads below.
+        # transient hiccup can't red the build. --offline-scan stops trivy fetching
+        # remote Maven BOM/parent POMs (which get 429-rate-limited from Maven
+        # Central on shared CI IPs and leave no SARIF behind).
         continue-on-error: true
         run: >-
-          trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed
-          --exit-code 0 --format sarif --output trivy-fs.sarif .
+          trivy fs --scanners vuln --offline-scan --severity HIGH,CRITICAL
+          --ignore-unfixed --exit-code 0 --format sarif --output trivy-fs.sarif .
       - name: Upload SARIF to GitHub Security tab
-        if: always()
+        # Only upload if the scan actually produced a SARIF; never fail on upload.
+        if: ${{ always() && hashFiles('trivy-fs.sarif') != '' }}
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-fs.sarif

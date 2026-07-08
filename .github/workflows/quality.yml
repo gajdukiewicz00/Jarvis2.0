@@ -105,9 +105,12 @@ jobs:
 
       - name: Run PMD across the reactor
         # Advisory report-only: pmd:pmd generates target/pmd.xml (uploaded below)
-        # without failing. pmd:check is the enforcing goal and is intentionally
-        # NOT run here — SpotBugs is the single hard quality gate (see the
-        # quality-gate summary job), keeping this a report as designed.
+        # and does not fail on violations (pmd:check is the enforcing goal and is
+        # intentionally NOT run — SpotBugs is the single hard quality gate).
+        # continue-on-error keeps this advisory job green through transient Maven
+        # Central 429 rate-limiting on shared CI IPs — which is what actually
+        # failed it, not the code (pmd:pmd passes cleanly from a clean reactor).
+        continue-on-error: true
         run: mvn -B -ntp -fae -Pci-quality pmd:pmd
 
       - name: Upload PMD reports
@@ -170,8 +173,8 @@ jobs:
         # produces a downloadable, human-readable report over Maven deps.
         continue-on-error: true
         run: >-
-          trivy fs --scanners vuln --pkg-types library --severity HIGH,CRITICAL
-          --ignore-unfixed --exit-code 0 --format table
+          trivy fs --scanners vuln --pkg-types library --offline-scan
+          --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 --format table
           --output trivy-dependency-report.txt .
 
       - name: Upload dependency scan report

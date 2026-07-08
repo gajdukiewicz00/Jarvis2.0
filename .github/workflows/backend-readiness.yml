@@ -1,72 +1,15 @@
 name: Core Backend Readiness
 
 on:
+  # Manual-only. This is a heavyweight acceptance suite: two ~35-minute
+  # runtime-smoke jobs that stand up the full stack, plus host-oriented wiring
+  # guards ("no active Docker runtime path"). It targets a self-hosted,
+  # Docker-free k8s runner and cannot go green on GitHub-hosted runners, so it
+  # is dispatch-only to avoid perma-red on every push. Trigger it by hand once a
+  # suitable runner exists. (The lightweight gates — reactor-tests, quality,
+  # security-and-build, k8s-tree-drift, desktop-entry-guard — are the required
+  # branch-protection checks.)
   workflow_dispatch:
-  pull_request:
-    paths:
-      - ".github/workflows/backend-readiness.yml"
-      - ".github/workflows/prod-image-sign.yml"
-      - ".gitignore"
-      - "pom.xml"
-      - "apps/api-gateway/**"
-      - "apps/security-service/**"
-      - "apps/user-profile/**"
-      - "apps/nlp-service/**"
-      - "apps/orchestrator/**"
-      - "apps/voice-gateway/**"
-      - "apps/smart-home-service/**"
-      - "apps/life-tracker/**"
-      - "apps/analytics-service/**"
-      - "apps/planner-service/**"
-      - "apps/pc-control/**"
-      - "apps/jarvis-common/**"
-      - "scripts/**"
-      - "docker/postgres-init/**"
-      - "docker/mosquitto/**"
-      - "k8s/**"
-      - "k8s/overlays/prod-release/**"
-      - "README.md"
-      - "DEPLOYMENT_INSTRUCTIONS.md"
-      - "k8s/README.md"
-      - "ARCHITECTURE.md"
-      - "docs/architecture.md"
-      - "docs/architecture/**"
-      - "docs/services/**"
-      - "RUNBOOK_LLM.md"
-  push:
-    branches:
-      - master
-      - main
-    paths:
-      - ".github/workflows/backend-readiness.yml"
-      - ".github/workflows/prod-image-sign.yml"
-      - ".gitignore"
-      - "pom.xml"
-      - "apps/api-gateway/**"
-      - "apps/security-service/**"
-      - "apps/user-profile/**"
-      - "apps/nlp-service/**"
-      - "apps/orchestrator/**"
-      - "apps/voice-gateway/**"
-      - "apps/smart-home-service/**"
-      - "apps/life-tracker/**"
-      - "apps/analytics-service/**"
-      - "apps/planner-service/**"
-      - "apps/pc-control/**"
-      - "apps/jarvis-common/**"
-      - "scripts/**"
-      - "docker/postgres-init/**"
-      - "docker/mosquitto/**"
-      - "k8s/**"
-      - "k8s/overlays/prod-release/**"
-      - "README.md"
-      - "DEPLOYMENT_INSTRUCTIONS.md"
-      - "k8s/README.md"
-      - "ARCHITECTURE.md"
-      - "docs/architecture.md"
-      - "docs/architecture/**"
-      - "docs/services/**"
-      - "RUNBOOK_LLM.md"
 
 permissions:
   contents: read

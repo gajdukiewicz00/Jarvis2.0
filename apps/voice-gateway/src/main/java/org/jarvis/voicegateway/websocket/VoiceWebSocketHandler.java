@@ -54,6 +54,14 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     // Store active sessions and their recognition sessions
     private final Map<String, SessionContext> sessions = new ConcurrentHashMap<>();
 
+    /**
+     * Per-command idempotency guard: a recognized command (by correlationId) executes at most
+     * once. Duplicate final-transcript frames for the same correlationId are ignored so a media
+     * action is never dispatched twice (which caused "pause then resume ~1s later"). TTL-bounded.
+     */
+    private final Map<String, Long> recentCommandCorrelations = new ConcurrentHashMap<>();
+    private static final long COMMAND_DEDUP_TTL_MS = 15_000L;
+
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
 
@@ -326,11 +334,31 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
+    /**
+     * Returns true if this correlationId was already processed within the dedup TTL (a duplicate
+     * command frame to ignore). Commands without a real correlationId are never deduped.
+     */
+    private boolean isDuplicateCommand(String correlationId) {
+        if (correlationId == null || correlationId.isBlank() || "no-correlation-id".equals(correlationId)) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        recentCommandCorrelations.values().removeIf(ts -> now - ts > COMMAND_DEDUP_TTL_MS);
+        Long previous = recentCommandCorrelations.putIfAbsent(correlationId, now);
+        return previous != null && now - previous <= COMMAND_DEDUP_TTL_MS;
+    }
+
     private void handleCommand(SessionContext ctx, String text) {
         String configuredRecognitionLanguage = canonicalRecognitionLanguage(ctx.language);
         String lang = commandLanguage(configuredRecognitionLanguage);
         String detectedLang = LanguageDetector.detect(text);
         String correlationId = ctx.correlationId != null ? ctx.correlationId : "no-correlation-id";
+
+        if (isDuplicateCommand(correlationId)) {
+            log.warn("🔁 Duplicate voice command ignored (already processed this correlationId): correlationId={}, text='{}'",
+                    correlationId, text);
+            return;
+        }
 
         if (detectedLang != null && !detectedLang.equals(lang)) {
             log.warn("Transcript language differs from configured session language: transcript='{}', detected={}, effectiveRecognitionLanguage={}, usingCommandLanguage={}, correlationId={}",
@@ -826,6 +854,14 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 return ru
                         ? "Громкость установлена на " + level + "%, сэр."
                         : "Volume set to " + level + "%, sir.";
+            }
+        }
+        if ("OPEN_URL".equalsIgnoreCase(action)) {
+            String query = actionParam(match, "query");
+            if (query != null && !query.isBlank()) {
+                return ru
+                        ? "Ищу на YouTube: " + query + ", сэр."
+                        : "Searching YouTube for: " + query + ", sir.";
             }
         }
         return null;

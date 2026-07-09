@@ -431,6 +431,54 @@ class RuleBasedVoiceCommandServiceTest {
         assertEquals("OPEN_URL", match.get().actionName());
         assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com/results"),
                 String.valueOf(match.get().parameters().get("url")));
+        assertEquals("обзор техники", String.valueOf(match.get().parameters().get("query")));
+    }
+
+    @Test
+    void voiceYouTubeSearchTolueratesSttMistakeNaEtape() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("найди на этапе обзор фольксвагена", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertEquals("обзор фольксвагена", String.valueOf(match.get().parameters().get("query")));
+    }
+
+    @Test
+    void voiceYouTubeSearchTolueratesSttMistakeNaEtu() {
+        Optional<VoiceCommandCatalog.Match> match =
+                service.match("найди на эту любой обзор на любая автомобиль", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("query")).contains("обзор"),
+                String.valueOf(match.get().parameters().get("query")));
+    }
+
+    @Test
+    void voiceYouTubeSearchWithoutQueryAsksClarification() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("найди на ютубе", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("YOUTUBE_CLARIFY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.INTERNAL, match.get().action().target());
+    }
+
+    @Test
+    void voiceSleduyushchiyTrekMapsToNextNotToggle() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("следующий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    @Test
+    void voicePauzaMapsToPauseNotPlayPauseToggle() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("пауза", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PAUSE", match.get().actionName());
+        // Must be an explicit pause, never the toggle.
+        assertTrue(!"PLAY_PAUSE".equals(match.get().actionName()) && !"TOGGLE".equals(match.get().actionName()));
     }
 
     private static boolean isVolumeDown(String action) {

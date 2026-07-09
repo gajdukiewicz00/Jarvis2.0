@@ -66,18 +66,46 @@ commands:
         en: "Sir, what should I search on YouTube? For example: search YouTube for a review."
 
   # "найди на ютубе <query>" — open the YouTube search results page for the query.
+  # STT frequently mangles "ютубе" → "этапе"/"эту"/"юту"/"ютюб"; accept those markers here so
+  # the phrase routes to YouTube search instead of falling to generic LLM chat. A missing query
+  # is caught by rule_youtube_search_no_query below (higher priority) and asks what to search.
   - id: rule_youtube_search
     priority: 35
     matchers:
       - type: regex
         values:
-          - "(?:найди|поищи|поиск|search)\\s+(?:видео\\s+)?(?:на\\s+)?(?:ютуб[а-я]*|youtube)\\s+(.+)"
+          - "(?:найди|поищи|поиск|покажи|открой|включи|search)\\s+(?:видео\\s+)?(?:на\\s+)?(?:ютуб[а-я]*|youtube|этапе|эту|юту|ютюб|ю\\s*туб[а-я]*)\\s+(.+)"
     action:
       target: pc_control
       name: OPEN_URL
       params:
         url: "https://www.youtube.com/results?search_query={1}"
+        query: "{1}"
     response:
       text:
-        ru: "Открыл поиск на YouTube, сэр. Выберите первое видео."
-        en: "Opened YouTube search, sir. Pick the first video."
+        ru: "Ищу на YouTube, сэр."
+        en: "Searching YouTube, sir."
+
+  # "найди на ютубе" with no query → ask what to search (must beat rule_youtube_search which
+  # requires a trailing query, so any bare form lands here).
+  - id: rule_youtube_search_no_query
+    priority: 46
+    matchers:
+      - type: exact
+        values:
+          - "найди на ютубе"
+          - "поищи на ютубе"
+          - "покажи на ютубе"
+          - "найди на этапе"
+          - "найди на эту"
+          - "поиск на ютубе"
+      - type: regex
+        values:
+          - "^(?:найди|поищи|поиск|покажи)\\s+(?:на\\s+)?(?:ютуб[а-я]*|youtube|этапе|эту|юту|ютюб)$"
+    action:
+      target: internal
+      name: YOUTUBE_CLARIFY
+    response:
+      text:
+        ru: "Сэр, что искать на YouTube?"
+        en: "Sir, what should I search on YouTube?"

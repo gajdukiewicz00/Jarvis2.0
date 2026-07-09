@@ -149,6 +149,12 @@ class VoiceTab(
             },
             onResponse = { text, action, handled ->
                 runtimeMonitor.recordAssistantResponse(text, action, handled)
+                // If the user's command WAS an explicit media pause/stop, cancel the session's
+                // auto-resume so media stays paused (otherwise playerctl play ~1.5s later undoes it).
+                val upper = action?.uppercase().orEmpty()
+                if (upper == "PAUSE" || upper == "STOP" || upper == "MEDIA_PAUSE") {
+                    SystemControlService.clearPausedByUs()
+                }
                 Platform.runLater {
                     responseArea.appendText("Jarvis: $text\n")
                 }

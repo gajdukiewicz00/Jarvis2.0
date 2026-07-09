@@ -317,6 +317,31 @@ class VoiceWebSocketHandlerRuleCommandTest {
         assertFalse(payloads.stream().anyMatch(p -> p.contains("Не удалось выполнить команду.")));
     }
 
+    @Test
+    void duplicateCommandForSameCorrelationIdExecutesOnlyOnce() throws Exception {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-User-Id", "user-1");
+        when(session.getHandshakeHeaders()).thenReturn(headers);
+
+        VoiceCommandCatalog.Match match = buildMatch(
+                new VoiceCommandCatalog.Action(
+                        VoiceCommandCatalog.ActionTarget.PC_CONTROL, "PAUSE", null, null, Map.of()),
+                new VoiceCommandCatalog.Response(null, Map.of("ru", "Пауза, сэр.")));
+        when(ruleBasedVoiceCommandService.match("пауза", "ru")).thenReturn(Optional.of(match));
+        when(voiceCommandActionDispatcher.dispatch(match, "user-1", "corr-dup"))
+                .thenReturn(new VoiceCommandActionDispatcher.DispatchResult(
+                        true, true, true, true, false, null, "PAUSE", Map.of(), null));
+        when(voiceOutputService.resolveRuleResponseAudio(any(), anyString(), any(), any(), any()))
+                .thenReturn(new byte[]{1});
+
+        invokeHandleCommand("corr-dup", "пауза");
+        invokeHandleCommand("corr-dup", "пауза");
+
+        // The second identical frame must be ignored — the action dispatches exactly once.
+        verify(voiceCommandActionDispatcher, org.mockito.Mockito.times(1))
+                .dispatch(match, "user-1", "corr-dup");
+    }
+
     private List<String> captureTextPayloads() throws Exception {
         ArgumentCaptor<WebSocketMessage<?>> messages = ArgumentCaptor.forClass(WebSocketMessage.class);
         verify(session, org.mockito.Mockito.atLeastOnce()).sendMessage(messages.capture());

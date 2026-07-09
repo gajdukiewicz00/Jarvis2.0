@@ -158,11 +158,27 @@ class SystemControlService {
         if (hasPlayer) {
             return try {
                 executeCheckedCommand("playerctl", playerctlAction)
+                // Verify the state actually transitioned for explicit pause/play so we never claim
+                // success when the player ignored the command. NEXT can't be verified cheaply.
+                val expected = when (action.uppercase()) {
+                    "PAUSE" -> "Paused"
+                    "PLAY" -> "Playing"
+                    else -> null
+                }
+                if (expected != null) {
+                    val status = playerctlStatus()
+                    if (status != null && !status.equals(expected, ignoreCase = true)) {
+                        logger.warn("🎵 Media $playerctlAction not confirmed: status='$status' expected='$expected'")
+                        return Result.failure(IllegalStateException(
+                            "MEDIA_STATE_NOT_CONFIRMED: player did not reach $expected (status=$status)"))
+                    }
+                }
                 logger.info("🎵 Media $playerctlAction via playerctl (players=$activePlayers)")
                 Result.success(Unit)
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 val coded = when {
+                    msg.contains("MEDIA_STATE_NOT_CONFIRMED", ignoreCase = true) -> msg
                     msg.contains("timed out", ignoreCase = true) -> "PLAYERCTL_TIMEOUT: $msg"
                     msg.contains("permission", ignoreCase = true) || msg.contains("denied", ignoreCase = true) -> "PERMISSION_DENIED: $msg"
                     msg.contains("No players found", ignoreCase = true) -> "NO_ACTIVE_PLAYER: $msg"
@@ -273,18 +289,33 @@ class SystemControlService {
     }
 
     fun openUrl(url: String): Result<Unit> {
+        // Voice search URLs carry a raw query (spaces/Cyrillic) which URI(String) rejects — encode
+        // the search_query value so "найди на ютубе обзор фольксвагена" opens a valid results page.
+        val safeUrl = sanitizeUrl(url)
         return try {
             if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(url))
+                Desktop.getDesktop().browse(URI(safeUrl))
             } else {
-                executeCheckedCommand("xdg-open", url)
+                executeCheckedCommand("xdg-open", safeUrl)
             }
-            logger.info("🌐 Opened URL: $url")
+            logger.info("🌐 Opened URL: $safeUrl")
             Result.success(Unit)
         } catch (e: Exception) {
-            logger.error("Could not open URL $url: ${e.message}")
+            logger.error("Could not open URL $safeUrl: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    /** URL-encode the search_query value (spaces/Cyrillic) so the URL is valid for URI/browse. */
+    private fun sanitizeUrl(url: String): String {
+        val marker = "search_query="
+        val idx = url.indexOf(marker)
+        if (idx < 0) {
+            return url.replace(" ", "%20")
+        }
+        val prefix = url.substring(0, idx + marker.length)
+        val query = url.substring(idx + marker.length)
+        return prefix + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
     }
 
     // ==================== Hotkey Control ====================
@@ -655,17 +686,40 @@ class SystemControlService {
         @Volatile
         private var pausedByUs = false
 
-        private fun playerctlStatus(): String =
-            try {
-                val proc = ProcessBuilder("playerctl", "status")
+        /**
+         * Runs a playerctl command with a hard 3s timeout so a hung playerctl (D-Bus/player
+         * stall) can NEVER block the caller forever. This matters because these run on
+         * VoiceSession's single scheduler thread — an untimed hang there froze recordingStartFuture
+         * for all subsequent commands (the "stops recording after N commands" bug).
+         */
+        private fun runPlayerctlBounded(vararg args: String): String {
+            return try {
+                val proc = ProcessBuilder(listOf("playerctl", *args))
                     .redirectErrorStream(true)
                     .start()
                 val out = proc.inputStream.bufferedReader().use { it.readText() }.trim()
-                proc.waitFor()
+                if (!proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                    proc.destroyForcibly()
+                    logger.warn("playerctl {} timed out (3s)", args.joinToString(" "))
+                    return ""
+                }
                 out
             } catch (e: Exception) {
                 ""
             }
+        }
+
+        private fun playerctlStatus(): String = runPlayerctlBounded("status")
+
+        /**
+         * Clears the paused-by-us flag so the paired [resumeMediaStatic] no-ops. Used when the
+         * user's OWN command was an explicit media pause/stop, so the session does NOT auto-resume
+         * media ~1.5s later and undo the pause the user just asked for.
+         */
+        @JvmStatic
+        fun clearPausedByUs() {
+            pausedByUs = false
+        }
 
         /**
          * Pause media playback - static method for quick access.
@@ -678,15 +732,8 @@ class SystemControlService {
             if (!playerctlStatus().equals("Playing", ignoreCase = true)) {
                 return
             }
-            try {
-                ProcessBuilder("playerctl", "pause")
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor()
-                pausedByUs = true
-            } catch (e: Exception) {
-                // Ignore - media control is optional
-            }
+            runPlayerctlBounded("pause")
+            pausedByUs = true
         }
 
         /**
@@ -699,15 +746,8 @@ class SystemControlService {
                 return
             }
             pausedByUs = false
-            try {
-                ProcessBuilder("playerctl", "play")
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor()
-                logger.info("▶️ Media resumed via playerctl")
-            } catch (e: Exception) {
-                // Ignore - media control is optional
-            }
+            runPlayerctlBounded("play")
+            logger.info("▶️ Media resumed via playerctl")
         }
     }
 }

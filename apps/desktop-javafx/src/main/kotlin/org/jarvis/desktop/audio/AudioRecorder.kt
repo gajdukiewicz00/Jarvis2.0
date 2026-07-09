@@ -48,7 +48,7 @@ class AudioRecorder {
 
             val audioData = ByteArrayOutputStream()
 
-            recordingThread = thread(name = "AudioRecorder") {
+            recordingThread = thread(name = "AudioRecorder", isDaemon = true) {
                 val buffer = ByteArray(4096)
                 try {
                     while (recording && targetLine != null) {
@@ -96,19 +96,26 @@ class AudioRecorder {
         // Set flag first to stop the recording loop
         recording = false
         
-        // Close the line to unblock any read() calls
+        // Flush + stop + close the capture line so the OS capture stream (PulseAudio/PipeWire
+        // source-output / file descriptor) is released every command. Leaking it across many
+        // commands is the prime suspect for "stops recording after ~N commands".
         try {
+            targetLine?.flush()
             targetLine?.stop()
             targetLine?.close()
         } catch (e: Exception) {
             logger.debug("Error closing audio line", e)
         }
         targetLine = null
-        
-        // Interrupt the thread if still running
+
+        // Interrupt the thread and wait for it to actually die before the next command opens a
+        // new line (a lingering thread keeps reading a closed line and compounds the leak).
         try {
             recordingThread?.interrupt()
-            recordingThread?.join(500) // Wait briefly for clean exit
+            recordingThread?.join(1500)
+            if (recordingThread?.isAlive == true) {
+                logger.warn("AudioRecorder thread did not exit within 1500ms")
+            }
         } catch (e: Exception) {
             logger.debug("Error interrupting recording thread", e)
         }

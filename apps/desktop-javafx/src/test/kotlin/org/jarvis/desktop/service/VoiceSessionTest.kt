@@ -276,6 +276,26 @@ class VoiceSessionTest {
     }
 
     @Test
+    @DisplayName("after 20 command cycles the session still accepts a new command")
+    fun manyCommandsDoNotStickTheStateMachine() {
+        session.enableAlwaysListening()
+        repeat(20) { i ->
+            val id = session.startSession()
+            assertNotNull(id, "startSession must succeed on cycle $i")
+            assertEquals(VoiceState.LISTENING, session.state)
+            // Simulate the command finishing (failure/cancel path recovers to wake-listening).
+            session.cancelSession("cycle-$i complete")
+            assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+            assertTrue(wakeWordEnabled.get())
+            assertNull(session.currentCorrelationId, "correlationId must be cleared each cycle")
+        }
+        // The 21st wake must still start a fresh recording session.
+        val next = session.startSession()
+        assertNotNull(next, "voice loop must still accept commands after 20 cycles")
+        assertEquals(VoiceState.LISTENING, session.state)
+    }
+
+    @Test
     @DisplayName("command execution failure returns session to LISTENING_WAKE_WORD")
     fun executionFailureReturnsToWakeListening() {
         session.enableAlwaysListening()

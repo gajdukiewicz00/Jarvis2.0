@@ -40,7 +40,7 @@ public class RuleBasedVoiceCommandService {
             return Optional.empty();
         }
 
-        String normalizedText = normalize(text);
+        String normalizedText = VoiceTextNormalizer.applyAliases(normalize(text));
         if (normalizedText.isBlank()) {
             return Optional.empty();
         }

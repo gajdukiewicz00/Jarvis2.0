@@ -39,7 +39,72 @@ commands:
       params:
         app: terminal
     response:
-      key: loading_sir
+      text:
+        ru: "Открываю терминал, сэр."
+        en: "Opening terminal, sir."
+
+  - id: rule_open_files
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой файлы"
+          - "открой файл менеджер"
+          - "открой папку"
+          - "открой проводник"
+          - "open files"
+          - "open file manager"
+      - type: contains
+        values:
+          - "запусти файл менеджер"
+          - "покажи файлы"
+          - "открой мои файлы"
+          - "open the files"
+      - type: regex
+        values:
+          - "(открой|открыть|запусти|запустить|покажи)\\s+(файл[а-я]*|папк[а-я]*|проводник[а-я]*)"
+          - "\\bopen\\b.*\\bfile(s| manager)?\\b"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: files
+    response:
+      text:
+        ru: "Открываю файлы, сэр."
+        en: "Opening files, sir."
+
+  - id: rule_open_vscode
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой vs code"
+          - "открой vscode"
+          - "открой visual studio code"
+          - "открой код"
+          - "открой редактор кода"
+          - "open vs code"
+          - "open vscode"
+      - type: contains
+        values:
+          - "запусти vs code"
+          - "запусти vscode"
+          - "открой вс код"
+          - "open visual studio code"
+      - type: regex
+        values:
+          - "(открой|открыть|запусти|запустить)\\s+(vs\\s*code|vscode|visual\\s+studio\\s+code)"
+          - "\\bopen\\b.*\\b(vs\\s*code|vscode)\\b"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: vscode
+    response:
+      text:
+        ru: "Открываю VS Code, сэр."
+        en: "Opening VS Code, sir."
 
   - id: rule_open_telegram
     priority: 30
@@ -306,6 +371,33 @@ commands:
         keyCombination: "Super+d"
     response:
       key: yes_sir_alt
+
+  # STT variants of "сверни все окна" are canonicalized by VoiceTextNormalizer
+  # ("с кровь все окна"/"скорой все окна"/"скрой/убери все окна" -> "сверни все окна").
+  - id: rule_minimize_all_windows
+    priority: 20
+    matchers:
+      - type: exact
+        values:
+          - "сверни все окна"
+          - "свернуть все окна"
+          - "minimize all windows"
+      - type: contains
+        values:
+          - "сверни все окна"
+          - "спрячь все окна"
+          - "minimize everything"
+      - type: regex
+        values:
+          - "(сверни|свернуть|сворачивай|спрячь|скрой|убери)\\s+(все\\s+)?окна"
+          - "\\bminimize\\b.*\\bwindows?\\b"
+    action:
+      target: pc_control
+      name: MINIMIZE_ALL_WINDOWS
+    response:
+      text:
+        ru: "Сворачиваю все окна, сэр."
+        en: "Minimizing all windows, sir."
 
   - id: rule_sleep_mode
     matchers:

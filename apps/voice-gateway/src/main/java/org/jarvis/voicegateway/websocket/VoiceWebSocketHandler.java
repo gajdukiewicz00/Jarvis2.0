@@ -516,7 +516,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     dispatchResult.executionSucceeded(),
                     dispatchResult.executionFailed(),
                     dispatchResult.failureReason())) {
-                responseText = commandFailureMessage(lang, dispatchResult.failureReason());
+                responseText = actionFailureMessage(lang, match, action, dispatchResult.failureReason());
             } else if (dispatchResult.responseTextOverride() != null
                     && !dispatchResult.responseTextOverride().isBlank()) {
                 // Dynamic spoken text (e.g. real planner summary) overrides the static phrase.
@@ -563,7 +563,7 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         } catch (RuntimeException e) {
             log.error("❌ Error executing rule-based command: id={}, action={}, correlationId={}",
                     match.command().id(), action, correlationId, e);
-            String errorText = commandFailureMessage(lang, e.getMessage());
+            String errorText = actionFailureMessage(lang, match, action, e.getMessage());
             CommandResponseOutcome outcome = new CommandResponseOutcome(
                     action,
                     errorText,
@@ -698,6 +698,117 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         return ru
                 ? "Не удалось выполнить команду."
                 : "I couldn't execute that command.";
+    }
+
+    /**
+     * Builds a failure message that names BOTH the attempted action and the failing
+     * subsystem (e.g. "Не удалось открыть Telegram: PC-control недоступен, сэр."), so the
+     * user never hears a bare generic error. Falls back to {@link #commandFailureMessage}
+     * for actions without a specific verb or for non-Russian output.
+     */
+    private String actionFailureMessage(
+            String lang, VoiceCommandCatalog.Match match, String action, String failureReason) {
+        boolean ru = lang.startsWith("ru");
+        String upper = failureReason == null ? "" : failureReason.toUpperCase(Locale.ROOT);
+        if (isConfirmationReason(upper)) {
+            return ru ? "Сэр, это действие требует подтверждения." : "Sir, this action requires confirmation.";
+        }
+        if (!ru) {
+            return commandFailureMessage(lang, failureReason);
+        }
+        String verb = failureVerb(match, action);
+        if (verb == null) {
+            return commandFailureMessage(lang, failureReason);
+        }
+        return "Не удалось " + verb + ": " + failureCause(match, action, upper) + ", сэр.";
+    }
+
+    private String failureVerb(VoiceCommandCatalog.Match match, String action) {
+        VoiceCommandCatalog.ActionTarget target = match.action() != null ? match.action().target() : null;
+        if (target == VoiceCommandCatalog.ActionTarget.PLANNER) {
+            return "получить план";
+        }
+        String name = action == null ? "" : action.toUpperCase(Locale.ROOT);
+        return switch (name) {
+            case "OPEN_APP" -> "открыть " + appLabel(actionParam(match, "app"));
+            case "OPEN_URL" -> "включить музыку";
+            case "VOLUME_UP" -> "сделать громче";
+            case "VOLUME_DOWN" -> "убавить громкость";
+            case "MUTE" -> "выключить звук";
+            case "UNMUTE" -> "включить звук";
+            case "NEXT", "NEXT_TRACK" -> "переключить трек";
+            case "PREV", "PREVIOUS" -> "вернуть трек";
+            case "PAUSE" -> "поставить на паузу";
+            case "MINIMIZE_ALL_WINDOWS", "MINIMIZE_ALL", "SHOW_DESKTOP" -> "свернуть окна";
+            default -> null;
+        };
+    }
+
+    private String appLabel(String app) {
+        if (app == null || app.isBlank()) {
+            return "приложение";
+        }
+        return switch (app.toLowerCase(Locale.ROOT)) {
+            case "telegram", "telegram-desktop" -> "Telegram";
+            case "files", "file-manager", "nautilus", "dolphin" -> "файлы";
+            case "vscode", "vs code", "code" -> "VS Code";
+            case "terminal", "konsole" -> "терминал";
+            case "browser", "firefox" -> "браузер";
+            case "chrome", "google-chrome" -> "Chrome";
+            default -> app;
+        };
+    }
+
+    private String failureCause(VoiceCommandCatalog.Match match, String action, String upper) {
+        VoiceCommandCatalog.ActionTarget target = match.action() != null ? match.action().target() : null;
+        boolean unreachable = upper.contains("ENDPOINT_UNREACHABLE") || upper.contains("CONNECTION REFUSED")
+                || upper.contains("I/O ERROR") || upper.contains("CONNECT TO") || upper.contains("PLANNER_UNAVAILABLE");
+        if (target == VoiceCommandCatalog.ActionTarget.PLANNER) {
+            return unreachable ? "planner-service недоступен" : "planner-service вернул ошибку";
+        }
+        boolean isWindows = "MINIMIZE_ALL_WINDOWS".equalsIgnoreCase(action) || "SHOW_DESKTOP".equalsIgnoreCase(action)
+                || "HOTKEY".equalsIgnoreCase(action);
+        if (unreachable) {
+            return isWindows ? "канал управления недоступен" : "PC-control недоступен";
+        }
+        if (upper.contains("NO_CLIENTS") || upper.contains("USER_NOT_CONNECTED") || upper.contains("NOT CONNECTED")
+                || upper.contains("NOT_CONNECTED") || upper.contains("NO IDENTIFIED DESKTOP")
+                || upper.contains("SESSION_NOT_FOUND")) {
+            return "приложение на компьютере не подключено";
+        }
+        if (upper.contains("ACK_TIMEOUT") || upper.contains("DID NOT ACKNOWLEDGE")
+                || upper.contains("TIMED OUT") || upper.contains("TIMEOUT")) {
+            return "компьютер не ответил вовремя";
+        }
+        if (upper.contains("HTTP_401") || upper.contains("HTTP_403") || upper.contains("PERMISSION")
+                || upper.contains("DENIED") || upper.contains("AUTH")) {
+            return "отказано в доступе";
+        }
+        if (upper.contains("NO_ACTIVE_PLAYER") || upper.contains("NO PLAYERS")) {
+            return "нет активного плеера";
+        }
+        if (upper.contains("PLAYERCTL_NOT_INSTALLED")) {
+            return "playerctl не установлен";
+        }
+        if (upper.contains("INVALID_PAYLOAD") || upper.contains("BAD REQUEST")) {
+            return "неверные параметры";
+        }
+        if ("OPEN_APP".equalsIgnoreCase(action)
+                && (upper.contains("APP_NOT_FOUND") || upper.contains("UNKNOWN ACTION") || upper.contains("NO SUCH")
+                        || upper.contains("CANNOT RUN") || upper.contains("COULD NOT OPEN") || upper.contains("OPEN APP"))) {
+            String app = actionParam(match, "app");
+            return "приложение " + (app != null ? app : "") + " не найдено";
+        }
+        return "PC-control вернул ошибку";
+    }
+
+    private String actionParam(VoiceCommandCatalog.Match match, String key) {
+        Map<String, Object> params = match.parameters();
+        if (params == null) {
+            return null;
+        }
+        Object value = params.get(key);
+        return value != null ? String.valueOf(value) : null;
     }
 
     private String maskUserId(String userId) {

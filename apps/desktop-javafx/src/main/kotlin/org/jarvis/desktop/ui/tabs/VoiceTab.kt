@@ -113,10 +113,11 @@ class VoiceTab(
                 voiceWebSocketClient.requestTimeoutPhrase()
             },
             onSessionError = { reason, error ->
+                // Do NOT append session errors ("Cancelled by user", "Always-listening disabled",
+                // "WebSocket disconnected", ...) into the transcript buffer — they are not spoken
+                // text and previously leaked in as if the user had said them. Log only; the status
+                // is reflected by the state-machine's onStateChange handler.
                 logger.error("❌ Session error: {}", reason, error)
-                Platform.runLater {
-                    transcriptionArea.appendText("Error: $reason\n")
-                }
             },
             voiceTransportReady = {
                 voiceWebSocketClient.isConnected
@@ -543,7 +544,24 @@ class VoiceTab(
             voiceWebSocketClient.startCommand(correlationId)
             logger.info("🎤 Voice session started: correlationId={}", correlationId)
         } else {
-            logger.warn("⚠️ Could not start voice session (state machine rejected)")
+            // The detector self-pauses on every wake detection (WakeWordDetector). If the session
+            // could not start (usually a dropped voice transport after a cancel/error), we MUST
+            // re-arm the detector so the NEXT "Jarvis" is heard again — otherwise the wake word is
+            // detected once and then silently ignored forever. Also try to restore the transport so
+            // the retry actually succeeds.
+            logger.warn("⚠️ Could not start voice session (rejected) — re-arming wake word and restoring transport")
+            if (!voiceWebSocketClient.isConnected) {
+                logger.info("🔌 Voice transport not ready — reconnecting")
+                try {
+                    voiceWebSocketClient.connect()
+                } catch (e: Exception) {
+                    logger.warn("Reconnect attempt failed: {}", e.message)
+                }
+            }
+            if (isAlwaysListening) {
+                wakeWordDetector?.resume()
+                logger.info("🎧 Wake word detection re-armed after rejected start")
+            }
         }
     }
 

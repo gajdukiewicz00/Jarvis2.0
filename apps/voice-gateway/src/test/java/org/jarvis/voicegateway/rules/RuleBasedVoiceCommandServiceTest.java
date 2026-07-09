@@ -237,6 +237,100 @@ class RuleBasedVoiceCommandServiceTest {
         assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
     }
 
+    // --- New PC-control mappings + fuzzy STT normalization (must not fall to LLM) ---
+
+    @Test
+    void voiceOtkroyFilesBuildsOpenAppFiles() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой файлы", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("files", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyFileManagerBuildsOpenAppFiles() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой файл менеджер", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("files", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyVesSkottNormalizesToVsCodeOpenApp() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой вес скотт", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("vscode", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyTelegrammNormalizesToTelegram() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой телеграмм", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyTerminalBuildsOpenAppTerminal() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой терминал", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("terminal", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceSverniVseOknaBuildsMinimizeAllWindows() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сверни все окна", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("MINIMIZE_ALL_WINDOWS", match.get().actionName());
+    }
+
+    @Test
+    void voiceSKrovVseOknaNormalizesToMinimizeAllWindows() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("с кровь все окна", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("MINIMIZE_ALL_WINDOWS", match.get().actionName());
+    }
+
+    @Test
+    void voiceSkoroyVseOknaNormalizesToMinimizeAllWindows() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("скорой все окна", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("MINIMIZE_ALL_WINDOWS", match.get().actionName());
+    }
+
+    @Test
+    void voiceKakiePlanyNaDenRoutesToPlannerNotPcControl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какие планы на день", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void voicePlanNaDenRoutesToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("план на день", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void unknownChatPhraseStillHasNoRuleMatch() {
+        assertTrue(service.match("как думаешь, стоит ли лететь на марс", "ru-RU").isEmpty());
+    }
+
     private static boolean isVolumeDown(String action) {
         if (action == null) {
             return false;

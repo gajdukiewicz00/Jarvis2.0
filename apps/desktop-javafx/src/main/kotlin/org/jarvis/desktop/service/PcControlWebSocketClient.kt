@@ -281,6 +281,10 @@ class PcControlWebSocketClient(
                     "MINIMIZE" -> systemControl.windowAction("MINIMIZE")
                     "MAXIMIZE" -> systemControl.windowAction("MAXIMIZE")
                     "FULLSCREEN" -> systemControl.windowAction("FULLSCREEN")
+                    // Minimize-all / show-desktop: same gesture as the "Super+D (Desktop)"
+                    // UI button — there is no OS "minimize all" primitive, so use the hotkey.
+                    "MINIMIZE_ALL_WINDOWS", "MINIMIZE_ALL", "SHOW_DESKTOP" ->
+                        systemControl.executeHotkey("super+d")
                     "LOCK_SCREEN" -> systemControl.lockScreen()
                     
                     // Notifications

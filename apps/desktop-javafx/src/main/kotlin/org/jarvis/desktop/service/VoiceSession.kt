@@ -348,13 +348,17 @@ class VoiceSession(
      */
     fun disableAlwaysListening() {
         logger.info("🔇 Disabling always-listening mode")
-        
+
         // Cancel any active session
         if (currentState.get() != VoiceState.IDLE) {
             cancelSession("Always-listening disabled")
         }
-        
+
         currentState.set(VoiceState.IDLE)
+        // cancelSession() above re-arms the detector (onEnableWakeWord); when we are truly
+        // DISABLING we must leave the wake word OFF regardless of caller ordering. Explicitly
+        // disarm here so the FSM itself guarantees "disabled means not listening".
+        onDisableWakeWord()
         onStateChange(VoiceState.IDLE, null)
     }
     

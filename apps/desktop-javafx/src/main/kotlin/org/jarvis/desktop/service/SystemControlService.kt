@@ -194,8 +194,9 @@ class SystemControlService {
             "browser", "firefox" -> listOf(listOf("firefox"))
             "chrome", "google-chrome" -> listOf(listOf("google-chrome"), listOf("chromium"))
             "terminal", "konsole" -> listOf(listOf("konsole"), listOf("gnome-terminal"), listOf("x-terminal-emulator"))
-            "file-manager", "dolphin", "nautilus" -> listOf(listOf("dolphin"), listOf("nautilus"))
-            "vscode", "code" -> listOf(listOf("code"))
+            "file-manager", "files", "file manager", "folder", "папка", "проводник", "dolphin", "nautilus" ->
+                listOf(listOf("nautilus"), listOf("dolphin"), listOf("xdg-open", System.getProperty("user.home") ?: "."))
+            "vscode", "vs code", "code", "visual studio code" -> listOf(listOf("code"), listOf("codium"))
             "spotify" -> listOf(listOf("spotify"), listOf("flatpak", "run", "com.spotify.Client"))
             "telegram", "telegram-desktop" -> listOf(
                 listOf("telegram-desktop"),

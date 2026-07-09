@@ -34,6 +34,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -201,11 +202,12 @@ class VoiceWebSocketHandlerRuleCommandTest {
                         false,
                         false,
                         true,
-                        "No desktop executor is connected",
+                        "user_not_connected: No identified desktop executor is connected for this user",
                         "OPEN_APP",
                         Map.of("app", "browser"),
                         null));
-        when(voiceOutputService.resolveRuleResponseAudio("loading_sir", "Не удалось выполнить команду.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
+        when(voiceOutputService.resolveRuleResponseAudio(
+                eq("loading_sir"), anyString(), eq("ru"), eq("ru-RU"), eq("ru-RU-Wavenet-A")))
                 .thenReturn(new byte[]{7, 8, 9});
 
         invokeHandleCommand("corr-fail", "открой браузер");
@@ -222,9 +224,10 @@ class VoiceWebSocketHandlerRuleCommandTest {
                 payload.contains("\"action\":\"OPEN_APP\"")
                         && payload.contains("\"handled\":false")
                         && payload.contains("\"executionFailed\":true")
-                        && payload.contains("\"failureReason\":\"No desktop executor is connected\"")
-                        && payload.contains("Не удалось выполнить команду.")));
+                        && payload.contains("Не удалось открыть браузер")
+                        && payload.contains("приложение на компьютере не подключено")));
         assertFalse(payloads.stream().anyMatch(payload -> payload.contains("Загружаю, сэр.")));
+        assertFalse(payloads.stream().anyMatch(payload -> payload.contains("Не удалось выполнить команду.")));
     }
 
     @Test
@@ -275,7 +278,7 @@ class VoiceWebSocketHandlerRuleCommandTest {
                         "HTTP_401: authentication rejected by pc-control dispatch",
                         "VOLUME_UP", Map.of("delta", 10), null));
         when(voiceOutputService.resolveRuleResponseAudio(
-                "loading_sir", "Не удалось выполнить: отказано в доступе, сэр.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
+                eq("loading_sir"), anyString(), eq("ru"), eq("ru-RU"), eq("ru-RU-Wavenet-A")))
                 .thenReturn(new byte[]{1});
 
         invokeHandleCommand("corr-401", "открой браузер");
@@ -303,15 +306,14 @@ class VoiceWebSocketHandlerRuleCommandTest {
                         "ENDPOINT_UNREACHABLE: Connection refused",
                         "VOLUME_UP", Map.of("delta", 10), null));
         when(voiceOutputService.resolveRuleResponseAudio(
-                "loading_sir", "Сэр, не удалось связаться со службой управления компьютером.", "ru", "ru-RU",
-                "ru-RU-Wavenet-A"))
+                eq("loading_sir"), anyString(), eq("ru"), eq("ru-RU"), eq("ru-RU-Wavenet-A")))
                 .thenReturn(new byte[]{1});
 
         invokeHandleCommand("corr-net", "открой браузер");
 
         List<String> payloads = captureTextPayloads();
         assertTrue(payloads.stream().anyMatch(p ->
-                p.contains("не удалось связаться со службой") && p.contains("\"status\":\"FAILED\"")));
+                p.contains("PC-control недоступен") && p.contains("\"status\":\"FAILED\"")));
         assertFalse(payloads.stream().anyMatch(p -> p.contains("Не удалось выполнить команду.")));
     }
 

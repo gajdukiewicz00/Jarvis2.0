@@ -276,6 +276,67 @@ class VoiceSessionTest {
     }
 
     @Test
+    @DisplayName("command execution failure returns session to LISTENING_WAKE_WORD")
+    fun executionFailureReturnsToWakeListening() {
+        session.enableAlwaysListening()
+        val correlationId = session.startSession()
+        Thread.sleep(500)
+        assertEquals(VoiceState.LISTENING, session.state)
+
+        // Simulate an action/processing failure surfaced to the session.
+        session.cancelSession("Action failed: PC-control unavailable")
+
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertTrue(wakeWordEnabled.get(), "Wake word must be re-armed after a failure")
+    }
+
+    @Test
+    @DisplayName("wake word after a failure starts a fresh command recording session")
+    fun wakeWordAfterFailureStartsNewSession() {
+        session.enableAlwaysListening()
+        val first = session.startSession()
+        Thread.sleep(500)
+        session.cancelSession("Cancelled by user")
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+
+        // Saying "Jarvis" again must start a brand-new capture session.
+        recordingStarted.set(false)
+        val second = session.startSession()
+        assertNotNull(second, "A new session must start after a cancel/failure")
+        assertNotEquals(first, second, "The new session must have a fresh correlationId")
+        assertEquals(VoiceState.LISTENING, session.state)
+        Thread.sleep(500)
+        assertTrue(recordingStarted.get(), "Recording must start for the new session")
+    }
+
+    @Test
+    @DisplayName("disableAlwaysListening disarms the wake word detector")
+    fun disableAlwaysListeningDisarmsWakeWord() {
+        session.enableAlwaysListening()
+        wakeWordEnabled.set(true)
+
+        session.disableAlwaysListening()
+
+        assertEquals(VoiceState.IDLE, session.state)
+        assertFalse(wakeWordEnabled.get(), "Disabling must leave the wake word OFF")
+    }
+
+    @Test
+    @DisplayName("disable then re-enable does not permanently block the next command")
+    fun disableThenReEnableAllowsNextCommand() {
+        session.enableAlwaysListening()
+        session.disableAlwaysListening()
+        assertEquals(VoiceState.IDLE, session.state)
+
+        // Re-enabling and saying the wake word must work again.
+        session.enableAlwaysListening()
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        val correlationId = session.startSession()
+        assertNotNull(correlationId, "Next command must start after re-enabling")
+        assertEquals(VoiceState.LISTENING, session.state)
+    }
+
+    @Test
     @DisplayName("startSession returns null and reports error when voice transport not ready")
     fun startSessionReturnsNullWhenTransportNotReady() {
         val transportReady = AtomicBoolean(false)

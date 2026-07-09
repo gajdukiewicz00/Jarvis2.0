@@ -165,6 +165,7 @@ commands:
       - type: exact
         values:
           - "открой ютуб"
+          - "открой youtube"
           - "open youtube"
       - type: alias
         values:
@@ -173,12 +174,21 @@ commands:
       - type: contains
         values:
           - "запусти ютуб"
+          - "покажи ютуб"
+          - "включи ютуб"
           - "open the youtube"
+      - type: regex
+        values:
+          - "(открой|запусти|покажи|включи)\\s+(ютуб[а-я]*|youtube)"
     action:
       target: pc_control
       name: OPEN_URL
       params:
         url: "https://www.youtube.com/"
+    response:
+      text:
+        ru: "Открываю YouTube, сэр."
+        en: "Opening YouTube, sir."
     response:
       key: loading_sir
 

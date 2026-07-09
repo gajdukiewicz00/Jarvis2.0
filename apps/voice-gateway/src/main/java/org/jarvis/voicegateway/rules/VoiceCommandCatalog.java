@@ -37,7 +37,8 @@ public final class VoiceCommandCatalog {
         PC_CONTROL,
         SYSTEM,
         SMART_HOME,
-        PLANNER;
+        PLANNER,
+        FINANCE;
 
         public static ActionTarget from(String rawValue) {
             if (rawValue == null || rawValue.isBlank()) {
@@ -48,6 +49,7 @@ public final class VoiceCommandCatalog {
                 case "SYSTEM", "SYSTEM_COMMAND" -> SYSTEM;
                 case "SMART_HOME", "SMARTHOME" -> SMART_HOME;
                 case "PLANNER", "TODO", "TASKS" -> PLANNER;
+                case "FINANCE", "MONEY", "EXPENSES" -> FINANCE;
                 default -> INTERNAL;
             };
         }

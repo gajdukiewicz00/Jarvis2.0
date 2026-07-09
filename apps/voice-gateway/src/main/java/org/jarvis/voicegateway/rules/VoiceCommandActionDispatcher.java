@@ -2,6 +2,7 @@ package org.jarvis.voicegateway.rules;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jarvis.voicegateway.client.FinanceActionGateway;
 import org.jarvis.voicegateway.client.PcControlActionGateway;
 import org.jarvis.voicegateway.client.PlannerActionGateway;
 import org.jarvis.voicegateway.client.SmartHomeActionGateway;
@@ -18,6 +19,7 @@ public class VoiceCommandActionDispatcher {
     private final PcControlActionGateway pcControlActionGateway;
     private final SmartHomeActionGateway smartHomeActionGateway;
     private final PlannerActionGateway plannerActionGateway;
+    private final FinanceActionGateway financeActionGateway;
 
     public DispatchResult dispatch(VoiceCommandCatalog.Match match, String userId, String correlationId) {
         VoiceCommandCatalog.Action action = match.action();
@@ -171,6 +173,21 @@ public class VoiceCommandActionDispatcher {
                         action.name(),
                         Map.of(),
                         null);
+            }
+            case FINANCE -> {
+                String scopedUserId = userId != null && !userId.isBlank() ? userId : "local-user";
+                FinanceActionGateway.FinanceResult financeResult =
+                        financeActionGateway.summarize(scopedUserId, "ru-RU", action.name());
+                log.info(
+                        "💰 Rule command routed to finance: id={}, action={}, correlationId={}, userId={}, success={}",
+                        match.command().id(), action.name(), correlationId, scopedUserId, financeResult.success());
+                if (financeResult.success()) {
+                    yield new DispatchResult(
+                            true, true, true, true, false, null, action.name(),
+                            Map.of("summary", financeResult.spokenSummary()), financeResult.spokenSummary());
+                }
+                yield new DispatchResult(
+                        true, true, true, false, true, financeResult.failureReason(), action.name(), Map.of(), null);
             }
         };
     }

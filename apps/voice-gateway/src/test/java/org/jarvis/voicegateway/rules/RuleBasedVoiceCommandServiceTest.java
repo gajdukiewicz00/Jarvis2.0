@@ -481,6 +481,83 @@ class RuleBasedVoiceCommandServiceTest {
         assertTrue(!"PLAY_PAUSE".equals(match.get().actionName()) && !"TOGGLE".equals(match.get().actionName()));
     }
 
+    // --- YouTube open alias regression (must NOT fall to LLM) ---
+
+    @Test
+    void voiceOtkroyYutyubNormalizesToOpenYouTubeUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой ютюб", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com"),
+                String.valueOf(match.get().parameters().get("url")));
+    }
+
+    @Test
+    void voiceOtkroyYutubOpensYouTubeUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой ютуб", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com"),
+                String.valueOf(match.get().parameters().get("url")));
+    }
+
+    @Test
+    void voicePokaziYutubOpensYouTubeUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("покажи ютуб", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+    }
+
+    // --- Finance routing (must NOT fall to LLM refusal) ---
+
+    @Test
+    void voiceChtoUNasFinansamiRoutesToFinance() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("что у нас финансами", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("FINANCE_SUMMARY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.FINANCE, match.get().action().target());
+    }
+
+    @Test
+    void voiceKakDelaSFinansamiRoutesToFinance() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("как дела с финансами", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("FINANCE_SUMMARY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.FINANCE, match.get().action().target());
+    }
+
+    @Test
+    void voiceSkolkoPotratilRoutesToFinance() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сколько я потратил", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("FINANCE_SUMMARY", match.get().actionName());
+    }
+
+    // --- Media previous + planner consistency ---
+
+    @Test
+    void voicePredydushchiyTrekMapsToPrev() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("предыдущий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PREV", match.get().actionName());
+    }
+
+    @Test
+    void voiceKakieUMenyaSegodnyaZadachiRoutesToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какие у меня сегодня задачи", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
     private static boolean isVolumeDown(String action) {
         if (action == null) {
             return false;

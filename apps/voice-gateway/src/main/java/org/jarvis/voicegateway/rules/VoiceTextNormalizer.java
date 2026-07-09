@@ -82,8 +82,26 @@ final class VoiceTextNormalizer {
     }
 
     /**
+     * Whole-word STT variants that must NOT be applied as substrings (e.g. "юту" is a substring
+     * of the correct "ютуб", so a substring replace would corrupt it). Space-bounded only.
+     */
+    private static final Map<String, String> WORD_ALIASES = buildWordAliases();
+
+    private static Map<String, String> buildWordAliases() {
+        Map<String, String> w = new LinkedHashMap<>();
+        // YouTube spellings STT gets wrong → the canonical "ютуб" that rule_open_youtube /
+        // the YouTube-search rule match.
+        w.put("ютюб", "ютуб");
+        w.put("ютьюб", "ютуб");
+        w.put("юту", "ютуб");
+        w.put("ю туб", "ютуб");
+        w.put("ю тюб", "ютуб");
+        return w;
+    }
+
+    /**
      * Applies the alias substitutions to already-normalized text. Longest aliases first so a
-     * more specific phrase wins over a shorter overlapping one, then converts number words.
+     * more specific phrase wins over a shorter overlapping one, then converts number/whole-word.
      */
     static String applyAliases(String normalized) {
         if (normalized == null || normalized.isBlank()) {
@@ -95,9 +113,19 @@ final class VoiceTextNormalizer {
                 result = result.replace(alias.getKey(), alias.getValue());
             }
         }
+        result = normalizeWordAliases(result);
         result = normalizeNumberWords(result);
         // Collapse any spaces introduced/left by replacement.
         return result.replaceAll("\\s+", " ").trim();
+    }
+
+    /** Replaces whole-word aliases (space-bounded, no partials). */
+    private static String normalizeWordAliases(String text) {
+        String result = " " + text + " ";
+        for (Map.Entry<String, String> alias : WORD_ALIASES.entrySet()) {
+            result = result.replace(" " + alias.getKey() + " ", " " + alias.getValue() + " ");
+        }
+        return result.trim();
     }
 
     /** Replaces whole-word Russian number words with digits (space-bounded, no partials). */

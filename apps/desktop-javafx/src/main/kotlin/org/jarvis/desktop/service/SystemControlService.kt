@@ -157,34 +157,34 @@ class SystemControlService {
 
         if (hasPlayer) {
             return try {
+                // playerctl exiting 0 means the command was ACCEPTED by the active player — that is
+                // a real success and must never be downgraded to a failure by a status re-read that
+                // may lag or list several players. We verify status only for diagnostics.
                 executeCheckedCommand("playerctl", playerctlAction)
-                // Verify the state actually transitioned for explicit pause/play so we never claim
-                // success when the player ignored the command. NEXT can't be verified cheaply.
                 val expected = when (action.uppercase()) {
                     "PAUSE" -> "Paused"
                     "PLAY" -> "Playing"
                     else -> null
                 }
-                if (expected != null) {
-                    val status = playerctlStatus()
-                    if (status != null && !status.equals(expected, ignoreCase = true)) {
-                        logger.warn("🎵 Media $playerctlAction not confirmed: status='$status' expected='$expected'")
-                        return Result.failure(IllegalStateException(
-                            "MEDIA_STATE_NOT_CONFIRMED: player did not reach $expected (status=$status)"))
-                    }
+                val confirmed = if (expected != null) {
+                    playerctlStatus()?.equals(expected, ignoreCase = true) == true
+                } else {
+                    true
                 }
-                logger.info("🎵 Media $playerctlAction via playerctl (players=$activePlayers)")
+                logger.info(
+                    "🎵 media action={} selectedExecutor=playerctl playerctlExit=0 stateConfirmed={} finalStatus=SUCCESS (players={})",
+                    action, confirmed, activePlayers
+                )
                 Result.success(Unit)
             } catch (e: Exception) {
                 val msg = e.message ?: ""
                 val coded = when {
-                    msg.contains("MEDIA_STATE_NOT_CONFIRMED", ignoreCase = true) -> msg
                     msg.contains("timed out", ignoreCase = true) -> "PLAYERCTL_TIMEOUT: $msg"
                     msg.contains("permission", ignoreCase = true) || msg.contains("denied", ignoreCase = true) -> "PERMISSION_DENIED: $msg"
                     msg.contains("No players found", ignoreCase = true) -> "NO_ACTIVE_PLAYER: $msg"
                     else -> "MEDIA_CONTROL_FAILED: $msg"
                 }
-                logger.error("Could not execute media control: $coded")
+                logger.error("🎵 media action={} selectedExecutor=playerctl finalStatus=FAILED reason={}", action, coded)
                 Result.failure(IllegalStateException(coded, e))
             }
         }

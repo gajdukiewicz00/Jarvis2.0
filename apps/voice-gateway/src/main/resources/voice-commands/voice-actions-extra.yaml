@@ -95,13 +95,14 @@ commands:
         values:
           - "найди на ютубе"
           - "поищи на ютубе"
-          - "покажи на ютубе"
           - "найди на этапе"
           - "найди на эту"
           - "поиск на ютубе"
+      # Only search verbs (найди/поищи/поиск) with no query → ask what to search. "покажи/открой
+      # ютуб" is an OPEN intent handled by rule_open_youtube, so it is intentionally excluded here.
       - type: regex
         values:
-          - "^(?:найди|поищи|поиск|покажи)\\s+(?:на\\s+)?(?:ютуб[а-я]*|youtube|этапе|эту|юту|ютюб)$"
+          - "^(?:найди|поищи|поиск)\\s+(?:на\\s+)?(?:ютуб[а-я]*|youtube|этапе|эту|юту|ютюб)$"
     action:
       target: internal
       name: YOUTUBE_CLARIFY

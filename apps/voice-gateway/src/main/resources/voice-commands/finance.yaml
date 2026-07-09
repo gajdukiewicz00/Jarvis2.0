@@ -1,0 +1,46 @@
+commands:
+  # Deterministic finance routing: "что у нас с финансами" must return REAL finance data
+  # (life-tracker via orchestrator passthrough), never a generic "I have no access to your
+  # finances" LLM refusal. Target `finance` -> FinanceActionGateway builds a spoken summary
+  # that overrides the static phrase.
+  - id: rule_finance_summary
+    description: "Summarize the user's finances (month spend, today spend, top categories)"
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "что у нас с финансами"
+          - "что у нас финансами"
+          - "как дела с финансами"
+          - "как у нас с финансами"
+          - "покажи финансы"
+          - "покажи мои финансы"
+          - "финансовая сводка"
+          - "сводка по финансам"
+          - "мой бюджет"
+          - "сколько я потратил"
+          - "сколько потратил"
+          - "расходы сегодня"
+          - "расходы за месяц"
+          - "мои расходы"
+          - "how are my finances"
+          - "show my finances"
+          - "how much did i spend"
+      - type: contains
+        values:
+          - "с финансами"
+          - "по финансам"
+          - "финансовая сводка"
+          - "сколько я потратил"
+          - "расходы за месяц"
+          - "расходы сегодня"
+          - "мой бюджет"
+          - "покажи финансы"
+      - type: regex
+        values:
+          - "(что|как|покажи|какие)\\s+.*(финанс[а-я]*|бюджет[а-я]*|расход[а-я]*)"
+          - "сколько\\s+(я\\s+)?(потратил[а-я]*|истратил[а-я]*)"
+          - "(finance|budget|spend|expenses?)"
+    action:
+      target: finance
+      name: FINANCE_SUMMARY

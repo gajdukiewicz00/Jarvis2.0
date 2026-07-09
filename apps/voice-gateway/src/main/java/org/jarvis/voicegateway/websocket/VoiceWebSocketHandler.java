@@ -371,6 +371,18 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             return;
         }
 
+        // Low-confidence / garbage-transcript guard: a too-short unmatched transcript (e.g. "лет")
+        // must NOT be guessed into a time/LLM answer. Known one-word commands (пауза/громче/…)
+        // already matched a rule above, so they never reach here. Ask the user to repeat.
+        if (isLowConfidenceTranscript(text)) {
+            log.info("🤔 Low-confidence transcript, asking to repeat: text='{}', correlationId={}", text, correlationId);
+            respondWithClarification(ctx, lang, "UNCLEAR_CLARIFY",
+                    lang.startsWith("ru") ? "Сэр, я не расслышал. Повторите команду, пожалуйста."
+                            : "Sir, I didn't catch that. Please repeat the command.",
+                    correlationId);
+            return;
+        }
+
         String responseText = null;
         String action = "UNKNOWN";
         boolean recognized = text != null && !text.isBlank();
@@ -630,6 +642,38 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
+    /**
+     * True when an UNMATCHED transcript is too short/garbled to safely guess an action from
+     * (e.g. "лет"). Real one-word commands (пауза/громче/тише/следующий/…) match a rule before
+     * this is ever reached, so they are unaffected.
+     */
+    private boolean isLowConfidenceTranscript(String text) {
+        if (text == null) {
+            return true;
+        }
+        return text.trim().length() < 4;
+    }
+
+    /** Speaks a clarification (e.g. "please repeat") and finishes the session — never falls to LLM. */
+    private void respondWithClarification(
+            SessionContext ctx, String lang, String action, String message, String correlationId) {
+        try {
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    action, message, true, true, true, false, false, false, false, null);
+            logCommandOutcome("guard", action, outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
+            byte[] audio = voiceOutputService.resolveRuleResponseAudio(
+                    null, message, lang, languageCode(lang), voiceName(lang));
+            sendAudioResponse(ctx.session, audio, correlationId);
+        } catch (RuntimeException e) {
+            log.error("Failed to send clarification, correlationId={}", correlationId, e);
+        } finally {
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "DONE");
+        }
+    }
+
     private String resolveRuleResponseText(VoiceCommandCatalog.Match match, String lang) {
         String responseText = match.responseText(lang);
         if (responseText != null && !responseText.isBlank()) {
@@ -767,6 +811,9 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         if (target == VoiceCommandCatalog.ActionTarget.PLANNER) {
             return "получить план";
         }
+        if (target == VoiceCommandCatalog.ActionTarget.FINANCE) {
+            return "получить финансовую сводку";
+        }
         String name = action == null ? "" : action.toUpperCase(Locale.ROOT);
         return switch (name) {
             case "OPEN_APP" -> "открыть " + appLabel(actionParam(match, "app"));
@@ -809,6 +856,14 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                 return "planner endpoint вернул " + httpCode.group(1);
             }
             return unreachable ? "planner endpoint недоступен" : "planner endpoint вернул ошибку";
+        }
+        if (target == VoiceCommandCatalog.ActionTarget.FINANCE) {
+            java.util.regex.Matcher httpCode =
+                    java.util.regex.Pattern.compile("FINANCE_ENDPOINT_HTTP_(\\d{3})").matcher(upper);
+            if (httpCode.find()) {
+                return "finance-service вернул " + httpCode.group(1);
+            }
+            return "finance-service недоступен";
         }
         boolean isWindows = "MINIMIZE_ALL_WINDOWS".equalsIgnoreCase(action) || "SHOW_DESKTOP".equalsIgnoreCase(action)
                 || "HOTKEY".equalsIgnoreCase(action);

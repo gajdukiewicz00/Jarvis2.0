@@ -41,7 +41,9 @@ final class VoiceTextNormalizer {
         aliases.put("вис код", "vs code");
         aliases.put("вс код", "vs code");
         aliases.put("вskod", "vs code");
+        aliases.put("visual studio code", "vs code");
         // --- Telegram doubled-letter STT ---
+        aliases.put("telegramm", "telegram");
         aliases.put("телеграмму", "телеграм");
         aliases.put("телеграмма", "телеграм");
         aliases.put("телеграмм", "телеграм");
@@ -96,6 +98,8 @@ final class VoiceTextNormalizer {
         w.put("юту", "ютуб");
         w.put("ю туб", "ютуб");
         w.put("ю тюб", "ютуб");
+        // Planner STT: "какие у меня задачах" → задачи (so planner rules match cleanly).
+        w.put("задачах", "задачи");
         return w;
     }
 

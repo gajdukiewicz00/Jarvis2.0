@@ -62,6 +62,12 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     private final Map<String, Long> recentCommandCorrelations = new ConcurrentHashMap<>();
     private static final long COMMAND_DEDUP_TTL_MS = 15_000L;
 
+    // Stateless registry of voice-accessible services — drives the "what can you do" catalog and
+    // the domain guard that forbids a generic-LLM refusal for a known local domain. Field
+    // initializer (not a constructor param) so existing hand-constructed handler tests are unaffected.
+    private final org.jarvis.voicegateway.registry.VoiceServiceRegistry serviceRegistry =
+            new org.jarvis.voicegateway.registry.VoiceServiceRegistry();
+
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
 
@@ -380,6 +386,22 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     lang.startsWith("ru") ? "Сэр, я не расслышал. Повторите команду, пожалуйста."
                             : "Sir, I didn't catch that. Please repeat the command.",
                     correlationId);
+            return;
+        }
+
+        // Service-domain guard: an unmatched transcript that clearly names a known Jarvis domain
+        // must NEVER fall through to a generic-LLM refusal ("I can't do that from chat"). Offer /
+        // clarify for that specific service instead. Phrases without any known domain keyword fall
+        // through to the intent/orchestrator path = Brain Chat.
+        var domainService = serviceRegistry.matchDomain(
+                ruleBasedVoiceCommandService.normalizedForDiagnostics(text));
+        if (domainService.isPresent()) {
+            var svc = domainService.get();
+            log.info("🛡️ Domain guard: text='{}' → service={} (avoiding generic LLM), correlationId={}",
+                    text, svc.serviceId(), correlationId);
+            respondWithClarification(ctx, lang,
+                    "SERVICE_" + svc.serviceId().toUpperCase(Locale.ROOT) + "_CLARIFY",
+                    svc.fallbackRu(), correlationId);
             return;
         }
 
@@ -903,6 +925,9 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
     private String dynamicSuccessMessage(String lang, VoiceCommandCatalog.Match match, String action) {
         boolean ru = lang.startsWith("ru");
+        if ("VOICE_COMMANDS_CATALOG".equals(action)) {
+            return serviceRegistry.catalogText(ru);
+        }
         if ("SET_VOLUME".equalsIgnoreCase(action) || "VOLUME_SET".equalsIgnoreCase(action)) {
             String level = actionParam(match, "level");
             if (level != null && !level.isBlank()) {
@@ -951,6 +976,9 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
 
     private String commandStatus(CommandResponseOutcome outcome) {
         String action = outcome.action();
+        if (action != null && action.endsWith("_CONFIRM")) {
+            return "REQUIRES_CONFIRMATION";
+        }
         if (action != null && (action.equals("CLARIFY_OPEN") || action.equals("YOUTUBE_CLARIFY")
                 || action.endsWith("_CLARIFY"))) {
             return "CLARIFICATION_NEEDED";

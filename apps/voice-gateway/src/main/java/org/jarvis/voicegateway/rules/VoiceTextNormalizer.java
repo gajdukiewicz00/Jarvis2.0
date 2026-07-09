@@ -59,8 +59,31 @@ final class VoiceTextNormalizer {
     }
 
     /**
+     * Russian cardinal number words → digits, so spoken volume levels ("громкость на сто")
+     * become "громкость на 100" and match the numeric SET_VOLUME rule instead of falling to
+     * LLM chat. Whole-word replacement only.
+     */
+    private static final Map<String, String> NUMBER_WORDS = buildNumberWords();
+
+    private static Map<String, String> buildNumberWords() {
+        Map<String, String> n = new LinkedHashMap<>();
+        n.put("ноль", "0");
+        n.put("десять", "10");
+        n.put("двадцать", "20");
+        n.put("тридцать", "30");
+        n.put("сорок", "40");
+        n.put("пятьдесят", "50");
+        n.put("шестьдесят", "60");
+        n.put("семьдесят", "70");
+        n.put("восемьдесят", "80");
+        n.put("девяносто", "90");
+        n.put("сто", "100");
+        return n;
+    }
+
+    /**
      * Applies the alias substitutions to already-normalized text. Longest aliases first so a
-     * more specific phrase wins over a shorter overlapping one.
+     * more specific phrase wins over a shorter overlapping one, then converts number words.
      */
     static String applyAliases(String normalized) {
         if (normalized == null || normalized.isBlank()) {
@@ -72,7 +95,17 @@ final class VoiceTextNormalizer {
                 result = result.replace(alias.getKey(), alias.getValue());
             }
         }
+        result = normalizeNumberWords(result);
         // Collapse any spaces introduced/left by replacement.
         return result.replaceAll("\\s+", " ").trim();
+    }
+
+    /** Replaces whole-word Russian number words with digits (space-bounded, no partials). */
+    private static String normalizeNumberWords(String text) {
+        String result = " " + text + " ";
+        for (Map.Entry<String, String> word : NUMBER_WORDS.entrySet()) {
+            result = result.replace(" " + word.getKey() + " ", " " + word.getValue() + " ");
+        }
+        return result.trim();
     }
 }

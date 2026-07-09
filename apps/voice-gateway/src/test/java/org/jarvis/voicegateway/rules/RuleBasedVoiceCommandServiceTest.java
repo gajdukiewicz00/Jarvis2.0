@@ -331,6 +331,108 @@ class RuleBasedVoiceCommandServiceTest {
         assertTrue(service.match("как думаешь, стоит ли лететь на марс", "ru-RU").isEmpty());
     }
 
+    // --- Absolute volume (number words normalized to digits) ---
+
+    @Test
+    void voiceGromkostNaStoBuildsSetVolume100() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("громкость на сто", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("100", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    @Test
+    void voiceGromkostNaDesyatBuildsSetVolume10() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("громкость на десять", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("10", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    @Test
+    void voicePostavGromkostNa50BuildsSetVolume50() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("поставь громкость на 50", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("50", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    @Test
+    void voiceZvukNa30BuildsSetVolume30() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("звук на 30", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("30", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    // --- Media play/pause/next ---
+
+    @Test
+    void voicePauzaBuildsPause() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("пауза", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PAUSE", match.get().actionName());
+    }
+
+    @Test
+    void voiceOstanoviMuzykuBuildsPause() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("останови музыку", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PAUSE", match.get().actionName());
+    }
+
+    @Test
+    void voiceVosproizvediBuildsPlay() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("воспроизведи", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLAY", match.get().actionName());
+    }
+
+    @Test
+    void voiceVosproizvediSleduyushchiyTrekBuildsNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("воспроизведи следующий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    // --- YouTube + ambiguous open (must NOT be OPEN_APP, must NOT go to LLM) ---
+
+    @Test
+    void voiceFirstYouTubeVideoDoesNotBecomeOpenApp() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("включи первое видео на ютубе", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("YOUTUBE_CLARIFY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.INTERNAL, match.get().action().target());
+    }
+
+    @Test
+    void voiceOtkroyEtuAsksForClarification() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой эту", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("CLARIFY_OPEN", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.INTERNAL, match.get().action().target());
+    }
+
+    @Test
+    void voiceYouTubeSearchWithQueryOpensSearchUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("найди на ютубе обзор техники", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com/results"),
+                String.valueOf(match.get().parameters().get("url")));
+    }
+
     private static boolean isVolumeDown(String action) {
         if (action == null) {
             return false;

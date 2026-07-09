@@ -6,24 +6,29 @@ import org.jarvis.common.security.ServiceJwtProvider;
 import org.jarvis.voicegateway.client.PlannerActionGateway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Deterministic voice bridge to the planner service. Reads the user's focus/day
- * over the internal service JWT and turns it into a short spoken summary so
- * "какие планы на сегодня" answers with REAL planner data instead of falling
- * through to generic LLM chat.
+ * Deterministic voice bridge to the planner. Reads the user's focus/day and turns it into a
+ * short spoken summary so "какие планы на день" answers with REAL planner data instead of
+ * falling through to generic LLM chat.
+ *
+ * <p>voice-gateway is NetworkPolicy-blocked from reaching planner-service (and api-gateway)
+ * directly — only the orchestrator is reachable. So this calls the orchestrator's planner
+ * passthrough ({@code /internal/planner/focus|daily}), which forwards to the api-gateway
+ * planner proxy → planner-service (the same reachable path the desktop Planner uses).
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RestPlannerActionGateway implements PlannerActionGateway {
 
-    @Value("${jarvis.planner.url:http://planner-service:8092}")
-    private String plannerUrl;
+    @Value("${jarvis.planner.dispatch-url:${jarvis.orchestrator.url:http://orchestrator:8083}}")
+    private String plannerDispatchUrl;
 
     @Value("${spring.application.name:voice-gateway}")
     private String serviceName;
@@ -45,6 +50,11 @@ public class RestPlannerActionGateway implements PlannerActionGateway {
             log.info("🗓️ Planner voice summary: userId={}, action={}, openTasks={}, hasTitle={}",
                     userId, action, openTasks, title != null && !title.isBlank());
             return new PlannerResult(true, summary, null);
+        } catch (HttpStatusCodeException e) {
+            int code = e.getStatusCode().value();
+            log.warn("🗓️ Planner endpoint returned {}: userId={}, action={}", code, userId, action);
+            return new PlannerResult(false, null, "PLANNER_ENDPOINT_HTTP_" + code
+                    + ": planner endpoint returned " + code);
         } catch (RuntimeException e) {
             log.warn("🗓️ Planner voice summary unavailable: userId={}, action={}, error={}",
                     userId, action, e.getMessage());
@@ -56,7 +66,7 @@ public class RestPlannerActionGateway implements PlannerActionGateway {
     private Map<String, Object> fetchFocus(String userId) {
         Map<String, Object> body = restClientBuilder.build()
                 .get()
-                .uri(plannerUrl + "/api/v1/planner/focus")
+                .uri(plannerDispatchUrl + "/internal/planner/focus")
                 .header("X-Service-Token", serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
                 .header("X-User-Id", userId)
                 .retrieve()
@@ -70,7 +80,7 @@ public class RestPlannerActionGateway implements PlannerActionGateway {
         try {
             Map<String, Object> daily = restClientBuilder.build()
                     .get()
-                    .uri(plannerUrl + "/api/v1/planner/daily")
+                    .uri(plannerDispatchUrl + "/internal/planner/daily")
                     .header("X-Service-Token", serviceJwtProvider.createToken(serviceName, List.of("SVC_INTERNAL")))
                     .header("X-User-Id", userId)
                     .retrieve()

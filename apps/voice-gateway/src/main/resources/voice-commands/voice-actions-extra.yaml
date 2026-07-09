@@ -1,0 +1,83 @@
+commands:
+  # Absolute volume: "громкость на 100" / "поставь громкость на 50" / "звук на 30".
+  # Number words ("сто","десять",…) are converted to digits by VoiceTextNormalizer first,
+  # so "громкость на сто" arrives here as "громкость на 100". The captured level rides into
+  # params.level via the {1} template; the spoken confirmation is built dynamically by the
+  # WS handler ("Громкость установлена на N%, сэр.").
+  - id: rule_set_volume_dynamic
+    priority: 20
+    matchers:
+      - type: regex
+        values:
+          - "(?:громкость|звук|volume)\\s+(?:на|to)\\s+([0-9]{1,3})"
+    action:
+      target: pc_control
+      name: SET_VOLUME
+      params:
+        level: "{1}"
+    response:
+      text:
+        ru: "Готово, сэр."
+        en: "Done, sir."
+
+  # Ambiguous "открой эту/это/его" — do NOT refuse via LLM; ask what to open.
+  - id: rule_clarify_open
+    priority: 40
+    matchers:
+      - type: exact
+        values:
+          - "открой эту"
+          - "открой это"
+          - "открой его"
+          - "открой её"
+          - "открой ее"
+          - "открой их"
+          - "открой"
+      - type: regex
+        values:
+          - "^открой\\s+(эту|это|его|её|ее|их)$"
+    action:
+      target: internal
+      name: CLARIFY_OPEN
+    response:
+      text:
+        ru: "Сэр, что именно открыть: приложение, файл, папку или ссылку?"
+        en: "Sir, what exactly should I open: an app, a file, a folder, or a link?"
+
+  # "включи первое видео на ютубе" must NOT be treated as OPEN_APP. Without a query, ask.
+  - id: rule_youtube_first_video
+    priority: 45
+    matchers:
+      - type: contains
+        values:
+          - "первое видео на ютубе"
+          - "первое видео на youtube"
+          - "первый ролик на ютубе"
+          - "первое видео в ютубе"
+      - type: regex
+        values:
+          - "(?:включи|открой|запусти|поставь)\\s+перв\\w*\\s+(?:видео|ролик)\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)"
+    action:
+      target: internal
+      name: YOUTUBE_CLARIFY
+    response:
+      text:
+        ru: "Сэр, что искать на YouTube? Скажите, например: найди на ютубе обзор."
+        en: "Sir, what should I search on YouTube? For example: search YouTube for a review."
+
+  # "найди на ютубе <query>" — open the YouTube search results page for the query.
+  - id: rule_youtube_search
+    priority: 35
+    matchers:
+      - type: regex
+        values:
+          - "(?:найди|поищи|поиск|search)\\s+(?:видео\\s+)?(?:на\\s+)?(?:ютуб[а-я]*|youtube)\\s+(.+)"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/results?search_query={1}"
+    response:
+      text:
+        ru: "Открыл поиск на YouTube, сэр. Выберите первое видео."
+        en: "Opened YouTube search, sir. Pick the first video."

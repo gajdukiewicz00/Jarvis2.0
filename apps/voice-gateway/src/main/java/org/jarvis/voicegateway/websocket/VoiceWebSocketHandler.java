@@ -521,6 +521,13 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     && !dispatchResult.responseTextOverride().isBlank()) {
                 // Dynamic spoken text (e.g. real planner summary) overrides the static phrase.
                 responseText = dispatchResult.responseTextOverride();
+            } else {
+                // Truthful dynamic confirmation for actions whose result carries data (e.g. the
+                // volume level actually set). Only applied on real success.
+                String dynamic = dynamicSuccessMessage(lang, match, action);
+                if (dynamic != null) {
+                    responseText = dynamic;
+                }
             }
 
             CommandResponseOutcome outcome = new CommandResponseOutcome(
@@ -541,16 +548,20 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     dispatchResult.failureReason());
             logCommandOutcome("rule", action, outcome, correlationId);
             log.info(
-                    "🧾 Voice action dispatch: recognizedText='{}', matchedRuleId={}, intent={}, actionType={}, targetService={}, userId={}, correlationId={}, status={}, userMessage='{}'",
+                    "🧾 Voice action dispatch: recognizedText='{}', normalizedText='{}', matchedRuleId={}, intent={}, actionType={}, tool={}, targetService={}, payload={}, userId={}, correlationId={}, status={}, userMessage='{}', debugReason={}",
                     recognizedText,
+                    ruleBasedVoiceCommandService.normalizedForDiagnostics(recognizedText),
                     matchedRuleId,
                     action,
                     action,
                     match.action() != null ? match.action().target() : "INTERNAL",
+                    match.action() != null ? match.action().target() : "INTERNAL",
+                    match.parameters(),
                     maskUserId(ctx.userId),
                     correlationId,
                     commandStatus(outcome),
-                    responseText);
+                    responseText,
+                    outcome.failureReason());
             sendCommandResponse(ctx.session, outcome, correlationId);
 
             byte[] audio = voiceOutputService.resolveRuleResponseAudio(
@@ -764,7 +775,12 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         boolean unreachable = upper.contains("ENDPOINT_UNREACHABLE") || upper.contains("CONNECTION REFUSED")
                 || upper.contains("I/O ERROR") || upper.contains("CONNECT TO") || upper.contains("PLANNER_UNAVAILABLE");
         if (target == VoiceCommandCatalog.ActionTarget.PLANNER) {
-            return unreachable ? "planner-service недоступен" : "planner-service вернул ошибку";
+            java.util.regex.Matcher httpCode =
+                    java.util.regex.Pattern.compile("PLANNER_ENDPOINT_HTTP_(\\d{3})").matcher(upper);
+            if (httpCode.find()) {
+                return "planner endpoint вернул " + httpCode.group(1);
+            }
+            return unreachable ? "planner endpoint недоступен" : "planner endpoint вернул ошибку";
         }
         boolean isWindows = "MINIMIZE_ALL_WINDOWS".equalsIgnoreCase(action) || "SHOW_DESKTOP".equalsIgnoreCase(action)
                 || "HOTKEY".equalsIgnoreCase(action);
@@ -802,6 +818,19 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         return "PC-control вернул ошибку";
     }
 
+    private String dynamicSuccessMessage(String lang, VoiceCommandCatalog.Match match, String action) {
+        boolean ru = lang.startsWith("ru");
+        if ("SET_VOLUME".equalsIgnoreCase(action) || "VOLUME_SET".equalsIgnoreCase(action)) {
+            String level = actionParam(match, "level");
+            if (level != null && !level.isBlank()) {
+                return ru
+                        ? "Громкость установлена на " + level + "%, сэр."
+                        : "Volume set to " + level + "%, sir.";
+            }
+        }
+        return null;
+    }
+
     private String actionParam(VoiceCommandCatalog.Match match, String key) {
         Map<String, Object> params = match.parameters();
         if (params == null) {
@@ -830,6 +859,11 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     }
 
     private String commandStatus(CommandResponseOutcome outcome) {
+        String action = outcome.action();
+        if (action != null && (action.equals("CLARIFY_OPEN") || action.equals("YOUTUBE_CLARIFY")
+                || action.endsWith("_CLARIFY"))) {
+            return "CLARIFICATION_NEEDED";
+        }
         String reason = outcome.failureReason();
         if (reason != null) {
             String upper = reason.toUpperCase(Locale.ROOT);

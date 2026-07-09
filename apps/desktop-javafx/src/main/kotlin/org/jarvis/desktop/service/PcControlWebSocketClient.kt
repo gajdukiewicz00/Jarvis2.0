@@ -235,7 +235,7 @@ class PcControlWebSocketClient(
                         val delta = params["delta"]?.jsonPrimitive?.intOrNull ?: 10
                         systemControl.changeVolume(delta, "-")
                     }
-                    "VOLUME_SET" -> {
+                    "VOLUME_SET", "SET_VOLUME" -> {
                         val level = params["level"]?.jsonPrimitive?.intOrNull ?: 50
                         systemControl.setVolume(level)
                     }

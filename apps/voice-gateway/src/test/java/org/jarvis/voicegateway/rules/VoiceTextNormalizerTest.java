@@ -26,6 +26,14 @@ class VoiceTextNormalizerTest {
     }
 
     @Test
+    void convertsRussianNumberWordsToDigits() {
+        assertEquals("громкость на 100", VoiceTextNormalizer.applyAliases("громкость на сто"));
+        assertEquals("громкость на 10", VoiceTextNormalizer.applyAliases("громкость на десять"));
+        assertEquals("звук на 30", VoiceTextNormalizer.applyAliases("звук на тридцать"));
+        assertEquals("громкость на 50", VoiceTextNormalizer.applyAliases("громкость на пятьдесят"));
+    }
+
+    @Test
     void leavesUnrelatedTextUnchanged() {
         assertEquals("какие планы на день", VoiceTextNormalizer.applyAliases("какие планы на день"));
         assertEquals("открой терминал", VoiceTextNormalizer.applyAliases("открой терминал"));

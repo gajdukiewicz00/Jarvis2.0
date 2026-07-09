@@ -48,15 +48,16 @@ class SystemControlService {
      * Set volume to a specific percentage.
      */
     fun setVolume(percent: Int): Result<Unit> {
+        val level = percent.coerceIn(0, 100)
         return try {
             val backend = selectAudioBackend()
             when (backend) {
-                "wpctl" -> executeCheckedCommand("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$percent%")
-                "pactl" -> executeCheckedCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$percent%")
-                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "$percent%")
+                "wpctl" -> executeCheckedCommand("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$level%")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$level%")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "$level%")
                 else -> error("Unsupported audio backend: $backend")
             }
-            logger.info("🔊 Volume set to {} via {}", "$percent%", backend)
+            logger.info("🔊 Volume set to {} via {}", "$level%", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not set volume: ${e.message}")
@@ -141,34 +142,86 @@ class SystemControlService {
             else -> action.lowercase()
         }
         
-        // Coded, diagnosable failures so the voice layer can speak a useful reason instead of a
-        // generic "не удалось выполнить команду". The prefix (before ':') becomes the failureCode.
-        if (!isCommandAvailable("playerctl")) {
-            logger.warn("🎵 Media control: playerctl is not installed")
-            return Result.failure(IllegalStateException("PLAYERCTL_NOT_INSTALLED: playerctl is not installed on the host"))
+        // Target resolution: prefer a real MPRIS player; fall back to a browser hotkey only when
+        // the active window is actually a browser; otherwise report truthfully that nothing is
+        // controllable. Coded prefixes (before ':') become the failureCode the voice layer maps.
+        val playerctlInstalled = isCommandAvailable("playerctl")
+        val activePlayers = if (playerctlInstalled) {
+            runCatching { executeProcess("playerctl", "-l").output.trim() }.getOrDefault("")
+        } else {
+            ""
         }
-        val activePlayers = runCatching { executeProcess("playerctl", "-l").output.trim() }.getOrDefault("")
-        if (activePlayers.isBlank() || activePlayers.contains("No players found", ignoreCase = true)) {
-            logger.info("🎵 Media control '$playerctlAction': no active MPRIS player")
-            return Result.failure(IllegalStateException("NO_ACTIVE_PLAYER: no active media player (playerctl -l is empty)"))
+        val hasPlayer = playerctlInstalled
+            && activePlayers.isNotBlank()
+            && !activePlayers.contains("No players found", ignoreCase = true)
+
+        if (hasPlayer) {
+            return try {
+                executeCheckedCommand("playerctl", playerctlAction)
+                logger.info("🎵 Media $playerctlAction via playerctl (players=$activePlayers)")
+                Result.success(Unit)
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                val coded = when {
+                    msg.contains("timed out", ignoreCase = true) -> "PLAYERCTL_TIMEOUT: $msg"
+                    msg.contains("permission", ignoreCase = true) || msg.contains("denied", ignoreCase = true) -> "PERMISSION_DENIED: $msg"
+                    msg.contains("No players found", ignoreCase = true) -> "NO_ACTIVE_PLAYER: $msg"
+                    else -> "MEDIA_CONTROL_FAILED: $msg"
+                }
+                logger.error("Could not execute media control: $coded")
+                Result.failure(IllegalStateException(coded, e))
+            }
         }
 
+        // No MPRIS player — try a best-effort browser media hotkey if a browser window is active.
+        val browserResult = tryBrowserMediaFallback(action)
+        if (browserResult != null) {
+            return browserResult
+        }
+
+        val reason = if (!playerctlInstalled) {
+            "PLAYERCTL_NOT_INSTALLED: playerctl is not installed and no browser media window is active"
+        } else {
+            "NO_ACTIVE_PLAYER: no active media player and no controllable browser window"
+        }
+        logger.info("🎵 Media control '$playerctlAction': $reason")
+        return Result.failure(IllegalStateException(reason))
+    }
+
+    /**
+     * Best-effort browser media control when no MPRIS player exists. Returns null when the active
+     * window is NOT a browser (so the caller reports NO_ACTIVE_PLAYER truthfully). When it IS a
+     * browser we inject a media hotkey — success here means "the key was sent to the focused
+     * window", not a verified state change.
+     */
+    private fun tryBrowserMediaFallback(action: String): Result<Unit>? {
+        val title = activeWindowTitle().lowercase()
+        if (title.isBlank()) return null
+        val browserMarkers = listOf("firefox", "mozilla", "chrome", "chromium", "yandex", "opera", "brave", "edge", "youtube")
+        if (browserMarkers.none { title.contains(it) }) return null
+        val isYouTube = title.contains("youtube")
+        val keys = when (action.uppercase()) {
+            "PLAY", "PAUSE", "PLAY_PAUSE", "TOGGLE" -> "XF86AudioPlay"
+            "STOP" -> "XF86AudioStop"
+            "NEXT" -> if (isYouTube) "shift+n"
+                else return Result.failure(IllegalStateException("BROWSER_NEXT_UNSUPPORTED: browser next-track is only supported on YouTube"))
+            "PREV", "PREVIOUS" -> if (isYouTube) "shift+p"
+                else return Result.failure(IllegalStateException("BROWSER_PREV_UNSUPPORTED: browser previous is only supported on YouTube"))
+            else -> return null
+        }
         return try {
-            executeCheckedCommand("playerctl", playerctlAction)
-            logger.info("🎵 Media $playerctlAction via playerctl (players=$activePlayers)")
+            executeCheckedCommand("xdotool", "key", keys)
+            logger.info("🎵 Media '$action' sent to active browser via hotkey '$keys' (window='$title')")
             Result.success(Unit)
         } catch (e: Exception) {
-            val msg = e.message ?: ""
-            val coded = when {
-                msg.contains("timed out", ignoreCase = true) -> "PLAYERCTL_TIMEOUT: $msg"
-                msg.contains("permission", ignoreCase = true) || msg.contains("denied", ignoreCase = true) -> "PERMISSION_DENIED: $msg"
-                msg.contains("No players found", ignoreCase = true) -> "NO_ACTIVE_PLAYER: $msg"
-                else -> "MEDIA_CONTROL_FAILED: $msg"
-            }
-            logger.error("Could not execute media control: $coded")
-            Result.failure(IllegalStateException(coded, e))
+            Result.failure(IllegalStateException("BROWSER_HOTKEY_FAILED: ${e.message}", e))
         }
     }
+
+    /** Active X window title via xdotool; empty string if xdotool/window is unavailable. */
+    private fun activeWindowTitle(): String =
+        runCatching { executeProcess("xdotool", "getactivewindow", "getwindowname").output.trim() }
+            .getOrDefault("")
 
     /**
      * Pause media playback using playerctl.

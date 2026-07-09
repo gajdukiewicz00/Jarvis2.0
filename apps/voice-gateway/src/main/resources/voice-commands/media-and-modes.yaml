@@ -53,12 +53,40 @@ commands:
       - type: contains
         values:
           - "поставь на паузу"
+          - "останови музыку"
+          - "останови воспроизведение"
           - "stop the music"
+          - "pause the music"
     action:
       target: pc_control
       name: PAUSE
     response:
-      key: affirmative
+      text:
+        ru: "Пауза, сэр."
+        en: "Paused, sir."
+
+  - id: rule_play_media
+    matchers:
+      - type: exact
+        values:
+          - "воспроизведи"
+          - "продолжи"
+          - "играй"
+          - "play"
+          - "resume"
+      - type: contains
+        values:
+          - "продолжи воспроизведение"
+          - "продолжай играть"
+          - "resume playback"
+          - "воспроизведи музыку"
+    action:
+      target: pc_control
+      name: PLAY
+    response:
+      text:
+        ru: "Воспроизвожу, сэр."
+        en: "Playing, sir."
 
   - id: rule_next_track
     matchers:
@@ -73,6 +101,7 @@ commands:
       - type: contains
         values:
           - "включи следующий трек"
+          - "воспроизведи следующий трек"
           - "skip this song"
           - "следующая песня"
           - "переключи трек"
@@ -85,13 +114,16 @@ commands:
           - "следующ[а-я]*\\s+(трек[а-я]*|песн[а-я]*|композиц[а-я]*)"
           - "переключи\\s+(трек[а-я]*|песн[а-я]*|музык[а-я]*|композиц[а-я]*)"
           - "пропусти\\s+(трек[а-я]*|песн[а-я]*|композиц[а-я]*)"
+          - "воспроизведи\\s+следующ[а-я]*\\s+(трек[а-я]*|песн[а-я]*)"
           - "\\bnext\\b.*\\b(track|song)\\b"
           - "\\bskip\\b.*\\b(track|song)\\b"
     action:
       target: pc_control
       name: NEXT
     response:
-      key: affirmative
+      text:
+        ru: "Переключаю трек, сэр."
+        en: "Skipping to the next track, sir."
 
   - id: rule_previous_track
     matchers:

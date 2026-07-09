@@ -121,6 +121,13 @@ class VoiceTab(
             },
             voiceTransportReady = {
                 voiceWebSocketClient.isConnected
+            },
+            sessionDiagnostics = {
+                "recorderActive=${audioRecorder.isRecording}, " +
+                    "sendingAllowed=${voiceWebSocketClient.isSendingAllowed}, " +
+                    "wsConnected=${voiceWebSocketClient.isConnected}, " +
+                    "wakeWordState=${wakeWordDetector?.getState()}, " +
+                    "alwaysListening=$isAlwaysListening"
             }
         )
         
@@ -149,6 +156,9 @@ class VoiceTab(
             },
             onResponse = { text, action, handled ->
                 runtimeMonitor.recordAssistantResponse(text, action, handled)
+                // A RESPONSE arrived — if no TTS audio follows shortly, recover as text-only
+                // instead of hanging in PROCESSING until the timeout.
+                voiceSession.onResponseReceived()
                 // If the user's command WAS an explicit media pause/stop, cancel the session's
                 // auto-resume so media stays paused (otherwise playerctl play ~1.5s later undoes it).
                 val upper = action?.uppercase().orEmpty()

@@ -144,4 +144,27 @@ object VoiceConfig {
     val wakeWordDelayMs: Long by lazy {
         System.getenv("JARVIS_VOICE_WAKE_WORD_DELAY_MS")?.toLongOrNull() ?: 300L
     }
+
+    /** Max time to wait in TTS_PLAYBACK (SPEAKING) before force-recovering — a hung audio
+     *  device (line.drain blocking) must never freeze the session forever. */
+    val maxSpeakingMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_MAX_SPEAKING_MS")?.toLongOrNull() ?: 30000L
+    }
+
+    /** How often the session watchdog checks for a stuck state. */
+    val watchdogIntervalMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_WATCHDOG_INTERVAL_MS")?.toLongOrNull() ?: 3000L
+    }
+
+    /** Grace window after a RESPONSE frame to wait for TTS audio before treating it as
+     *  text-only and recovering (instead of waiting out the full processing timeout). */
+    val textOnlyGraceMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_TEXT_ONLY_GRACE_MS")?.toLongOrNull() ?: 2500L
+    }
+
+    /** Absolute upper bound for any single active (non-idle) state; the watchdog force-recovers
+     *  past this even if a per-state timeout somehow didn't fire. */
+    val maxActiveStateMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_MAX_ACTIVE_STATE_MS")?.toLongOrNull() ?: 45000L
+    }
 }

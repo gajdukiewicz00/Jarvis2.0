@@ -138,17 +138,31 @@ class WakeWordDetector(
     fun pause() {
         if (currentState == ListeningState.LISTENING) {
             currentState = ListeningState.PAUSED
-            println("Wake word detector paused")
+            // Stop actively capturing so the command recorder is the ONLY open capture stream
+            // during a command — running two concurrent mic streams leaks OS capture handles and
+            // is the prime suspect for "recording stops after ~N commands". The line stays OPEN
+            // (cheap stop/start), so no per-command open/close churn.
+            try {
+                targetDataLine?.stop()
+            } catch (e: Exception) {
+                System.err.println("Wake detector pause stop() error: ${e.message}")
+            }
+            println("Wake word detector paused (capture stopped)")
         }
     }
-    
+
     /**
      * Resume wake word detection.
      */
     fun resume() {
         if (currentState == ListeningState.PAUSED) {
+            try {
+                targetDataLine?.start()
+            } catch (e: Exception) {
+                System.err.println("Wake detector resume start() error: ${e.message}")
+            }
             currentState = ListeningState.LISTENING
-            println("Wake word detector resumed")
+            println("Wake word detector resumed (capture restarted)")
         }
     }
     
@@ -195,9 +209,16 @@ class WakeWordDetector(
         
         while (isRunning) {
             try {
+                // While paused (a command is being recorded), don't read the mic at all — the
+                // command recorder owns the capture device. Prevents two concurrent capture streams.
+                if (currentState == ListeningState.PAUSED) {
+                    Thread.sleep(20)
+                    continue
+                }
+
                 // Read audio from microphone
                 val bytesRead = targetDataLine?.read(buffer, 0, buffer.size) ?: -1
-                
+
                 if (bytesRead <= 0) {
                     Thread.sleep(10)
                     continue

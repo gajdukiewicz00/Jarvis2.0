@@ -276,23 +276,82 @@ class VoiceSessionTest {
     }
 
     @Test
-    @DisplayName("after 20 command cycles the session still accepts a new command")
-    fun manyCommandsDoNotStickTheStateMachine() {
+    @Timeout(20)
+    @DisplayName("after 30 command cycles the session still records command 31")
+    fun thirtyCommandsDoNotStickTheStateMachine() {
         session.enableAlwaysListening()
-        repeat(20) { i ->
+        // 30 cycles through the recovery chokepoint (each command reaches PROCESSING then
+        // recovers), proving the FSM never sticks and always re-arms for the next command.
+        repeat(30) { i ->
             val id = session.startSession()
             assertNotNull(id, "startSession must succeed on cycle $i")
             assertEquals(VoiceState.LISTENING, session.state)
-            // Simulate the command finishing (failure/cancel path recovers to wake-listening).
+            session.onFinalTranscript("сделай громче", id)
+            assertEquals(VoiceState.PROCESSING, session.state, "cycle $i must reach PROCESSING")
+            // Recover (as a failed/cancelled command would); returns to wake-listening immediately.
             session.cancelSession("cycle-$i complete")
-            assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
-            assertTrue(wakeWordEnabled.get())
+            assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state, "cycle $i must recover to wake-listening")
+            assertTrue(wakeWordEnabled.get(), "cycle $i must re-arm wake word")
             assertNull(session.currentCorrelationId, "correlationId must be cleared each cycle")
         }
-        // The 21st wake must still start a fresh recording session.
         val next = session.startSession()
-        assertNotNull(next, "voice loop must still accept commands after 20 cycles")
+        assertNotNull(next, "voice loop must still accept command 31 after 30 cycles")
         assertEquals(VoiceState.LISTENING, session.state)
+    }
+
+    @Test
+    @Timeout(10)
+    @DisplayName("text-only response (no TTS audio) recovers to WAKE_LISTENING within the grace window")
+    fun textOnlyResponseRecoversToWakeListening() {
+        session.enableAlwaysListening()
+        val id = session.startSession()
+        Thread.sleep(400)
+        session.onFinalTranscript("какие планы на день", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+
+        // A RESPONSE arrives but no TTS audio follows → grace elapses → recover.
+        session.onResponseReceived()
+        var waited = 0
+        while (session.state != VoiceState.LISTENING_WAKE_WORD && waited < 6000) {
+            Thread.sleep(100); waited += 100
+        }
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertTrue(wakeWordEnabled.get(), "wake word must be re-armed after text-only response")
+    }
+
+    @Test
+    @DisplayName("TTS playback finished (incl. failure/no-device) recovers to WAKE_LISTENING")
+    fun ttsPlaybackFinishedRecoversToWakeListening() {
+        session.enableAlwaysListening()
+        val id = session.startSession()
+        Thread.sleep(400)
+        session.onFinalTranscript("пауза", id)
+        session.onTtsPlaybackStarted()
+        assertEquals(VoiceState.TTS_PLAYBACK, session.state)
+        // AudioPlayer always calls onTtsPlaybackFinished (finally block) even on failure/no-device.
+        session.onTtsPlaybackFinished()
+        var waited = 0
+        while (session.state != VoiceState.LISTENING_WAKE_WORD && waited < 3000) {
+            Thread.sleep(100); waited += 100
+        }
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertTrue(wakeWordEnabled.get())
+    }
+
+    @Test
+    @DisplayName("duplicate/late final transcript after PROCESSING is ignored (no double process)")
+    fun duplicateFinalTranscriptIsIgnored() {
+        session.enableAlwaysListening()
+        val id = session.startSession()
+        Thread.sleep(400)
+        session.onFinalTranscript("сделай громче", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+        recordingStopped.set(false)
+
+        // A second (duplicate/late) final transcript for the same command must be ignored.
+        session.onFinalTranscript("сделай громче", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+        assertFalse(recordingStopped.get(), "duplicate transcript must not re-run stop/processing")
     }
 
     @Test

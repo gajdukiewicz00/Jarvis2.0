@@ -1,22 +1,20 @@
 package org.jarvis.desktop.features.common
 
+import org.jarvis.desktop.e2e.E2eFx
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * Bare JavaFX [javafx.scene.control.Label] construction (no [Scene]/[Stage]
- * shown, no [javafx.application.Platform.startup]) works off the FX thread
- * for simple property-graph assembly — only actual rendering/layout needs
- * the running toolkit. This is a probe for that assumption as much as a
- * regression test: if headless JavaFX construction stops working in this
- * environment, this file is the first thing that will fail loudly.
+ * [ShellPanelSupport] builds JavaFX [javafx.scene.control.Label]s, which
+ * require the JavaFX toolkit. All construction/assertions run on the FX
+ * thread via [E2eFx.onFx] (which boots the headless Monocle toolkit once).
  */
 class ShellPanelSupportTest {
 
     @Test
-    fun `statusPill applies the pill and muted tone style classes`() {
+    fun `statusPill applies the pill and muted tone style classes`() = E2eFx.onFx {
         val label = ShellPanelSupport.statusPill("Ready")
         assertEquals("Ready", label.text)
         assertTrue(label.styleClass.contains("shell-status-pill"))
@@ -24,14 +22,14 @@ class ShellPanelSupportTest {
     }
 
     @Test
-    fun `sectionTitle applies the section-title style class`() {
+    fun `sectionTitle applies the section-title style class`() = E2eFx.onFx {
         val label = ShellPanelSupport.sectionTitle("Overview")
         assertEquals("Overview", label.text)
         assertTrue(label.styleClass.contains("shell-section-title"))
     }
 
     @Test
-    fun `sectionSubtitle wraps text and applies the subtitle style class`() {
+    fun `sectionSubtitle wraps text and applies the subtitle style class`() = E2eFx.onFx {
         val label = ShellPanelSupport.sectionSubtitle("Details go here")
         assertEquals("Details go here", label.text)
         assertTrue(label.isWrapText)
@@ -39,7 +37,7 @@ class ShellPanelSupportTest {
     }
 
     @Test
-    fun `applyTone swaps the previous tone class for the new one`() {
+    fun `applyTone swaps the previous tone class for the new one`() = E2eFx.onFx {
         val label = ShellPanelSupport.statusPill("Status")
         assertTrue(label.styleClass.contains("shell-status-tone-muted"))
 
@@ -50,7 +48,7 @@ class ShellPanelSupportTest {
     }
 
     @Test
-    fun `applyTone is idempotent when the tone is already applied`() {
+    fun `applyTone is idempotent when the tone is already applied`() = E2eFx.onFx {
         val label = ShellPanelSupport.statusPill("Status")
         ShellPanelSupport.applyTone(label, "shell-status-tone-error")
         ShellPanelSupport.applyTone(label, "shell-status-tone-error")

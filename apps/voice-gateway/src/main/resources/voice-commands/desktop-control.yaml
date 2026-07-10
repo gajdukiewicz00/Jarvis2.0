@@ -189,8 +189,6 @@ commands:
       text:
         ru: "Открываю YouTube, сэр."
         en: "Opening YouTube, sir."
-    response:
-      key: loading_sir
 
   - id: rule_volume_up
     matchers:
@@ -409,6 +407,31 @@ commands:
         ru: "Сворачиваю все окна, сэр."
         en: "Minimizing all windows, sir."
 
+  # Bring windows back after a minimize/show-desktop. "открой все окна" must resolve here
+  # (RESTORE_WINDOWS) and NOT be stolen by the generic OPEN_APP regex, which negative-lookahead
+  # excludes "все окна". Higher priority than the generic rule so the EXACT phrases always win.
+  - id: rule_restore_windows
+    priority: 20
+    matchers:
+      - type: exact
+        values:
+          - "открой все окна"
+          - "верни все окна"
+          - "разверни все окна"
+          - "покажи все окна"
+          - "restore windows"
+      - type: contains
+        values:
+          - "верни окна"
+          - "разверни окна"
+    action:
+      target: pc_control
+      name: RESTORE_WINDOWS
+    response:
+      text:
+        ru: "Возвращаю окна, сэр."
+        en: "Restoring windows, sir."
+
   - id: rule_sleep_mode
     matchers:
       - type: exact
@@ -440,3 +463,26 @@ commands:
       name: monitor_off
     response:
       key: rest_mode
+
+  # Generic "открой/запусти <app>" fallback: when no specific open-rule matched, capture the app
+  # name and let the PC-control handler resolve it (dynamic "Открываю <app>, сэр."). Scoring is
+  # score = typeScore + value.length + priority*100; REGEX(2000) outscores CONTAINS(1000), so this
+  # rule uses a strongly NEGATIVE priority (-50 → -5000) to guarantee ANY specific rule (priority>=0)
+  # wins, while it still matches an otherwise-unmatched app-open. Negative lookahead excludes the
+  # window-restore phrase ("все окна") and the clarify pronouns ("эту/это/его/её/ее/их") so those
+  # rules are never stolen. Capture group 1 is the app name → params.app.
+  - id: rule_open_app_generic
+    priority: -50
+    matchers:
+      - type: regex
+        values:
+          - "^(?:открой|запусти)\\s+(?!все\\s+окна$|эту$|это$|его$|её$|ее$|их$)([а-яёa-z0-9][а-яёa-z0-9 ._-]{1,40})$"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: "{1}"
+    response:
+      text:
+        ru: "Открываю, сэр."
+        en: "Opening, sir."

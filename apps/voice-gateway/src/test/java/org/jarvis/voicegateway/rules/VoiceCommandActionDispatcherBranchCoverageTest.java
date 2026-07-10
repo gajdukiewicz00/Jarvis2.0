@@ -35,11 +35,13 @@ class VoiceCommandActionDispatcherBranchCoverageTest {
     private PlannerActionGateway plannerActionGateway;
     @Mock
     private org.jarvis.voicegateway.client.FinanceActionGateway financeActionGateway;
+    @Mock
+    private org.jarvis.voicegateway.client.VisionActionGateway visionActionGateway;
 
     @Test
     void dispatchThrowsWhenMatchedCommandHasNoAction() {
         VoiceCommandActionDispatcher dispatcher =
-                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway);
+                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway, visionActionGateway);
 
         VoiceCommandCatalog.Match match = matchFor(null);
 
@@ -51,7 +53,7 @@ class VoiceCommandActionDispatcherBranchCoverageTest {
     @Test
     void smartHomeDispatchThrowsWhenDeviceIdIsNull() {
         VoiceCommandActionDispatcher dispatcher =
-                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway);
+                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway, visionActionGateway);
 
         VoiceCommandCatalog.Match match = matchFor(new VoiceCommandCatalog.Action(
                 VoiceCommandCatalog.ActionTarget.SMART_HOME, "TURN_ON", null, null, Map.of()));
@@ -62,7 +64,7 @@ class VoiceCommandActionDispatcherBranchCoverageTest {
     @Test
     void smartHomeDispatchThrowsWhenDeviceIdIsBlank() {
         VoiceCommandActionDispatcher dispatcher =
-                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway);
+                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway, visionActionGateway);
 
         VoiceCommandCatalog.Match match = matchFor(new VoiceCommandCatalog.Action(
                 VoiceCommandCatalog.ActionTarget.SMART_HOME, "TURN_ON", "   ", null, Map.of()));
@@ -73,7 +75,7 @@ class VoiceCommandActionDispatcherBranchCoverageTest {
     @Test
     void smartHomeDispatchUsesProvidedUserIdWhenNonBlank() {
         VoiceCommandActionDispatcher dispatcher =
-                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway);
+                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway, visionActionGateway);
 
         VoiceCommandActionDispatcher.DispatchResult result = dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
@@ -89,7 +91,7 @@ class VoiceCommandActionDispatcherBranchCoverageTest {
     @Test
     void smartHomeDispatchFallsBackToLocalUserWhenUserIdBlank() {
         VoiceCommandActionDispatcher dispatcher =
-                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway);
+                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway, visionActionGateway);
 
         dispatcher.dispatch(
                 matchFor(new VoiceCommandCatalog.Action(
@@ -103,7 +105,7 @@ class VoiceCommandActionDispatcherBranchCoverageTest {
     @Test
     void smartHomeDispatchMarksFailureWhenGatewayThrows() {
         VoiceCommandActionDispatcher dispatcher =
-                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway);
+                new VoiceCommandActionDispatcher(pcControlActionGateway, smartHomeActionGateway, plannerActionGateway, financeActionGateway, visionActionGateway);
         doThrow(new IllegalStateException("device offline"))
                 .when(smartHomeActionGateway).execute("local-user", "kitchen_light", "TURN_ON", null);
 

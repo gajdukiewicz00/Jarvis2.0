@@ -19,6 +19,37 @@ class SystemControlService {
         val output: String
     )
 
+    /**
+     * Minimal abstraction over [SystemAppIndex] so tests can inject a deterministic, offline fake
+     * that returns canned [AppResolution]s (the concrete index is a final class that scans the real
+     * filesystem). Production wraps a real index in [IndexAppOpener].
+     */
+    internal interface AppOpener {
+        fun resolve(query: String): AppResolution
+        fun launchCommand(entry: AppEntry): List<String>
+    }
+
+    private class IndexAppOpener(private val index: SystemAppIndex) : AppOpener {
+        override fun resolve(query: String): AppResolution = index.resolve(query)
+        override fun launchCommand(entry: AppEntry): List<String> = index.launchCommand(entry)
+    }
+
+    /** Test seam: when non-null, the openApp index branch uses this instead of the shared index. */
+    internal var appOpenerOverride: AppOpener? = null
+
+    /**
+     * Test seam: when non-null, replaces real OS process execution in [executeProcess]. Receives the
+     * argv and returns `(exitCode, mergedOutput)` so tests can capture commands and drive branches
+     * without spawning anything.
+     */
+    internal var commandExecutorOverride: ((List<String>) -> Pair<Int, String>)? = null
+
+    /**
+     * Test seam: when non-null, replaces the raw `ProcessBuilder.start()` in [startFirstAvailable].
+     * Return normally to signal a successful launch; throw to signal "try the next candidate".
+     */
+    internal var appLauncherOverride: ((List<String>) -> Unit)? = null
+
     // ==================== Volume Control ====================
 
     /**
@@ -275,7 +306,10 @@ class SystemControlService {
             "vlc" -> listOf(listOf("vlc"))
             "notepad", "kate", "text-editor" -> listOf(listOf("kate"), listOf("gedit"))
             "settings" -> listOf(listOf("gnome-control-center"), listOf("systemsettings"), listOf("kcmshell6", "systemsettings"))
-            else -> listOf(listOf(appName))
+            // Unknown name: resolve it against the fuzzy system app index instead of blindly
+            // exec-ing the raw spoken text. The index branch may return a coded clarify/not-found
+            // failure that the WS ack propagates to the voice layer (see openViaIndex).
+            else -> return openViaIndex(appName)
         }
 
         return try {
@@ -287,6 +321,71 @@ class SystemControlService {
             Result.failure(e)
         }
     }
+
+    /**
+     * Resolve an unknown [appName] via the shared [SystemAppIndex] and act on the outcome:
+     *  - [AppResolution.Launch]   → launch the resolved app (index argv, then the literal name).
+     *  - [AppResolution.Clarify]  → fail with `APP_CLARIFY|<best candidate name>` (no launch).
+     *  - [AppResolution.NotFound] → fail with `APP_NOT_FOUND|<query>[|<suggestion names>]`.
+     *
+     * The coded failure messages are carried verbatim as the [Result.failure] message so the PC
+     * control ack can forward them to the orchestrator. When the index could not be built (a real
+     * filesystem scan failure), degrade to the previous literal-exec behaviour rather than crash.
+     */
+    private fun openViaIndex(appName: String): Result<Unit> {
+        val opener = resolveAppOpener() ?: return launchLiteral(appName)
+        return when (val resolution = opener.resolve(appName)) {
+            is AppResolution.Launch -> launchResolved(appName, opener, resolution)
+            is AppResolution.Clarify -> {
+                val candidate = resolution.candidates.firstOrNull()?.name ?: appName
+                logger.info("🤔 openApp '{}' is ambiguous; asking to clarify → {}", appName, candidate)
+                Result.failure(AppOpenException("APP_CLARIFY|$candidate"))
+            }
+            is AppResolution.NotFound -> {
+                val suffix = if (resolution.suggestions.isEmpty()) {
+                    ""
+                } else {
+                    "|" + resolution.suggestions.joinToString(",") { it.name }
+                }
+                logger.info("🚫 openApp '{}' not found{}", appName, suffix)
+                Result.failure(AppOpenException("APP_NOT_FOUND|$appName$suffix"))
+            }
+        }
+    }
+
+    private fun launchResolved(
+        appName: String,
+        opener: AppOpener,
+        resolution: AppResolution.Launch,
+    ): Result<Unit> {
+        return try {
+            val argv = opener.launchCommand(resolution.entry)
+            startFirstAvailable(listOf(argv, listOf(appName)))
+            logger.info(
+                "🚀 Opened app: {} → resolved '{}' (confidence={})",
+                appName, resolution.entry.name, resolution.confidence,
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("Could not launch resolved app {} ({}): {}", appName, resolution.entry.name, e.message)
+            Result.failure(AppOpenException("APP_LAUNCH_FAILED|${e.message}"))
+        }
+    }
+
+    /** Previous behaviour: exec the literal spoken name. Used only when the index is unavailable. */
+    private fun launchLiteral(appName: String): Result<Unit> {
+        return try {
+            startFirstAvailable(listOf(listOf(appName)))
+            logger.info("🚀 Opened app (literal fallback): {}", appName)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("Could not open app $appName: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /** Test seam first, then the lazily-built shared index; null means "index unavailable". */
+    private fun resolveAppOpener(): AppOpener? = appOpenerOverride ?: sharedAppOpener()
 
     fun openUrl(url: String): Result<Unit> {
         // Voice search URLs carry a raw query (spaces/Cyrillic) which URI(String) rejects — encode
@@ -366,6 +465,58 @@ class SystemControlService {
         } catch (e: Exception) {
             logger.error("Could not perform window action: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Minimize every window / show the desktop (GNOME on X11). Prefers `wmctrl -k on`; if wmctrl is
+     * missing or fails, falls back to the Super+D hotkey.
+     */
+    fun showDesktop(): Result<Unit> {
+        return try {
+            executeCheckedCommand("wmctrl", "-k", "on")
+            logger.info("🪟 Show desktop (minimized all windows) via wmctrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.warn("wmctrl show-desktop failed, falling back to super+d: {}", e.message)
+            executeHotkey("super+d")
+        }
+    }
+
+    /**
+     * Undo "show desktop" and bring windows back (`wmctrl -k off`). If wmctrl is missing/unsupported
+     * the operation cannot be performed, so this reports [Result.failure] with code `WM_UNSUPPORTED`.
+     */
+    fun restoreWindows(): Result<Unit> {
+        return try {
+            executeCheckedCommand("wmctrl", "-k", "off")
+            logger.info("🪟 Restored windows (un-show-desktop) via wmctrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("Could not restore windows (wmctrl unavailable/failed): {}", e.message)
+            Result.failure(IllegalStateException("WM_UNSUPPORTED", e))
+        }
+    }
+
+    /**
+     * Maximize the active window. Prefers `wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz`;
+     * if wmctrl fails, falls back to `xdotool getactivewindow windowmaximize`.
+     */
+    fun maximizeActiveWindow(): Result<Unit> {
+        return try {
+            executeCheckedCommand("wmctrl", "-r", ":ACTIVE:", "-b", "add,maximized_vert,maximized_horz")
+            logger.info("🪟 Maximized active window via wmctrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.warn("wmctrl maximize failed, falling back to xdotool: {}", e.message)
+            try {
+                executeCheckedCommand("xdotool", "getactivewindow", "windowmaximize")
+                logger.info("🪟 Maximized active window via xdotool")
+                Result.success(Unit)
+            } catch (fallback: Exception) {
+                logger.error("Could not maximize active window: {}", fallback.message)
+                Result.failure(fallback)
+            }
         }
     }
 
@@ -583,6 +734,10 @@ class SystemControlService {
     }
 
     private fun executeProcess(vararg command: String): CommandResult {
+        commandExecutorOverride?.let { override ->
+            val (exitCode, output) = override(command.toList())
+            return CommandResult(command.toList(), exitCode, output)
+        }
         logger.info("▶️ Running system command: {}", command.joinToString(" "))
         val process = ProcessBuilder(*command)
             .redirectErrorStream(true)
@@ -626,12 +781,17 @@ class SystemControlService {
     }
 
     private fun startFirstAvailable(commands: List<List<String>>) {
+        val launcher = appLauncherOverride
         var lastError: Exception? = null
         for (command in commands) {
             try {
-                ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .start()
+                if (launcher != null) {
+                    launcher(command)
+                } else {
+                    ProcessBuilder(command)
+                        .redirectErrorStream(true)
+                        .start()
+                }
                 return
             } catch (e: Exception) {
                 lastError = e
@@ -678,7 +838,30 @@ class SystemControlService {
 
     companion object {
         private val logger = LoggerFactory.getLogger(SystemControlService::class.java)
-        
+
+        // The system app index is expensive to build (it scans .desktop dirs + PATH) and immutable,
+        // so it is built once and shared across every SystemControlService instance. A build failure
+        // (e.g. unreadable dirs) degrades to the literal-exec fallback and is not retried.
+        private val appOpenerLock = Any()
+        @Volatile
+        private var cachedAppOpener: AppOpener? = null
+        @Volatile
+        private var appOpenerBuildFailed = false
+
+        private fun sharedAppOpener(): AppOpener? {
+            cachedAppOpener?.let { return it }
+            if (appOpenerBuildFailed) return null
+            return synchronized(appOpenerLock) {
+                cachedAppOpener ?: try {
+                    IndexAppOpener(SystemAppIndex()).also { cachedAppOpener = it }
+                } catch (e: Throwable) {
+                    logger.warn("System app index build failed; openApp falls back to literal exec: {}", e.message)
+                    appOpenerBuildFailed = true
+                    null
+                }
+            }
+        }
+
         // Tracks whether WE paused a genuinely-playing player, so the paired
         // resume only restarts media that was actually playing before the wake
         // word. Without this guard, resume (playerctl play) force-starts a player
@@ -751,3 +934,9 @@ class SystemControlService {
         }
     }
 }
+
+/**
+ * Carries a coded openApp outcome (e.g. `APP_CLARIFY|VS Code`, `APP_NOT_FOUND|вексель|VS Code,Excel`)
+ * verbatim as the [Result.failure] message so the PC control ack forwards it to the voice layer.
+ */
+class AppOpenException(message: String) : Exception(message)

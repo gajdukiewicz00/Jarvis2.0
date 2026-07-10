@@ -54,6 +54,8 @@ class PcControlWebSocketClient(
                     add("MEDIA_CONTROL")
                     add("APP_CONTROL")
                     add("WINDOW_CONTROL")
+                    add("WINDOW_RESTORE")
+                    add("WINDOW_MAXIMIZE")
                     add("HOTKEY")
                     add("NOTIFICATION")
                     add("SCENARIO")
@@ -124,6 +126,10 @@ class PcControlWebSocketClient(
 
     private var webSocket: WebSocket? = null
     private var isConnected = false
+    // Set by disconnect() so an already-sleeping reconnect / endpoint-switch thread does NOT quietly
+    // re-open the socket (and re-register the AppConfig listener) after the caller asked to stop.
+    // A subsequent explicit connect() clears it.
+    @Volatile private var closedByClient = false
     private var reconnectAttempts = 0
     private val maxReconnectAttempts = 10
     private var authRefreshAttempts = 0
@@ -138,6 +144,7 @@ class PcControlWebSocketClient(
             return
         }
 
+        closedByClient = false
         ensureConfigListener()
         resolvedUrl = urlProvider()
         
@@ -166,6 +173,7 @@ class PcControlWebSocketClient(
     
     fun disconnect() {
         logger.info("Disconnecting from PC Control WebSocket")
+        closedByClient = true
         webSocket?.close(1000, "Client disconnecting")
         webSocket = null
         isConnected = false
@@ -281,10 +289,15 @@ class PcControlWebSocketClient(
                     "MINIMIZE" -> systemControl.windowAction("MINIMIZE")
                     "MAXIMIZE" -> systemControl.windowAction("MAXIMIZE")
                     "FULLSCREEN" -> systemControl.windowAction("FULLSCREEN")
-                    // Minimize-all / show-desktop: same gesture as the "Super+D (Desktop)"
-                    // UI button — there is no OS "minimize all" primitive, so use the hotkey.
+                    // Minimize-all / show-desktop: prefer wmctrl -k on (with a super+d fallback
+                    // baked into showDesktop) over the raw hotkey for reliability.
                     "MINIMIZE_ALL_WINDOWS", "MINIMIZE_ALL", "SHOW_DESKTOP" ->
-                        systemControl.executeHotkey("super+d")
+                        systemControl.showDesktop()
+                    // Restore/un-show-desktop and maximize-all: the inverse gestures.
+                    "RESTORE_WINDOWS", "RESTORE_ALL_WINDOWS", "SHOW_ALL_WINDOWS" ->
+                        systemControl.restoreWindows()
+                    "MAXIMIZE_ALL", "MAXIMIZE_ACTIVE_WINDOW", "MAXIMIZE_WINDOW" ->
+                        systemControl.maximizeActiveWindow()
                     "LOCK_SCREEN" -> systemControl.lockScreen()
                     
                     // Notifications
@@ -448,7 +461,7 @@ class PcControlWebSocketClient(
                 reconnectAttempts = 0
                 Thread {
                     Thread.sleep(300L)
-                    if (!isConnected) {
+                    if (!isConnected && !closedByClient) {
                         connect()
                     }
                 }.apply {
@@ -510,7 +523,7 @@ class PcControlWebSocketClient(
         
         Thread {
             Thread.sleep(delay * 1000L)
-            if (!isConnected) {
+            if (!isConnected && !closedByClient) {
                 connect()
             }
         }.apply {
@@ -540,7 +553,9 @@ class PcControlWebSocketClient(
 
         Thread {
             Thread.sleep(200L)
-            connect()
+            if (!closedByClient) {
+                connect()
+            }
         }.apply {
             isDaemon = true
             name = "jarvis-desktop-pc-control-endpoint-switch"

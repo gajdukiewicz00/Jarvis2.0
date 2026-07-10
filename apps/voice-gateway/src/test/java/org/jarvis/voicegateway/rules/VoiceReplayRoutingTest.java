@@ -84,11 +84,77 @@ class VoiceReplayRoutingTest {
 
     // ---- Regressions from latest test ----
     @Test void youtubeAnyVideo_lyubayaVideo() {
-        // "открой любая видео на ютубе" → alias любая→любое → YOUTUBE clarify, NOT PC-control generic.
-        assertEquals("YOUTUBE_CLARIFY", actionOf("открой любая видео на ютубе"));
+        // "открой любая видео на ютубе" → alias любая→любое → YouTube TRENDING, NOT PC-control generic.
+        var m = service.match("открой любая видео на ютубе", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_URL", m.get().actionName());
+        assertTrue(String.valueOf(m.get().parameters().get("url")).contains("youtube.com/feed/trending"));
     }
     @Test void youtubeAnyVideo_lyuboeVideo() {
-        assertEquals("YOUTUBE_CLARIFY", actionOf("открой любое видео на ютубе"));
+        var m = service.match("открой любое видео на ютубе", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_URL", m.get().actionName());
+        assertTrue(String.valueOf(m.get().parameters().get("url")).contains("youtube.com/feed/trending"));
+    }
+    @Test void youtubeFirstVideo_noQueryClarifies() {
+        assertEquals("YOUTUBE_CLARIFY", actionOf("первое видео на ютубе"));
+    }
+    @Test void youtubeTopic_videoProKoshek() {
+        var m = service.match("включи видео про кошек", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_URL", m.get().actionName());
+        assertTrue(String.valueOf(m.get().parameters().get("url")).contains("youtube.com/results"));
+        assertTrue(String.valueOf(m.get().parameters().get("url")).contains("кошек"));
+    }
+
+    // ---- Generic app-open (OPEN_APP with captured app name) ----
+    @Test void openAppGeneric_kalkulyator() {
+        var m = service.match("открой калькулятор", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_APP", m.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, m.get().action().target());
+        assertEquals("калькулятор", m.get().parameters().get("app"));
+    }
+    @Test void openAppGeneric_veksel() {
+        var m = service.match("открой вексель", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_APP", m.get().actionName());
+        assertEquals("вексель", m.get().parameters().get("app"));
+    }
+    @Test void openAppGeneric_skott() {
+        var m = service.match("открой скотт", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_APP", m.get().actionName());
+        assertEquals("скотт", m.get().parameters().get("app"));
+    }
+    @Test void openAppGeneric_doesNotStealVsCodeAlias() {
+        // "открой вес скотт" → normalizer → "открой vs code" → specific rule wins with app=vscode.
+        var m = service.match("открой вес скотт", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_APP", m.get().actionName());
+        assertEquals("vscode", m.get().parameters().get("app"));
+    }
+
+    // ---- Window restore vs minimize (generic must not steal either) ----
+    @Test void restoreWindows_otkroyVseOkna() { assertEquals("RESTORE_WINDOWS", actionOf("открой все окна")); }
+    @Test void restoreWindows_razverniVseOkna() { assertEquals("RESTORE_WINDOWS", actionOf("разверни все окна")); }
+    @Test void minimizeAllWindows_sttVariant() {
+        // "с кровь все окна" → normalizer → "сверни все окна" → MINIMIZE_ALL_WINDOWS.
+        assertEquals("MINIMIZE_ALL_WINDOWS", actionOf("с кровь все окна"));
+    }
+
+    // ---- Vision screen analysis carries the confirm contract params ----
+    @Test void visionScreen_carriesConfirmParams() {
+        var m = service.match("что ты видишь на экране", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("VISION_SCREEN_ANALYZE_CONFIRM", m.get().actionName());
+        assertEquals("VISION_SCREEN_ANALYZE", m.get().parameters().get("confirmAction"));
+        assertEquals("vision", m.get().parameters().get("confirmTarget"));
+    }
+
+    // ---- Garbage STT stays unmatched (handler low-conf guard) ----
+    @Test void garbageVargMogutHasNoRule() {
+        assertTrue(service.match("варг могут", "ru-RU").isEmpty());
     }
     @Test void visionScreen_chtoVidishNaEkrane() {
         assertEquals("VISION_SCREEN_ANALYZE_CONFIRM", actionOf("что ты видишь на экране"));

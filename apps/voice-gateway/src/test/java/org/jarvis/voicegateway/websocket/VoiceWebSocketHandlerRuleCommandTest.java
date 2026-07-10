@@ -81,7 +81,8 @@ class VoiceWebSocketHandlerRuleCommandTest {
                 intentService,
                 localIntentExecutionService,
                 orchestratorClient,
-                new ObjectMapper());
+                new ObjectMapper(),
+                new org.jarvis.voicegateway.confirmation.PendingConfirmationStore());
 
         lenient().when(sttService.createSession(any())).thenReturn(recognitionSession);
         when(ttsService.describeRuntime()).thenReturn(Map.of(
@@ -121,7 +122,10 @@ class VoiceWebSocketHandlerRuleCommandTest {
                         Map.of("app", "browser"),
                         null));
         when(wavResponseRegistry.lookupText("loading_sir", "ru")).thenReturn("Загружаю, сэр.");
-        when(voiceOutputService.resolveRuleResponseAudio("loading_sir", "Загружаю, сэр.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
+        // OPEN_APP success now speaks a truthful "Открываю <App>, сэр." (dynamicSuccessMessage),
+        // overriding the static loading phrase.
+        when(voiceOutputService.resolveRuleResponseAudio(
+                "loading_sir", "Открываю Browser, сэр.", "ru", "ru-RU", "ru-RU-Wavenet-A"))
                 .thenReturn(new byte[]{1, 2, 3});
 
         invokeHandleCommand("corr-1", "открой браузер");
@@ -139,7 +143,7 @@ class VoiceWebSocketHandlerRuleCommandTest {
         assertTrue(payloads.stream().anyMatch(payload ->
                 payload.contains("\"action\":\"OPEN_APP\"")
                         && payload.contains("\"handled\":true")
-                        && payload.contains("Загружаю, сэр.")));
+                        && payload.contains("Открываю Browser, сэр.")));
         verify(session).sendMessage(any(BinaryMessage.class));
     }
 
@@ -176,7 +180,8 @@ class VoiceWebSocketHandlerRuleCommandTest {
                 eq("corr-2"),
                 eq("что нового"),
                 eq("user-1"));
-        verify(voiceCommandActionDispatcher, never()).dispatch(any(), any(), any());
+        verify(voiceCommandActionDispatcher, never())
+                .dispatch(any(VoiceCommandCatalog.Match.class), any(), any());
     }
 
     @Test

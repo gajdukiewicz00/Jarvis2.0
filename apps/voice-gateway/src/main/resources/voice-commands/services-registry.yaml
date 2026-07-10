@@ -252,6 +252,10 @@ commands:
     action:
       target: internal
       name: VISION_SCREEN_ANALYZE_CONFIRM
+      params:
+        confirmAction: VISION_SCREEN_ANALYZE
+        confirmTarget: vision
+        question: "Что на экране?"
     response:
       text:
         ru: "Сэр, могу сделать скриншот и проанализировать экран. Подтвердить?"

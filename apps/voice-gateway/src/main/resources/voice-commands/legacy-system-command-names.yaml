@@ -104,32 +104,9 @@ commands:
     response:
       key: affirmative
 
-  - id: rule_legacy_system_582
-    description: "Migrated legacy system command / Сделай громче"
-    priority: -5
-    matchers:
-      - type: exact
-        values:
-          - "сделай громче"
-    action:
-      target: pc_control
-      name: VOLUME_UP
-      params:
-        delta: 10
-    response:
-      key: yes_sir
-
-  - id: rule_legacy_system_583
-    description: "Migrated legacy system command / сделай тише"
-    priority: -5
-    matchers:
-      - type: exact
-        values:
-          - "сделай тише"
-    action:
-      target: pc_control
-      name: VOLUME_DOWN
-      params:
-        delta: 10
-    response:
-      key: yes_sir
+  # rule_legacy_system_582 ("сделай громче") removed: it shadowed rule_volume_up
+  # (desktop-control.yaml) as an EXACT match with a generic "yes_sir" response. The
+  # canonical VOLUME_UP rule speaks "Делаю громче, сэр." — keep that as the single owner.
+  #
+  # rule_legacy_system_583 ("сделай тише") removed for the same reason: rule_volume_down
+  # (desktop-control.yaml) owns it and speaks "Уменьшаю громкость, сэр.".

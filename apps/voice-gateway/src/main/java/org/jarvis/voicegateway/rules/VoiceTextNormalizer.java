@@ -42,6 +42,9 @@ final class VoiceTextNormalizer {
         aliases.put("вс код", "vs code");
         aliases.put("вskod", "vs code");
         aliases.put("visual studio code", "vs code");
+        // --- YouTube "any video" phrasing STT ---
+        aliases.put("любая видео", "любое видео");
+        aliases.put("любой видео", "любое видео");
         // --- Telegram doubled-letter STT ---
         aliases.put("telegramm", "telegram");
         aliases.put("телеграмму", "телеграм");

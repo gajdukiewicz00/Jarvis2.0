@@ -13,18 +13,25 @@ import java.util.concurrent.TimeUnit
 /**
  * Voice session state machine that coordinates the entire voice command flow.
  *
- * States: IDLE, LISTENING_WAKE_WORD (ready), LISTENING (recording), PROCESSING,
- * TTS_PLAYBACK (speaking), COOLDOWN, ERROR.
+ * Concrete states (the [VoiceState] enum) map to the conceptual lifecycle states like so:
+ *   LISTENING_WAKE_WORD = WAKE_LISTENING (armed, waiting for "Jarvis")
+ *   LISTENING + !recordingActive = WAKE_DETECTED (wake fired, recording not yet started)
+ *   LISTENING + recordingActive  = RECORDING_COMMAND (mic streaming the command)
+ *   PROCESSING = PROCESSING_COMMAND (waiting for server response/action)
+ *   TTS_PLAYBACK = SPEAKING (playing the TTS answer)
+ *   COOLDOWN = short guard pause after speaking, then back to WAKE_LISTENING
+ *   ERROR = CANCELLED/ERROR (never dwelt in — recovers almost immediately)
  *
  * Robustness guarantees (so always-listening never leaks after many commands):
- * - Every terminal path funnels through [recoverToWakeListening], which cancels all timers,
- *   stops recording, clears correlationId, resumes media, and re-arms the wake word.
- * - Every active state has a bound: LISTENING (listen timeout), PROCESSING (processing
- *   timeout), TTS_PLAYBACK (speaking timeout), plus a WATCHDOG on an independent thread that
- *   force-recovers any non-idle state that overstays [VoiceConfig.maxActiveStateMs].
- * - Every transition is logged with full diagnostics.
+ * - Every terminal path funnels through the single idempotent [completeCommandSession], which
+ *   cancels all timers, stops recording, clears the correlationId + flags, resumes media, and
+ *   re-arms the wake word. A second completion for the same correlationId is a safe no-op.
+ * - Every active state has a BACKSTOP bound enforced by an independent WATCHDOG thread that
+ *   force-recovers a state that overstays its safe dwell time ([maxDwellMsFor]):
+ *     WAKE_DETECTED 3s, RECORDING 15s, PROCESSING 20s, SPEAKING 20s, ERROR 2s.
+ * - Every transition is logged with a full [debugSnapshot].
  *
- * Thread-safe: all state transitions are atomic.
+ * Thread-safe: state transitions are atomic and recovery is synchronized on the instance.
  */
 class VoiceSession(
     private val onStateChange: (VoiceState, String?) -> Unit,  // (state, correlationId)
@@ -48,6 +55,14 @@ class VoiceSession(
     @Volatile private var stateEnteredAtMs = System.currentTimeMillis()
     @Volatile private var alwaysListeningEnabled = false
 
+    // --- Lifecycle bookkeeping for the debug snapshot + idempotent completion ---
+    @Volatile private var recordingActive = false          // mic actually streaming a command
+    @Volatile private var startedCorrelationId: String? = null
+    @Volatile private var endedCorrelationId: String? = null
+    @Volatile private var lastCompletedCorrelationId: String? = null  // idempotency key
+    @Volatile private var lastCommandCompletedAt: Long = 0L
+    @Volatile private var lastRecoveryReason: String = "none"
+
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "VoiceSession-Scheduler").apply { isDaemon = true }
     }
@@ -66,14 +81,22 @@ class VoiceSession(
 
     val state: VoiceState get() = currentState.get()
     val currentCorrelationId: String? get() = correlationId
+    val isRecordingActive: Boolean get() = recordingActive
+    val alwaysListeningActive: Boolean get() = alwaysListeningEnabled
 
-    /** Active (non-idle) states have a maximum dwell time; used by the watchdog. */
+    /**
+     * Exact per-state dwell bound (the safe upper limit before the watchdog force-recovers).
+     * WAKE_DETECTED (LISTENING before recording starts) is bounded tighter than the full
+     * RECORDING window, so a wake that never begins capturing is caught within 3s.
+     */
     private fun maxDwellMsFor(s: VoiceState): Long = when (s) {
-        VoiceState.LISTENING -> VoiceConfig.listenTimeoutMs + 5000
-        VoiceState.PROCESSING -> VoiceConfig.processingTimeoutMs + 5000
-        VoiceState.TTS_PLAYBACK -> VoiceConfig.maxSpeakingMs + 5000
-        VoiceState.COOLDOWN -> VoiceConfig.cooldownMs + 5000
-        else -> Long.MAX_VALUE  // IDLE / LISTENING_WAKE_WORD / ERROR: no bound
+        VoiceState.LISTENING ->
+            if (recordingActive) VoiceConfig.recordingMaxMs else VoiceConfig.wakeDetectedTimeoutMs
+        VoiceState.PROCESSING -> VoiceConfig.processingMaxMs
+        VoiceState.TTS_PLAYBACK -> VoiceConfig.maxSpeakingMs
+        VoiceState.COOLDOWN -> VoiceConfig.cooldownMs + 3000
+        VoiceState.ERROR -> VoiceConfig.errorMaxMs
+        else -> Long.MAX_VALUE  // IDLE / LISTENING_WAKE_WORD: no bound
     }
 
     private fun startWatchdog() {
@@ -85,10 +108,10 @@ class VoiceSession(
                 val bound = minOf(maxDwellMsFor(s), VoiceConfig.maxActiveStateMs)
                 if (s != VoiceState.IDLE && s != VoiceState.LISTENING_WAKE_WORD && dwell > bound) {
                     logger.warn(
-                        "🐶 voice.session.watchdog_recovered: state={} stuck for {}ms (> {}ms), correlationId={}, diag=[{}]",
-                        s, dwell, bound, correlationId, safeDiagnostics()
+                        "🐶 voice.session.watchdog_recovered: state={} recording={} stuck for {}ms (> {}ms) {}",
+                        s, recordingActive, dwell, bound, debugSnapshot()
                     )
-                    recoverToWakeListening("watchdog_recovered:$s")
+                    completeCommandSession(correlationId, "watchdog_recovered:$s")
                 }
             } catch (e: Exception) {
                 logger.debug("Watchdog tick error: {}", e.message)
@@ -105,10 +128,26 @@ class VoiceSession(
         val prev = currentState.getAndSet(newState)
         stateEnteredAtMs = System.currentTimeMillis()
         logger.info(
-            "🔀 voice.session.transition {} -> {} | reason='{}' correlationId={} alwaysListening={} mediaPaused={} transportReady={} diag=[{}]",
-            prev, newState, reason, corr, alwaysListeningEnabled, mediaPausedBySession, safeTransportReady(), safeDiagnostics()
+            "🔀 voice.session.transition {} -> {} | reason='{}' {}",
+            prev, newState, reason, debugSnapshot()
         )
         onStateChange(newState, corr)
+    }
+
+    /** Begin mic capture for the current command and arm the RECORDING timeout. */
+    private fun beginRecording() {
+        recordingActive = true
+        startedCorrelationId = correlationId
+        try { onStartRecording() } catch (e: Exception) { logger.debug("startRecording: {}", e.message) }
+        startListenTimeout()
+    }
+
+    /** Stop mic capture if active. Idempotent — safe to call from any recovery path. */
+    private fun endRecording() {
+        if (recordingActive) {
+            recordingActive = false
+            try { onStopRecording() } catch (e: Exception) { logger.debug("stopRecording: {}", e.message) }
+        }
     }
 
     /**
@@ -137,6 +176,7 @@ class VoiceSession(
         // Transition to LISTENING (atomic guard against a concurrent wake)
         if (currentState.compareAndSet(current, VoiceState.LISTENING)) {
             correlationId = newCorrelationId
+            recordingActive = false  // WAKE_DETECTED until recording actually starts
             stateEnteredAtMs = System.currentTimeMillis()
             startWatchdog()
             onDisableWakeWord()
@@ -151,19 +191,17 @@ class VoiceSession(
             }
 
             logger.info(
-                "🔀 voice.session.transition {} -> LISTENING | reason='wake/manual' correlationId={} manual={} diag=[{}]",
-                current, newCorrelationId, isManualTalk, safeDiagnostics()
+                "🔀 voice.session.transition {} -> LISTENING | reason='wake/manual' manual={} {}",
+                current, isManualTalk, debugSnapshot()
             )
             onStateChange(VoiceState.LISTENING, newCorrelationId)
 
             if (isManualTalk) {
-                onStartRecording()
-                startListenTimeout()
+                beginRecording()
             } else {
                 recordingStartFuture = scheduler.schedule({
                     if (currentState.get() == VoiceState.LISTENING) {
-                        onStartRecording()
-                        startListenTimeout()
+                        beginRecording()
                     }
                 }, VoiceConfig.wakeWordDelayMs, TimeUnit.MILLISECONDS)
             }
@@ -201,16 +239,16 @@ class VoiceSession(
         if (transcript.isBlank() || shouldIgnoreAsNoise(transcript)) {
             logger.info("🔇 Ignoring transcript as empty/noise: '{}', correlationId={}", transcript, correlationId)
             correlationId?.let { onSendEndOfSpeech(it) }
-            recoverToWakeListening("empty_or_noise_transcript")
+            completeCommandSession(correlationId, "empty_or_noise_transcript")
             return
         }
 
         // Transition to PROCESSING
         if (currentState.compareAndSet(VoiceState.LISTENING, VoiceState.PROCESSING)) {
             stateEnteredAtMs = System.currentTimeMillis()
-            onStopRecording()
+            endRecording()
             correlationId?.let { onSendEndOfSpeech(it) }
-            logger.info("🔀 voice.session.transition LISTENING -> PROCESSING | transcript='{}' correlationId={}", transcript, correlationId)
+            logger.info("🔀 voice.session.transition LISTENING -> PROCESSING | transcript='{}' {}", transcript, debugSnapshot())
             onStateChange(VoiceState.PROCESSING, correlationId)
             startProcessingTimeout()
         }
@@ -234,7 +272,7 @@ class VoiceSession(
         processingTimeoutFuture?.cancel(false)
 
         if (current == VoiceState.LISTENING) {
-            onStopRecording()
+            endRecording()
         }
 
         enterState(VoiceState.TTS_PLAYBACK, correlationId, "tts_audio_received")
@@ -244,7 +282,7 @@ class VoiceSession(
         ttsPlaybackTimeoutFuture = scheduler.schedule({
             if (currentState.get() == VoiceState.TTS_PLAYBACK) {
                 logger.warn("⏰ Speaking timeout after {} ms, recovering, correlationId={}", VoiceConfig.maxSpeakingMs, correlationId)
-                recoverToWakeListening("speaking_timeout")
+                completeCommandSession(correlationId, "speaking_timeout")
             }
         }, VoiceConfig.maxSpeakingMs, TimeUnit.MILLISECONDS)
     }
@@ -290,7 +328,7 @@ class VoiceSession(
     fun onTextOnlyResponse() {
         if (currentState.get() == VoiceState.PROCESSING) {
             logger.info("💬 Text-only response, recovering without waiting for playback, correlationId={}", correlationId)
-            recoverToWakeListening("text_only_response")
+            completeCommandSession(correlationId, "text_only_response")
         }
     }
 
@@ -299,14 +337,36 @@ class VoiceSession(
             logger.debug("Not in COOLDOWN state, skipping cooldown end")
             return
         }
-        recoverToWakeListening("cooldown_finished")
+        completeCommandSession(correlationId, "cooldown_finished")
     }
 
     /**
-     * THE single recovery chokepoint. Cancels every timer, stops recording, clears the
-     * correlationId + flags, resumes media, and re-arms the wake word — then transitions to
-     * LISTENING_WAKE_WORD so the next wake starts a fresh session. Idempotent-ish and safe to
-     * call from any thread (main scheduler, watchdog, or callbacks).
+     * THE single idempotent completion chokepoint. Every command path (success, timeout, noise,
+     * cancel, watchdog) ends here. Cancels every timer, stops recording, clears the correlationId
+     * + flags, resumes media, and re-arms the wake word — then transitions to LISTENING_WAKE_WORD
+     * so the next wake starts a fresh session.
+     *
+     * Idempotent: a second call for the same [correlationId] while already settled is ignored, so
+     * a `finally`-block completion plus an explicit completion never double-recover.
+     */
+    @Synchronized
+    fun completeCommandSession(correlationId: String?, reason: String) {
+        val settled = currentState.get() in setOf(VoiceState.LISTENING_WAKE_WORD, VoiceState.IDLE)
+        if (correlationId != null && correlationId == lastCompletedCorrelationId && settled) {
+            logger.debug("voice.session.complete ignored (already completed correlationId={}, reason={})", correlationId, reason)
+            return
+        }
+        lastCompletedCorrelationId = correlationId ?: lastCompletedCorrelationId
+        endedCorrelationId = correlationId ?: this.correlationId
+        lastCommandCompletedAt = System.currentTimeMillis()
+        lastRecoveryReason = reason
+        recoverToWakeListening(reason)
+    }
+
+    /**
+     * Low-level recovery mechanism. Cancels timers, stops recording, clears state, resumes media,
+     * and re-arms the wake word. Called only via [completeCommandSession] (idempotency gate) or
+     * [disableAlwaysListening]. Safe from any thread.
      */
     @Synchronized
     private fun recoverToWakeListening(reason: String) {
@@ -315,7 +375,6 @@ class VoiceSession(
             // Disabled — do not re-arm.
             return
         }
-        val endedCorrelationId = correlationId
 
         // Cancel every timer.
         recordingStartFuture?.cancel(false); recordingStartFuture = null
@@ -324,10 +383,8 @@ class VoiceSession(
         ttsPlaybackTimeoutFuture?.cancel(false); ttsPlaybackTimeoutFuture = null
         cooldownFuture?.cancel(false); cooldownFuture = null
 
-        // Stop recording if it was in progress.
-        if (prev == VoiceState.LISTENING) {
-            try { onStopRecording() } catch (e: Exception) { logger.debug("stopRecording during recovery: {}", e.message) }
-        }
+        // Stop recording (idempotent — closes the per-command mic line so it is never leaked).
+        endRecording()
 
         correlationId = null
 
@@ -337,17 +394,19 @@ class VoiceSession(
             mediaPausedBySession = false
         }
 
-        enterState(VoiceState.LISTENING_WAKE_WORD, null, "recover:$reason (from $prev, corr=$endedCorrelationId)")
+        enterState(VoiceState.LISTENING_WAKE_WORD, null, "recover:$reason (from $prev)")
         try { onEnableWakeWord() } catch (e: Exception) { logger.debug("enableWakeWord during recovery: {}", e.message) }
     }
 
     /**
-     * Cancel the current session due to error or timeout, surfacing the error, then recover.
+     * Cancel the current session due to error or timeout, surfacing the error, then recover
+     * through the idempotent completion chokepoint.
      */
     fun cancelSession(reason: String, error: Exception? = null) {
-        logger.warn("❌ Cancelling session: reason='{}', state={}, correlationId={}", reason, currentState.get(), correlationId, error)
+        val corr = correlationId
+        logger.warn("❌ Cancelling session: reason='{}', state={}, correlationId={}", reason, currentState.get(), corr, error)
         try { onSessionError(reason, error) } catch (e: Exception) { logger.debug("onSessionError: {}", e.message) }
-        recoverToWakeListening("cancel:$reason")
+        completeCommandSession(corr, "cancel:$reason")
     }
 
     /**
@@ -375,9 +434,7 @@ class VoiceSession(
         processingTimeoutFuture?.cancel(false); processingTimeoutFuture = null
         ttsPlaybackTimeoutFuture?.cancel(false); ttsPlaybackTimeoutFuture = null
         cooldownFuture?.cancel(false); cooldownFuture = null
-        if (currentState.get() == VoiceState.LISTENING) {
-            try { onStopRecording() } catch (e: Exception) { logger.debug("stopRecording on disable: {}", e.message) }
-        }
+        endRecording()
         correlationId = null
         if (mediaPausedBySession) {
             try { onResumeMedia() } catch (e: Exception) { logger.debug("resumeMedia on disable: {}", e.message) }
@@ -419,11 +476,12 @@ class VoiceSession(
         listenTimeoutFuture = scheduler.schedule({
             if (currentState.get() == VoiceState.LISTENING) {
                 logger.warn("⏰ Listen timeout after {} ms, correlationId={}", VoiceConfig.listenTimeoutMs, correlationId)
-                onStopRecording()
+                endRecording()
                 correlationId?.let { onSendEndOfSpeech(it) }
                 try { onSpeakTimeout() } catch (e: Exception) { logger.debug("Could not speak timeout message: {}", e.message) }
                 // Recover after a brief delay so the timeout phrase can play.
-                scheduler.schedule({ recoverToWakeListening("listen_timeout") }, 2000, TimeUnit.MILLISECONDS)
+                val corr = correlationId
+                scheduler.schedule({ completeCommandSession(corr, "listen_timeout") }, 2000, TimeUnit.MILLISECONDS)
             }
         }, VoiceConfig.listenTimeoutMs, TimeUnit.MILLISECONDS)
     }
@@ -432,10 +490,50 @@ class VoiceSession(
         processingTimeoutFuture = scheduler.schedule({
             if (currentState.get() == VoiceState.PROCESSING) {
                 logger.warn("⏰ Processing timeout after {} ms, correlationId={}", VoiceConfig.processingTimeoutMs, correlationId)
-                recoverToWakeListening("processing_timeout")
+                completeCommandSession(correlationId, "processing_timeout")
             }
         }, VoiceConfig.processingTimeoutMs, TimeUnit.MILLISECONDS)
     }
+
+    /** Human-readable list of still-armed timers, for the debug snapshot. */
+    private fun pendingTimers(): String {
+        val timers = mutableListOf<String>()
+        if (recordingStartFuture?.isDone == false) timers.add("recordingStart")
+        if (listenTimeoutFuture?.isDone == false) timers.add("listen")
+        if (processingTimeoutFuture?.isDone == false) timers.add("processing")
+        if (ttsPlaybackTimeoutFuture?.isDone == false) timers.add("tts")
+        if (cooldownFuture?.isDone == false) timers.add("cooldown")
+        return if (timers.isEmpty()) "none" else timers.joinToString("|")
+    }
+
+    /**
+     * Compact one-line JSON snapshot of the entire voice lifecycle, for logs and Diagnostics.
+     * External flags (wakeWordActive, isSendingAllowed, webSocketConnected) ride in via the
+     * caller-supplied [sessionDiagnostics] string under "diag".
+     */
+    fun debugSnapshot(): String {
+        val s = currentState.get()
+        val dwell = System.currentTimeMillis() - stateEnteredAtMs
+        return buildString {
+            append("{")
+            append("\"voiceState\":\"").append(s).append("\",")
+            append("\"alwaysListeningActive\":").append(alwaysListeningEnabled).append(",")
+            append("\"recorderActive\":").append(recordingActive).append(",")
+            append("\"ttsPlaybackActive\":").append(s == VoiceState.TTS_PLAYBACK).append(",")
+            append("\"currentCorrelationId\":").append(jsonStr(correlationId)).append(",")
+            append("\"startedCorrelationId\":").append(jsonStr(startedCorrelationId)).append(",")
+            append("\"endedCorrelationId\":").append(jsonStr(endedCorrelationId)).append(",")
+            append("\"lastCommandCompletedAt\":").append(lastCommandCompletedAt).append(",")
+            append("\"lastRecoveryReason\":").append(jsonStr(lastRecoveryReason)).append(",")
+            append("\"pendingTimers\":").append(jsonStr(pendingTimers())).append(",")
+            append("\"stateDwellMs\":").append(dwell).append(",")
+            append("\"diag\":").append(jsonStr(safeDiagnostics()))
+            append("}")
+        }
+    }
+
+    private fun jsonStr(v: String?): String =
+        if (v == null) "null" else "\"" + v.replace("\\", "\\\\").replace("\"", "'") + "\""
 
     /**
      * Cleanup resources.

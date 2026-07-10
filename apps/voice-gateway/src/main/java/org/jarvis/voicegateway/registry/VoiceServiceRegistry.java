@@ -41,7 +41,7 @@ public class VoiceServiceRegistry {
     private static final List<ServiceEntry> SERVICES = List.of(
             new ServiceEntry("pc_control", "управление компьютером", Availability.READY,
                     List.of("компьютер", "терминал", "консол", "телеграм", "файл", "vs code", "vscode",
-                            "ютуб", "браузер", "окн", "рабочий стол", "скриншот", "экран"),
+                            "браузер", "окн", "рабочий стол", "скриншот"),
                     "Сэр, я управляю компьютером. Что именно открыть или сделать?"),
             new ServiceEntry("media", "медиа", Availability.READY,
                     List.of("пауза", "воспроизвед", "играй", "трек", "песн", "громкост", "звук", "плеер", "музык"),

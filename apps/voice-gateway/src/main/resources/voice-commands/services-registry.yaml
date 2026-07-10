@@ -224,6 +224,39 @@ commands:
         ru: "Сэр, компьютерное зрение экспериментальное. Доступ к камере требует подтверждения."
         en: "Sir, computer vision is experimental. Camera access requires confirmation."
 
+  # Screen analysis (not a PC-control screenshot) — route to Vision, ask to confirm the capture.
+  - id: rule_vision_screen
+    priority: 8
+    matchers:
+      - type: exact
+        values:
+          - "что ты видишь на экране"
+          - "что видишь на экране"
+          - "посмотри на экран"
+          - "проанализируй экран"
+          - "что на экране"
+          - "проверь экран"
+          - "распознай экран"
+          - "распознай текст на экране"
+          - "сделай скриншот и проанализируй"
+      - type: contains
+        values:
+          - "видишь на экране"
+          - "проанализируй экран"
+          - "распознай экран"
+          - "распознай текст на экране"
+      - type: regex
+        values:
+          - "что\\s+(ты\\s+)?видишь\\s+на\\s+экране"
+          - "(проанализируй|проверь|распознай|посмотри на)\\s+экран"
+    action:
+      target: internal
+      name: VISION_SCREEN_ANALYZE_CONFIRM
+    response:
+      text:
+        ru: "Сэр, могу сделать скриншот и проанализировать экран. Подтвердить?"
+        en: "Sir, I can take a screenshot and analyze the screen. Confirm?"
+
   # ---- Proactive ------------------------------------------------------------
   - id: rule_proactive_status
     priority: 5

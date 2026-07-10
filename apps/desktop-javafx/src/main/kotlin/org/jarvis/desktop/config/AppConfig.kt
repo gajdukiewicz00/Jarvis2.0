@@ -148,12 +148,36 @@ object VoiceConfig {
     /** Max time to wait in TTS_PLAYBACK (SPEAKING) before force-recovering — a hung audio
      *  device (line.drain blocking) must never freeze the session forever. */
     val maxSpeakingMs: Long by lazy {
-        System.getenv("JARVIS_VOICE_MAX_SPEAKING_MS")?.toLongOrNull() ?: 30000L
+        System.getenv("JARVIS_VOICE_MAX_SPEAKING_MS")?.toLongOrNull() ?: 20000L
     }
 
-    /** How often the session watchdog checks for a stuck state. */
+    /** How often the session watchdog checks for a stuck state (1–2s per spec). */
     val watchdogIntervalMs: Long by lazy {
-        System.getenv("JARVIS_VOICE_WATCHDOG_INTERVAL_MS")?.toLongOrNull() ?: 3000L
+        System.getenv("JARVIS_VOICE_WATCHDOG_INTERVAL_MS")?.toLongOrNull() ?: 1500L
+    }
+
+    // --- Exact per-state watchdog dwell bounds (the safe upper limit each active state may
+    // occupy before the watchdog force-recovers to WAKE_LISTENING). These are BACKSTOPS layered
+    // on top of the primary per-state scheduled timeouts. ---
+
+    /** WAKE_DETECTED: wake fired but command recording never actually started. */
+    val wakeDetectedTimeoutMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_WAKE_DETECTED_TIMEOUT_MS")?.toLongOrNull() ?: 3000L
+    }
+
+    /** RECORDING_COMMAND: mic streaming a command for too long (no final transcript). */
+    val recordingMaxMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_RECORDING_MAX_MS")?.toLongOrNull() ?: 15000L
+    }
+
+    /** PROCESSING_COMMAND: waiting for the server response/action for too long. */
+    val processingMaxMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_PROCESSING_MAX_MS")?.toLongOrNull() ?: 20000L
+    }
+
+    /** ERROR / CANCELLED: must not dwell — recover almost immediately. */
+    val errorMaxMs: Long by lazy {
+        System.getenv("JARVIS_VOICE_ERROR_MAX_MS")?.toLongOrNull() ?: 2000L
     }
 
     /** Grace window after a RESPONSE frame to wait for TTS audio before treating it as

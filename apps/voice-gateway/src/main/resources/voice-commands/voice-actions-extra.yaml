@@ -44,7 +44,8 @@ commands:
         ru: "Сэр, что именно открыть: приложение, файл, папку или ссылку?"
         en: "Sir, what exactly should I open: an app, a file, a folder, or a link?"
 
-  # "включи первое видео на ютубе" must NOT be treated as OPEN_APP. Without a query, ask.
+  # "включи первое/любое видео на ютубе" must NOT be treated as OPEN_APP or a generic PC-control
+  # clarification. Without a real search query, ask what to search on YouTube.
   - id: rule_youtube_first_video
     priority: 45
     matchers:
@@ -54,9 +55,13 @@ commands:
           - "первое видео на youtube"
           - "первый ролик на ютубе"
           - "первое видео в ютубе"
+          - "любое видео на ютубе"
+          - "видео на ютубе"
+          - "какое-нибудь видео на ютубе"
       - type: regex
         values:
-          - "(?:включи|открой|запусти|поставь)\\s+перв\\w*\\s+(?:видео|ролик)\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)"
+          - "(?:включи|открой|запусти|поставь|покажи)\\s+(?:перв\\w*|любое|какое[- ]?нибудь)?\\s*(?:видео|ролик)\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)"
+          - "(?:видео|ролик)\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)$"
     action:
       target: internal
       name: YOUTUBE_CLARIFY

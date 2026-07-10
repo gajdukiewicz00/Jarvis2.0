@@ -82,6 +82,32 @@ class VoiceReplayRoutingTest {
     }
     @Test void voiceCommandsCatalog() { assertEquals("VOICE_COMMANDS_CATALOG", actionOf("что ты умеешь")); }
 
+    // ---- Regressions from latest test ----
+    @Test void youtubeAnyVideo_lyubayaVideo() {
+        // "открой любая видео на ютубе" → alias любая→любое → YOUTUBE clarify, NOT PC-control generic.
+        assertEquals("YOUTUBE_CLARIFY", actionOf("открой любая видео на ютубе"));
+    }
+    @Test void youtubeAnyVideo_lyuboeVideo() {
+        assertEquals("YOUTUBE_CLARIFY", actionOf("открой любое видео на ютубе"));
+    }
+    @Test void visionScreen_chtoVidishNaEkrane() {
+        assertEquals("VISION_SCREEN_ANALYZE_CONFIRM", actionOf("что ты видишь на экране"));
+    }
+    @Test void visionScreen_proanaliziruy() {
+        assertEquals("VISION_SCREEN_ANALYZE_CONFIRM", actionOf("проанализируй экран"));
+    }
+    @Test void volumeUp_specificResponse() {
+        var m = service.match("сделай громче", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("VOLUME_UP", m.get().actionName());
+        assertEquals("Делаю громче, сэр.", m.get().responseText("ru"));
+    }
+    @Test void openYouTubeStillOpens() {
+        var m = service.match("открой ютуб", "ru-RU");
+        assertTrue(m.isPresent());
+        assertEquals("OPEN_URL", m.get().actionName());
+    }
+
     // ---- Negative: no rule → handler guard applies ----
     @Test void garbageShortHasNoRule() {
         assertTrue(service.match("лет", "ru-RU").isEmpty()); // → ASK_REPEAT (handler low-conf guard)

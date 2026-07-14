@@ -289,13 +289,104 @@ class WakeWordDetector(
     data class FailureDetails(
         val message: String?,
         val messageStack: List<String>,
-        val nativeCode: String?
+        val nativeCode: String?,
+        /** Fully-qualified class of the caught throwable — the reliable signal for
+         *  Porcupine activation/access-key exceptions whose message is opaque. */
+        val exceptionClass: String = ""
     )
 
     companion object {
         // Porcupine 4.x messageStack lines look like "[0] d3ff828 00000136: ...";
         // the 8-hex token ("00000136") is the native error code we surface.
         private val NATIVE_CODE_REGEX = Regex("\\b([0-9a-fA-F]{8})\\b")
+
+        // Fragments in a Porcupine build failure that point at the ACCESS KEY
+        // (activation/credential) rather than at a model/runtime mismatch. All are
+        // matched case-insensitively against message + messageStack.
+        private val KEY_FAILURE_MARKERS = listOf(
+            "access key", "accesskey", "activation", "credential",
+            "invalid", "unauthorized", "authentication", "401", "403"
+        )
+
+        // Porcupine surfaces access-key/activation problems as dedicated exception
+        // SUBCLASSES (e.g. PorcupineActivationRefusedException, ...LimitException,
+        // ...ThrottledException, PorcupineActivationException) whose human message is
+        // often just "Initialization failed:" with an opaque native stack — so the
+        // exception CLASS name, not the message, is the reliable signal. Matched
+        // case-insensitively against the fully-qualified class name.
+        private val KEY_FAILURE_EXCEPTION_MARKERS = listOf(
+            "activation", "accesskey", "refused", "limitreached", "throttled"
+        )
+
+        /**
+         * Validate the Porcupine access key WITHOUT opening a microphone: building
+         * a Porcupine engine (built-in [builtInKeyword]) validates the key on its
+         * own, so a successful build proves the key is good and an immediate
+         * [Porcupine.delete] frees the native handle. This is what lets callers tell
+         * "key invalid" apart from "no real mic". The key is NEVER logged here.
+         */
+        fun validateAccessKey(
+            key: String,
+            builtInKeyword: BuiltInKeyword = BuiltInKeyword.JARVIS
+        ): AccessKeyValidationResult {
+            val engine = try {
+                Porcupine.Builder()
+                    .setAccessKey(key)
+                    .setBuiltInKeyword(builtInKeyword)
+                    .build()
+            } catch (t: Throwable) {
+                return classifyValidationFailure(describeFailure(t))
+            }
+            try {
+                engine.delete()
+            } catch (_: Throwable) {
+                // Best-effort cleanup: a failed delete does not change the VALID verdict.
+            }
+            return AccessKeyValidationResult(AccessKeyValidation.VALID, null)
+        }
+
+        /**
+         * Pure heuristic: decide whether a captured build [failure] is an access-key
+         * problem (→ INVALID) or something else (→ UNKNOWN). The reason is the plain
+         * message/stack text (Porcupine never echoes the key), safe to surface/log.
+         */
+        fun classifyValidationFailure(failure: FailureDetails): AccessKeyValidationResult {
+            val exceptionClassLower = failure.exceptionClass.lowercase()
+            val isKeyException = KEY_FAILURE_EXCEPTION_MARKERS.any { exceptionClassLower.contains(it) }
+
+            val haystack = (failure.messageStack + listOfNotNull(failure.message))
+                .joinToString(separator = " ")
+                .lowercase()
+            val isKeyMessage = KEY_FAILURE_MARKERS.any { haystack.contains(it) }
+
+            val status = if (isKeyException || isKeyMessage) {
+                AccessKeyValidation.INVALID
+            } else {
+                AccessKeyValidation.UNKNOWN
+            }
+            // Prefer a human-readable reason. For activation-refused/limit/throttled the
+            // message is opaque ("Initialization failed:"), so derive it from the class.
+            val reason = when {
+                isKeyException -> activationReason(failure.exceptionClass)
+                else -> failure.message?.takeIf { it.isNotBlank() } ?: failure.messageStack.firstOrNull()
+            }
+            return AccessKeyValidationResult(status, reason)
+        }
+
+        /** Map a Porcupine activation/key exception class to a plain-language reason. */
+        private fun activationReason(exceptionClass: String): String {
+            val c = exceptionClass.lowercase()
+            return when {
+                c.contains("refused") ->
+                    "Porcupine activation refused — the access key was rejected (activation limit reached, or the key is expired/revoked)."
+                c.contains("limit") ->
+                    "Porcupine activation limit reached — the access key is already used on the maximum number of devices."
+                c.contains("throttled") ->
+                    "Porcupine activation throttled — too many activations; try again later or use a different key."
+                else ->
+                    "Porcupine rejected the access key (activation/access-key error)."
+            }
+        }
 
         /**
          * Create detector with built-in Porcupine keywords (e.g., JARVIS in English).
@@ -333,7 +424,8 @@ class WakeWordDetector(
             return FailureDetails(
                 message = t.message,
                 messageStack = stack,
-                nativeCode = extractNativeCode(searchable)
+                nativeCode = extractNativeCode(searchable),
+                exceptionClass = t.javaClass.name
             )
         }
 

@@ -46,14 +46,43 @@ object WakeWordOutcomeUi {
             ?: "default"
         val likely = diagnostics.recommendedFix ?: reason
         return buildString {
-            append("Wake word detection failed to initialize.\n")
+            append(headlineFor(reason))
             append("Manual Talk still works.\n\n")
             append("Likely reason: $likely.\n")
             append("Tried:\n")
             append("- custom Russian model: $custom\n")
             append("- built-in Jarvis fallback: $builtIn\n")
             append("Selected mic: $mic\n")
+            wrongDefaultDeviceNote(diagnostics)?.let { append("\n$it\n") }
+            append("\nSteps to fix:\n")
+            append("1. Generate a new key in the Picovoice Console.\n")
+            append("2. Set PORCUPINE_ACCESS_KEY to that key.\n")
+            append("3. Select C4K or T1 as the wake-word microphone.\n")
+            append("4. Restart Jarvis.\n")
             append("Recommended: ${diagnostics.recommendedFix ?: "use Manual Talk"}.")
         }
+    }
+
+    /** Cause-specific first line so the dialog names WHAT went wrong up front. */
+    private fun headlineFor(reason: String): String = when (reason) {
+        "access_key_invalid" ->
+            "Wake word detection failed: the Porcupine access key is invalid or rejected.\n"
+        "access_key_missing" ->
+            "Wake word detection is unavailable: no Porcupine access key is configured.\n"
+        "no_input_device", "no_working_microphone" ->
+            "Wake word detection failed: no compatible microphone input device was found.\n"
+        else -> "Wake word detection failed to initialize.\n"
+    }
+
+    /**
+     * When the raw system default was a playback/output device (the exact bug that
+     * selected "alsa_playback.java [default]" as the mic), tell the user to pick a
+     * real capture device instead.
+     */
+    private fun wrongDefaultDeviceNote(diagnostics: WakeWordDiagnostics): String? {
+        val before = diagnostics.selectedInputDeviceBeforeFilter ?: return null
+        if (!WakeWordInputDevices.looksLikePlayback(before)) return null
+        return "Also detected wrong default input device: $before. " +
+            "Try selecting C4K or T1 as wake-word microphone."
     }
 }

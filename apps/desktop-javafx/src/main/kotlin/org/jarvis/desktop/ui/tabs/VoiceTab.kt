@@ -20,6 +20,8 @@ import org.jarvis.desktop.service.SystemControlService
 import org.jarvis.desktop.service.VoiceControlService
 import org.jarvis.desktop.service.VoiceSession
 import org.jarvis.desktop.service.VoiceWebSocketClient
+import org.jarvis.desktop.service.AccessKeyValidation
+import org.jarvis.desktop.service.AccessKeyValidationResult
 import org.jarvis.desktop.service.CustomModelInfo
 import org.jarvis.desktop.service.StaticInitInfo
 import org.jarvis.desktop.service.WakeWordAttempt
@@ -65,6 +67,7 @@ class VoiceTab(
     private val toggleListeningBtn = Button("Start Always Listening")
     private val testWakeWordBtn = Button("Test Wake Word Setup")
     private val refreshDevicesBtn = Button("↻ Refresh devices")
+    private val wakeInputDeviceCombo = ComboBox<String>()
     private val stateIndicator = Circle(10.0)
     
     private val audioRecorder = AudioRecorder()
@@ -77,6 +80,13 @@ class VoiceTab(
     private var wakeWordDetector: WakeWordDetector? = null
     private var isAlwaysListening = false
     @Volatile private var previousVoiceState: VoiceRuntimeState? = null
+
+    // User's explicit wake-word microphone choice from the dropdown (null == "Auto").
+    // A volatile shadow so buildWakeWordInitializer can read it off the FX thread
+    // (e.g. the background diagnostics probe) without touching a JavaFX property.
+    @Volatile private var wakeInputDeviceChoice: String? = null
+    // Suppresses persistence while the combo is being repopulated programmatically.
+    @Volatile private var suppressComboPersist = false
 
     init {
         val content = VBox(10.0)
@@ -264,7 +274,10 @@ class VoiceTab(
         // Device info row
         deviceInfoLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
         refreshDevicesBtn.style = "-fx-font-size: 11px;"
-        refreshDevicesBtn.setOnAction { voiceControlService.refreshDevices() }
+        refreshDevicesBtn.setOnAction {
+            voiceControlService.refreshDevices()
+            refreshWakeInputDeviceChoices()
+        }
         val deviceRow = HBox(8.0)
         deviceRow.children.addAll(deviceInfoLabel, refreshDevicesBtn)
         content.children.add(deviceRow)
@@ -299,7 +312,26 @@ class VoiceTab(
         val toggleRow = HBox(10.0)
         toggleRow.children.addAll(toggleListeningBtn, testWakeWordBtn)
         content.children.add(toggleRow)
-        
+
+        // Wake-word microphone selector. "Auto" lets the initializer pick the best
+        // real mic (playback/output devices are already filtered out); choosing a
+        // specific device pins wake-word capture to it and it is tried first.
+        wakeInputDeviceCombo.promptText = AUTO_DEVICE_LABEL
+        wakeInputDeviceCombo.style = "-fx-font-size: 11px;"
+        wakeInputDeviceCombo.prefWidth = 260.0
+        wakeInputDeviceCombo.setOnAction {
+            if (suppressComboPersist) return@setOnAction
+            val value = wakeInputDeviceCombo.value
+            wakeInputDeviceChoice = value?.takeIf { it.isNotBlank() && it != AUTO_DEVICE_LABEL }
+            persistWakeInputDeviceChoice(wakeInputDeviceChoice)
+        }
+        val wakeDeviceRow = HBox(8.0)
+        val wakeDeviceLabel = Label("Wake Word Input Device:")
+        wakeDeviceLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
+        wakeDeviceRow.children.addAll(wakeDeviceLabel, wakeInputDeviceCombo)
+        content.children.add(wakeDeviceRow)
+        refreshWakeInputDeviceChoices()
+
         // Separator
         content.children.add(Separator())
 
@@ -512,10 +544,28 @@ class VoiceTab(
     private fun buildWakeWordInitializer(): WakeWordInitializer {
         val accessKey = PorcupineAccessKeyResolver.resolve()
         val accessKeyPresent = !accessKey.isNullOrBlank()
+        val accessKeyLooksValidFormat = looksLikeValidKeyFormat(accessKey)
+        logAccessKeyShape(accessKey, accessKeyPresent)
         val customModel = buildCustomModelInfo()
         val format = WakeWordInputDevices.PORCUPINE_FORMAT
-        val devices = WakeWordInputDevices.list(format)
+        // Classify enumerated devices: real mics come back in `accepted` (playback/
+        // output devices like "alsa_playback.java [default]" land in `rejected`).
+        val classification = WakeWordInputDevices.listWithClassification(format)
         val defaultDeviceName = WakeWordInputDevices.defaultDeviceName(format)
+        // Try the user-selected (or last-persisted-working) mic first, else the
+        // preferred order the classifier already produced.
+        val devices = orderForSelection(classification.accepted, selectedWakeDeviceName())
+        // Validate the access key SEPARATELY from opening a mic — building a
+        // Porcupine engine validates the key and needs no microphone, so this tells
+        // "key invalid" apart from "no real mic".
+        val validateAccessKey: () -> AccessKeyValidationResult = {
+            val key = accessKey
+            if (key.isNullOrBlank()) {
+                AccessKeyValidationResult(AccessKeyValidation.UNKNOWN, "no access key")
+            } else {
+                WakeWordDetector.validateAccessKey(key)
+            }
+        }
         // Higher default sensitivity (0.65) makes "Jarvis" trigger more reliably on
         // quieter / accented speech. Tune via JARVIS_WAKE_SENSITIVITY.
         val wakeSensitivity =
@@ -555,8 +605,114 @@ class VoiceTab(
                 defaultDevice = defaultDeviceName
             ),
             persistDevice = { device -> persistWakeInputDevice(device) },
-            stopProbe = { handle -> (handle as? WakeWordDetector)?.stop() }
+            stopProbe = { handle -> (handle as? WakeWordDetector)?.stop() },
+            accessKeyLooksValidFormat = accessKeyLooksValidFormat,
+            rejectedDevices = classification.rejected,
+            selectedDeviceBeforeFilter = defaultDeviceName,
+            validateAccessKey = validateAccessKey
         )
+    }
+
+    /**
+     * Cheap, offline format check for the Porcupine key BEFORE the network-backed
+     * engine build: a real key is a long, non-placeholder token. This lets us fail
+     * fast on obviously-bad keys and keep the expensive [WakeWordDetector.validateAccessKey]
+     * for keys that at least look plausible.
+     */
+    private fun looksLikeValidKeyFormat(key: String?): Boolean {
+        val trimmed = key?.trim().orEmpty()
+        if (trimmed.length < MIN_ACCESS_KEY_LENGTH) return false
+        val lower = trimmed.lowercase()
+        if (KEY_PLACEHOLDER_FRAGMENTS.any { lower.contains(it) }) return false
+        if (trimmed.startsWith("<") && trimmed.endsWith(">")) return false
+        if (trimmed.toSet().size <= 1) return false // all-same-char (e.g. "xxxx…")
+        return true
+    }
+
+    /** Log only the SHAPE of the key — presence, length, and a SHA-256 prefix. Never the key. */
+    private fun logAccessKeyShape(key: String?, present: Boolean) {
+        val length = key?.length ?: 0
+        val hashPrefix = key?.takeIf { it.isNotBlank() }?.let { accessKeyHashPrefix(it) } ?: "none"
+        logger.info(
+            "Porcupine access key shape: accessKeyPresent={}, accessKeyLength={}, accessKeyHashPrefix={}",
+            present, length, hashPrefix
+        )
+    }
+
+    private fun accessKeyHashPrefix(key: String): String = try {
+        val digest = java.security.MessageDigest.getInstance("SHA-256").digest(key.toByteArray(Charsets.UTF_8))
+        digest.joinToString("") { "%02x".format(it) }.take(8)
+    } catch (e: Exception) {
+        "unknown"
+    }
+
+    /** Front [selectedName] within [accepted] so it is attempted first; else keep classifier order. */
+    private fun orderForSelection(
+        accepted: List<WakeWordInputDevice>,
+        selectedName: String?
+    ): List<WakeWordInputDevice> {
+        if (selectedName.isNullOrBlank()) return accepted
+        val idx = accepted.indexOfFirst { it.name == selectedName }
+        if (idx <= 0) return accepted
+        return listOf(accepted[idx]) + accepted.filterIndexed { i, _ -> i != idx }
+    }
+
+    /** The device to try first: the dropdown choice, else the last-persisted working mic. */
+    private fun selectedWakeDeviceName(): String? {
+        wakeInputDeviceChoice?.takeIf { it.isNotBlank() }?.let { return it }
+        return readPersistedWorkingDevice()
+    }
+
+    private fun readPersistedWorkingDevice(): String? = try {
+        Preferences.userNodeForPackage(VoiceTab::class.java).get("wakeInputDevice", null)?.takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * Repopulate the wake-word microphone dropdown ("Auto" + accepted mics) off the
+     * FX thread, preselecting the persisted choice when it is still present.
+     */
+    private fun refreshWakeInputDeviceChoices() {
+        Thread {
+            val accepted = try {
+                WakeWordInputDevices.listWithClassification().accepted.map { it.name }
+            } catch (e: Exception) {
+                logger.debug("Could not enumerate wake input devices: {}", e.message)
+                emptyList()
+            }
+            val items = listOf(AUTO_DEVICE_LABEL) + accepted
+            val persisted = readWakeInputDeviceChoicePref()
+            val toSelect = if (persisted != null && items.contains(persisted)) persisted else AUTO_DEVICE_LABEL
+            Platform.runLater {
+                suppressComboPersist = true
+                wakeInputDeviceCombo.items.setAll(items)
+                wakeInputDeviceCombo.value = toSelect
+                suppressComboPersist = false
+                wakeInputDeviceChoice = toSelect.takeIf { it != AUTO_DEVICE_LABEL }
+            }
+        }.apply {
+            name = "WakeDeviceEnum"
+            isDaemon = true
+            start()
+        }
+    }
+
+    private fun persistWakeInputDeviceChoice(name: String?) {
+        try {
+            val prefs = Preferences.userNodeForPackage(VoiceTab::class.java)
+            if (name.isNullOrBlank()) prefs.remove("wakeInputDeviceChoice") else prefs.put("wakeInputDeviceChoice", name)
+        } catch (e: Exception) {
+            logger.debug("Could not persist wake input device choice: {}", e.message)
+        }
+    }
+
+    private fun readWakeInputDeviceChoicePref(): String? = try {
+        Preferences.userNodeForPackage(VoiceTab::class.java)
+            .get("wakeInputDeviceChoice", null)
+            ?.takeIf { it.isNotBlank() }
+    } catch (e: Exception) {
+        null
     }
 
     private fun buildDetector(
@@ -783,5 +939,10 @@ class VoiceTab(
             "-fx-font-size: 14px; -fx-background-color: #4A90E2; -fx-text-fill: white;"
         private const val TOGGLE_STOP_STYLE =
             "-fx-font-size: 14px; -fx-background-color: #E74C3C; -fx-text-fill: white;"
+        // Sentinel dropdown item meaning "let the initializer pick the best real mic".
+        private const val AUTO_DEVICE_LABEL = "Auto"
+        // Picovoice access keys are ~56-char base64 tokens; anything much shorter is bogus.
+        private const val MIN_ACCESS_KEY_LENGTH = 40
+        private val KEY_PLACEHOLDER_FRAGMENTS = listOf("your-key", "changeme", "placeholder", "xxxx")
     }
 }

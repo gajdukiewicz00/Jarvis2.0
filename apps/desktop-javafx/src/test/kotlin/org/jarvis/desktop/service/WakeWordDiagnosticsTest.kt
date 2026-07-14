@@ -81,4 +81,75 @@ class WakeWordDiagnosticsTest {
 
         assertTrue(json.contains("line1\\n\\\"quoted\\\""))
     }
+
+    @Test
+    fun `setup json includes the section-5 fields`() {
+        val json = diagnostics().copy(
+            accessKeyLooksValidFormat = true,
+            accessKeyValidationStatus = "VALID",
+            customModelStatus = "INCOMPATIBLE",
+            builtInJarvisStatus = "OK"
+        ).testWakeWordSetupJson()
+
+        listOf(
+            "accessKeyLooksValidFormat",
+            "accessKeyValidationStatus",
+            "accessKeyFailureReason",
+            "selectedInputDeviceBeforeFilter",
+            "selectedInputDeviceAfterFilter",
+            "rejectedDevices",
+            "triedInputDevices",
+            "customModelStatus",
+            "builtInJarvisStatus",
+            "manualTalkStillAvailable"
+        ).forEach { key ->
+            assertTrue(json.contains("\"$key\""), "expected key '$key' in $json")
+        }
+        assertTrue(json.contains("\"accessKeyValidationStatus\":\"VALID\""))
+    }
+
+    @Test
+    fun `serializes rejected and tried devices as nested objects`() {
+        val json = diagnostics().copy(
+            rejectedDevices = listOf(
+                RejectedInputDevice("alsa_playback.java [default]", "playback/output/monitor device")
+            ),
+            triedInputDevices = listOf(
+                WakeWordInitializer.TriedInputDevice("C4K Mic", "failed", "line unavailable"),
+                WakeWordInitializer.TriedInputDevice("USB Mic", "success", null)
+            )
+        )
+
+        val setup = json.testWakeWordSetupJson()
+        assertTrue(
+            setup.contains(
+                "\"rejectedDevices\":[{\"name\":\"alsa_playback.java [default]\"," +
+                    "\"reason\":\"playback/output/monitor device\"}]"
+            ),
+            setup
+        )
+        assertTrue(
+            setup.contains("{\"name\":\"C4K Mic\",\"status\":\"failed\",\"error\":\"line unavailable\"}"),
+            setup
+        )
+        assertTrue(
+            setup.contains("{\"name\":\"USB Mic\",\"status\":\"success\",\"error\":null}"),
+            setup
+        )
+        // Same nested shape must also appear in the full LOG json.
+        assertTrue(json.toJson().contains("\"triedInputDevices\":["))
+    }
+
+    @Test
+    fun `setup json never contains an access key value even with new fields`() {
+        val secret = "pv-super-secret-key-value-1234567890"
+        val json = diagnostics().copy(
+            accessKeyValidationStatus = "INVALID",
+            accessKeyFailureReason = "AccessKey activation refused"
+        ).testWakeWordSetupJson()
+
+        assertFalse(json.contains(secret))
+        assertFalse(json.contains("accessKey\""), "no raw accessKey value field")
+        assertTrue(json.contains("\"accessKeyValidationStatus\":\"INVALID\""))
+    }
 }

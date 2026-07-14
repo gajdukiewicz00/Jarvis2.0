@@ -64,7 +64,13 @@ class WakeWordInitializerTest {
         devices: List<WakeWordInputDevice> = listOf(device("mic-1", 1)),
         attempt: (WakeWordAttempt) -> WakeWordAttemptResult,
         persistDevice: (WakeWordInputDevice) -> Unit = {},
-        stopProbe: (Any) -> Unit = {}
+        stopProbe: (Any) -> Unit = {},
+        accessKeyLooksValidFormat: Boolean = true,
+        rejectedDevices: List<RejectedInputDevice> = emptyList(),
+        selectedDeviceBeforeFilter: String? = null,
+        validateAccessKey: () -> AccessKeyValidationResult = {
+            AccessKeyValidationResult(AccessKeyValidation.UNKNOWN, null)
+        }
     ) = WakeWordInitializer(
         accessKeyPresent = accessKeyPresent,
         customModel = customModel,
@@ -72,8 +78,16 @@ class WakeWordInitializerTest {
         attempt = attempt,
         staticInfo = staticInfo,
         persistDevice = persistDevice,
-        stopProbe = stopProbe
+        stopProbe = stopProbe,
+        accessKeyLooksValidFormat = accessKeyLooksValidFormat,
+        rejectedDevices = rejectedDevices,
+        selectedDeviceBeforeFilter = selectedDeviceBeforeFilter,
+        validateAccessKey = validateAccessKey
     )
+
+    private fun valid() = AccessKeyValidationResult(AccessKeyValidation.VALID, null)
+    private fun invalid(reason: String? = "AccessKey activation error") =
+        AccessKeyValidationResult(AccessKeyValidation.INVALID, reason)
 
     @Test
     fun `custom success yields Enabled CUSTOM_RU with compatible model`() {
@@ -201,6 +215,118 @@ class WakeWordInitializerTest {
         // The default-first device is attempted first.
         assertEquals("preferred-mic", attempt.seen.first().device?.name)
         assertEquals(listOf(device("preferred-mic", 0)), persisted)
+    }
+
+    @Test
+    fun `invalid access key (validation rejected) yields Disabled access_key_invalid without opening a mic`() {
+        val attempt = RecordingAttempt(customSucceeds = true, builtInSucceeds = true)
+        val outcome = initializer(
+            attempt = attempt,
+            validateAccessKey = { invalid("AccessKey activation refused (401)") }
+        ).initialize()
+
+        val disabled = assertInstanceOf(WakeWordInitOutcome.Disabled::class.java, outcome)
+        assertEquals("access_key_invalid", disabled.reason)
+        assertEquals("INVALID", disabled.diagnostics.accessKeyValidationStatus)
+        assertTrue(disabled.userMessage.contains("Picovoice Console"))
+        assertTrue(disabled.userMessage.contains("PORCUPINE_ACCESS_KEY"))
+        // The key is invalid — no engine/mic attempt should have been made.
+        assertTrue(attempt.seen.isEmpty())
+    }
+
+    @Test
+    fun `blank or placeholder key format yields Disabled access_key_invalid`() {
+        val attempt = RecordingAttempt(customSucceeds = true, builtInSucceeds = true)
+        val outcome = initializer(
+            attempt = attempt,
+            accessKeyLooksValidFormat = false
+        ).initialize()
+
+        val disabled = assertInstanceOf(WakeWordInitOutcome.Disabled::class.java, outcome)
+        assertEquals("access_key_invalid", disabled.reason)
+        assertEquals("INVALID", disabled.diagnostics.accessKeyValidationStatus)
+        assertEquals(false, disabled.diagnostics.accessKeyLooksValidFormat)
+        // Never reaches validation or a mic attempt.
+        assertTrue(attempt.seen.isEmpty())
+    }
+
+    @Test
+    fun `custom incompatible then built-in success yields Enabled BUILTIN_JARVIS`() {
+        val attempt = RecordingAttempt(customSucceeds = false, builtInSucceeds = true)
+        val outcome = initializer(attempt = attempt, validateAccessKey = { valid() }).initialize()
+
+        val enabled = assertInstanceOf(WakeWordInitOutcome.Enabled::class.java, outcome)
+        assertEquals(WakeWordMode.BUILTIN_JARVIS, enabled.mode)
+        assertEquals(false, enabled.diagnostics.customModelCompatible)
+        assertEquals("VALID", enabled.diagnostics.accessKeyValidationStatus)
+    }
+
+    @Test
+    fun `valid key with every mic failing attributes the outcome to the microphone`() {
+        val attempt = RecordingAttempt(customSucceeds = false, builtInSucceeds = false)
+        val outcome = initializer(attempt = attempt, validateAccessKey = { valid() }).initialize()
+
+        val disabled = assertInstanceOf(WakeWordInitOutcome.Disabled::class.java, outcome)
+        // Key is VALID → engine builds → failure is the mic, not the key/model.
+        assertEquals("no_working_microphone", disabled.reason)
+        assertTrue(disabled.userMessage.contains("no compatible microphone"))
+        assertEquals(false, disabled.diagnostics.builtInJarvisAvailable)
+        assertTrue(disabled.diagnostics.manualTalkStillAvailable)
+        assertEquals("VALID", disabled.diagnostics.accessKeyValidationStatus)
+    }
+
+    @Test
+    fun `triedInputDevices records every attempt with success and failed status`() {
+        val attempt = RecordingAttempt(customSucceeds = false, builtInSucceeds = true)
+        val devices = listOf(device("mic-a", 0), device("mic-b", 1))
+
+        val outcome = initializer(
+            customModel = null, // skip custom so the built-in loop is the only path
+            devices = devices,
+            attempt = attempt,
+            validateAccessKey = { valid() }
+        ).initialize()
+
+        val enabled = assertInstanceOf(WakeWordInitOutcome.Enabled::class.java, outcome)
+        val tried = enabled.diagnostics.triedInputDevices
+        // Built-in succeeds on the first device, so exactly one success attempt is recorded.
+        assertEquals(1, tried.size)
+        assertEquals("mic-a", tried.first().name)
+        assertEquals("success", tried.first().status)
+    }
+
+    @Test
+    fun `triedInputDevices records a failed attempt with its error`() {
+        val attempt = RecordingAttempt(customSucceeds = false, builtInSucceeds = false)
+        val outcome = initializer(
+            customModel = null,
+            devices = listOf(device("mic-a", 0)),
+            attempt = attempt,
+            validateAccessKey = { valid() }
+        ).initialize()
+
+        val disabled = assertInstanceOf(WakeWordInitOutcome.Disabled::class.java, outcome)
+        val failed = disabled.diagnostics.triedInputDevices.single()
+        assertEquals("mic-a", failed.name)
+        assertEquals("failed", failed.status)
+        assertTrue(failed.error?.contains("different version") == true)
+    }
+
+    @Test
+    fun `diagnostics carry the rejected playback devices for the report`() {
+        val attempt = RecordingAttempt(customSucceeds = true, builtInSucceeds = true)
+        val rejected = listOf(RejectedInputDevice("alsa_playback.java [default]", "playback/output/monitor device"))
+
+        val outcome = initializer(
+            attempt = attempt,
+            rejectedDevices = rejected,
+            selectedDeviceBeforeFilter = "alsa_playback.java [default]",
+            validateAccessKey = { valid() }
+        ).initialize()
+
+        val enabled = assertInstanceOf(WakeWordInitOutcome.Enabled::class.java, outcome)
+        assertEquals(rejected, enabled.diagnostics.rejectedDevices)
+        assertEquals("alsa_playback.java [default]", enabled.diagnostics.selectedInputDeviceBeforeFilter)
     }
 
     @Test

@@ -125,4 +125,39 @@ class WakeWordOutcomeUiTest {
         assertTrue(text.contains("custom Russian model: skipped"))
         assertTrue(text.contains("built-in Jarvis fallback: not reached"))
     }
+
+    @Test
+    fun `access_key_invalid dialog emphasizes the key and lists the four fix steps`() {
+        val diag = diagnostics(recommendedFix = "generate a new key in Picovoice Console and set PORCUPINE_ACCESS_KEY")
+
+        val text = WakeWordOutcomeUi.disabledDialogText(diag, "access_key_invalid")
+
+        assertTrue(text.contains("access key is invalid or rejected"))
+        assertTrue(text.contains("Manual Talk still works"))
+        assertTrue(text.contains("1. Generate a new key"))
+        assertTrue(text.contains("2. Set PORCUPINE_ACCESS_KEY"))
+        assertTrue(text.contains("3. Select C4K or T1"))
+        assertTrue(text.contains("4. Restart Jarvis"))
+    }
+
+    @Test
+    fun `dialog flags a playback default input device`() {
+        val diag = diagnostics().copy(
+            selectedInputDeviceBeforeFilter = "alsa_playback.java [default]"
+        )
+
+        val text = WakeWordOutcomeUi.disabledDialogText(diag, "no_working_microphone")
+
+        assertTrue(text.contains("wrong default input device: alsa_playback.java [default]"))
+        assertTrue(text.contains("Try selecting C4K or T1"))
+    }
+
+    @Test
+    fun `dialog omits the playback note for a real default input device`() {
+        val diag = diagnostics().copy(selectedInputDeviceBeforeFilter = "C4K Microphone")
+
+        val text = WakeWordOutcomeUi.disabledDialogText(diag, "no_working_microphone")
+
+        assertFalse(text.contains("wrong default input device"))
+    }
 }

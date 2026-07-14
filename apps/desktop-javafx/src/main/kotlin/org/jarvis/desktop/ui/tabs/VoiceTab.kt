@@ -20,12 +20,24 @@ import org.jarvis.desktop.service.SystemControlService
 import org.jarvis.desktop.service.VoiceControlService
 import org.jarvis.desktop.service.VoiceSession
 import org.jarvis.desktop.service.VoiceWebSocketClient
+import org.jarvis.desktop.service.CustomModelInfo
+import org.jarvis.desktop.service.StaticInitInfo
+import org.jarvis.desktop.service.WakeWordAttempt
+import org.jarvis.desktop.service.WakeWordAttemptResult
 import org.jarvis.desktop.service.WakeWordDetector
+import org.jarvis.desktop.service.WakeWordInitOutcome
+import org.jarvis.desktop.service.WakeWordInitializer
+import org.jarvis.desktop.service.WakeWordInputDevice
+import org.jarvis.desktop.service.WakeWordInputDevices
+import org.jarvis.desktop.service.WakeWordMode
+import org.jarvis.desktop.service.WakeWordOutcomeUi
 import ai.picovoice.porcupine.Porcupine.BuiltInKeyword
 import org.slf4j.LoggerFactory
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.util.prefs.Preferences
 
 /**
  * Voice control tab with proper session state machine.
@@ -51,6 +63,7 @@ class VoiceTab(
     private val pushToTalkBtn = Button("🎤 Manual Talk")
     private val cancelBtn = Button("⏹ Stop / Cancel")
     private val toggleListeningBtn = Button("Start Always Listening")
+    private val testWakeWordBtn = Button("Test Wake Word Setup")
     private val refreshDevicesBtn = Button("↻ Refresh devices")
     private val stateIndicator = Circle(10.0)
     
@@ -271,13 +284,21 @@ class VoiceTab(
         // Always Listening toggle button
         toggleListeningBtn.prefWidth = 250.0
         toggleListeningBtn.prefHeight = 40.0
-        toggleListeningBtn.style = "-fx-font-size: 14px; -fx-background-color: #4A90E2; -fx-text-fill: white;"
-        
+        toggleListeningBtn.style = TOGGLE_START_STYLE
+
         toggleListeningBtn.setOnAction {
             toggleAlwaysListening()
         }
-        
-        content.children.add(toggleListeningBtn)
+
+        // Wake-word setup diagnostics (dry probe; never blocks the FX thread).
+        testWakeWordBtn.style = "-fx-font-size: 12px;"
+        testWakeWordBtn.setOnAction {
+            runWakeWordDiagnostics()
+        }
+
+        val toggleRow = HBox(10.0)
+        toggleRow.children.addAll(toggleListeningBtn, testWakeWordBtn)
+        content.children.add(toggleRow)
         
         // Separator
         content.children.add(Separator())
@@ -400,111 +421,217 @@ class VoiceTab(
     }
 
     private fun startAlwaysListening() {
-        try {
-            val accessKey = PorcupineAccessKeyResolver.resolve()
-            
-            if (accessKey == null || accessKey.isBlank()) {
-                Platform.runLater {
-                    val alert = Alert(Alert.AlertType.WARNING)
-                    alert.title = "Wake Word Detection Unavailable"
-                    alert.headerText = "Porcupine access key not configured"
-                    alert.contentText = """
-                        Wake word detection requires a Porcupine access key.
-                        
-                        To enable this feature:
-                        1. Get a free access key from https://console.picovoice.ai
-                        2. Set environment variable: export PORCUPINE_ACCESS_KEY="your-key"
-                           or save it in secrets/secrets.env
-                        3. Restart the application
-                        
-                        You can still use "Manual Talk" button for voice commands.
-                    """.trimIndent()
-                    alert.showAndWait()
-                }
-                return
-            }
-            
-            // Try the repo-committed Russian model first, fallback to built-in English "jarvis"
-            val modelPath = resolveWakeWordModelPath()
-            
-            // Higher default sensitivity (0.65) makes "Jarvis" trigger more reliably on quieter
-            // / accented speech; 0.5 (Porcupine default) missed too much. Tune via JARVIS_WAKE_SENSITIVITY.
-            val wakeSensitivity = System.getenv("JARVIS_WAKE_SENSITIVITY")?.toFloatOrNull()?.coerceIn(0.0f, 1.0f) ?: 0.65f
-            wakeWordDetector = if (modelPath != null) {
-                logger.info("Using custom Russian model: {} (wake sensitivity={})", modelPath, wakeSensitivity)
-                WakeWordDetector(
-                    accessKey = accessKey,
-                    keywordPaths = listOf(modelPath),
-                    sensitivity = wakeSensitivity,
-                    onWakeWordDetected = { keywordIndex ->
-                        onWakeWordDetected(keywordIndex)
-                    }
-                )
-            } else {
-                // Fallback: Use built-in English "jarvis" keyword
-                logger.info("Custom Russian model not found - using built-in English 'jarvis' keyword")
-                try {
-                    val detector = WakeWordDetector.createWithBuiltInKeywords(
-                        accessKey = accessKey,
-                        keywords = listOf(BuiltInKeyword.JARVIS),
-                        sensitivity = wakeSensitivity,
-                        onWakeWordDetected = { keywordIndex ->
-                            onWakeWordDetected(keywordIndex)
-                        }
-                    )
-                    
-                    // Show info message that English model is being used
-                    Platform.runLater {
-                        val alert = Alert(Alert.AlertType.INFORMATION)
-                        alert.title = "Using English Wake Word"
-                        alert.headerText = "Russian model not found - using English 'Jarvis'"
-                        alert.contentText = """
-                            The custom Russian wake word model is not available.
-                            
-                            Currently using: Built-in English "Jarvis" keyword
-                            (Say "Jarvis" to activate)
-                        """.trimIndent()
-                        alert.showAndWait()
-                    }
-                    
-                    detector
-                } catch (e: Exception) {
-                    logger.error("Failed to initialize built-in keyword", e)
-                    Platform.runLater {
-                        val alert = Alert(Alert.AlertType.WARNING)
-                        alert.title = "Wake Word Detection Unavailable"
-                        alert.contentText = "Wake word detection is not available. Use 'Manual Talk' button instead."
-                        alert.showAndWait()
-                    }
-                    return
-                }
-            }
-            
-            wakeWordDetector?.start()
-            isAlwaysListening = true
-            voiceSession.enableAlwaysListening()
-            voiceControlService.onAlwaysListeningChanged(true)
-            
-            Platform.runLater {
-                toggleListeningBtn.text = "Stop Always Listening"
-                toggleListeningBtn.style = "-fx-font-size: 14px; -fx-background-color: #E74C3C; -fx-text-fill: white;"
-            }
-            
-            logger.info("🎧 Always listening mode activated")
-            
+        val outcome = try {
+            buildWakeWordInitializer().initialize()
         } catch (e: Exception) {
-            logger.error("Failed to start wake word detection", e)
-            Platform.runLater {
-                val alert = Alert(Alert.AlertType.ERROR)
-                alert.title = "Wake Word Detection Error"
-                alert.headerText = "Failed to start wake word detection"
-                alert.contentText = """
-                    Error: ${e.message}
-                    
-                    You can still use "Manual Talk" button for voice commands.
-                """.trimIndent()
+            logger.error("Unexpected error initializing wake word detection", e)
+            null
+        }
+
+        when (outcome) {
+            is WakeWordInitOutcome.Enabled -> applyEnabledOutcome(outcome)
+            is WakeWordInitOutcome.Disabled -> applyDisabledOutcome(outcome)
+            null -> applyInitErrorState()
+        }
+    }
+
+    /**
+     * On success: adopt the started detector as the live handle, flip the
+     * authoritative always-listening state, and (only when we fell back to the
+     * built-in engine because the custom model was incompatible) tell the user.
+     */
+    private fun applyEnabledOutcome(outcome: WakeWordInitOutcome.Enabled) {
+        wakeWordDetector = outcome.handle as WakeWordDetector
+        isAlwaysListening = true
+        voiceSession.enableAlwaysListening()
+        voiceControlService.onAlwaysListeningChanged(true)
+        logger.info("🎧 Wake word enabled: mode={}, device={}", outcome.mode, outcome.device?.name)
+        logger.info("Wake word diagnostics: {}", outcome.diagnostics.toJson())
+
+        Platform.runLater {
+            toggleListeningBtn.text = WakeWordOutcomeUi.buttonLabel(outcome)
+            toggleListeningBtn.style = TOGGLE_STOP_STYLE
+            if (WakeWordOutcomeUi.shouldShowCustomFallbackNotice(outcome)) {
+                val alert = Alert(Alert.AlertType.INFORMATION)
+                alert.title = "Using Built-in Wake Word"
+                alert.headerText = "Russian model incompatible - using built-in Jarvis"
+                alert.contentText = "Custom Russian wake-word model is incompatible with current " +
+                    "Porcupine runtime. Falling back to built-in Jarvis."
                 alert.showAndWait()
             }
+        }
+    }
+
+    /**
+     * SAFE STATE RECOVERY on failure: no live detector, always-listening OFF, the
+     * session is NOT put into always-listening, Manual Talk stays usable, and the
+     * WebSocket/STT are untouched. The raw native stack goes to the LOG only; the
+     * dialog shows a readable summary.
+     */
+    private fun applyDisabledOutcome(outcome: WakeWordInitOutcome.Disabled) {
+        wakeWordDetector = null
+        isAlwaysListening = false
+        voiceControlService.onAlwaysListeningChanged(false)
+        logger.error("Wake word disabled ({}). Diagnostics: {}", outcome.reason, outcome.diagnostics.toJson())
+
+        val dialogText = WakeWordOutcomeUi.disabledDialogText(outcome.diagnostics, outcome.reason)
+        Platform.runLater {
+            toggleListeningBtn.text = WakeWordOutcomeUi.buttonLabel(outcome)
+            toggleListeningBtn.style = TOGGLE_START_STYLE
+            val alert = Alert(Alert.AlertType.WARNING)
+            alert.title = "Wake Word Detection Unavailable"
+            alert.headerText = "Wake word detection could not start"
+            alert.contentText = dialogText
+            alert.showAndWait()
+        }
+    }
+
+    /** Fallback for an unexpected exception while merely building the initializer. */
+    private fun applyInitErrorState() {
+        wakeWordDetector = null
+        isAlwaysListening = false
+        voiceControlService.onAlwaysListeningChanged(false)
+        Platform.runLater {
+            toggleListeningBtn.text = WakeWordOutcomeUi.START_LABEL
+            toggleListeningBtn.style = TOGGLE_START_STYLE
+            val alert = Alert(Alert.AlertType.ERROR)
+            alert.title = "Wake Word Detection Error"
+            alert.headerText = "Failed to start wake word detection"
+            alert.contentText = "Wake word detection failed to initialize.\nManual Talk still works."
+            alert.showAndWait()
+        }
+    }
+
+    /**
+     * Assemble the pure [WakeWordInitializer] with production seams: the `attempt`
+     * seam builds AND starts a real [WakeWordDetector] for the requested mode/device
+     * and converts any Throwable into a captured [WakeWordAttemptResult.Failure]
+     * (message + Porcupine 4.x message stack + native code). No native calls happen
+     * inside the initializer itself.
+     */
+    private fun buildWakeWordInitializer(): WakeWordInitializer {
+        val accessKey = PorcupineAccessKeyResolver.resolve()
+        val accessKeyPresent = !accessKey.isNullOrBlank()
+        val customModel = buildCustomModelInfo()
+        val format = WakeWordInputDevices.PORCUPINE_FORMAT
+        val devices = WakeWordInputDevices.list(format)
+        val defaultDeviceName = WakeWordInputDevices.defaultDeviceName(format)
+        // Higher default sensitivity (0.65) makes "Jarvis" trigger more reliably on
+        // quieter / accented speech. Tune via JARVIS_WAKE_SENSITIVITY.
+        val wakeSensitivity =
+            System.getenv("JARVIS_WAKE_SENSITIVITY")?.toFloatOrNull()?.coerceIn(0.0f, 1.0f) ?: 0.65f
+
+        val attempt: (WakeWordAttempt) -> WakeWordAttemptResult = { request ->
+            try {
+                val detector = buildDetector(request, accessKey.orEmpty(), customModel, wakeSensitivity)
+                detector.start()
+                WakeWordAttemptResult.Success(detector)
+            } catch (e: Throwable) {
+                val details = WakeWordDetector.describeFailure(e)
+                logger.warn(
+                    "Wake word attempt failed: mode={}, device={}, code={}, msg={}",
+                    request.mode, request.device?.name, details.nativeCode, details.message
+                )
+                WakeWordAttemptResult.Failure(
+                    exceptionClass = e.javaClass.simpleName,
+                    message = details.message,
+                    messageStack = details.messageStack,
+                    nativeCode = details.nativeCode
+                )
+            }
+        }
+
+        return WakeWordInitializer(
+            accessKeyPresent = accessKeyPresent,
+            customModel = customModel,
+            devices = devices,
+            attempt = attempt,
+            staticInfo = StaticInitInfo(
+                porcupineVersion = PORCUPINE_RUNTIME_VERSION,
+                osName = System.getProperty("os.name").orEmpty(),
+                osArch = System.getProperty("os.arch").orEmpty(),
+                javaVersion = System.getProperty("java.version").orEmpty(),
+                manualTalkDevice = defaultDeviceName,
+                defaultDevice = defaultDeviceName
+            ),
+            persistDevice = { device -> persistWakeInputDevice(device) },
+            stopProbe = { handle -> (handle as? WakeWordDetector)?.stop() }
+        )
+    }
+
+    private fun buildDetector(
+        request: WakeWordAttempt,
+        accessKey: String,
+        customModel: CustomModelInfo?,
+        sensitivity: Float
+    ): WakeWordDetector = when (request.mode) {
+        WakeWordMode.CUSTOM_RU -> WakeWordDetector(
+            accessKey = accessKey,
+            keywordPaths = listOfNotNull(customModel?.path),
+            sensitivity = sensitivity,
+            deviceName = request.device?.name,
+            onWakeWordDetected = { keywordIndex -> onWakeWordDetected(keywordIndex) }
+        )
+        WakeWordMode.BUILTIN_JARVIS -> WakeWordDetector.createWithBuiltInKeywords(
+            accessKey = accessKey,
+            keywords = listOf(BuiltInKeyword.JARVIS),
+            sensitivity = sensitivity,
+            deviceName = request.device?.name,
+            onWakeWordDetected = { keywordIndex -> onWakeWordDetected(keywordIndex) }
+        )
+    }
+
+    private fun buildCustomModelInfo(): CustomModelInfo? {
+        val path = resolveWakeWordModelPath() ?: return null
+        val file = File(path)
+        val exists = file.exists()
+        return CustomModelInfo(
+            path = path,
+            exists = exists,
+            sizeBytes = if (exists) file.length() else 0L,
+            readable = exists && file.canRead()
+        )
+    }
+
+    private fun persistWakeInputDevice(device: WakeWordInputDevice) {
+        try {
+            Preferences.userNodeForPackage(VoiceTab::class.java).put("wakeInputDevice", device.name)
+        } catch (e: Exception) {
+            logger.debug("Could not persist wake input device '{}': {}", device.name, e.message)
+        }
+    }
+
+    /**
+     * "Test Wake Word Setup": dry-probe custom then built-in on a background
+     * thread (so native init never stalls the FX thread), stop any probe handle
+     * the initializer opened, then show + log the section-6 diagnostics JSON.
+     */
+    private fun runWakeWordDiagnostics() {
+        Thread {
+            val json = try {
+                buildWakeWordInitializer().diagnose().testWakeWordSetupJson()
+            } catch (e: Exception) {
+                logger.error("Wake word diagnostics failed", e)
+                "{\"error\":\"diagnostics failed\"}"
+            }
+            logger.info("Wake word setup diagnostics: {}", json)
+            Platform.runLater {
+                val area = TextArea(json).apply {
+                    isEditable = false
+                    isWrapText = true
+                    prefRowCount = 12
+                    prefColumnCount = 40
+                }
+                val alert = Alert(Alert.AlertType.INFORMATION)
+                alert.title = "Wake Word Setup"
+                alert.headerText = "Wake word diagnostics"
+                alert.dialogPane.content = area
+                alert.showAndWait()
+            }
+        }.apply {
+            name = "WakeWordDiagnostics"
+            isDaemon = true
+            start()
         }
     }
 
@@ -516,10 +643,10 @@ class VoiceTab(
         voiceControlService.onAlwaysListeningChanged(false)
         
         Platform.runLater {
-            toggleListeningBtn.text = "Start Always Listening"
-            toggleListeningBtn.style = "-fx-font-size: 14px; -fx-background-color: #4A90E2; -fx-text-fill: white;"
+            toggleListeningBtn.text = WakeWordOutcomeUi.START_LABEL
+            toggleListeningBtn.style = TOGGLE_START_STYLE
         }
-        
+
         logger.info("🔇 Always listening mode deactivated")
     }
 
@@ -647,5 +774,14 @@ class VoiceTab(
         audioRecorder.stopRecording()
         voiceWebSocketClient.disconnect()
         voiceSession.shutdown()
+    }
+
+    companion object {
+        // Pinned to the ai.picovoice:porcupine-java version in this module's pom.
+        private const val PORCUPINE_RUNTIME_VERSION = "4.0.0"
+        private const val TOGGLE_START_STYLE =
+            "-fx-font-size: 14px; -fx-background-color: #4A90E2; -fx-text-fill: white;"
+        private const val TOGGLE_STOP_STYLE =
+            "-fx-font-size: 14px; -fx-background-color: #E74C3C; -fx-text-fill: white;"
     }
 }

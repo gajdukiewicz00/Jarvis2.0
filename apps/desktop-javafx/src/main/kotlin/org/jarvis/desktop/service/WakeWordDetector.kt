@@ -16,6 +16,9 @@ class WakeWordDetector(
     private val keywordPaths: List<String>? = null,  // paths to .ppn files
     private val builtInKeywords: List<BuiltInKeyword>? = null,  // built-in keywords
     private val sensitivity: Float = 0.5f,
+    // Optional specific input device (mixer) name. When null, the default input
+    // line is used — the same mic Manual Talk opens via AudioSystem.getLine.
+    private val deviceName: String? = null,
     private val onWakeWordDetected: (Int) -> Unit  // callback with keyword index
 ) {
     
@@ -181,14 +184,10 @@ class WakeWordDetector(
         )
         
         val dataLineInfo = DataLine.Info(TargetDataLine::class.java, audioFormat)
-        
-        if (!AudioSystem.isLineSupported(dataLineInfo)) {
-            throw IllegalStateException("Microphone not supported")
-        }
-        
-        targetDataLine = AudioSystem.getLine(dataLineInfo) as TargetDataLine
-        targetDataLine?.open(audioFormat)
-        targetDataLine?.start()
+
+        val line = openTargetLine(dataLineInfo, audioFormat)
+        targetDataLine = line
+        line.start()
         
         // Start audio processing thread
         audioThread = Thread {
@@ -198,6 +197,34 @@ class WakeWordDetector(
             isDaemon = true
             start()
         }
+    }
+
+    /**
+     * Open the capture line. If a specific [deviceName] was requested, open THAT
+     * mixer's [TargetDataLine] so wake-word detection can be pinned to the same
+     * mic Manual Talk uses; otherwise fall back to the default input line.
+     */
+    private fun openTargetLine(dataLineInfo: DataLine.Info, audioFormat: AudioFormat): TargetDataLine {
+        val requested = deviceName?.trim()
+        if (!requested.isNullOrEmpty()) {
+            val mixerInfo = AudioSystem.getMixerInfo().firstOrNull { it.name.trim() == requested }
+            if (mixerInfo != null) {
+                val mixer = AudioSystem.getMixer(mixerInfo)
+                if (mixer.isLineSupported(dataLineInfo)) {
+                    val line = mixer.getLine(dataLineInfo) as TargetDataLine
+                    line.open(audioFormat)
+                    return line
+                }
+            }
+            System.err.println("Requested wake-word input device '$requested' unavailable; using default input line")
+        }
+
+        if (!AudioSystem.isLineSupported(dataLineInfo)) {
+            throw IllegalStateException("Microphone not supported")
+        }
+        val line = AudioSystem.getLine(dataLineInfo) as TargetDataLine
+        line.open(audioFormat)
+        return line
     }
     
     private fun processMicrophoneAudio(porcupineInstance: Porcupine) {
@@ -254,7 +281,22 @@ class WakeWordDetector(
         }
     }
     
+    /**
+     * Structured view of a caught wake-word initialization failure: the plain
+     * message, Porcupine 4.x's full [PorcupineException.getMessageStack], and the
+     * parsed native error code (when present).
+     */
+    data class FailureDetails(
+        val message: String?,
+        val messageStack: List<String>,
+        val nativeCode: String?
+    )
+
     companion object {
+        // Porcupine 4.x messageStack lines look like "[0] d3ff828 00000136: ...";
+        // the 8-hex token ("00000136") is the native error code we surface.
+        private val NATIVE_CODE_REGEX = Regex("\\b([0-9a-fA-F]{8})\\b")
+
         /**
          * Create detector with built-in Porcupine keywords (e.g., JARVIS in English).
          * No need to download or train models - works immediately!
@@ -263,6 +305,7 @@ class WakeWordDetector(
             accessKey: String,
             keywords: List<BuiltInKeyword>,  // e.g., [BuiltInKeyword.JARVIS]
             sensitivity: Float = 0.5f,
+            deviceName: String? = null,
             onWakeWordDetected: (Int) -> Unit
         ): WakeWordDetector {
             return WakeWordDetector(
@@ -270,8 +313,36 @@ class WakeWordDetector(
                 keywordPaths = null,
                 builtInKeywords = keywords,
                 sensitivity = sensitivity,
+                deviceName = deviceName,
                 onWakeWordDetected = onWakeWordDetected
             )
+        }
+
+        /**
+         * Turn any caught [Throwable] from a start() attempt into a structured
+         * [FailureDetails]. Captures the full Porcupine message stack (4.x) so the
+         * cryptic "[0] ... 00000136" native detail lands in logs/diagnostics rather
+         * than being shown raw to the user.
+         */
+        fun describeFailure(t: Throwable): FailureDetails {
+            val stack: List<String> = when (t) {
+                is PorcupineException -> t.messageStack?.toList().orEmpty()
+                else -> emptyList()
+            }
+            val searchable = stack + listOfNotNull(t.message)
+            return FailureDetails(
+                message = t.message,
+                messageStack = stack,
+                nativeCode = extractNativeCode(searchable)
+            )
+        }
+
+        /** Extract the first "00000136"-style native code from message/stack lines. */
+        fun extractNativeCode(lines: List<String>): String? {
+            for (line in lines) {
+                NATIVE_CODE_REGEX.find(line)?.let { return it.groupValues[1] }
+            }
+            return null
         }
     }
 }

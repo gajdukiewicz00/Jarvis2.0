@@ -578,6 +578,12 @@ commands:
           - "работает ли gpu"
           - "проверь ai runtime"
           - "какая модель запущена"
+          # STT-cut / short variants of the above (globally-unique, so safe as exact —
+          # "статус и" is the common Vosk cut of "статус ии"). Kept exact (not contains)
+          # because "статус и" is a prefix of unrelated phrases like "статус интернета".
+          - "статус и"
+          - "статус ai"
+          - "проверь модель"
       - type: contains
         values:
           - "статус модели"

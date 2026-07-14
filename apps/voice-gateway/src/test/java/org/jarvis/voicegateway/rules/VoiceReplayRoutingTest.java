@@ -67,6 +67,13 @@ class VoiceReplayRoutingTest {
     @Test void diagnostics() { assertEquals("DIAGNOSTICS_RUN", actionOf("проверь систему")); }
     @Test void serviceStatus() { assertEquals("SERVICE_STATUS_SUMMARY", actionOf("статус сервисов")); }
     @Test void aiRuntime() { assertEquals("AI_RUNTIME_STATUS", actionOf("статус ии")); }
+    // Short / STT-cut variants of the AI-runtime-status intent must route to AI_RUNTIME_STATUS.
+    @Test void aiRuntime_statusIiExisting() { assertEquals("AI_RUNTIME_STATUS", actionOf("статус ии")); }
+    @Test void aiRuntime_statusISttCut() { assertEquals("AI_RUNTIME_STATUS", actionOf("статус и")); }
+    @Test void aiRuntime_statusAi() { assertEquals("AI_RUNTIME_STATUS", actionOf("статус ai")); }
+    @Test void aiRuntime_statusModeli() { assertEquals("AI_RUNTIME_STATUS", actionOf("статус модели")); }
+    @Test void aiRuntime_proverModel() { assertEquals("AI_RUNTIME_STATUS", actionOf("проверь модель")); }
+    @Test void aiRuntime_rabotaetLiGpu() { assertEquals("AI_RUNTIME_STATUS", actionOf("работает ли gpu")); }
     @Test void memorySearch() { assertEquals("MEMORY_SEARCH", actionOf("покажи память про джарвис")); }
     @Test void securityAudit() { assertEquals("SECURITY_AUDIT_RECENT", actionOf("покажи audit")); }
     @Test void pairing() { assertEquals("PAIRING_STATUS", actionOf("покажи pairing")); }

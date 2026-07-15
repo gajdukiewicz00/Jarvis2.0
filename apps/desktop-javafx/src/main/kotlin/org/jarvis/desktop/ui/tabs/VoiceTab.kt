@@ -45,6 +45,7 @@ import org.jarvis.desktop.service.wake.WakeSidecarAutostart
 import org.jarvis.desktop.service.wake.WakeWordCallback
 import org.jarvis.desktop.service.wake.WakeWordConfig
 import org.jarvis.desktop.service.wake.WakeWordProvider
+import org.jarvis.desktop.service.wake.WakeWordProviderManager
 import org.jarvis.desktop.service.wake.WakeWordProviderSelector
 import org.jarvis.desktop.service.wake.WakeWordProviderType
 import ai.picovoice.porcupine.Porcupine.BuiltInKeyword
@@ -85,12 +86,15 @@ class VoiceTab(
     private val cancelBtn = Button("⏹ Stop / Cancel")
     private val toggleListeningBtn = Button("Start Always Listening")
     private val testWakeWordBtn = Button("Test Wake Word Setup")
+    private val startWakeBtn = Button("Start Wake Word Provider")
     private val restartWakeBtn = Button("Restart Wake Word Provider")
     private val stopWakeBtn = Button("Stop Wake Word Provider")
     private val refreshDevicesBtn = Button("↻ Refresh devices")
+    private val wakeRefreshDevicesBtn = Button("↻ Refresh Wake Mics")
     private val wakeInputDeviceCombo = ComboBox<String>()
     private val wakeProviderCombo = ComboBox<String>()
     private val wakePhraseCombo = ComboBox<String>()
+    private val wakeThresholdSpinner = Spinner<Double>()
     private val wakeStatusLabel = Label("")
     private val stateIndicator = Circle(10.0)
     
@@ -115,6 +119,10 @@ class VoiceTab(
     @Volatile private var wakeGate: WakeEventGate? = null
     // Last selection outcome, reused by the section-8 diagnostics assembly.
     @Volatile private var lastSelection: SelectionResult? = null
+    // The single lifecycle owner for the active wake provider. The JavaFX layer talks
+    // to THIS (start/pause/resume/stop), never to a raw provider, so "one active
+    // instance" + "pause/resume without teardown" live in one place. Built per start.
+    @Volatile private var wakeManager: WakeWordProviderManager? = null
     // The live Porcupine detector captured by the attempt seam — adopted as the
     // pause/resume handle ONLY when the Porcupine provider actually won.
     @Volatile private var pendingPorcupineDetector: WakeWordDetector? = null
@@ -128,6 +136,9 @@ class VoiceTab(
     // Provider + phrase choices, shadowed so currentWakeConfig() reads them off-thread.
     @Volatile private var wakeProviderChoice: WakeWordProviderType? = null
     @Volatile private var wakePhraseModel: String? = null
+    // Detection score threshold from the Threshold control (0.0–1.0), shadowed so the
+    // background selector can read it off the FX thread without touching a JavaFX property.
+    @Volatile private var wakeThreshold: Double? = null
     // Suppresses persistence while the combo is being repopulated programmatically.
     @Volatile private var suppressComboPersist = false
 
@@ -157,17 +168,25 @@ class VoiceTab(
             onEnableWakeWord = {
                 // Wake-listening just re-armed (session recovered to LISTENING_WAKE_WORD, or
                 // always-listening was enabled). Arm the gate's post-command cooldown so the
-                // TTS tail / echo cannot immediately re-trigger a wake. For sidecar providers
-                // there is no local detector to resume — the gate is what holds wake off while
-                // busy; the Porcupine detector additionally resumes its own capture here.
+                // TTS tail / echo cannot immediately re-trigger a wake (the gate is the
+                // "suspenders"). Then RESUME the active provider via the manager (the "belt"):
+                // for a sidecar provider this POSTs /resume, for Porcupine it resumes the local
+                // detector. markCompleted first so any duplicate/stale wake during the
+                // 1.5–3s cooldown is still dropped even though detection is live again.
                 wakeGate?.markCompleted(System.currentTimeMillis())
                 if (isAlwaysListening) {
                     wakeWordDetector?.resume()
-                    logger.info("🎧 Wake word detection re-armed (gate cooldown started)")
+                    wakeManager?.resume()
+                    logger.info("🎧 Wake word detection re-armed (gate cooldown started, provider resumed)")
                 }
             },
             onDisableWakeWord = {
+                // A command just started (wake detected) / always-listening disabled. PAUSE the
+                // active provider through the manager so it stops streaming wake events while the
+                // command records and TTS plays — sidecar providers POST /pause, Porcupine pauses
+                // its detector (idempotent with the direct detector pause below).
                 wakeWordDetector?.pause()
+                wakeManager?.pause()
                 logger.info("🔇 Wake word detection paused")
             },
             onPauseMedia = {
@@ -389,22 +408,38 @@ class VoiceTab(
             wakeInputDeviceChoice = value?.takeIf { it.isNotBlank() && it != AUTO_DEVICE_LABEL }
             persistWakeInputDeviceChoice(wakeInputDeviceChoice)
         }
+        // "Refresh Wake Mics": re-fetch the sidecar GET /devices off-thread and repopulate
+        // the Microphone combo (falls back to the local Java Sound classify when the sidecar
+        // is unreachable). Non-blocking, no hardware/modal.
+        wakeRefreshDevicesBtn.style = "-fx-font-size: 11px;"
+        wakeRefreshDevicesBtn.setOnAction { refreshWakeInputDeviceChoices() }
         val wakeDeviceRow = HBox(8.0)
         val wakeDeviceLabel = Label("Wake Word Microphone:")
         wakeDeviceLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
-        wakeDeviceRow.children.addAll(wakeDeviceLabel, wakeInputDeviceCombo)
+        wakeDeviceRow.children.addAll(wakeDeviceLabel, wakeInputDeviceCombo, wakeRefreshDevicesBtn)
         content.children.add(wakeDeviceRow)
         refreshWakeInputDeviceChoices()
 
-        // Wake-word provider controls: diagnostics, restart, stop. All non-blocking.
+        // Wake detection threshold (0.0–1.0). Seeded from the persisted choice, else
+        // JARVIS_WAKEWORD_THRESHOLD, else the documented default; feeds WakeWordConfig.threshold.
+        buildWakeThresholdSpinner()
+        val thresholdRow = HBox(8.0)
+        val thresholdLabel = Label("Wake Threshold:")
+        thresholdLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
+        thresholdRow.children.addAll(thresholdLabel, wakeThresholdSpinner)
+        content.children.add(thresholdRow)
+
+        // Wake-word provider controls: diagnostics, explicit start, restart, stop. All non-blocking.
         testWakeWordBtn.style = "-fx-font-size: 12px;"
         testWakeWordBtn.setOnAction { runWakeWordDiagnostics() }
+        startWakeBtn.style = "-fx-font-size: 12px;"
+        startWakeBtn.setOnAction { startWakeProviderExplicit() }
         restartWakeBtn.style = "-fx-font-size: 12px;"
         restartWakeBtn.setOnAction { restartWakeProvider() }
         stopWakeBtn.style = "-fx-font-size: 12px;"
         stopWakeBtn.setOnAction { stopAlwaysListening() }
         val wakeButtonsRow = HBox(10.0)
-        wakeButtonsRow.children.addAll(testWakeWordBtn, restartWakeBtn, stopWakeBtn)
+        wakeButtonsRow.children.addAll(testWakeWordBtn, startWakeBtn, restartWakeBtn, stopWakeBtn)
         content.children.add(wakeButtonsRow)
 
         // Separator
@@ -529,11 +564,14 @@ class VoiceTab(
     }
 
     /**
-     * Provider-based Always-Listening start. Runs [WakeWordProviderSelector.select]
-     * OFF the FX thread (it does sidecar health/HTTP + autostart, which can block a
-     * few seconds), then applies the outcome on the FX thread. The selector ALWAYS
-     * returns a started provider (ManualOnlyProvider is the last resort), so we can
-     * never leave Always-Listening half-enabled. Manual Talk / WS / STT are untouched.
+     * Provider-based Always-Listening start. Builds a single [WakeWordProviderManager]
+     * (over a fresh [WakeWordProviderSelector]) and runs [WakeWordProviderManager.start]
+     * OFF the FX thread (it does sidecar health/HTTP + autostart, which can block a few
+     * seconds), then applies the outcome on the FX thread. The manager owns the single
+     * active provider and is the pause/resume/stop handle the session lifecycle drives.
+     * The selector ALWAYS returns a started provider (ManualOnlyProvider is the last
+     * resort), so we can never leave Always-Listening half-enabled. Manual Talk / WS /
+     * STT are untouched.
      */
     private fun startAlwaysListening() {
         wakeSelectionInProgress = true
@@ -554,8 +592,12 @@ class VoiceTab(
                 Platform.runLater { onWakeAccepted() }
             }
             val selector = WakeWordProviderSelector(config, providers)
+            val manager = WakeWordProviderManager(config, selector)
             val selection = try {
-                selector.select(callback)
+                // The manager wraps the callback in a generation guard (a late wake from a
+                // provider that has since been replaced/stopped is dropped) and stores the
+                // winning provider as the single active one.
+                manager.start(callback)
             } catch (e: Exception) {
                 // SAFE STATE: treat as the manual-only outcome — never a hard failure.
                 logger.error("Wake provider selection threw; falling back to Manual Talk only", e)
@@ -563,7 +605,7 @@ class VoiceTab(
             }
             Platform.runLater {
                 wakeSelectionInProgress = false
-                if (selection == null) applyManualOnlySafeState() else applySelectionOutcome(selection, gate)
+                if (selection == null) applyManualOnlySafeState() else applySelectionOutcome(selection, gate, manager)
             }
         }.apply {
             name = "WakeProviderSelect"
@@ -610,9 +652,10 @@ class VoiceTab(
      * off but Manual Talk keeps working). The Section-9 message is shown as INFO on
      * the status line — never a blocking error while a provider is active.
      */
-    private fun applySelectionOutcome(selection: SelectionResult, gate: WakeEventGate) {
+    private fun applySelectionOutcome(selection: SelectionResult, gate: WakeEventGate, manager: WakeWordProviderManager) {
         lastSelection = selection
         wakeGate = gate
+        wakeManager = manager
         activeWakeProvider = selection.selected
         // Only adopt the Porcupine detector's pause/resume handle when Porcupine won;
         // sidecar providers have no local detector (gate handles busy-suppression).
@@ -645,6 +688,7 @@ class VoiceTab(
         activeWakeProvider = null
         wakeWordDetector = null
         wakeGate = null
+        wakeManager = null
         val ui = manualOnlyOutcome()
         applyWakeUi(ui)
         voiceControlService.onAlwaysListeningChanged(false)
@@ -676,6 +720,17 @@ class VoiceTab(
     private fun restartWakeProvider() {
         stopAlwaysListening()
         startAlwaysListening()
+    }
+
+    /**
+     * "Start Wake Word Provider": explicitly (re)start the provider. When nothing is
+     * running this is the same as toggling Always-Listening on; when a provider is already
+     * active it does a clean stop→start (restart) so the manager is never left with a
+     * leaked previous provider. No-op while a selection is already in flight.
+     */
+    private fun startWakeProviderExplicit() {
+        if (wakeSelectionInProgress) return
+        if (isAlwaysListening) restartWakeProvider() else startAlwaysListening()
     }
 
     /**
@@ -911,15 +966,55 @@ class VoiceTab(
     }
 
     /**
+     * Build the wake-threshold spinner: seed the value from the persisted choice, else
+     * JARVIS_WAKEWORD_THRESHOLD, else the documented default. The value is shadowed into
+     * [wakeThreshold] (read off-thread by [currentWakeConfig]) and persisted on change.
+     */
+    private fun buildWakeThresholdSpinner() {
+        val initial = readWakeThresholdPref()
+            ?: System.getenv("JARVIS_WAKEWORD_THRESHOLD")?.trim()?.toDoubleOrNull()?.coerceIn(0.0, 1.0)
+            ?: DEFAULT_THRESHOLD
+        wakeThresholdSpinner.valueFactory =
+            SpinnerValueFactory.DoubleSpinnerValueFactory(0.0, 1.0, initial, WAKE_THRESHOLD_STEP)
+        wakeThresholdSpinner.isEditable = true
+        wakeThresholdSpinner.prefWidth = 110.0
+        wakeThresholdSpinner.style = "-fx-font-size: 11px;"
+        wakeThreshold = initial
+        wakeThresholdSpinner.valueProperty().addListener { _, _, newValue ->
+            val v = (newValue ?: DEFAULT_THRESHOLD).coerceIn(0.0, 1.0)
+            wakeThreshold = v
+            persistWakeThreshold(v)
+        }
+    }
+
+    private fun persistWakeThreshold(value: Double) {
+        try {
+            Preferences.userNodeForPackage(VoiceTab::class.java).putDouble("wakeThresholdChoice", value)
+        } catch (e: Exception) {
+            logger.debug("Could not persist wake threshold: {}", e.message)
+        }
+    }
+
+    private fun readWakeThresholdPref(): Double? = try {
+        val prefs = Preferences.userNodeForPackage(VoiceTab::class.java)
+        if (prefs.get("wakeThresholdChoice", null) == null) null
+        else prefs.getDouble("wakeThresholdChoice", DEFAULT_THRESHOLD).coerceIn(0.0, 1.0)
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
      * Resolve the effective wake config: env supplies url/threshold defaults, while
-     * the three dropdowns (provider / phrase / microphone) override type/model/device.
-     * Read entirely off shadowed @Volatile fields so it is safe off the FX thread.
+     * the controls (provider / phrase / microphone / threshold) override
+     * type/model/device/threshold. Read entirely off shadowed @Volatile fields so it
+     * is safe off the FX thread.
      */
     private fun currentWakeConfig(): WakeWordConfig {
         val base = parseWakeConfig { System.getenv(it) }
         return base.copy(
             type = wakeProviderChoice ?: base.type,
             model = wakePhraseModel ?: base.model,
+            threshold = wakeThreshold ?: base.threshold,
             device = selectedWakeDeviceName() ?: base.device
         )
     }
@@ -1021,9 +1116,12 @@ class VoiceTab(
         Thread {
             val json = try {
                 val config = currentWakeConfig()
-                val providers = buildProviders(config)
-                val selector = WakeWordProviderSelector(config, providers)
-                val providerDiags = selector.providerDiagnostics()
+                // Prefer the LIVE manager (reflects the real active provider incl. its paused
+                // state + last selection); fall back to a fresh selector when nothing is running.
+                val manager = wakeManager
+                val providerDiags = manager?.diagnostics()
+                    ?: WakeWordProviderSelector(config, buildProviders(config)).providerDiagnostics()
+                val selection = manager?.lastSelection() ?: lastSelection
                 val sidecarDiag = try {
                     OkHttpWakeSidecarClient(config.sidecarUrl).diagnostics()
                 } catch (e: Exception) {
@@ -1035,7 +1133,16 @@ class VoiceTab(
                 } catch (e: Exception) {
                     emptyList()
                 }
-                buildDiagnosticsJson(lastSelection, providerDiags, sidecarDiag, rejected)
+                buildDiagnosticsJson(
+                    selection = selection,
+                    providerDiags = providerDiags,
+                    sidecarDiag = sidecarDiag,
+                    rejected = rejected,
+                    voiceSessionState = voiceSession.state.name,
+                    providerPaused = manager?.isPaused() ?: false,
+                    recorderActive = voiceSession.isRecordingActive,
+                    lastRecoveryReason = voiceSession.lastRecoveryReason
+                )
             } catch (e: Exception) {
                 logger.error("Wake word diagnostics failed", e)
                 "{\"error\":\"diagnostics failed\"}"
@@ -1067,6 +1174,13 @@ class VoiceTab(
      * are untouched. Idempotent — safe to call when nothing is running.
      */
     private fun stopAlwaysListening() {
+        // Stop through the manager first — it owns the single active provider and clears
+        // it (SSE + POST /stop for sidecar; detector stop for Porcupine). Idempotent.
+        try {
+            wakeManager?.stop()
+        } catch (e: Exception) {
+            logger.debug("Wake manager stop failed: {}", e.message)
+        }
         try {
             activeWakeProvider?.stop()
         } catch (e: Exception) {
@@ -1075,6 +1189,7 @@ class VoiceTab(
         // Also stop the Porcupine detector directly (idempotent) in case it was
         // adopted as the pause/resume handle.
         wakeWordDetector?.stop()
+        wakeManager = null
         activeWakeProvider = null
         porcupineProvider = null
         wakeWordDetector = null
@@ -1258,6 +1373,8 @@ class VoiceTab(
         internal const val DEFAULT_MODEL = "hey_jarvis"
         internal const val DEFAULT_THRESHOLD = 0.5
         internal const val DEFAULT_DEVICE = "auto"
+        // Threshold spinner increment (0.0–1.0 in 0.05 steps).
+        private const val WAKE_THRESHOLD_STEP = 0.05
 
         // ── provider dropdown labels ──
         private const val PROVIDER_AUTO = "Auto"
@@ -1362,16 +1479,30 @@ class VoiceTab(
             selection: SelectionResult?,
             providerDiags: List<WakeProviderDiagnostics>,
             sidecarDiag: SidecarDiagnosticsData?,
-            rejected: List<Pair<String, String>>
+            rejected: List<Pair<String, String>>,
+            voiceSessionState: String? = null,
+            providerPaused: Boolean? = null,
+            recorderActive: Boolean? = null,
+            lastRecoveryReason: String? = null
         ): String {
             val oww = providerDiags.firstOrNull { it.providerId == "openwakeword" }
             val vosk = providerDiags.firstOrNull { it.providerId == "vosk" }
             val porcupine = providerDiags.firstOrNull { it.providerId == "porcupine" }
             val porcupineAvailable = porcupine?.installed ?: false
+            // The reason a fallback occurred: the first attempt in the chain that did NOT start.
+            val fallbackReason = selection?.fallbackChain?.firstOrNull { !it.started }?.reason
+            // Sidecar reachability: the openWakeWord provider's own probe result, else a
+            // successful /diagnostics fetch implies reachable.
+            val sidecarReachable = oww?.reachable ?: (if (sidecarDiag != null) true else null)
+            // Models the wake engine reports it has loaded (sidecar authoritative, else provider).
+            val modelsLoaded = oww?.models?.takeIf { it.isNotEmpty() } ?: sidecarDiag?.models ?: emptyList()
             val obj = buildJsonObject {
                 put("selectedProvider", selection?.selected?.providerId ?: selection?.selectedType?.name?.lowercase() ?: "manual")
                 put("providerStatus", (selection?.status ?: WakeProviderState.UNAVAILABLE).name)
+                put("providerFallbackReason", fallbackReason)
                 put("manualTalkAvailable", true)
+                put("sidecarReachable", sidecarReachable)
+                putJsonArray("modelsLoaded") { modelsLoaded.forEach { add(it) } }
                 put("openWakeWordInstalled", oww?.installed ?: sidecarDiag?.installed)
                 put("openWakeWordReachable", oww?.reachable)
                 putJsonArray("openWakeWordModels") {
@@ -1391,7 +1522,13 @@ class VoiceTab(
                 }
                 put("lastWakeDetectedAt", sidecarDiag?.lastWakeDetectedAt ?: oww?.lastWakeDetectedAt)
                 put("lastWakeScore", sidecarDiag?.lastWakeScore ?: oww?.lastWakeScore)
+                // Live voice-session + provider lifecycle state (null when not supplied by a caller
+                // that has a session/manager in hand — the pure unit tests pass neither).
+                put("voiceSessionState", voiceSessionState)
+                put("providerPaused", providerPaused)
+                put("recorderActive", recorderActive)
                 put("lastError", sidecarDiag?.lastError ?: oww?.lastError)
+                put("lastRecoveryReason", lastRecoveryReason)
                 putJsonArray("fallbackChain") {
                     selection?.fallbackChain?.forEach { record ->
                         addJsonObject {

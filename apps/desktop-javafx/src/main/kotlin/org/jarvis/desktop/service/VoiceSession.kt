@@ -61,7 +61,7 @@ class VoiceSession(
     @Volatile private var endedCorrelationId: String? = null
     @Volatile private var lastCompletedCorrelationId: String? = null  // idempotency key
     @Volatile private var lastCommandCompletedAt: Long = 0L
-    @Volatile private var lastRecoveryReason: String = "none"
+    @Volatile private var recoveryReasonState: String = "none"
 
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "VoiceSession-Scheduler").apply { isDaemon = true }
@@ -83,6 +83,12 @@ class VoiceSession(
     val currentCorrelationId: String? get() = correlationId
     val isRecordingActive: Boolean get() = recordingActive
     val alwaysListeningActive: Boolean get() = alwaysListeningEnabled
+
+    /**
+     * Reason of the most recent recovery/completion (mirrors the debugSnapshot field),
+     * exposed so the Voice tab's section-8 diagnostics JSON can surface it.
+     */
+    val lastRecoveryReason: String get() = recoveryReasonState
 
     /**
      * Exact per-state dwell bound (the safe upper limit before the watchdog force-recovers).
@@ -359,9 +365,18 @@ class VoiceSession(
         lastCompletedCorrelationId = correlationId ?: lastCompletedCorrelationId
         endedCorrelationId = correlationId ?: this.correlationId
         lastCommandCompletedAt = System.currentTimeMillis()
-        lastRecoveryReason = reason
+        recoveryReasonState = reason
         recoverToWakeListening(reason)
     }
+
+    /**
+     * Naming-parity alias for [completeCommandSession] — THE single idempotent completion
+     * chokepoint every terminal voice path (success / timeout / noise / cancel / watchdog /
+     * text-only) funnels through. Provided so callers/tests can use the DoD's spelling; it
+     * simply delegates, so there is exactly one recovery implementation.
+     */
+    fun completeVoiceCommandSession(correlationId: String?, reason: String) =
+        completeCommandSession(correlationId, reason)
 
     /**
      * Low-level recovery mechanism. Cancels timers, stops recording, clears state, resumes media,
@@ -524,7 +539,7 @@ class VoiceSession(
             append("\"startedCorrelationId\":").append(jsonStr(startedCorrelationId)).append(",")
             append("\"endedCorrelationId\":").append(jsonStr(endedCorrelationId)).append(",")
             append("\"lastCommandCompletedAt\":").append(lastCommandCompletedAt).append(",")
-            append("\"lastRecoveryReason\":").append(jsonStr(lastRecoveryReason)).append(",")
+            append("\"lastRecoveryReason\":").append(jsonStr(recoveryReasonState)).append(",")
             append("\"pendingTimers\":").append(jsonStr(pendingTimers())).append(",")
             append("\"stateDwellMs\":").append(dwell).append(",")
             append("\"diag\":").append(jsonStr(safeDiagnostics()))

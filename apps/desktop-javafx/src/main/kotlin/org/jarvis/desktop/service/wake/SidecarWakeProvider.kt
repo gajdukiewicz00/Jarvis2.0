@@ -42,6 +42,7 @@ abstract class SidecarWakeProvider(
     @Volatile private var activeConfig: WakeWordConfig? = null
     @Volatile private var eventStream: Closeable? = null
     @Volatile private var listening = false
+    @Volatile private var paused = false
     @Volatile private var lastState: WakeProviderState = WakeProviderState.UNAVAILABLE
     @Volatile private var lastReachable: Boolean? = null
     @Volatile private var lastError: String? = null
@@ -103,12 +104,34 @@ abstract class SidecarWakeProvider(
         }
 
         listening = true
+        paused = false
         lastState = readyState()
         return WakeWordStartResult(true, providerId, readyState(), null)
     }
 
+    override fun pause() {
+        if (paused) return // idempotent: already paused → no redundant POST
+        paused = true
+        try {
+            http.pause()
+        } catch (e: Exception) {
+            logger.debug("wake.{}.pause error: {}", providerId, e.message)
+        }
+    }
+
+    override fun resume() {
+        if (!paused) return // idempotent: not paused → nothing to resume
+        paused = false
+        try {
+            http.resume()
+        } catch (e: Exception) {
+            logger.debug("wake.{}.resume error: {}", providerId, e.message)
+        }
+    }
+
     override fun stop() {
         listening = false
+        paused = false
         try {
             http.stopEngine()
         } catch (e: Exception) {
@@ -123,7 +146,8 @@ abstract class SidecarWakeProvider(
         if (lastState != WakeProviderState.ERROR) lastState = WakeProviderState.UNAVAILABLE
     }
 
-    override fun status(): WakeWordStatus = WakeWordStatus(lastState, messageFor(lastState))
+    override fun status(): WakeWordStatus =
+        if (paused) WakeWordStatus(lastState, "$providerId paused") else WakeWordStatus(lastState, messageFor(lastState))
 
     override fun diagnostics(): WakeProviderDiagnostics {
         val data = try {
@@ -141,6 +165,8 @@ abstract class SidecarWakeProvider(
             lastWakeScore = data?.lastWakeScore ?: lastWakeScore,
             lastWakeDetectedAt = data?.lastWakeDetectedAt ?: lastWakeAt,
             lastError = data?.lastError ?: lastError,
+            // Prefer the sidecar's own paused flag if it reports one; else the local flag.
+            paused = data?.paused ?: paused,
             extra = mapOf(
                 "engine" to engineName,
                 "sidecarUrl" to (activeConfig?.sidecarUrl ?: "")

@@ -32,7 +32,9 @@ data class SidecarDiagnosticsData(
     val listening: Boolean,
     val lastWakeScore: Double?,
     val lastWakeDetectedAt: String?,
-    val lastError: String?
+    val lastError: String?,
+    /** Sidecar-reported pause state (`paused` in /diagnostics), null when absent. */
+    val paused: Boolean? = null
 )
 
 /**
@@ -53,6 +55,16 @@ interface WakeSidecarClient {
     fun startEngine(request: StartEngineRequest): StartEngineResponse
 
     fun stopEngine(): Boolean
+
+    /**
+     * Pause detection on the sidecar (`POST /pause`) WITHOUT stopping the engine,
+     * so it can be resumed cheaply during command recording / TTS. Returns whether
+     * the sidecar acknowledged. Never throws.
+     */
+    fun pause(): Boolean
+
+    /** Resume detection on the sidecar (`POST /resume`). Returns success. Never throws. */
+    fun resume(): Boolean
 
     fun openEvents(onEvent: (String) -> Unit, onError: (Throwable) -> Unit): Closeable
 

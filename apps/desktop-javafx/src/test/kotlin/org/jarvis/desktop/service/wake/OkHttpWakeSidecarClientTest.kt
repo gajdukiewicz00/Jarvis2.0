@@ -97,4 +97,46 @@ class OkHttpWakeSidecarClientTest {
         assertEquals(503, r.statusCode)
         assertEquals("vosk_not_installed", r.error)
     }
+
+    @Test
+    fun `pause posts to slash pause and returns success`() {
+        server.enqueue(MockResponse().setBody("""{"status":"PAUSED"}"""))
+
+        assertTrue(client.pause())
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/pause", recorded.path)
+    }
+
+    @Test
+    fun `resume posts to slash resume and returns success`() {
+        server.enqueue(MockResponse().setBody("""{"status":"LISTENING"}"""))
+
+        assertTrue(client.resume())
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/resume", recorded.path)
+    }
+
+    @Test
+    fun `pause returns false on a non-2xx response and never throws`() {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"boom"}"""))
+        assertFalse(client.pause())
+    }
+
+    @Test
+    fun `diagnostics parses the paused flag when present`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"installed":true,"models":["hey_jarvis"],"listening":true,"paused":true}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val diag = client.diagnostics()
+
+        assertNotNull(diag)
+        assertEquals(true, diag!!.paused)
+    }
 }

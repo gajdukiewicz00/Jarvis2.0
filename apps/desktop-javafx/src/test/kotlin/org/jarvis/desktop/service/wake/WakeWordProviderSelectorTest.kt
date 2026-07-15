@@ -35,6 +35,8 @@ class WakeWordProviderSelectorTest {
             return result(config, callback)
         }
 
+        override fun pause() {}
+        override fun resume() {}
         override fun stop() {}
         override fun status(): WakeWordStatus = WakeWordStatus(WakeProviderState.READY, "")
         override fun diagnostics(): WakeProviderDiagnostics =

@@ -14,6 +14,8 @@ package org.jarvis.desktop.service.wake
  * @param lastWakeScore score of the most recent wake, if any.
  * @param lastWakeDetectedAt ISO timestamp of the most recent wake, if any.
  * @param lastError last error reason (redacted, never a key value).
+ * @param paused detection is paused (mic/stream held off during a command/TTS)
+ *   WITHOUT the provider being torn down. Defaults to false.
  * @param extra provider-specific key/values (engine name, sidecar url, ...).
  */
 data class WakeProviderDiagnostics(
@@ -25,6 +27,7 @@ data class WakeProviderDiagnostics(
     val lastWakeScore: Double?,
     val lastWakeDetectedAt: String?,
     val lastError: String?,
+    val paused: Boolean = false,
     val extra: Map<String, String> = emptyMap()
 ) {
     fun toJson(): String = wakeJsonObject(
@@ -36,6 +39,7 @@ data class WakeProviderDiagnostics(
         "lastWakeScore" to lastWakeScore,
         "lastWakeDetectedAt" to lastWakeDetectedAt,
         "lastError" to lastError,
+        "paused" to paused,
         "extra" to extra
     )
 }

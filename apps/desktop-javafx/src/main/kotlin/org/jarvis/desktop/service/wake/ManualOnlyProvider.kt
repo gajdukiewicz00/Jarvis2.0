@@ -21,6 +21,14 @@ class ManualOnlyProvider : WakeWordProvider {
             reason = null
         )
 
+    override fun pause() {
+        // No-op: manual-only does no detection, so there is nothing to pause.
+    }
+
+    override fun resume() {
+        // No-op: nothing to resume.
+    }
+
     override fun stop() {
         // No-op: nothing to release.
     }

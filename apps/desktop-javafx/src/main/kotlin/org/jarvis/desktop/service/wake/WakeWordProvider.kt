@@ -120,6 +120,17 @@ interface WakeWordProvider {
     /** Start detection, routing wake events to [callback]. Never throws. */
     fun start(config: WakeWordConfig, callback: WakeWordCallback): WakeWordStartResult
 
+    /**
+     * Pause detection WITHOUT tearing down the provider, so it can be resumed
+     * cheaply after a command finishes recording / TTS finishes speaking. Idempotent
+     * (calling it while already paused is a no-op) and never throws. Providers with
+     * nothing to pause (e.g. manual-only) treat this as a no-op.
+     */
+    fun pause()
+
+    /** Resume detection after a [pause]. Idempotent; never throws. */
+    fun resume()
+
     /** Stop detection and release resources. Idempotent; never throws. */
     fun stop()
 

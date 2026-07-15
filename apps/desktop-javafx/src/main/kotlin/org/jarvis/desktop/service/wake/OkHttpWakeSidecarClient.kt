@@ -121,6 +121,24 @@ class OkHttpWakeSidecarClient(
         }
     }
 
+    override fun pause(): Boolean = postSimple("pause")
+
+    override fun resume(): Boolean = postSimple("resume")
+
+    /** Short-timeout empty-body POST to a control endpoint (`/pause`, `/resume`). Never throws. */
+    private fun postSimple(path: String): Boolean {
+        return try {
+            val httpReq = Request.Builder()
+                .url("$base/$path")
+                .post(EMPTY_BODY.toRequestBody(JSON_MEDIA))
+                .build()
+            shortClient.newCall(httpReq).execute().use { it.isSuccessful }
+        } catch (e: Exception) {
+            logger.debug("wake.sidecar.{} error: {}", path, e.message)
+            false
+        }
+    }
+
     override fun openEvents(onEvent: (String) -> Unit, onError: (Throwable) -> Unit): Closeable {
         val request = Request.Builder()
             .url("$base/events")
@@ -179,7 +197,8 @@ class OkHttpWakeSidecarClient(
                     listening = obj["listening"]?.jsonPrimitive?.booleanOrNull ?: false,
                     lastWakeScore = obj["lastWakeScore"]?.jsonPrimitive?.doubleOrNull,
                     lastWakeDetectedAt = obj["lastWakeDetectedAt"]?.jsonPrimitive?.contentOrNull,
-                    lastError = obj["lastError"]?.jsonPrimitive?.contentOrNull
+                    lastError = obj["lastError"]?.jsonPrimitive?.contentOrNull,
+                    paused = obj["paused"]?.jsonPrimitive?.booleanOrNull
                 )
             }
         } catch (e: Exception) {

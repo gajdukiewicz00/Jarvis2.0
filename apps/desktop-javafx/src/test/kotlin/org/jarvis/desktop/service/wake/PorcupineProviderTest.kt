@@ -132,4 +132,35 @@ class PorcupineProviderTest {
         provider.stop() // must not throw even though the handle is not a WakeWordDetector
         assertEquals(WakeProviderState.UNAVAILABLE, provider.status().state)
     }
+
+    @Test
+    fun `pause and resume flip the paused state once a detector is active`() {
+        val provider = PorcupineProvider(keyValid = { true }, buildInitializer = { enabledInitializer() })
+        provider.start(config) { }
+
+        assertFalse(provider.diagnostics().paused)
+
+        provider.pause() // delegates to the detector; fallback flag flips when active
+        assertTrue(provider.diagnostics().paused)
+        assertTrue(provider.status().message.contains("paused"))
+
+        provider.resume()
+        assertFalse(provider.diagnostics().paused)
+    }
+
+    @Test
+    fun `pause and resume are a no-op with no active detector`() {
+        val provider = PorcupineProvider(keyValid = { true }, buildInitializer = { enabledInitializer() })
+
+        // Never started → no active detector → pause/resume must be no-ops (never throw).
+        provider.pause()
+        provider.resume()
+        assertFalse(provider.diagnostics().paused)
+
+        // After stop() the handle is cleared → pause is a no-op again.
+        provider.start(config) { }
+        provider.stop()
+        provider.pause()
+        assertFalse(provider.diagnostics().paused)
+    }
 }

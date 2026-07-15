@@ -20,6 +20,8 @@ class FakeWakeSidecarClient(
     val startRequests = mutableListOf<StartEngineRequest>()
     var healthCalls = 0
     var stopCalls = 0
+    var pauseCalls = 0
+    var resumeCalls = 0
     var streamClosed = false
     private var eventSink: ((String) -> Unit)? = null
     private var errorSink: ((Throwable) -> Unit)? = null
@@ -38,6 +40,16 @@ class FakeWakeSidecarClient(
 
     override fun stopEngine(): Boolean {
         stopCalls++
+        return true
+    }
+
+    override fun pause(): Boolean {
+        pauseCalls++
+        return true
+    }
+
+    override fun resume(): Boolean {
+        resumeCalls++
         return true
     }
 
@@ -161,6 +173,60 @@ class OpenWakeWordProviderTest {
         assertEquals(WakeProviderState.UNAVAILABLE, result.status)
         assertNotNull(result.reason)
         assertTrue(result.reason!!.contains("sidecar_unreachable"))
+    }
+
+    @Test
+    fun `pause and resume post to the sidecar and flip diagnostics paused`() {
+        val sidecar = FakeWakeSidecarClient()
+        val provider = OpenWakeWordProvider(http = sidecar)
+        provider.start(config) { }
+
+        assertFalse(provider.diagnostics().paused)
+
+        provider.pause()
+        assertEquals(1, sidecar.pauseCalls)
+        assertTrue(provider.diagnostics().paused)
+        assertTrue(provider.status().message.contains("paused"))
+
+        provider.resume()
+        assertEquals(1, sidecar.resumeCalls)
+        assertFalse(provider.diagnostics().paused)
+    }
+
+    @Test
+    fun `pause and resume are idempotent - no redundant sidecar posts`() {
+        val sidecar = FakeWakeSidecarClient()
+        val provider = OpenWakeWordProvider(http = sidecar)
+        provider.start(config) { }
+
+        provider.pause()
+        provider.pause() // already paused → no second POST
+        assertEquals(1, sidecar.pauseCalls)
+
+        provider.resume()
+        provider.resume() // already resumed → no second POST
+        assertEquals(1, sidecar.resumeCalls)
+    }
+
+    @Test
+    fun `diagnostics prefer the sidecar reported paused flag over the local flag`() {
+        val sidecar = FakeWakeSidecarClient(
+            diagnosticsData = SidecarDiagnosticsData(
+                installed = true,
+                models = listOf("hey_jarvis"),
+                selectedDevice = "mic0",
+                listening = true,
+                lastWakeScore = null,
+                lastWakeDetectedAt = null,
+                lastError = null,
+                paused = true
+            )
+        )
+        val provider = OpenWakeWordProvider(http = sidecar)
+        provider.start(config) { }
+
+        // Local flag is false (never paused), but the sidecar reports paused=true.
+        assertTrue(provider.diagnostics().paused)
     }
 
     @Test

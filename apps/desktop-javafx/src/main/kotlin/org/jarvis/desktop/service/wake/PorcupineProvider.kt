@@ -44,6 +44,9 @@ class PorcupineProvider(
     @Volatile private var lastState: WakeProviderState = WakeProviderState.UNAVAILABLE
     @Volatile private var lastScore: Double? = null
     @Volatile private var lastAt: String? = null
+    // Fallback pause flag for when the handle is not a real WakeWordDetector (tests);
+    // the real paused state is read from the detector via getState() when present.
+    @Volatile private var pausedFlag = false
 
     override fun probeAvailable(): Boolean = safeKeyValid()
 
@@ -101,6 +104,31 @@ class PorcupineProvider(
         }
     }
 
+    override fun pause() {
+        // No active detector → nothing to pause (no-op, never throws).
+        val current = handle ?: return
+        pausedFlag = true
+        (current as? WakeWordDetector)?.let {
+            try {
+                it.pause()
+            } catch (_: Exception) {
+                // Best-effort; never throw from the wake path.
+            }
+        }
+    }
+
+    override fun resume() {
+        val current = handle ?: return
+        pausedFlag = false
+        (current as? WakeWordDetector)?.let {
+            try {
+                it.resume()
+            } catch (_: Exception) {
+                // Best-effort; never throw from the wake path.
+            }
+        }
+    }
+
     override fun stop() {
         (handle as? WakeWordDetector)?.let {
             try {
@@ -110,10 +138,12 @@ class PorcupineProvider(
             }
         }
         handle = null
+        pausedFlag = false
         lastState = WakeProviderState.UNAVAILABLE
     }
 
-    override fun status(): WakeWordStatus = WakeWordStatus(lastState, messageFor(lastState))
+    override fun status(): WakeWordStatus =
+        if (isPausedNow()) WakeWordStatus(lastState, "$providerId paused") else WakeWordStatus(lastState, messageFor(lastState))
 
     override fun diagnostics(): WakeProviderDiagnostics = WakeProviderDiagnostics(
         providerId = providerId,
@@ -124,8 +154,15 @@ class PorcupineProvider(
         lastWakeScore = lastScore,
         lastWakeDetectedAt = lastAt,
         lastError = null,
+        paused = isPausedNow(),
         extra = mapOf("engine" to "porcupine", "keyValid" to safeKeyValid().toString())
     )
+
+    /** True paused state from the live detector when present, else the fallback flag. */
+    private fun isPausedNow(): Boolean {
+        val detector = handle as? WakeWordDetector ?: return pausedFlag
+        return detector.getState() == WakeWordDetector.ListeningState.PAUSED
+    }
 
     private fun safeKeyValid(): Boolean = try {
         keyValid()

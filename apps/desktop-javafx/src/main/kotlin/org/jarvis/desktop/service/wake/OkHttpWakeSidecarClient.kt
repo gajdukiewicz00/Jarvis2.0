@@ -101,7 +101,10 @@ class OkHttpWakeSidecarClient(
                 .url("$base/start")
                 .post(payload.toRequestBody(JSON_MEDIA))
                 .build()
-            shortClient.newCall(httpReq).execute().use { resp ->
+            // /start RMS-probes microphones server-side (can take a few seconds when the
+            // first-preferred mics are dead), so use the longer-timeout client — the 3s
+            // shortClient would spuriously time out and force a Manual-only fallback.
+            testClient.newCall(httpReq).execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 val error = runCatching {
                     json.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull

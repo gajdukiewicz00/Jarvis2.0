@@ -319,8 +319,6 @@ def pick_usable_device(
     ``probe_fn`` so it can be unit-tested with injected RMS values — no hardware.
     """
     probe_results: List[Dict[str, Any]] = []
-    usable_preferred: Optional[Dict[str, Any]] = None
-    usable_any: Optional[Dict[str, Any]] = None
 
     for dev in devices:
         try:
@@ -331,13 +329,15 @@ def pick_usable_device(
             continue
 
         probe_results.append({"name": dev["name"], "id": dev["id"], "rms": round(rms, 6)})
+        # `devices` is preferred-first, so the FIRST device with signal is already
+        # the best choice (a live preferred mic, or — once all preferred are exhausted
+        # — the first live fallback). Short-circuit here: probing the whole list would
+        # cost ~1.5s/device (10s+ on a typical multi-device host), overrunning the
+        # desktop client's /start timeout and defeating the fix through the UI.
         if rms > floor:
-            if usable_any is None:
-                usable_any = dev
-            if dev.get("preferred") and usable_preferred is None:
-                usable_preferred = dev
+            return dev, probe_results
 
-    return (usable_preferred or usable_any), probe_results
+    return None, probe_results
 
 
 def probe_device_rms(device_id: int, seconds: float = PROBE_SECONDS) -> float:

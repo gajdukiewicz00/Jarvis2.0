@@ -390,7 +390,9 @@ def test_pick_usable_device_prefers_live_over_silent():
     assert chosen is not None
     assert chosen["id"] == 7  # live PREFERRED, NOT the dead C4K (id 2)
     ids = {r["id"] for r in results}
-    assert ids == {2, 7, 0}  # every device probed + recorded
+    # Short-circuit: probing stops at the FIRST live device (id 7), so the trailing
+    # id 0 is NOT probed — this keeps /start fast on multi-device hosts.
+    assert ids == {2, 7}
     rms_by_id = {r["id"]: r["rms"] for r in results}
     assert rms_by_id[2] == 0.0  # dead mic's silence is on record
 

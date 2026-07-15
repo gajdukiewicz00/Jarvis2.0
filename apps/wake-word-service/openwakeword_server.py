@@ -13,30 +13,38 @@ Optional engine: vosk phrase-spotter (best-effort; Russian/English "джарви
 No API key is ever required.
 
 Endpoints:
-  GET  /health        liveness + loaded models + selected device
+  GET  /health        liveness + loaded models + selected device + paused
   GET  /devices       enumerated input devices (preferred first, deduped)
   POST /start         open device, start capture+detection thread
+  POST /pause         suspend detection (keep stream owned, /health stays UP)
+  POST /resume        resume detection after a pause
   POST /stop          stop capture thread + close stream
   GET  /diagnostics   full engine/device/error state incl. rejected devices
   GET  /events        SSE stream of WAKE_DETECTED events + keepalives
 
 Env:
-  JARVIS_WAKEWORD_PORT       listen port                 (default 18095)
-  JARVIS_WAKEWORD_HOST       bind host                   (default 127.0.0.1)
-  JARVIS_WAKEWORD_DEVICE     default device for autostart (id|name|auto)
-  JARVIS_WAKEWORD_MODEL      wake model name             (default hey_jarvis)
-  JARVIS_WAKEWORD_THRESHOLD  detection threshold         (default 0.5)
-  JARVIS_WAKEWORD_ENGINE     openwakeword|vosk           (default openwakeword)
-  JARVIS_WAKEWORD_FRAMEWORK  onnx|tflite                 (default onnx)
-  JARVIS_WAKEWORD_AUTOSTART  1 to auto-start capture on boot (default 0)
-  JARVIS_VOSK_MODEL          path to a vosk model dir (optional)
+  JARVIS_WAKEWORD_PORT        listen port                 (default 18095)
+  JARVIS_WAKEWORD_HOST        bind host (LOOPBACK ONLY)   (default 127.0.0.1)
+  JARVIS_WAKEWORD_DEVICE      default device for autostart (id|name|auto)
+  JARVIS_WAKEWORD_MODEL       wake model name             (default hey_jarvis)
+  JARVIS_WAKEWORD_THRESHOLD   detection threshold         (default 0.5)
+  JARVIS_WAKEWORD_COOLDOWN_MS duplicate-wake debounce ms  (default 2000)
+  JARVIS_WAKEWORD_ENGINE      openwakeword|vosk           (default openwakeword)
+  JARVIS_WAKEWORD_FRAMEWORK   onnx|tflite                 (default onnx)
+  JARVIS_WAKEWORD_AUTOSTART   1 to auto-start capture on boot (default 0)
+  JARVIS_VOSK_MODEL           path to a vosk model dir (optional)
+
+Privacy: no raw audio is ever persisted, and no transcript/audio content is
+logged. Only wake scores, device names, and error strings are recorded.
 """
 from __future__ import annotations
 
 import asyncio
+import atexit
 import json
 import logging
 import os
+import signal
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -56,9 +64,12 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SAMPLE_RATE = 16000
 CHANNELS = 1
 FRAME_SAMPLES = 1280          # 80 ms @ 16 kHz — openWakeWord's native frame
-WAKE_COOLDOWN_SEC = 2.0       # debounce window to ignore repeat triggers
+# Duplicate-wake debounce window (JARVIS_WAKEWORD_COOLDOWN_MS, default 2000ms).
+WAKE_COOLDOWN_SEC = max(0.0, int(os.getenv("JARVIS_WAKEWORD_COOLDOWN_MS", "2000")) / 1000.0)
 KEEPALIVE_SEC = 15.0          # SSE keepalive comment interval
 SUBSCRIBER_QUEUE_MAX = 64
+STREAM_OPEN_TIMEOUT = 4.0     # max seconds /start waits for the mic to open
+MAX_CONSECUTIVE_READ_ERRORS = 10  # transient device errors tolerated before giving up
 
 # Case-insensitive tokens that mark a device as an output/loopback (rejected).
 EXCLUDE_TOKENS = ("playback", "output", "monitor", "sink", "speaker")
@@ -82,6 +93,16 @@ logger = logging.getLogger("wakeword")
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def should_accept_wake(now: float, last_fire: float, cooldown_sec: float) -> bool:
+    """Duplicate-wake dedup: accept a detection only if the cooldown elapsed.
+
+    Pure function so the debounce policy can be unit-tested without hardware.
+    ``now`` / ``last_fire`` are monotonic seconds. Two detections closer than
+    ``cooldown_sec`` collapse to a single accepted event.
+    """
+    return (now - last_fire) >= cooldown_sec
 
 
 # ---------------------------------------------------------------------------
@@ -356,6 +377,7 @@ class WakeWordState:
         self.threshold: float = DEFAULT_THRESHOLD
         self.selected_device: Optional[Dict[str, Any]] = None
         self.listening: bool = False
+        self.paused: bool = False
         self.loaded_models: List[str] = []
         self.provider: str = "openWakeWord"
         self.inference_framework: str = DEFAULT_FRAMEWORK
@@ -366,8 +388,11 @@ class WakeWordState:
 
         self._engine: Any = None
         self._stream: Any = None
+        self._native_rate: int = SAMPLE_RATE
+        self._open_channels: int = CHANNELS
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self._ready = threading.Event()   # capture loop signals stream open/failed
         self._last_fire = 0.0
 
         # SSE plumbing — loop captured at app startup.
@@ -388,6 +413,21 @@ class WakeWordState:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
                 logger.warning("SSE subscriber queue full; dropping event")
+
+    # -- honest state reporting ---------------------------------------------
+    def is_listening(self) -> bool:
+        """Return the REAL detection state, never an optimistic flag.
+
+        Listening is true only when the capture thread is alive, the input
+        stream is actually open, we are not paused, and no stop was requested.
+        If the mic stream died, this returns False even if a stale flag says
+        otherwise — /health and /diagnostics must not lie.
+        """
+        thread = self._thread
+        stream = self._stream
+        thread_alive = thread is not None and thread.is_alive()
+        stream_active = stream is not None
+        return thread_alive and stream_active and not self.paused and not self._stop.is_set()
 
     # -- capture control ----------------------------------------------------
     def start(self, device_sel: str, model: str, threshold: float, engine: str) -> Dict[str, Any]:
@@ -415,10 +455,18 @@ class WakeWordState:
                 built = self._build_engine(engine, model)
             except HTTPException:
                 raise
+            except FileNotFoundError as exc:
+                # Model file absent — a client-fixable request error, not a 500.
+                self.last_error = f"model_not_found: {exc}"
+                logger.error("wake model not found: %s", exc)
+                raise HTTPException(
+                    status_code=422,
+                    detail={"error": "model_not_found", "model": model, "detail": str(exc)},
+                )
             except Exception as exc:
                 self.last_error = f"engine_init_failed: {exc}"
                 logger.exception("engine init failed")
-                raise HTTPException(status_code=500, detail={"error": str(exc)})
+                raise HTTPException(status_code=500, detail={"error": "engine_init_failed", "detail": str(exc)})
 
             self._engine = built
             self.engine_name = engine
@@ -429,12 +477,29 @@ class WakeWordState:
             self.loaded_models = built.loaded_models()
             self.inference_framework = getattr(built, "framework", DEFAULT_FRAMEWORK)
             self.last_error = None
+            self.paused = False
 
             self._stop.clear()
+            self._ready.clear()
             self._thread = threading.Thread(
                 target=self._capture_loop, name="wakeword-capture", daemon=True,
             )
             self._thread.start()
+
+            # Wait for the capture thread to actually open the mic (or fail), so
+            # /start reports the truth instead of an optimistic "STARTED".
+            opened = self._ready.wait(timeout=STREAM_OPEN_TIMEOUT)
+            if not opened or self._stream is None:
+                err = self.last_error or "device_open_timeout"
+                self._stop_locked()
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "device_open_failed",
+                        "device": device.get("name"),
+                        "detail": err,
+                    },
+                )
             self.listening = True
 
         logger.info(
@@ -463,6 +528,29 @@ class WakeWordState:
         framework = DEFAULT_FRAMEWORK
         return OpenWakeWordEngine(model, framework)
 
+    def pause(self) -> Dict[str, Any]:
+        """Suspend detection without tearing the mic down (fast resume).
+
+        While paused the capture thread keeps draining the stream so it stays
+        owned and healthy, but no frames reach the model and no WAKE_DETECTED
+        is emitted. /health stays UP. Idempotent (double pause is safe).
+        """
+        with self.lock:
+            was_paused = self.paused
+            self.paused = True
+        if not was_paused:
+            logger.info("capture paused")
+        return {"status": "PAUSED", "paused": True, "listening": self.is_listening()}
+
+    def resume(self) -> Dict[str, Any]:
+        """Resume detection after a pause. Idempotent (double resume is safe)."""
+        with self.lock:
+            was_paused = self.paused
+            self.paused = False
+        if was_paused:
+            logger.info("capture resumed")
+        return {"status": "RESUMED", "paused": False, "listening": self.is_listening()}
+
     def stop(self) -> Dict[str, Any]:
         with self.lock:
             self._stop_locked()
@@ -485,6 +573,8 @@ class WakeWordState:
                 logger.warning("stream close error: %s", exc)
         self._engine = None
         self.listening = False
+        self.paused = False
+        self._ready.clear()
 
     def _open_input_stream(self, device_id: int):
         """Negotiate a working (samplerate, channels) combo for a raw device.
@@ -541,11 +631,16 @@ class WakeWordState:
         try:
             stream, native_rate, open_channels = self._open_input_stream(device_id)
             self._stream = stream
+            self._native_rate = native_rate
+            self._open_channels = open_channels
         except Exception as exc:
             self.last_error = f"device_open_failed: {exc}"
             self.listening = False
             logger.error("failed to open input stream: %s", exc)
+            self._ready.set()   # unblock start() so it can report the failure
             return
+        # Signal start() that the mic is open and detection is live.
+        self._ready.set()
 
         resample = None
         if native_rate != SAMPLE_RATE:
@@ -556,9 +651,18 @@ class WakeWordState:
         pending = np.zeros(0, dtype=np.float32)
 
         logger.info("capture loop running on device %s (native=%dHz)", device, native_rate)
+        consecutive_errors = 0
         while not self._stop.is_set():
             try:
                 data, overflowed = stream.read(native_frame)
+                consecutive_errors = 0
+                if self._stop.is_set():
+                    break
+                # Paused: keep the stream drained (owned + healthy) but feed no
+                # frames to the model and emit nothing. Resume is instant.
+                if self.paused:
+                    pending = np.zeros(0, dtype=np.float32)
+                    continue
                 if overflowed:
                     logger.debug("input overflow")
                 block = np.frombuffer(bytes(data), dtype=np.int16)
@@ -580,15 +684,27 @@ class WakeWordState:
                     if score >= self.threshold:
                         self._on_wake(score)
             except Exception as exc:
+                # Tolerate transient device hiccups; give up only if they persist.
+                consecutive_errors += 1
                 self.last_error = f"capture_error: {exc}"
-                logger.exception("capture loop error")
-                break
+                if consecutive_errors >= MAX_CONSECUTIVE_READ_ERRORS:
+                    logger.error(
+                        "capture loop giving up after %d consecutive errors: %s",
+                        consecutive_errors, exc,
+                    )
+                    break
+                logger.warning(
+                    "transient capture error (%d/%d): %s",
+                    consecutive_errors, MAX_CONSECUTIVE_READ_ERRORS, exc,
+                )
+                self._stop.wait(0.1)
 
+        self.listening = False
         logger.info("capture loop exited")
 
     def _on_wake(self, score: float) -> None:
         now = time.monotonic()
-        if now - self._last_fire < WAKE_COOLDOWN_SEC:
+        if not should_accept_wake(now, self._last_fire, WAKE_COOLDOWN_SEC):
             return
         self._last_fire = now
 
@@ -610,6 +726,22 @@ class WakeWordState:
 
 
 STATE = WakeWordState()
+
+
+def _release_resources() -> None:
+    """Release the microphone/stream on interpreter exit (belt-and-suspenders).
+
+    stop() is idempotent, so this composes safely with the lifespan shutdown
+    and the signal handlers below.
+    """
+    try:
+        STATE.stop()
+    except Exception:  # never raise from an atexit/signal path
+        pass
+
+
+# Guarantee the mic is freed even on an ungraceful teardown.
+atexit.register(_release_resources)
 
 
 # ---------------------------------------------------------------------------
@@ -653,7 +785,9 @@ async def health() -> Dict[str, Any]:
         "provider": "openWakeWord",
         "modelsLoaded": STATE.loaded_models,
         "device": device_name,
-        "listening": STATE.listening,
+        # Honest: reflects the REAL stream state, not an optimistic flag.
+        "listening": STATE.is_listening(),
+        "paused": STATE.paused,
     }
 
 
@@ -665,6 +799,16 @@ async def devices() -> Dict[str, Any]:
 @app.post("/start")
 async def start(req: StartRequest) -> Dict[str, Any]:
     return STATE.start(req.device, req.model, req.threshold, req.engine)
+
+
+@app.post("/pause")
+async def pause() -> Dict[str, Any]:
+    return STATE.pause()
+
+
+@app.post("/resume")
+async def resume() -> Dict[str, Any]:
+    return STATE.resume()
 
 
 @app.post("/stop")
@@ -684,7 +828,9 @@ async def diagnostics() -> Dict[str, Any]:
         "soundDeviceInstalled": _sounddevice_available(),
         "models": STATE.loaded_models,
         "selectedDevice": STATE.selected_device,
-        "listening": STATE.listening,
+        # Honest: computed from the live stream/thread, plus the pause flag.
+        "listening": STATE.is_listening(),
+        "paused": STATE.paused,
         "lastWakeDetectedAt": STATE.last_wake_detected_at,
         "lastWakeScore": STATE.last_wake_score,
         "lastError": STATE.last_error,
@@ -731,7 +877,33 @@ async def http_exception_handler(request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content=detail)
 
 
+def _install_signal_handlers() -> None:
+    """Release the mic on SIGTERM/SIGINT before the process exits.
+
+    When run under uvicorn, uvicorn's own handlers drive the lifespan shutdown
+    (which also calls STATE.stop()); these handlers are a best-effort safety net
+    for the standalone/embedded case. Only installable from the main thread.
+    """
+    def _graceful(signum, _frame):  # pragma: no cover - signal path
+        logger.info("received signal %s; releasing microphone", signum)
+        _release_resources()
+        # Restore default disposition and re-raise so the process still exits.
+        try:
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+        except Exception:
+            raise SystemExit(0)
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, _graceful)
+        except (ValueError, OSError):  # not main thread / unsupported platform
+            logger.debug("could not install handler for signal %s", sig)
+
+
 if __name__ == "__main__":
     import uvicorn
 
+    _install_signal_handlers()
+    # Loopback-only unless the operator explicitly overrides the bind host.
     uvicorn.run(app, host=DEFAULT_HOST, port=DEFAULT_PORT, log_level="info")

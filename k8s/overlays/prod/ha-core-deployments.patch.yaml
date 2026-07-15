@@ -176,7 +176,7 @@ spec:
           resources:
             requests:
               cpu: "250m"
-              memory: "768Mi"
+              memory: "1Gi"
             limits:
               cpu: "1"
               # Raised 1Gi -> 2Gi: 1Gi OOMKilled the JVM (exit 137) under

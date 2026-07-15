@@ -176,10 +176,14 @@ spec:
           resources:
             requests:
               cpu: "250m"
-              memory: "512Mi"
+              memory: "1Gi"
             limits:
               cpu: "1"
-              memory: "1Gi"
+              # Raised 1Gi -> 2Gi: 1Gi OOMKilled the JVM (exit 137) under
+              # Vosk STT + rule-catalog load, which dropped the voice WS
+              # (api-gateway returned 4503 voice_gateway_unavailable). Keep in
+              # sync with k8s/overlays/prod and the live deployment.
+              memory: "2Gi"
           lifecycle:
             preStop:
               exec:

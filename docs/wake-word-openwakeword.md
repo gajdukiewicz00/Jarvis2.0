@@ -31,9 +31,18 @@ bash scripts/test-wakeword-openwakeword.sh
 
 # 3b. live wake test — start capture + stream events for ~20s, say "Hey Jarvis"
 bash scripts/test-wakeword-openwakeword.sh --listen
+
+# 4. stop the sidecar (graceful: POST /stop, then SIGTERM/SIGKILL, confirm port freed)
+bash scripts/stop-wakeword-openwakeword.sh
 ```
 
-The setup script is **idempotent**: it reuses an existing `.venv-wakeword`.
+The setup script is **idempotent**: it reuses an existing `.venv-wakeword`. The desktop app
+also **autostarts** the sidecar when Always Listening begins (`JARVIS_WAKEWORD_AUTOSTART`), so
+manual `run`/`stop` is only needed for standalone testing.
+
+> **Security:** the sidecar binds **loopback (`127.0.0.1`) only** by default — it is not exposed
+> on the network. Only set `JARVIS_WAKEWORD_HOST` to a non-loopback address if you understand the
+> exposure. No raw audio or transcripts are ever persisted or logged.
 
 ---
 
@@ -101,6 +110,19 @@ Responses:
 {"status": "STOPPED"}
 ```
 
+### `POST /pause` / `POST /resume`
+
+Suspend / resume wake detection **without losing sidecar health** — the mic stream stays
+owned so resume is instant. Used by the desktop while a command is recording or TTS is playing
+so a wake word can't self-trigger mid-command. Idempotent.
+
+```json
+{"status": "PAUSED", "paused": true,  "listening": false}
+{"status": "RESUMED","paused": false, "listening": true}
+```
+
+While paused, `/health` stays `UP`, `listening` is `false`, and `/events` emits only keepalives.
+
 ### `GET /diagnostics`
 
 ```json
@@ -114,6 +136,7 @@ Responses:
   "models": ["hey_jarvis_v0.1"],
   "selectedDevice": {"id": 2, "name": "...", "sampleRate": 16000, "channels": 1, "isInput": true, "preferred": true},
   "listening": true,
+  "paused": false,
   "lastWakeDetectedAt": "2026-07-15T18:41:18.209565+00:00",
   "lastWakeScore": 0.83,
   "lastError": null,
@@ -171,10 +194,40 @@ keep selecting the real C4K/T1 microphone while still feeding the model clean
 | `JARVIS_WAKEWORD_DEVICE`    | `auto`        | Default device (`auto`\|`<id>`\|`<name>`) |
 | `JARVIS_WAKEWORD_MODEL`     | `hey_jarvis`  | Wake model name (or path to `.onnx`/`.tflite`) |
 | `JARVIS_WAKEWORD_THRESHOLD` | `0.5`         | Detection threshold (0.0–1.0) |
+| `JARVIS_WAKEWORD_COOLDOWN_MS`| `2000`       | Min gap between accepted wakes (duplicate suppression) |
 | `JARVIS_WAKEWORD_ENGINE`    | `openwakeword`| `openwakeword` \| `vosk` |
 | `JARVIS_WAKEWORD_FRAMEWORK` | `onnx`        | `onnx` \| `tflite` (extension preference) |
 | `JARVIS_WAKEWORD_AUTOSTART` | `0`           | `1` to begin capture on server boot |
 | `JARVIS_VOSK_MODEL`         | (auto)        | Path to a vosk model dir |
+
+### Desktop-side (JavaFX) variables
+
+The desktop app reads these to choose and reach a provider (it does not run the sidecar's env):
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `JARVIS_WAKE_PROVIDER`      | `auto` | `auto`\|`openwakeword`\|`vosk`\|`porcupine`\|`manual` |
+| `JARVIS_WAKEWORD_URL`       | `http://127.0.0.1:18095` | Sidecar base URL |
+| `JARVIS_WAKEWORD_MODEL`     | `hey_jarvis` | Wake phrase/model |
+| `JARVIS_WAKEWORD_THRESHOLD` | `0.5` | Detection threshold |
+| `JARVIS_WAKEWORD_DEVICE`    | `auto` | Preferred capture device |
+| `JARVIS_WAKEWORD_AUTOSTART` | `true` | Autostart the sidecar when Always Listening begins |
+
+In `AUTO` the desktop tries **openWakeWord → Vosk phrase spotter → Porcupine (only if a valid key
+exists) → Manual only**. A missing/invalid `PORCUPINE_ACCESS_KEY` never blocks openWakeWord/Vosk.
+
+---
+
+## Uninstall / cleanup
+
+```bash
+bash scripts/stop-wakeword-openwakeword.sh   # stop the sidecar, free the port
+rm -rf .venv-wakeword                          # remove the venv (gitignored)
+# openWakeWord/vosk pretrained models live inside the venv / ~/.cache and go with it.
+```
+
+Removing the venv fully uninstalls the wake-word sidecar; the desktop then falls back to
+Porcupine (if a valid key exists) or Manual Talk, and Always Listening reports the fallback.
 
 ---
 

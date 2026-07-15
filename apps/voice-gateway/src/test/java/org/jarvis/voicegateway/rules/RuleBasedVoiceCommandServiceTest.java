@@ -72,4 +72,497 @@ class RuleBasedVoiceCommandServiceTest {
         assertEquals(VoiceCommandCatalog.MatcherType.REGEX, match.get().matcherType());
         assertEquals("35", match.get().parameters().get("level"));
     }
+
+    @Test
+    void matchesOpenTelegramWithFillerWordsFromRealStt() {
+        // Real STT output has filler words ("could you open A telegram") that defeat EXACT/CONTAINS;
+        // the regex matcher catches the open+telegram keyword combo and routes to PC-control, not the LLM.
+        Optional<VoiceCommandCatalog.Match> match = service.match("could you open a telegram", "en-US");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void matchesOpenTelegramRussian() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой мне телеграм пожалуйста", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void matchesTurnOnMusicWithFillerWords() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("please turn on the music now", "en-US");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+    }
+
+    // --- P0.1 Planner routing: these MUST resolve to PLANNER, not fall through to LLM chat ---
+
+    @Test
+    void routesKakiePlanyNaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какие планы на сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void routesChtoUMenyaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("что у меня сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void routesZadachiNaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("джарвис какие задачи на сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void routesFokusNaSegodnyaToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какой фокус на сегодня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+    }
+
+    // --- P0.2 Media next: phrase-coverage gap that used to fall through to LLM ---
+
+    @Test
+    void routesSleduyushchiyTrekToNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("следующий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    @Test
+    void routesSleduyushchayaPesnyaToNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("следующая песня", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    @Test
+    void routesPereklyuchiTrekToNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("переключи трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    // --- P0.3 Volume regression: "тише" must keep routing to volume_down ---
+
+    @Test
+    void routesSdelatTisheToVolumeDown() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сделай тише", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertTrue(
+                isVolumeDown(match.get().actionName()),
+                "expected a volume-down action but got " + match.get().actionName());
+    }
+
+    @Test
+    void routesTisheToVolumeDown() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("тише", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertTrue(
+                isVolumeDown(match.get().actionName()),
+                "expected a volume-down action but got " + match.get().actionName());
+    }
+
+    // --- P0.4 Fallback: an unknown phrase yields no rule (handler then routes to LLM) ---
+
+    @Test
+    void unknownPhraseProducesNoRuleMatch() {
+        Optional<VoiceCommandCatalog.Match> match =
+                service.match("расскажи что-нибудь про квантовую запутанность", "ru-RU");
+
+        assertTrue(match.isEmpty());
+    }
+
+    // --- Voice ↔ PC Control UI parity: voice builds the SAME action the working UI button uses ---
+    // (desktop PcControlTab: Vol +10 → SystemControlService.changeVolume(10,"+") ≡ VOLUME_UP;
+    //  Telegram button → openApp("telegram") ≡ OPEN_APP app=telegram; both converge on
+    //  SystemControlService via PcControlWebSocketClient's VOLUME_UP / OPEN_APP mapping.)
+
+    @Test
+    void voiceGromcheBuildsSameVolumeUpActionAsPcControlButton() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("громче", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("VOLUME_UP", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
+    }
+
+    @Test
+    void voiceSdelayGromcheBuildsSameVolumeUpAction() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сделай громче", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("VOLUME_UP", match.get().actionName());
+    }
+
+    @Test
+    void voiceOtkroyTelegramBuildsSameOpenAppActionAsPcControlButton() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой телеграм", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
+    }
+
+    @Test
+    void voiceVklyuchiMuzykuBuildsMediaOpenAction() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("включи музыку", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PC_CONTROL, match.get().action().target());
+    }
+
+    // --- New PC-control mappings + fuzzy STT normalization (must not fall to LLM) ---
+
+    @Test
+    void voiceOtkroyFilesBuildsOpenAppFiles() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой файлы", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("files", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyFileManagerBuildsOpenAppFiles() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой файл менеджер", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("files", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyVesSkottNormalizesToVsCodeOpenApp() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой вес скотт", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("vscode", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyTelegrammNormalizesToTelegram() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой телеграмм", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("telegram", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceOtkroyTerminalBuildsOpenAppTerminal() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой терминал", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_APP", match.get().actionName());
+        assertEquals("terminal", match.get().parameters().get("app"));
+    }
+
+    @Test
+    void voiceSverniVseOknaBuildsMinimizeAllWindows() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сверни все окна", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("MINIMIZE_ALL_WINDOWS", match.get().actionName());
+    }
+
+    @Test
+    void voiceSKrovVseOknaNormalizesToMinimizeAllWindows() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("с кровь все окна", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("MINIMIZE_ALL_WINDOWS", match.get().actionName());
+    }
+
+    @Test
+    void voiceSkoroyVseOknaNormalizesToMinimizeAllWindows() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("скорой все окна", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("MINIMIZE_ALL_WINDOWS", match.get().actionName());
+    }
+
+    @Test
+    void voiceKakiePlanyNaDenRoutesToPlannerNotPcControl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какие планы на день", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void voicePlanNaDenRoutesToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("план на день", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    @Test
+    void unknownChatPhraseStillHasNoRuleMatch() {
+        assertTrue(service.match("как думаешь, стоит ли лететь на марс", "ru-RU").isEmpty());
+    }
+
+    // --- Absolute volume (number words normalized to digits) ---
+
+    @Test
+    void voiceGromkostNaStoBuildsSetVolume100() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("громкость на сто", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("100", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    @Test
+    void voiceGromkostNaDesyatBuildsSetVolume10() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("громкость на десять", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("10", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    @Test
+    void voicePostavGromkostNa50BuildsSetVolume50() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("поставь громкость на 50", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("50", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    @Test
+    void voiceZvukNa30BuildsSetVolume30() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("звук на 30", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("SET_VOLUME", match.get().actionName());
+        assertEquals("30", String.valueOf(match.get().parameters().get("level")));
+    }
+
+    // --- Media play/pause/next ---
+
+    @Test
+    void voicePauzaBuildsPause() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("пауза", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PAUSE", match.get().actionName());
+    }
+
+    @Test
+    void voiceOstanoviMuzykuBuildsPause() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("останови музыку", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PAUSE", match.get().actionName());
+    }
+
+    @Test
+    void voiceVosproizvediBuildsPlay() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("воспроизведи", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLAY", match.get().actionName());
+    }
+
+    @Test
+    void voiceVosproizvediSleduyushchiyTrekBuildsNext() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("воспроизведи следующий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    // --- YouTube + ambiguous open (must NOT be OPEN_APP, must NOT go to LLM) ---
+
+    @Test
+    void voiceFirstYouTubeVideoDoesNotBecomeOpenApp() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("включи первое видео на ютубе", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("YOUTUBE_CLARIFY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.INTERNAL, match.get().action().target());
+    }
+
+    @Test
+    void voiceOtkroyEtuAsksForClarification() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой эту", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("CLARIFY_OPEN", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.INTERNAL, match.get().action().target());
+    }
+
+    @Test
+    void voiceYouTubeSearchWithQueryOpensSearchUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("найди на ютубе обзор техники", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com/results"),
+                String.valueOf(match.get().parameters().get("url")));
+        assertEquals("обзор техники", String.valueOf(match.get().parameters().get("query")));
+    }
+
+    @Test
+    void voiceYouTubeSearchTolueratesSttMistakeNaEtape() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("найди на этапе обзор фольксвагена", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertEquals("обзор фольксвагена", String.valueOf(match.get().parameters().get("query")));
+    }
+
+    @Test
+    void voiceYouTubeSearchTolueratesSttMistakeNaEtu() {
+        Optional<VoiceCommandCatalog.Match> match =
+                service.match("найди на эту любой обзор на любая автомобиль", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("query")).contains("обзор"),
+                String.valueOf(match.get().parameters().get("query")));
+    }
+
+    @Test
+    void voiceYouTubeSearchWithoutQueryAsksClarification() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("найди на ютубе", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("YOUTUBE_CLARIFY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.INTERNAL, match.get().action().target());
+    }
+
+    @Test
+    void voiceSleduyushchiyTrekMapsToNextNotToggle() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("следующий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("NEXT", match.get().actionName());
+    }
+
+    @Test
+    void voicePauzaMapsToPauseNotPlayPauseToggle() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("пауза", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PAUSE", match.get().actionName());
+        // Must be an explicit pause, never the toggle.
+        assertTrue(!"PLAY_PAUSE".equals(match.get().actionName()) && !"TOGGLE".equals(match.get().actionName()));
+    }
+
+    // --- YouTube open alias regression (must NOT fall to LLM) ---
+
+    @Test
+    void voiceOtkroyYutyubNormalizesToOpenYouTubeUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой ютюб", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com"),
+                String.valueOf(match.get().parameters().get("url")));
+    }
+
+    @Test
+    void voiceOtkroyYutubOpensYouTubeUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("открой ютуб", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+        assertTrue(String.valueOf(match.get().parameters().get("url")).contains("youtube.com"),
+                String.valueOf(match.get().parameters().get("url")));
+    }
+
+    @Test
+    void voicePokaziYutubOpensYouTubeUrl() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("покажи ютуб", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("OPEN_URL", match.get().actionName());
+    }
+
+    // --- Finance routing (must NOT fall to LLM refusal) ---
+
+    @Test
+    void voiceChtoUNasFinansamiRoutesToFinance() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("что у нас финансами", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("FINANCE_SUMMARY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.FINANCE, match.get().action().target());
+    }
+
+    @Test
+    void voiceKakDelaSFinansamiRoutesToFinance() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("как дела с финансами", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("FINANCE_SUMMARY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.FINANCE, match.get().action().target());
+    }
+
+    @Test
+    void voiceSkolkoPotratilRoutesToFinance() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("сколько я потратил", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("FINANCE_SUMMARY", match.get().actionName());
+    }
+
+    // --- Media previous + planner consistency ---
+
+    @Test
+    void voicePredydushchiyTrekMapsToPrev() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("предыдущий трек", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PREV", match.get().actionName());
+    }
+
+    @Test
+    void voiceKakieUMenyaSegodnyaZadachiRoutesToPlanner() {
+        Optional<VoiceCommandCatalog.Match> match = service.match("какие у меня сегодня задачи", "ru-RU");
+
+        assertTrue(match.isPresent());
+        assertEquals("PLANNER_TODAY", match.get().actionName());
+        assertEquals(VoiceCommandCatalog.ActionTarget.PLANNER, match.get().action().target());
+    }
+
+    private static boolean isVolumeDown(String action) {
+        if (action == null) {
+            return false;
+        }
+        String normalized = action.toUpperCase(java.util.Locale.ROOT);
+        return normalized.contains("VOLUME_DOWN") || normalized.equals("VOLUME_DOWN") || normalized.contains("QUIETER");
+    }
 }

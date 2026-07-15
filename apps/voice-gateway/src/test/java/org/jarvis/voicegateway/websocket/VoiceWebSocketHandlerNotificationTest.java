@@ -74,7 +74,8 @@ class VoiceWebSocketHandlerNotificationTest {
                 intentService,
                 localIntentExecutionService,
                 orchestratorClient,
-                new ObjectMapper());
+                new ObjectMapper(),
+                new org.jarvis.voicegateway.confirmation.PendingConfirmationStore());
 
         lenient().when(sttService.createSession(any())).thenReturn(recognitionSession);
         when(ttsService.describeRuntime()).thenReturn(Map.of(

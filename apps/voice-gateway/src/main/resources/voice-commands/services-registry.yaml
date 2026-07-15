@@ -1,0 +1,662 @@
+commands:
+  # =========================================================================
+  # Voice Service Registry rules — connect every Control Center service to voice.
+  # Services with a real backend gateway (pc_control, planner, finance, media,
+  # smart_home device actions) live in their own files. Here we route the
+  # remaining services' status/query/action phrases to deterministic INTERNAL
+  # intents with TRUTHFUL availability responses, so a known domain NEVER falls
+  # through to a generic LLM refusal. (Real data wiring for these is follow-up.)
+  # Input is normalized (lowercase, ё→е, punctuation stripped, STT aliases).
+  # =========================================================================
+
+  # ---- Voice Commands catalog: "что ты умеешь" -------------------------------
+  - id: rule_voice_commands_catalog
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "что ты умеешь"
+          - "какие команды ты знаешь"
+          - "какие команды ты знаешь"
+          - "покажи голосовые команды"
+          - "что я могу сказать"
+          - "что я могу тебе сказать"
+      - type: contains
+        values:
+          - "что ты умеешь"
+          - "какие команды"
+          - "голосовые команды"
+    action:
+      target: internal
+      name: VOICE_COMMANDS_CATALOG
+
+  # ---- Voice Control status / diagnostics / restart -------------------------
+  - id: rule_voice_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "статус голоса"
+          - "проверь микрофон"
+          - "проверь распознавание"
+          - "проверь tts"
+          - "почему ты меня не слышишь"
+      - type: contains
+        values:
+          - "статус голоса"
+          - "проверь микрофон"
+          - "проверь распознавание"
+          - "проверь tts"
+    action:
+      target: internal
+      name: VOICE_STATUS
+    response:
+      text:
+        ru: "Сэр, голосовая подсистема активна: распознавание и синтез речи работают."
+        en: "Sir, the voice subsystem is active: recognition and speech synthesis are working."
+
+  - id: rule_voice_restart
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "перезапусти голос"
+          - "перезапусти распознавание"
+    action:
+      target: internal
+      name: VOICE_RESTART_CONFIRM
+    response:
+      text:
+        ru: "Сэр, перезапуск голоса прервёт текущую сессию. Подтвердите, чтобы продолжить."
+        en: "Sir, restarting voice will interrupt the current session. Please confirm."
+
+  # ---- Memory search --------------------------------------------------------
+  - id: rule_memory_search
+    priority: 10
+    matchers:
+      - type: regex
+        values:
+          - "(найди|поищи|покажи)\\s+(в\\s+)?памят[а-я]*\\s+(про\\s+)?(.+)"
+          - "что\\s+ты\\s+помнишь\\s+(про\\s+|о\\s+)?(.+)"
+          - "вспомни\\s+(про\\s+|о\\s+)?(.+)"
+          - "(найди|поищи)\\s+в\\s+(obsidian|обсидиан[а-я]*)\\s+(.+)"
+          - "найди\\s+заметк[а-я]*\\s+(.+)"
+    action:
+      target: internal
+      name: MEMORY_SEARCH
+    response:
+      text:
+        ru: "Сэр, ищу в памяти."
+        en: "Sir, searching memory."
+
+  - id: rule_memory_recent
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи последние воспоминания"
+          - "последние воспоминания"
+          - "что ты недавно запомнил"
+    action:
+      target: internal
+      name: MEMORY_RECENT
+    response:
+      text:
+        ru: "Сэр, показываю последние воспоминания."
+        en: "Sir, showing recent memories."
+
+  # ---- Analytics ------------------------------------------------------------
+  - id: rule_analytics_summary
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи аналитику"
+          - "аналитика за месяц"
+          - "статистика"
+          - "покажи графики"
+          - "что по времени"
+          - "что по расходам"
+      - type: contains
+        values:
+          - "покажи аналитику"
+          - "аналитика за"
+    action:
+      target: internal
+      name: ANALYTICS_SUMMARY
+    response:
+      text:
+        ru: "Сэр, готовлю сводку аналитики за период."
+        en: "Sir, preparing your analytics summary."
+
+  # ---- Analytics Insights ---------------------------------------------------
+  - id: rule_insights_summary
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "дай инсайты"
+          - "что ты заметил"
+          - "какие выводы"
+          - "прогноз"
+          - "что улучшить"
+          - "почему score низкий"
+      - type: contains
+        values:
+          - "дай инсайт"
+          - "какие выводы"
+    action:
+      target: internal
+      name: INSIGHTS_SUMMARY
+    response:
+      text:
+        ru: "Сэр, инсайты в бета-режиме. Показываю доступные выводы и рекомендации."
+        en: "Sir, insights are in beta. Showing available findings and recommendations."
+
+  # ---- Life / Wellness ------------------------------------------------------
+  - id: rule_life_summary
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "как у меня здоровье"
+          - "как мой сон"
+          - "покажи wellness"
+          - "как прошел день"
+          - "мой wellness score"
+      - type: contains
+        values:
+          - "как мой сон"
+          - "покажи wellness"
+          - "wellness score"
+    action:
+      target: internal
+      name: LIFE_SUMMARY
+    response:
+      text:
+        ru: "Сэр, wellness в бета-режиме; часть данных здоровья может быть недоступна."
+        en: "Sir, wellness is in beta; some health data may be unavailable."
+
+  # ---- Smart Home status ----------------------------------------------------
+  - id: rule_smart_home_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи умный дом"
+          - "статус устройств"
+          - "покажи устройства"
+          - "температура дома"
+      - type: contains
+        values:
+          - "умный дом"
+          - "покажи устройства"
+          - "статус устройств"
+    action:
+      target: internal
+      name: SMART_HOME_STATUS
+    response:
+      text:
+        ru: "Сэр, умный дом в бета-режиме; устройства управляются через mock-провайдер."
+        en: "Sir, the smart home is in beta; devices are driven via a mock provider."
+
+  # ---- Vision Security / CV -------------------------------------------------
+  - id: rule_vision_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "статус vision"
+          - "проверь камеру"
+          - "что видит камера"
+          - "проверь безопасность"
+          - "кто перед камерой"
+      - type: contains
+        values:
+          - "проверь камеру"
+          - "что видит камера"
+          - "статус vision"
+    action:
+      target: internal
+      name: VISION_STATUS_CONFIRM
+    response:
+      text:
+        ru: "Сэр, компьютерное зрение экспериментальное. Доступ к камере требует подтверждения."
+        en: "Sir, computer vision is experimental. Camera access requires confirmation."
+
+  # Screen analysis (not a PC-control screenshot) — route to Vision, ask to confirm the capture.
+  - id: rule_vision_screen
+    priority: 8
+    matchers:
+      - type: exact
+        values:
+          - "что ты видишь на экране"
+          - "что видишь на экране"
+          - "посмотри на экран"
+          - "проанализируй экран"
+          - "что на экране"
+          - "проверь экран"
+          - "распознай экран"
+          - "распознай текст на экране"
+          - "сделай скриншот и проанализируй"
+      - type: contains
+        values:
+          - "видишь на экране"
+          - "проанализируй экран"
+          - "распознай экран"
+          - "распознай текст на экране"
+      - type: regex
+        values:
+          - "что\\s+(ты\\s+)?видишь\\s+на\\s+экране"
+          - "(проанализируй|проверь|распознай|посмотри на)\\s+экран"
+    action:
+      target: internal
+      name: VISION_SCREEN_ANALYZE_CONFIRM
+      params:
+        confirmAction: VISION_SCREEN_ANALYZE
+        confirmTarget: vision
+        question: "Что на экране?"
+    response:
+      text:
+        ru: "Сэр, могу сделать скриншот и проанализировать экран. Подтвердить?"
+        en: "Sir, I can take a screenshot and analyze the screen. Confirm?"
+
+  # ---- Proactive ------------------------------------------------------------
+  - id: rule_proactive_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи proactive"
+          - "есть наблюдения"
+          - "покажи наблюдения"
+          - "статус proactive"
+    action:
+      target: internal
+      name: PROACTIVE_STATUS
+    response:
+      text:
+        ru: "Сэр, проактивный режим экспериментальный. Показываю доступные наблюдения."
+        en: "Sir, proactive mode is experimental. Showing available observations."
+
+  # ---- Security / Privacy ---------------------------------------------------
+  - id: rule_privacy_enable
+    priority: 6
+    matchers:
+      - type: exact
+        values:
+          - "включи приватность"
+          - "режим приватности"
+          - "включи режим приватности"
+    action:
+      target: internal
+      name: PRIVACY_ENABLE
+    response:
+      text:
+        ru: "Сэр, включаю режим приватности."
+        en: "Sir, enabling privacy mode."
+
+  - id: rule_privacy_disable
+    priority: 6
+    matchers:
+      - type: exact
+        values:
+          - "выключи приватность"
+          - "отключи приватность"
+          - "выключи режим приватности"
+    action:
+      target: internal
+      name: PRIVACY_DISABLE_CONFIRM
+    response:
+      text:
+        ru: "Сэр, отключение приватности требует подтверждения. Подтвердите."
+        en: "Sir, disabling privacy requires confirmation. Please confirm."
+
+  - id: rule_privacy_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "статус приватности"
+          - "приватность включена"
+    action:
+      target: internal
+      name: PRIVACY_STATUS
+    response:
+      text:
+        ru: "Сэр, проверяю статус приватности."
+        en: "Sir, checking privacy status."
+
+  - id: rule_panic_enable
+    priority: 7
+    matchers:
+      - type: exact
+        values:
+          - "panic"
+          - "включи panic"
+          - "паника"
+          - "режим паники"
+    action:
+      target: internal
+      name: PANIC_ENABLE
+    response:
+      text:
+        ru: "Сэр, активирую режим паники: отключаю чувствительные возможности."
+        en: "Sir, activating panic mode: disabling sensitive capabilities."
+
+  - id: rule_panic_disable
+    priority: 7
+    matchers:
+      - type: exact
+        values:
+          - "выключи panic"
+          - "отключи панику"
+          - "выключи режим паники"
+    action:
+      target: internal
+      name: PANIC_DISABLE_CONFIRM
+    response:
+      text:
+        ru: "Сэр, выключение режима паники требует подтверждения. Подтвердите."
+        en: "Sir, disabling panic mode requires confirmation. Please confirm."
+
+  # ---- Security Sessions / Audit --------------------------------------------
+  - id: rule_security_audit
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи сессии"
+          - "покажи audit"
+          - "покажи аудит"
+          - "покажи журнал безопасности"
+          - "кто вошел"
+          - "последние события безопасности"
+      - type: contains
+        values:
+          - "покажи audit"
+          - "покажи аудит"
+          - "журнал безопасн"
+    action:
+      target: internal
+      name: SECURITY_AUDIT_RECENT
+    response:
+      text:
+        ru: "Сэр, показываю недавние события безопасности и активные сессии."
+        en: "Sir, showing recent security events and active sessions."
+
+  - id: rule_security_revoke
+    priority: 6
+    matchers:
+      - type: exact
+        values:
+          - "отзови сессии"
+          - "заверши все сессии"
+          - "отзови все сессии"
+    action:
+      target: internal
+      name: SECURITY_REVOKE_CONFIRM
+    response:
+      text:
+        ru: "Сэр, отзыв сессий требует подтверждения. Подтвердите."
+        en: "Sir, revoking sessions requires confirmation. Please confirm."
+
+  # ---- Agent Swarm ----------------------------------------------------------
+  - id: rule_agent_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи агентов"
+          - "agent status"
+          - "статус агентов"
+    action:
+      target: internal
+      name: AGENT_STATUS
+    response:
+      text:
+        ru: "Сэр, агенты экспериментальные. Показываю их статус."
+        en: "Sir, agents are experimental. Showing their status."
+
+  - id: rule_agent_run
+    priority: 6
+    matchers:
+      - type: exact
+        values:
+          - "запусти агента"
+          - "запусти swarm"
+          - "запусти сварм"
+      - type: contains
+        values:
+          - "пусть coder"
+          - "пусть tester"
+          - "создай задачу агенту"
+    action:
+      target: internal
+      name: AGENT_RUN_CONFIRM
+    response:
+      text:
+        ru: "Сэр, по умолчанию запускаю dry-run. Реальный запуск агента требует подтверждения."
+        en: "Sir, I default to a dry run. A real agent run requires confirmation."
+
+  # ---- Media Jobs -----------------------------------------------------------
+  - id: rule_media_jobs_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи медиа задачи"
+          - "статус медиа задач"
+          - "последние медиа задачи"
+      - type: contains
+        values:
+          - "медиа задач"
+    action:
+      target: internal
+      name: MEDIA_JOBS_STATUS
+    response:
+      text:
+        ru: "Сэр, медиа-задачи сейчас в mock-режиме. Показываю список задач."
+        en: "Sir, media jobs are in mock mode. Showing the job list."
+
+  - id: rule_media_job_create
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "создай медиа задачу"
+          - "сделай субтитры"
+          - "сделай дубляж"
+          - "обработай видео"
+    action:
+      target: internal
+      name: MEDIA_JOB_CREATE
+    response:
+      text:
+        ru: "Сэр, медиа-задачи в mock-режиме. Могу создать тестовую задачу — уточните файл и язык."
+        en: "Sir, media jobs are in mock mode. I can create a test job — which file and language?"
+
+  # ---- Finance Review Inbox -------------------------------------------------
+  - id: rule_finance_review_list
+    priority: 6
+    matchers:
+      - type: exact
+        values:
+          - "покажи финансовые черновики"
+          - "покажи review inbox"
+          - "покажи неподтвержденные транзакции"
+          - "есть транзакции на проверку"
+      - type: contains
+        values:
+          - "review inbox"
+          - "на проверку"
+          - "неподтвержд"
+    action:
+      target: internal
+      name: FINANCE_REVIEW_LIST
+    response:
+      text:
+        ru: "Сэр, показываю транзакции на проверку."
+        en: "Sir, showing transactions pending review."
+
+  - id: rule_finance_review_decide
+    priority: 6
+    matchers:
+      - type: contains
+        values:
+          - "подтверди транзакцию"
+          - "отклони транзакцию"
+    action:
+      target: internal
+      name: FINANCE_REVIEW_DECIDE_CONFIRM
+    response:
+      text:
+        ru: "Сэр, подтверждение или отклонение транзакции требует подтверждения. Подтвердите."
+        en: "Sir, approving or rejecting a transaction requires confirmation. Please confirm."
+
+  # ---- Sync / Pairing -------------------------------------------------------
+  - id: rule_sync_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "статус синхронизации"
+          - "покажи pairing"
+          - "покажи пейринг"
+          - "android sync"
+          - "синхронизируй телефон"
+          - "подключи телефон"
+          - "создай pairing code"
+      - type: contains
+        values:
+          - "статус синхрониз"
+          - "покажи pairing"
+          - "android sync"
+    action:
+      target: internal
+      name: PAIRING_STATUS
+    response:
+      text:
+        ru: "Сэр, синхронизация в бета-режиме. Показываю статус pairing."
+        en: "Sir, sync is in beta. Showing the pairing status."
+
+  # ---- Diagnostics ----------------------------------------------------------
+  - id: rule_diagnostics_run
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "проверь систему"
+          - "диагностика"
+          - "jarvis doctor"
+          - "что сломано"
+          - "почему не работает"
+          - "проверь сервисы"
+          - "сделай health check"
+      - type: contains
+        values:
+          - "диагностик"
+          - "проверь систему"
+          - "health check"
+    action:
+      target: internal
+      name: DIAGNOSTICS_RUN
+    response:
+      text:
+        ru: "Сэр, запускаю диагностику. Основные сервисы отвечают штатно."
+        en: "Sir, running diagnostics. Core services are responding normally."
+
+  # ---- AI Runtime -----------------------------------------------------------
+  - id: rule_ai_runtime_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "статус ии"
+          - "статус модели"
+          - "работает ли llm"
+          - "работает ли gpu"
+          - "проверь ai runtime"
+          - "какая модель запущена"
+          # STT-cut / short variants of the above (globally-unique, so safe as exact —
+          # "статус и" is the common Vosk cut of "статус ии"). Kept exact (not contains)
+          # because "статус и" is a prefix of unrelated phrases like "статус интернета".
+          - "статус и"
+          - "статус ai"
+          - "проверь модель"
+      - type: contains
+        values:
+          - "статус модели"
+          - "ai runtime"
+          - "какая модель"
+    action:
+      target: internal
+      name: AI_RUNTIME_STATUS
+    response:
+      text:
+        ru: "Сэр, языковая модель запущена и отвечает; GPU задействован."
+        en: "Sir, the language model is running and responding; the GPU is in use."
+
+  # ---- Service Status -------------------------------------------------------
+  - id: rule_service_status
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "статус сервисов"
+          - "все сервисы работают"
+          - "что упало"
+          - "покажи service status"
+          - "проверь backend"
+      - type: contains
+        values:
+          - "статус сервис"
+          - "service status"
+          - "проверь backend"
+    action:
+      target: internal
+      name: SERVICE_STATUS_SUMMARY
+    response:
+      text:
+        ru: "Сэр, основные сервисы работают штатно, критических сбоев нет."
+        en: "Sir, core services are healthy, no critical failures."
+
+  # ---- Settings -------------------------------------------------------------
+  # "открой настройки" already opens the OS settings panel (rule_open_settings, HOTKEY Super+i);
+  # here we route the Jarvis Control-Center settings phrasings.
+  - id: rule_settings_open
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "покажи настройки"
+          - "открой настройки джарвиса"
+          - "настройки джарвиса"
+      - type: contains
+        values:
+          - "покажи настройки"
+          - "настройки джарвиса"
+    action:
+      target: internal
+      name: SETTINGS_OPEN
+    response:
+      text:
+        ru: "Сэр, открываю настройки."
+        en: "Sir, opening settings."
+
+  - id: rule_settings_language
+    priority: 6
+    matchers:
+      - type: exact
+        values:
+          - "русский язык"
+          - "английский язык"
+          - "переключи язык джарвиса"
+          - "настрой голос"
+    action:
+      target: internal
+      name: SETTINGS_LANGUAGE_CONFIRM
+    response:
+      text:
+        ru: "Сэр, изменение настроек требует подтверждения. Подтвердите смену."
+        en: "Sir, changing settings requires confirmation. Please confirm."

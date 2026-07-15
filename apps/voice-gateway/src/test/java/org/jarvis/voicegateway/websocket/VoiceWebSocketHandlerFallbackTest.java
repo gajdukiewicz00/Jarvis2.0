@@ -77,7 +77,8 @@ class VoiceWebSocketHandlerFallbackTest {
                 intentService,
                 localIntentExecutionService,
                 orchestratorClient,
-                new ObjectMapper());
+                new ObjectMapper(),
+                new org.jarvis.voicegateway.confirmation.PendingConfirmationStore());
 
         lenient().when(sttService.createSession(any())).thenReturn(recognitionSession);
         lenient().when(sttService.describeRuntime()).thenReturn(Map.of(

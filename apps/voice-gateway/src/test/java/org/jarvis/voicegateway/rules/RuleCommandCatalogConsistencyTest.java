@@ -49,11 +49,20 @@ class RuleCommandCatalogConsistencyTest {
 
             Map<String, Object> response = objectMap(command.get("response"));
             String responseKey = stringValue(response.get("key"));
-            if (responseKey == null || responseKey.isBlank()) {
-                missingResponses.add(id);
-            } else {
+            // A command's spoken reply may come from a pre-recorded WAV (response.key), an inline
+            // TTS text map (response.text), or be built DYNAMICALLY by the handler/gateway for
+            // planner/finance summaries and internal intents (catalog, clarifications, status).
+            boolean hasText = response.get("text") != null;
+            String target = stringValue(objectMap(command.get("action")).get("target"));
+            boolean dynamicTarget = target != null && switch (target.trim().toLowerCase()) {
+                case "planner", "finance", "internal" -> true;
+                default -> false;
+            };
+            if (responseKey != null && !responseKey.isBlank()) {
                 assertTrue(responsesByKey.containsKey(responseKey),
                         "Command " + id + " references unknown response key " + responseKey);
+            } else if (!hasText && !dynamicTarget) {
+                missingResponses.add(id);
             }
 
             for (Map<String, Object> matcher : objectList(command.get("matchers"))) {

@@ -19,6 +19,37 @@ class SystemControlService {
         val output: String
     )
 
+    /**
+     * Minimal abstraction over [SystemAppIndex] so tests can inject a deterministic, offline fake
+     * that returns canned [AppResolution]s (the concrete index is a final class that scans the real
+     * filesystem). Production wraps a real index in [IndexAppOpener].
+     */
+    internal interface AppOpener {
+        fun resolve(query: String): AppResolution
+        fun launchCommand(entry: AppEntry): List<String>
+    }
+
+    private class IndexAppOpener(private val index: SystemAppIndex) : AppOpener {
+        override fun resolve(query: String): AppResolution = index.resolve(query)
+        override fun launchCommand(entry: AppEntry): List<String> = index.launchCommand(entry)
+    }
+
+    /** Test seam: when non-null, the openApp index branch uses this instead of the shared index. */
+    internal var appOpenerOverride: AppOpener? = null
+
+    /**
+     * Test seam: when non-null, replaces real OS process execution in [executeProcess]. Receives the
+     * argv and returns `(exitCode, mergedOutput)` so tests can capture commands and drive branches
+     * without spawning anything.
+     */
+    internal var commandExecutorOverride: ((List<String>) -> Pair<Int, String>)? = null
+
+    /**
+     * Test seam: when non-null, replaces the raw `ProcessBuilder.start()` in [startFirstAvailable].
+     * Return normally to signal a successful launch; throw to signal "try the next candidate".
+     */
+    internal var appLauncherOverride: ((List<String>) -> Unit)? = null
+
     // ==================== Volume Control ====================
 
     /**
@@ -48,15 +79,16 @@ class SystemControlService {
      * Set volume to a specific percentage.
      */
     fun setVolume(percent: Int): Result<Unit> {
+        val level = percent.coerceIn(0, 100)
         return try {
             val backend = selectAudioBackend()
             when (backend) {
-                "wpctl" -> executeCheckedCommand("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$percent%")
-                "pactl" -> executeCheckedCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$percent%")
-                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "$percent%")
+                "wpctl" -> executeCheckedCommand("wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "$level%")
+                "pactl" -> executeCheckedCommand("pactl", "set-sink-volume", "@DEFAULT_SINK@", "$level%")
+                "amixer" -> executeCheckedCommand("amixer", "set", "Master", "$level%")
                 else -> error("Unsupported audio backend: $backend")
             }
-            logger.info("🔊 Volume set to {} via {}", "$percent%", backend)
+            logger.info("🔊 Volume set to {} via {}", "$level%", backend)
             Result.success(Unit)
         } catch (e: Exception) {
             logger.error("Could not set volume: ${e.message}")
@@ -141,15 +173,102 @@ class SystemControlService {
             else -> action.lowercase()
         }
         
+        // Target resolution: prefer a real MPRIS player; fall back to a browser hotkey only when
+        // the active window is actually a browser; otherwise report truthfully that nothing is
+        // controllable. Coded prefixes (before ':') become the failureCode the voice layer maps.
+        val playerctlInstalled = isCommandAvailable("playerctl")
+        val activePlayers = if (playerctlInstalled) {
+            runCatching { executeProcess("playerctl", "-l").output.trim() }.getOrDefault("")
+        } else {
+            ""
+        }
+        val hasPlayer = playerctlInstalled
+            && activePlayers.isNotBlank()
+            && !activePlayers.contains("No players found", ignoreCase = true)
+
+        if (hasPlayer) {
+            return try {
+                // playerctl exiting 0 means the command was ACCEPTED by the active player — that is
+                // a real success and must never be downgraded to a failure by a status re-read that
+                // may lag or list several players. We verify status only for diagnostics.
+                executeCheckedCommand("playerctl", playerctlAction)
+                val expected = when (action.uppercase()) {
+                    "PAUSE" -> "Paused"
+                    "PLAY" -> "Playing"
+                    else -> null
+                }
+                val confirmed = if (expected != null) {
+                    playerctlStatus()?.equals(expected, ignoreCase = true) == true
+                } else {
+                    true
+                }
+                logger.info(
+                    "🎵 media action={} selectedExecutor=playerctl playerctlExit=0 stateConfirmed={} finalStatus=SUCCESS (players={})",
+                    action, confirmed, activePlayers
+                )
+                Result.success(Unit)
+            } catch (e: Exception) {
+                val msg = e.message ?: ""
+                val coded = when {
+                    msg.contains("timed out", ignoreCase = true) -> "PLAYERCTL_TIMEOUT: $msg"
+                    msg.contains("permission", ignoreCase = true) || msg.contains("denied", ignoreCase = true) -> "PERMISSION_DENIED: $msg"
+                    msg.contains("No players found", ignoreCase = true) -> "NO_ACTIVE_PLAYER: $msg"
+                    else -> "MEDIA_CONTROL_FAILED: $msg"
+                }
+                logger.error("🎵 media action={} selectedExecutor=playerctl finalStatus=FAILED reason={}", action, coded)
+                Result.failure(IllegalStateException(coded, e))
+            }
+        }
+
+        // No MPRIS player — try a best-effort browser media hotkey if a browser window is active.
+        val browserResult = tryBrowserMediaFallback(action)
+        if (browserResult != null) {
+            return browserResult
+        }
+
+        val reason = if (!playerctlInstalled) {
+            "PLAYERCTL_NOT_INSTALLED: playerctl is not installed and no browser media window is active"
+        } else {
+            "NO_ACTIVE_PLAYER: no active media player and no controllable browser window"
+        }
+        logger.info("🎵 Media control '$playerctlAction': $reason")
+        return Result.failure(IllegalStateException(reason))
+    }
+
+    /**
+     * Best-effort browser media control when no MPRIS player exists. Returns null when the active
+     * window is NOT a browser (so the caller reports NO_ACTIVE_PLAYER truthfully). When it IS a
+     * browser we inject a media hotkey — success here means "the key was sent to the focused
+     * window", not a verified state change.
+     */
+    private fun tryBrowserMediaFallback(action: String): Result<Unit>? {
+        val title = activeWindowTitle().lowercase()
+        if (title.isBlank()) return null
+        val browserMarkers = listOf("firefox", "mozilla", "chrome", "chromium", "yandex", "opera", "brave", "edge", "youtube")
+        if (browserMarkers.none { title.contains(it) }) return null
+        val isYouTube = title.contains("youtube")
+        val keys = when (action.uppercase()) {
+            "PLAY", "PAUSE", "PLAY_PAUSE", "TOGGLE" -> "XF86AudioPlay"
+            "STOP" -> "XF86AudioStop"
+            "NEXT" -> if (isYouTube) "shift+n"
+                else return Result.failure(IllegalStateException("BROWSER_NEXT_UNSUPPORTED: browser next-track is only supported on YouTube"))
+            "PREV", "PREVIOUS" -> if (isYouTube) "shift+p"
+                else return Result.failure(IllegalStateException("BROWSER_PREV_UNSUPPORTED: browser previous is only supported on YouTube"))
+            else -> return null
+        }
         return try {
-            executeCheckedCommand("playerctl", playerctlAction)
-            logger.info("🎵 Media $playerctlAction via playerctl")
+            executeCheckedCommand("xdotool", "key", keys)
+            logger.info("🎵 Media '$action' sent to active browser via hotkey '$keys' (window='$title')")
             Result.success(Unit)
         } catch (e: Exception) {
-            logger.error("Could not execute media control: ${e.message}")
-            Result.failure(e)
+            Result.failure(IllegalStateException("BROWSER_HOTKEY_FAILED: ${e.message}", e))
         }
     }
+
+    /** Active X window title via xdotool; empty string if xdotool/window is unavailable. */
+    private fun activeWindowTitle(): String =
+        runCatching { executeProcess("xdotool", "getactivewindow", "getwindowname").output.trim() }
+            .getOrDefault("")
 
     /**
      * Pause media playback using playerctl.
@@ -175,13 +294,22 @@ class SystemControlService {
             "browser", "firefox" -> listOf(listOf("firefox"))
             "chrome", "google-chrome" -> listOf(listOf("google-chrome"), listOf("chromium"))
             "terminal", "konsole" -> listOf(listOf("konsole"), listOf("gnome-terminal"), listOf("x-terminal-emulator"))
-            "file-manager", "dolphin", "nautilus" -> listOf(listOf("dolphin"), listOf("nautilus"))
-            "vscode", "code" -> listOf(listOf("code"))
-            "spotify" -> listOf(listOf("spotify"))
+            "file-manager", "files", "file manager", "folder", "папка", "проводник", "dolphin", "nautilus" ->
+                listOf(listOf("nautilus"), listOf("dolphin"), listOf("xdg-open", System.getProperty("user.home") ?: "."))
+            "vscode", "vs code", "code", "visual studio code" -> listOf(listOf("code"), listOf("codium"))
+            "spotify" -> listOf(listOf("spotify"), listOf("flatpak", "run", "com.spotify.Client"))
+            "telegram", "telegram-desktop" -> listOf(
+                listOf("telegram-desktop"),
+                listOf("telegram"),
+                listOf("flatpak", "run", "org.telegram.desktop"),
+            )
             "vlc" -> listOf(listOf("vlc"))
             "notepad", "kate", "text-editor" -> listOf(listOf("kate"), listOf("gedit"))
             "settings" -> listOf(listOf("gnome-control-center"), listOf("systemsettings"), listOf("kcmshell6", "systemsettings"))
-            else -> listOf(listOf(appName))
+            // Unknown name: resolve it against the fuzzy system app index instead of blindly
+            // exec-ing the raw spoken text. The index branch may return a coded clarify/not-found
+            // failure that the WS ack propagates to the voice layer (see openViaIndex).
+            else -> return openViaIndex(appName)
         }
 
         return try {
@@ -194,19 +322,99 @@ class SystemControlService {
         }
     }
 
-    fun openUrl(url: String): Result<Unit> {
-        return try {
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI(url))
-            } else {
-                executeCheckedCommand("xdg-open", url)
+    /**
+     * Resolve an unknown [appName] via the shared [SystemAppIndex] and act on the outcome:
+     *  - [AppResolution.Launch]   → launch the resolved app (index argv, then the literal name).
+     *  - [AppResolution.Clarify]  → fail with `APP_CLARIFY|<best candidate name>` (no launch).
+     *  - [AppResolution.NotFound] → fail with `APP_NOT_FOUND|<query>[|<suggestion names>]`.
+     *
+     * The coded failure messages are carried verbatim as the [Result.failure] message so the PC
+     * control ack can forward them to the orchestrator. When the index could not be built (a real
+     * filesystem scan failure), degrade to the previous literal-exec behaviour rather than crash.
+     */
+    private fun openViaIndex(appName: String): Result<Unit> {
+        val opener = resolveAppOpener() ?: return launchLiteral(appName)
+        return when (val resolution = opener.resolve(appName)) {
+            is AppResolution.Launch -> launchResolved(appName, opener, resolution)
+            is AppResolution.Clarify -> {
+                val candidate = resolution.candidates.firstOrNull()?.name ?: appName
+                logger.info("🤔 openApp '{}' is ambiguous; asking to clarify → {}", appName, candidate)
+                Result.failure(AppOpenException("APP_CLARIFY|$candidate"))
             }
-            logger.info("🌐 Opened URL: $url")
+            is AppResolution.NotFound -> {
+                val suffix = if (resolution.suggestions.isEmpty()) {
+                    ""
+                } else {
+                    "|" + resolution.suggestions.joinToString(",") { it.name }
+                }
+                logger.info("🚫 openApp '{}' not found{}", appName, suffix)
+                Result.failure(AppOpenException("APP_NOT_FOUND|$appName$suffix"))
+            }
+        }
+    }
+
+    private fun launchResolved(
+        appName: String,
+        opener: AppOpener,
+        resolution: AppResolution.Launch,
+    ): Result<Unit> {
+        return try {
+            val argv = opener.launchCommand(resolution.entry)
+            startFirstAvailable(listOf(argv, listOf(appName)))
+            logger.info(
+                "🚀 Opened app: {} → resolved '{}' (confidence={})",
+                appName, resolution.entry.name, resolution.confidence,
+            )
             Result.success(Unit)
         } catch (e: Exception) {
-            logger.error("Could not open URL $url: ${e.message}")
+            logger.error("Could not launch resolved app {} ({}): {}", appName, resolution.entry.name, e.message)
+            Result.failure(AppOpenException("APP_LAUNCH_FAILED|${e.message}"))
+        }
+    }
+
+    /** Previous behaviour: exec the literal spoken name. Used only when the index is unavailable. */
+    private fun launchLiteral(appName: String): Result<Unit> {
+        return try {
+            startFirstAvailable(listOf(listOf(appName)))
+            logger.info("🚀 Opened app (literal fallback): {}", appName)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("Could not open app $appName: ${e.message}")
             Result.failure(e)
         }
+    }
+
+    /** Test seam first, then the lazily-built shared index; null means "index unavailable". */
+    private fun resolveAppOpener(): AppOpener? = appOpenerOverride ?: sharedAppOpener()
+
+    fun openUrl(url: String): Result<Unit> {
+        // Voice search URLs carry a raw query (spaces/Cyrillic) which URI(String) rejects — encode
+        // the search_query value so "найди на ютубе обзор фольксвагена" opens a valid results page.
+        val safeUrl = sanitizeUrl(url)
+        return try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(URI(safeUrl))
+            } else {
+                executeCheckedCommand("xdg-open", safeUrl)
+            }
+            logger.info("🌐 Opened URL: $safeUrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("Could not open URL $safeUrl: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    /** URL-encode the search_query value (spaces/Cyrillic) so the URL is valid for URI/browse. */
+    private fun sanitizeUrl(url: String): String {
+        val marker = "search_query="
+        val idx = url.indexOf(marker)
+        if (idx < 0) {
+            return url.replace(" ", "%20")
+        }
+        val prefix = url.substring(0, idx + marker.length)
+        val query = url.substring(idx + marker.length)
+        return prefix + java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8)
     }
 
     // ==================== Hotkey Control ====================
@@ -257,6 +465,58 @@ class SystemControlService {
         } catch (e: Exception) {
             logger.error("Could not perform window action: ${e.message}")
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Minimize every window / show the desktop (GNOME on X11). Prefers `wmctrl -k on`; if wmctrl is
+     * missing or fails, falls back to the Super+D hotkey.
+     */
+    fun showDesktop(): Result<Unit> {
+        return try {
+            executeCheckedCommand("wmctrl", "-k", "on")
+            logger.info("🪟 Show desktop (minimized all windows) via wmctrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.warn("wmctrl show-desktop failed, falling back to super+d: {}", e.message)
+            executeHotkey("super+d")
+        }
+    }
+
+    /**
+     * Undo "show desktop" and bring windows back (`wmctrl -k off`). If wmctrl is missing/unsupported
+     * the operation cannot be performed, so this reports [Result.failure] with code `WM_UNSUPPORTED`.
+     */
+    fun restoreWindows(): Result<Unit> {
+        return try {
+            executeCheckedCommand("wmctrl", "-k", "off")
+            logger.info("🪟 Restored windows (un-show-desktop) via wmctrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.error("Could not restore windows (wmctrl unavailable/failed): {}", e.message)
+            Result.failure(IllegalStateException("WM_UNSUPPORTED", e))
+        }
+    }
+
+    /**
+     * Maximize the active window. Prefers `wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz`;
+     * if wmctrl fails, falls back to `xdotool getactivewindow windowmaximize`.
+     */
+    fun maximizeActiveWindow(): Result<Unit> {
+        return try {
+            executeCheckedCommand("wmctrl", "-r", ":ACTIVE:", "-b", "add,maximized_vert,maximized_horz")
+            logger.info("🪟 Maximized active window via wmctrl")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            logger.warn("wmctrl maximize failed, falling back to xdotool: {}", e.message)
+            try {
+                executeCheckedCommand("xdotool", "getactivewindow", "windowmaximize")
+                logger.info("🪟 Maximized active window via xdotool")
+                Result.success(Unit)
+            } catch (fallback: Exception) {
+                logger.error("Could not maximize active window: {}", fallback.message)
+                Result.failure(fallback)
+            }
         }
     }
 
@@ -474,6 +734,10 @@ class SystemControlService {
     }
 
     private fun executeProcess(vararg command: String): CommandResult {
+        commandExecutorOverride?.let { override ->
+            val (exitCode, output) = override(command.toList())
+            return CommandResult(command.toList(), exitCode, output)
+        }
         logger.info("▶️ Running system command: {}", command.joinToString(" "))
         val process = ProcessBuilder(*command)
             .redirectErrorStream(true)
@@ -484,8 +748,17 @@ class SystemControlService {
             reader.forEachLine { output.appendLine(it) }
         }
 
-        val exitCode = process.waitFor()
-        val trimmed = output.toString().trim()
+        val finished = process.waitFor(6, java.util.concurrent.TimeUnit.SECONDS)
+        val exitCode: Int
+        val trimmed: String
+        if (finished) {
+            exitCode = process.exitValue()
+            trimmed = output.toString().trim()
+        } else {
+            process.destroyForcibly()
+            exitCode = 124
+            trimmed = "command timed out"
+        }
         if (exitCode == 0) {
             logger.info("✅ Command succeeded: command='{}', output='{}'", command.joinToString(" "), trimmed)
         } else {
@@ -508,12 +781,17 @@ class SystemControlService {
     }
 
     private fun startFirstAvailable(commands: List<List<String>>) {
+        val launcher = appLauncherOverride
         var lastError: Exception? = null
         for (command in commands) {
             try {
-                ProcessBuilder(command)
-                    .redirectErrorStream(true)
-                    .start()
+                if (launcher != null) {
+                    launcher(command)
+                } else {
+                    ProcessBuilder(command)
+                        .redirectErrorStream(true)
+                        .start()
+                }
                 return
             } catch (e: Exception) {
                 lastError = e
@@ -560,7 +838,30 @@ class SystemControlService {
 
     companion object {
         private val logger = LoggerFactory.getLogger(SystemControlService::class.java)
-        
+
+        // The system app index is expensive to build (it scans .desktop dirs + PATH) and immutable,
+        // so it is built once and shared across every SystemControlService instance. A build failure
+        // (e.g. unreadable dirs) degrades to the literal-exec fallback and is not retried.
+        private val appOpenerLock = Any()
+        @Volatile
+        private var cachedAppOpener: AppOpener? = null
+        @Volatile
+        private var appOpenerBuildFailed = false
+
+        private fun sharedAppOpener(): AppOpener? {
+            cachedAppOpener?.let { return it }
+            if (appOpenerBuildFailed) return null
+            return synchronized(appOpenerLock) {
+                cachedAppOpener ?: try {
+                    IndexAppOpener(SystemAppIndex()).also { cachedAppOpener = it }
+                } catch (e: Throwable) {
+                    logger.warn("System app index build failed; openApp falls back to literal exec: {}", e.message)
+                    appOpenerBuildFailed = true
+                    null
+                }
+            }
+        }
+
         // Tracks whether WE paused a genuinely-playing player, so the paired
         // resume only restarts media that was actually playing before the wake
         // word. Without this guard, resume (playerctl play) force-starts a player
@@ -568,17 +869,40 @@ class SystemControlService {
         @Volatile
         private var pausedByUs = false
 
-        private fun playerctlStatus(): String =
-            try {
-                val proc = ProcessBuilder("playerctl", "status")
+        /**
+         * Runs a playerctl command with a hard 3s timeout so a hung playerctl (D-Bus/player
+         * stall) can NEVER block the caller forever. This matters because these run on
+         * VoiceSession's single scheduler thread — an untimed hang there froze recordingStartFuture
+         * for all subsequent commands (the "stops recording after N commands" bug).
+         */
+        private fun runPlayerctlBounded(vararg args: String): String {
+            return try {
+                val proc = ProcessBuilder(listOf("playerctl", *args))
                     .redirectErrorStream(true)
                     .start()
                 val out = proc.inputStream.bufferedReader().use { it.readText() }.trim()
-                proc.waitFor()
+                if (!proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                    proc.destroyForcibly()
+                    logger.warn("playerctl {} timed out (3s)", args.joinToString(" "))
+                    return ""
+                }
                 out
             } catch (e: Exception) {
                 ""
             }
+        }
+
+        private fun playerctlStatus(): String = runPlayerctlBounded("status")
+
+        /**
+         * Clears the paused-by-us flag so the paired [resumeMediaStatic] no-ops. Used when the
+         * user's OWN command was an explicit media pause/stop, so the session does NOT auto-resume
+         * media ~1.5s later and undo the pause the user just asked for.
+         */
+        @JvmStatic
+        fun clearPausedByUs() {
+            pausedByUs = false
+        }
 
         /**
          * Pause media playback - static method for quick access.
@@ -591,15 +915,8 @@ class SystemControlService {
             if (!playerctlStatus().equals("Playing", ignoreCase = true)) {
                 return
             }
-            try {
-                ProcessBuilder("playerctl", "pause")
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor()
-                pausedByUs = true
-            } catch (e: Exception) {
-                // Ignore - media control is optional
-            }
+            runPlayerctlBounded("pause")
+            pausedByUs = true
         }
 
         /**
@@ -612,15 +929,14 @@ class SystemControlService {
                 return
             }
             pausedByUs = false
-            try {
-                ProcessBuilder("playerctl", "play")
-                    .redirectErrorStream(true)
-                    .start()
-                    .waitFor()
-                logger.info("▶️ Media resumed via playerctl")
-            } catch (e: Exception) {
-                // Ignore - media control is optional
-            }
+            runPlayerctlBounded("play")
+            logger.info("▶️ Media resumed via playerctl")
         }
     }
 }
+
+/**
+ * Carries a coded openApp outcome (e.g. `APP_CLARIFY|VS Code`, `APP_NOT_FOUND|вексель|VS Code,Excel`)
+ * verbatim as the [Result.failure] message so the PC control ack forwards it to the voice layer.
+ */
+class AppOpenException(message: String) : Exception(message)

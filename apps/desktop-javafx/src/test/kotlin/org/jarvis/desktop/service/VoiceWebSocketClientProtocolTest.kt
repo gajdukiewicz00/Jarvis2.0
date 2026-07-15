@@ -40,12 +40,13 @@ class VoiceWebSocketClientProtocolTest {
     }
 
     @Test
-    @DisplayName("voice websocket ERROR frames are surfaced as assistant responses")
-    fun errorFramesAreSurfacedToUi() {
+    @DisplayName("voice websocket ERROR frames route to onProtocolError, never the response log")
+    fun errorFramesAreNotSurfacedAsResponses() {
         val states = CopyOnWriteArrayList<String>()
         val responses = CopyOnWriteArrayList<Triple<String, String?, Boolean>>()
+        val protocolErrors = CopyOnWriteArrayList<Pair<String, String?>>()
         val connectedLatch = CountDownLatch(1)
-        val responseLatch = CountDownLatch(1)
+        val errorLatch = CountDownLatch(1)
 
         server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -53,8 +54,8 @@ class VoiceWebSocketClientProtocolTest {
                     """
                     {
                       "type": "ERROR",
-                      "code": "NO_AUDIO_RECEIVED",
-                      "message": "Voice session ended before any audio was received.",
+                      "code": "END_NOT_ALLOWED",
+                      "message": "END is only valid while audio is streaming.",
                       "correlationId": "corr-123"
                     }
                     """.trimIndent()
@@ -80,20 +81,25 @@ class VoiceWebSocketClientProtocolTest {
             onTranscript = { _, _, _ -> },
             onResponse = { text, action, handled ->
                 responses += Triple(text, action, handled)
-                responseLatch.countDown()
             },
             onAudioReceived = {},
-            uiDispatcher = { action -> action() }
+            uiDispatcher = { action -> action() },
+            onProtocolError = { code, message ->
+                protocolErrors += (code to message)
+                errorLatch.countDown()
+            }
         )
 
         client!!.connect()
 
         assertTrue(connectedLatch.await(5, TimeUnit.SECONDS), "voice websocket should connect")
-        assertTrue(responseLatch.await(5, TimeUnit.SECONDS), "protocol error should be surfaced")
+        assertTrue(errorLatch.await(5, TimeUnit.SECONDS), "protocol error should reach onProtocolError")
         assertEquals(
-            Triple("Voice session ended before any audio was received.", "NO_AUDIO_RECEIVED", false),
-            responses.single()
+            "END_NOT_ALLOWED" to "END is only valid while audio is streaming.",
+            protocolErrors.single()
         )
+        // The reported bug: a gateway ERROR frame must NEVER be rendered as a "Jarvis: ..." response.
+        assertTrue(responses.isEmpty(), "ERROR frames must not be delivered to onResponse / the response log")
         assertTrue(states.contains("CONNECTED"))
         assertTrue(states.none { it.startsWith("ERROR:", ignoreCase = true) })
     }

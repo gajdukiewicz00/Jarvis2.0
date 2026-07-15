@@ -1,0 +1,161 @@
+commands:
+  # Absolute volume: "громкость на 100" / "поставь громкость на 50" / "звук на 30".
+  # Number words ("сто","десять",…) are converted to digits by VoiceTextNormalizer first,
+  # so "громкость на сто" arrives here as "громкость на 100". The captured level rides into
+  # params.level via the {1} template; the spoken confirmation is built dynamically by the
+  # WS handler ("Громкость установлена на N%, сэр.").
+  - id: rule_set_volume_dynamic
+    priority: 20
+    matchers:
+      - type: regex
+        values:
+          - "(?:громкость|звук|volume)\\s+(?:на|to)\\s+([0-9]{1,3})"
+    action:
+      target: pc_control
+      name: SET_VOLUME
+      params:
+        level: "{1}"
+    response:
+      text:
+        ru: "Готово, сэр."
+        en: "Done, sir."
+
+  # Ambiguous "открой эту/это/его" — do NOT refuse via LLM; ask what to open.
+  - id: rule_clarify_open
+    priority: 40
+    matchers:
+      - type: exact
+        values:
+          - "открой эту"
+          - "открой это"
+          - "открой его"
+          - "открой её"
+          - "открой ее"
+          - "открой их"
+          - "открой"
+      - type: regex
+        values:
+          - "^открой\\s+(эту|это|его|её|ее|их)$"
+    action:
+      target: internal
+      name: CLARIFY_OPEN
+    response:
+      text:
+        ru: "Сэр, что именно открыть: приложение, файл, папку или ссылку?"
+        en: "Sir, what exactly should I open: an app, a file, a folder, or a link?"
+
+  # "включи первое видео на ютубе" must NOT be treated as OPEN_APP or a generic PC-control
+  # clarification. Without a real search query, ask what to search on YouTube. The broad
+  # "любое/какое-нибудь видео на ютубе" phrasings are owned by rule_youtube_trending now, so this
+  # rule is scoped to the "перв*" ("первое/первый") wording only to avoid overlap.
+  - id: rule_youtube_first_video
+    priority: 45
+    matchers:
+      - type: contains
+        values:
+          - "первое видео на ютубе"
+          - "первое видео на youtube"
+          - "первый ролик на ютубе"
+          - "первое видео в ютубе"
+      - type: regex
+        values:
+          - "(?:включи|открой|запусти|поставь|покажи)\\s+перв\\w*\\s+(?:видео|ролик)\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)"
+          - "перв\\w*\\s+(?:видео|ролик)\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)$"
+    action:
+      target: internal
+      name: YOUTUBE_CLARIFY
+    response:
+      text:
+        ru: "Сэр, что искать на YouTube? Скажите, например: найди на ютубе обзор."
+        en: "Sir, what should I search on YouTube? For example: search YouTube for a review."
+
+  # "любое/какое-нибудь видео на ютубе" (no topic) → open YouTube trending. Highest YouTube priority
+  # so it wins over first_video/topic/search. pc_control OPEN_URL to the trending feed.
+  - id: rule_youtube_trending
+    priority: 47
+    matchers:
+      - type: contains
+        values:
+          - "любое видео на ютубе"
+          - "любая видео на ютубе"
+          - "включи любое видео на ютубе"
+          - "какое-нибудь видео на ютубе"
+          - "открой любое видео на ютубе"
+      - type: regex
+        values:
+          - "(?:открой|включи|запусти|поставь)\\s+(?:любое|какое[- ]?нибудь)\\s+видео\\s+(?:на|в)\\s+(?:ютуб[а-я]*|youtube)$"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/feed/trending"
+    response:
+      text:
+        ru: "Открываю популярные видео на YouTube, сэр."
+        en: "Opening trending videos on YouTube, sir."
+
+  # "видео про <тема>" → open a YouTube search for the topic. Captures the topic (group 2 in both
+  # patterns) into the results URL and query param.
+  - id: rule_youtube_topic
+    priority: 44
+    matchers:
+      - type: regex
+        values:
+          - "(?:включи|открой|найди|покажи)\\s+.*видео\\s+.*про\\s+(.+)"
+          - "(?:видео|ролик)\\s+про\\s+(.+)$"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/results?search_query={1}"
+        query: "{1}"
+    response:
+      text:
+        ru: "Ищу на YouTube, сэр."
+        en: "Searching YouTube, sir."
+
+  # "найди на ютубе <query>" — open the YouTube search results page for the query.
+  # STT frequently mangles "ютубе" → "этапе"/"эту"/"юту"/"ютюб"; accept those markers here so
+  # the phrase routes to YouTube search instead of falling to generic LLM chat. A missing query
+  # is caught by rule_youtube_search_no_query below (higher priority) and asks what to search.
+  - id: rule_youtube_search
+    priority: 35
+    matchers:
+      - type: regex
+        values:
+          - "(?:найди|поищи|поиск|покажи|открой|включи|search)\\s+(?:видео\\s+)?(?:на\\s+)?(?:ютуб[а-я]*|youtube|этапе|эту|юту|ютюб|ю\\s*туб[а-я]*)\\s+(.+)"
+    action:
+      target: pc_control
+      name: OPEN_URL
+      params:
+        url: "https://www.youtube.com/results?search_query={1}"
+        query: "{1}"
+    response:
+      text:
+        ru: "Ищу на YouTube, сэр."
+        en: "Searching YouTube, sir."
+
+  # "найди на ютубе" with no query → ask what to search (must beat rule_youtube_search which
+  # requires a trailing query, so any bare form lands here).
+  - id: rule_youtube_search_no_query
+    priority: 46
+    matchers:
+      - type: exact
+        values:
+          - "найди на ютубе"
+          - "поищи на ютубе"
+          - "найди на этапе"
+          - "найди на эту"
+          - "поиск на ютубе"
+      # Only search verbs (найди/поищи/поиск) with no query → ask what to search. "покажи/открой
+      # ютуб" is an OPEN intent handled by rule_open_youtube, so it is intentionally excluded here.
+      - type: regex
+        values:
+          - "^(?:найди|поищи|поиск)\\s+(?:на\\s+)?(?:ютуб[а-я]*|youtube|этапе|эту|юту|ютюб)$"
+    action:
+      target: internal
+      name: YOUTUBE_CLARIFY
+    response:
+      text:
+        ru: "Сэр, что искать на YouTube?"
+        en: "Sir, what should I search on YouTube?"

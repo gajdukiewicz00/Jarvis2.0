@@ -1,0 +1,83 @@
+commands:
+  # Deterministic planner routing: "какие планы на сегодня" and friends must be
+  # answered with REAL planner data (planner-service /focus + /daily), never fall
+  # through to generic LLM chat. Target `planner` -> PlannerActionGateway builds a
+  # spoken Russian summary that overrides the static phrase.
+  #
+  # Regex notes: input text is normalized (lowercased, ё→е, punctuation → space,
+  # spaces collapsed). Patterns are only lowercased, so DO NOT rely on \w / \b for
+  # Cyrillic (no UNICODE_CHARACTER_CLASS) — use explicit [а-я] ranges and \s.
+  - id: rule_planner_today
+    description: "Summarize today's plan / open tasks from the planner service"
+    priority: 5
+    matchers:
+      - type: exact
+        values:
+          - "какие планы на сегодня"
+          - "какие планы на день"
+          - "какие у меня планы на сегодня"
+          - "какие у меня планы на день"
+          - "какие у меня планы"
+          - "какой план на день"
+          - "какой у меня план на день"
+          - "что у меня сегодня"
+          - "что у меня на сегодня"
+          - "что у меня на день"
+          - "что у меня сегодня по плану"
+          - "план на сегодня"
+          - "план на день"
+          - "планы на сегодня"
+          - "планы на день"
+          - "мой план на сегодня"
+          - "мой план на день"
+          - "мой план"
+          - "что делать сегодня"
+          - "что мне делать сегодня"
+          - "задачи на сегодня"
+          - "задачи на день"
+          - "какие задачи на сегодня"
+          - "мои задачи на сегодня"
+          - "какой у меня фокус на сегодня"
+          - "какой фокус на сегодня"
+          - "что в планнере"
+          - "что в планере"
+          - "мои планы"
+          - "мои задачи"
+          - "what are my plans for today"
+          - "what should i do today"
+          - "my tasks for today"
+          - "what is my focus today"
+      - type: contains
+        values:
+          - "планы на сегодня"
+          - "планы на день"
+          - "план на день"
+          - "задачи на сегодня"
+          - "задачи на день"
+          - "дела на сегодня"
+          - "дела на день"
+          - "фокус на сегодня"
+          - "что у меня сегодня"
+          - "мой план на день"
+          - "покажи мои задачи"
+          - "покажи мой план"
+          - "покажи планы на сегодня"
+          - "покажи планы на день"
+          - "открой планнер"
+          - "what is on my plate today"
+          - "my plan for today"
+          - "tasks for today"
+      - type: regex
+        values:
+          - "(какие|каков|какой|мои|мой|моя)\\s+(план[а-я]*|задач[а-я]*|фокус[а-я]*)"
+          - "(план[а-я]*|задач[а-я]*|фокус[а-я]*|дел[а-я]*)\\s+на\\s+(сегодня|день)"
+          # Allow filler words between the question word and the noun so ALL daily-plan phrasings
+          # (e.g. "какие у меня сегодня задачи") route to the SAME PLANNER_TODAY summary.
+          - "(какие|какой|каков|что|сколько)\\s+.*(задач[а-я]*|план[а-я]*|дел[а-я]*|фокус[а-я]*).*(сегодня|день)"
+          - "(сегодня|на день).*(задач[а-я]*|план[а-я]*|дел[а-я]*|фокус[а-я]*)"
+          - "что\\s+(у\\s+меня\\s+)?(на\\s+)?(сегодня|день)\\s+(по\\s+план[а-я]*|в\\s+план[а-я]*|за\\s+задач[а-я]*)"
+          - "(plan|task|focus|todo|to do|agenda)[a-z]*.*today"
+          - "today.*(plan|task|focus|todo|to do|agenda)"
+    action:
+      target: planner
+      name: PLANNER_TODAY

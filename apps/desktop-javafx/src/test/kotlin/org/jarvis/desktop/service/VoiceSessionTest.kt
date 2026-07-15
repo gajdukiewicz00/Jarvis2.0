@@ -276,6 +276,237 @@ class VoiceSessionTest {
     }
 
     @Test
+    @Timeout(20)
+    @DisplayName("after 30 command cycles the session still records command 31")
+    fun thirtyCommandsDoNotStickTheStateMachine() {
+        session.enableAlwaysListening()
+        // 30 cycles through the recovery chokepoint (each command reaches PROCESSING then
+        // recovers), proving the FSM never sticks and always re-arms for the next command.
+        repeat(30) { i ->
+            val id = session.startSession()
+            assertNotNull(id, "startSession must succeed on cycle $i")
+            assertEquals(VoiceState.LISTENING, session.state)
+            session.onFinalTranscript("сделай громче", id)
+            assertEquals(VoiceState.PROCESSING, session.state, "cycle $i must reach PROCESSING")
+            // Recover (as a failed/cancelled command would); returns to wake-listening immediately.
+            session.cancelSession("cycle-$i complete")
+            assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state, "cycle $i must recover to wake-listening")
+            assertTrue(wakeWordEnabled.get(), "cycle $i must re-arm wake word")
+            assertNull(session.currentCorrelationId, "correlationId must be cleared each cycle")
+        }
+        val next = session.startSession()
+        assertNotNull(next, "voice loop must still accept command 31 after 30 cycles")
+        assertEquals(VoiceState.LISTENING, session.state)
+    }
+
+    /** The exact user-observed command sequence, cycled to reach 30+ commands. */
+    private val soakCommands = listOf(
+        "ты тут", "какие планы на день", "открой ютюб", "сделай громче",
+        "воспроизведи", "открой терминал", "какие планы на день", "сделай тише",
+        "что у нас с финансами", "покажи память про джарвис"
+    )
+
+    @Test
+    @Timeout(120)
+    @DisplayName("30 FULL command lifecycles (record→process→speak→cooldown) never stick; command 31 still records")
+    fun thirtyFullLifecyclesSoakDoesNotLeak() {
+        session.enableAlwaysListening()
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+
+        repeat(30) { i ->
+            val phrase = soakCommands[i % soakCommands.size]
+            wakeWordEnabled.set(false)  // a real wake disables the detector; recovery must re-arm it
+
+            // 1) wake → record
+            val id = session.startSession(isManualTalk = true)
+            assertNotNull(id, "command $i: startSession must succeed")
+            assertEquals(VoiceState.LISTENING, session.state, "command $i: must be RECORDING")
+            assertTrue(session.isRecordingActive, "command $i: recorder must be active while recording")
+
+            // 2) final transcript → process
+            session.onFinalTranscript(phrase, id)
+            assertEquals(VoiceState.PROCESSING, session.state, "command $i ('$phrase'): must reach PROCESSING")
+
+            // 3) speak (TTS start → finish; AudioPlayer's finally always fires finish)
+            session.onTtsPlaybackStarted()
+            assertEquals(VoiceState.TTS_PLAYBACK, session.state, "command $i: must be SPEAKING")
+            session.onTtsPlaybackFinished()
+
+            // 4) cooldown elapses → back to WAKE_LISTENING
+            var waited = 0
+            while (session.state != VoiceState.LISTENING_WAKE_WORD && waited < 5000) {
+                Thread.sleep(20); waited += 20
+            }
+
+            // Invariants asserted after EVERY command (the anti-leak contract):
+            assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state, "command $i: must settle to WAKE_LISTENING")
+            assertTrue(session.alwaysListeningActive, "command $i: always-listening must stay ON")
+            assertFalse(session.isRecordingActive, "command $i: recorder must be OFF after completion")
+            assertNull(session.currentCorrelationId, "command $i: correlationId must be cleared")
+            assertTrue(wakeWordEnabled.get(), "command $i: wake detector must be re-armed")
+        }
+
+        // The acceptance criterion: command 31 must still start recording.
+        val next = session.startSession(isManualTalk = true)
+        assertNotNull(next, "command 31 must still record after 30 full lifecycles")
+        assertEquals(VoiceState.LISTENING, session.state)
+        assertTrue(session.isRecordingActive, "command 31 recorder must be active")
+    }
+
+    @Test
+    @DisplayName("completeCommandSession is idempotent: a second call for the same correlationId is a no-op")
+    fun completeCommandSessionIsIdempotent() {
+        session.enableAlwaysListening()
+        val id = session.startSession(isManualTalk = true)
+        assertNotNull(id)
+        session.onFinalTranscript("сделай громче", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+
+        // First completion recovers to WAKE_LISTENING and clears the command.
+        session.completeCommandSession(id, "first")
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertNull(session.currentCorrelationId)
+
+        // A second completion for the SAME id while already settled must be ignored — it must
+        // not re-run recovery (which would re-arm the wake word and disturb a fresh command).
+        wakeWordEnabled.set(false)
+        session.completeCommandSession(id, "second-duplicate")
+        assertFalse(wakeWordEnabled.get(), "duplicate completion must NOT re-run recovery / re-enable wake word")
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+    }
+
+    @Test
+    @DisplayName("debugSnapshot exposes the full voice lifecycle as compact JSON")
+    fun debugSnapshotHasAllLifecycleFields() {
+        session.enableAlwaysListening()
+        val snap = session.debugSnapshot()
+        listOf(
+            "voiceState", "alwaysListeningActive", "recorderActive", "ttsPlaybackActive",
+            "currentCorrelationId", "startedCorrelationId", "endedCorrelationId",
+            "lastCommandCompletedAt", "lastRecoveryReason", "pendingTimers"
+        ).forEach { field ->
+            assertTrue(snap.contains("\"$field\""), "snapshot must contain '$field': $snap")
+        }
+        assertTrue(snap.startsWith("{") && snap.endsWith("}"), "snapshot must be a JSON object: $snap")
+    }
+
+    @Test
+    @Timeout(10)
+    @DisplayName("text-only response (no TTS audio) recovers to WAKE_LISTENING within the grace window")
+    fun textOnlyResponseRecoversToWakeListening() {
+        session.enableAlwaysListening()
+        val id = session.startSession()
+        Thread.sleep(400)
+        session.onFinalTranscript("какие планы на день", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+
+        // A RESPONSE arrives but no TTS audio follows → grace elapses → recover.
+        session.onResponseReceived()
+        var waited = 0
+        while (session.state != VoiceState.LISTENING_WAKE_WORD && waited < 6000) {
+            Thread.sleep(100); waited += 100
+        }
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertTrue(wakeWordEnabled.get(), "wake word must be re-armed after text-only response")
+    }
+
+    @Test
+    @DisplayName("TTS playback finished (incl. failure/no-device) recovers to WAKE_LISTENING")
+    fun ttsPlaybackFinishedRecoversToWakeListening() {
+        session.enableAlwaysListening()
+        val id = session.startSession()
+        Thread.sleep(400)
+        session.onFinalTranscript("пауза", id)
+        session.onTtsPlaybackStarted()
+        assertEquals(VoiceState.TTS_PLAYBACK, session.state)
+        // AudioPlayer always calls onTtsPlaybackFinished (finally block) even on failure/no-device.
+        session.onTtsPlaybackFinished()
+        var waited = 0
+        while (session.state != VoiceState.LISTENING_WAKE_WORD && waited < 3000) {
+            Thread.sleep(100); waited += 100
+        }
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertTrue(wakeWordEnabled.get())
+    }
+
+    @Test
+    @DisplayName("duplicate/late final transcript after PROCESSING is ignored (no double process)")
+    fun duplicateFinalTranscriptIsIgnored() {
+        session.enableAlwaysListening()
+        val id = session.startSession()
+        Thread.sleep(400)
+        session.onFinalTranscript("сделай громче", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+        recordingStopped.set(false)
+
+        // A second (duplicate/late) final transcript for the same command must be ignored.
+        session.onFinalTranscript("сделай громче", id)
+        assertEquals(VoiceState.PROCESSING, session.state)
+        assertFalse(recordingStopped.get(), "duplicate transcript must not re-run stop/processing")
+    }
+
+    @Test
+    @DisplayName("command execution failure returns session to LISTENING_WAKE_WORD")
+    fun executionFailureReturnsToWakeListening() {
+        session.enableAlwaysListening()
+        val correlationId = session.startSession()
+        Thread.sleep(500)
+        assertEquals(VoiceState.LISTENING, session.state)
+
+        // Simulate an action/processing failure surfaced to the session.
+        session.cancelSession("Action failed: PC-control unavailable")
+
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        assertTrue(wakeWordEnabled.get(), "Wake word must be re-armed after a failure")
+    }
+
+    @Test
+    @DisplayName("wake word after a failure starts a fresh command recording session")
+    fun wakeWordAfterFailureStartsNewSession() {
+        session.enableAlwaysListening()
+        val first = session.startSession()
+        Thread.sleep(500)
+        session.cancelSession("Cancelled by user")
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+
+        // Saying "Jarvis" again must start a brand-new capture session.
+        recordingStarted.set(false)
+        val second = session.startSession()
+        assertNotNull(second, "A new session must start after a cancel/failure")
+        assertNotEquals(first, second, "The new session must have a fresh correlationId")
+        assertEquals(VoiceState.LISTENING, session.state)
+        Thread.sleep(500)
+        assertTrue(recordingStarted.get(), "Recording must start for the new session")
+    }
+
+    @Test
+    @DisplayName("disableAlwaysListening disarms the wake word detector")
+    fun disableAlwaysListeningDisarmsWakeWord() {
+        session.enableAlwaysListening()
+        wakeWordEnabled.set(true)
+
+        session.disableAlwaysListening()
+
+        assertEquals(VoiceState.IDLE, session.state)
+        assertFalse(wakeWordEnabled.get(), "Disabling must leave the wake word OFF")
+    }
+
+    @Test
+    @DisplayName("disable then re-enable does not permanently block the next command")
+    fun disableThenReEnableAllowsNextCommand() {
+        session.enableAlwaysListening()
+        session.disableAlwaysListening()
+        assertEquals(VoiceState.IDLE, session.state)
+
+        // Re-enabling and saying the wake word must work again.
+        session.enableAlwaysListening()
+        assertEquals(VoiceState.LISTENING_WAKE_WORD, session.state)
+        val correlationId = session.startSession()
+        assertNotNull(correlationId, "Next command must start after re-enabling")
+        assertEquals(VoiceState.LISTENING, session.state)
+    }
+
+    @Test
     @DisplayName("startSession returns null and reports error when voice transport not ready")
     fun startSessionReturnsNullWhenTransportNotReady() {
         val transportReady = AtomicBoolean(false)

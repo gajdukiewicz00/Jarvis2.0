@@ -78,7 +78,7 @@ services:
     # direct /api/v1/pc/** routes flow through even in K8s runtime mode.
     local-bridge: ${PC_CONTROL_LOCAL_BRIDGE:false}
   vision-security:
-    enabled: ${VISION_SECURITY_ENABLED:false}
+    enabled: ${VISION_SECURITY_ENABLED:true}
     # local-bridge=true tells the gateway that even in k8s runtime mode the
     # vision-security-service Service is wired (selectorless Service +
     # patched Endpoints) to a workstation host process on port 8094 — the

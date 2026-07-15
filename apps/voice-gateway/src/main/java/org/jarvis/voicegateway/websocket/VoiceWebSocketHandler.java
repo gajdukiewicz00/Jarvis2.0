@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jarvis.voicegateway.client.OrchestratorClient;
+import org.jarvis.voicegateway.confirmation.PendingConfirmation;
+import org.jarvis.voicegateway.confirmation.PendingConfirmationStore;
 import org.jarvis.voicegateway.rules.RuleBasedVoiceCommandService;
 import org.jarvis.voicegateway.service.LocalIntentExecutionService;
 import org.jarvis.voicegateway.service.StreamingRecognitionSession;
@@ -30,8 +32,10 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -50,9 +54,36 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     private final LocalIntentExecutionService localIntentExecutionService;
     private final OrchestratorClient orchestratorClient;
     private final ObjectMapper objectMapper;
+    private final PendingConfirmationStore pendingConfirmationStore;
 
     // Store active sessions and their recognition sessions
     private final Map<String, SessionContext> sessions = new ConcurrentHashMap<>();
+
+    // Confirm/cancel vocabularies. STRONG words always intercept (so an explicit "подтверждаю"
+    // executes a guarded action, and "отмена" always aborts). WEAK words ("да"/"нет"/…) only
+    // intercept when a pending confirmation exists, so ordinary chat is never hijacked.
+    private static final Set<String> STRONG_CONFIRM_WORDS =
+            Set.of("подтверждаю", "подтверди", "выполняй", "выполни", "разрешаю", "confirm");
+    private static final Set<String> STRONG_CANCEL_WORDS =
+            Set.of("отмена", "отмени", "cancel");
+    private static final Set<String> WEAK_CONFIRM_WORDS =
+            Set.of("да", "давай", "окей", "ок", "yes");
+    private static final Set<String> WEAK_CANCEL_WORDS =
+            Set.of("нет", "не надо");
+
+    /**
+     * Per-command idempotency guard: a recognized command (by correlationId) executes at most
+     * once. Duplicate final-transcript frames for the same correlationId are ignored so a media
+     * action is never dispatched twice (which caused "pause then resume ~1s later"). TTL-bounded.
+     */
+    private final Map<String, Long> recentCommandCorrelations = new ConcurrentHashMap<>();
+    private static final long COMMAND_DEDUP_TTL_MS = 15_000L;
+
+    // Stateless registry of voice-accessible services — drives the "what can you do" catalog and
+    // the domain guard that forbids a generic-LLM refusal for a known local domain. Field
+    // initializer (not a constructor param) so existing hand-constructed handler tests are unaffected.
+    private final org.jarvis.voicegateway.registry.VoiceServiceRegistry serviceRegistry =
+            new org.jarvis.voicegateway.registry.VoiceServiceRegistry();
 
     @Value("${jarvis.vosk.default-language:ru-RU}")
     private String defaultLanguage;
@@ -183,7 +214,16 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     return;
                 }
                 if (ctx.phase != SessionPhase.STREAMING) {
-                    protocolError(ctx, "END_NOT_ALLOWED", "END is only valid while audio is streaming.");
+                    // Idempotent END. The server auto-finalizes on silence detection
+                    // (STREAMING -> PROCESSING -> DONE), so a client END that races that
+                    // finalize — or a duplicate/late END, or an END on a session that
+                    // already completed — is benign, NOT a protocol error. Emitting an
+                    // ERROR frame here is what surfaced "END is only valid while audio is
+                    // streaming" as a bogus assistant response in the desktop. Swallow it
+                    // as a stream-lifecycle no-op (logged, no client-visible frame).
+                    log.debug("voice.stream.invalid_end_without_active_stream session={} phase={} correlationId={} "
+                            + "(idempotent END ignored — no active audio stream; not surfaced to the user)",
+                            session.getId(), ctx.phase, correlationId);
                     return;
                 }
                 log.info("⏹️ End-of-speech received, correlationId={}, session={}",
@@ -317,20 +357,75 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
+    /**
+     * Returns true if this correlationId was already processed within the dedup TTL (a duplicate
+     * command frame to ignore). Commands without a real correlationId are never deduped.
+     */
+    private boolean isDuplicateCommand(String correlationId) {
+        if (correlationId == null || correlationId.isBlank() || "no-correlation-id".equals(correlationId)) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        recentCommandCorrelations.values().removeIf(ts -> now - ts > COMMAND_DEDUP_TTL_MS);
+        Long previous = recentCommandCorrelations.putIfAbsent(correlationId, now);
+        return previous != null && now - previous <= COMMAND_DEDUP_TTL_MS;
+    }
+
     private void handleCommand(SessionContext ctx, String text) {
         String configuredRecognitionLanguage = canonicalRecognitionLanguage(ctx.language);
         String lang = commandLanguage(configuredRecognitionLanguage);
         String detectedLang = LanguageDetector.detect(text);
         String correlationId = ctx.correlationId != null ? ctx.correlationId : "no-correlation-id";
 
+        if (isDuplicateCommand(correlationId)) {
+            log.warn("🔁 Duplicate voice command ignored (already processed this correlationId): correlationId={}, text='{}'",
+                    correlationId, text);
+            return;
+        }
+
         if (detectedLang != null && !detectedLang.equals(lang)) {
             log.warn("Transcript language differs from configured session language: transcript='{}', detected={}, effectiveRecognitionLanguage={}, usingCommandLanguage={}, correlationId={}",
                     text, detectedLang, configuredRecognitionLanguage, lang, correlationId);
         }
 
+        // Confirm/cancel interception: a spoken "подтверждаю"/"отмена" (and, when a pending exists,
+        // "да"/"нет") executes or aborts the last guarded action instead of being routed as a new
+        // command. Runs after dedup and before rule matching so it wins over any rule.
+        if (checkPendingConfirmation(ctx, text, lang, correlationId)) {
+            return;
+        }
+
         var ruleMatch = ruleBasedVoiceCommandService.match(text, lang);
         if (ruleMatch.isPresent()) {
-            handleRuleCommand(ctx, ruleMatch.get(), lang, correlationId);
+            handleRuleCommand(ctx, ruleMatch.get(), text, lang, correlationId);
+            return;
+        }
+
+        // Low-confidence / garbage-transcript guard: a too-short unmatched transcript (e.g. "лет")
+        // must NOT be guessed into a time/LLM answer. Known one-word commands (пауза/громче/…)
+        // already matched a rule above, so they never reach here. Ask the user to repeat.
+        if (isLowConfidenceTranscript(text)) {
+            log.info("🤔 Low-confidence transcript, asking to repeat: text='{}', correlationId={}", text, correlationId);
+            respondWithClarification(ctx, lang, "UNCLEAR_CLARIFY",
+                    lang.startsWith("ru") ? "Сэр, я не расслышал. Повторите команду, пожалуйста."
+                            : "Sir, I didn't catch that. Please repeat the command.",
+                    correlationId);
+            return;
+        }
+
+        // Service-domain guard: an unmatched transcript that clearly names a known Jarvis domain
+        // must NEVER fall through to a generic-LLM refusal ("I can't do that from chat"). Offer /
+        // clarify for that specific service instead. Phrases without any known domain keyword fall
+        // through to the intent/orchestrator path = Brain Chat.
+        var domainService = serviceRegistry.matchDomain(
+                ruleBasedVoiceCommandService.normalizedForDiagnostics(text));
+        if (domainService.isPresent()) {
+            var svc = domainService.get();
+            log.info("🛡️ Domain guard: text='{}' → service={} (avoiding generic LLM), correlationId={}",
+                    text, svc.serviceId(), correlationId);
+            respondWithClarification(ctx, lang,
+                    "SERVICE_" + svc.serviceId().toUpperCase(Locale.ROOT) + "_CLARIFY",
+                    svc.fallbackRu(), correlationId);
             return;
         }
 
@@ -489,54 +584,29 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
         }
     }
 
-    private void handleRuleCommand(SessionContext ctx, VoiceCommandCatalog.Match match, String lang, String correlationId) {
+    private void handleRuleCommand(
+            SessionContext ctx, VoiceCommandCatalog.Match match, String recognizedText, String lang,
+            String correlationId) {
         String action = match.actionName() != null ? match.actionName() : "UNKNOWN";
+        String matchedRuleId = match.command() != null ? match.command().id() : "unknown";
         String responseText = resolveRuleResponseText(match, lang);
+
+        // Guarded rule: create a pending confirmation and only speak the confirm prompt now. The
+        // real action executes later, when the user says "подтверждаю".
+        if (isConfirmationPromptRule(match)) {
+            handleConfirmationPrompt(ctx, match, recognizedText, action, responseText, lang, correlationId);
+            return;
+        }
 
         try {
             var dispatchResult = voiceCommandActionDispatcher.dispatch(match, ctx.userId, correlationId);
-            if (dispatchResult.routedAction() != null && !dispatchResult.routedAction().isBlank()) {
-                action = dispatchResult.routedAction();
-            }
-
-            if (shouldUseFailureResponse(
-                    dispatchResult.actionResolved(),
-                    dispatchResult.executionSucceeded(),
-                    dispatchResult.executionFailed(),
-                    dispatchResult.failureReason())) {
-                responseText = commandFailureMessage(lang, dispatchResult.failureReason());
-            }
-
-            CommandResponseOutcome outcome = new CommandResponseOutcome(
-                    action,
-                    responseText,
-                    isHandled(
-                            dispatchResult.actionResolved(),
-                            dispatchResult.executionAttempted(),
-                            dispatchResult.executionSucceeded(),
-                            dispatchResult.executionFailed(),
-                            dispatchResult.failureReason()),
-                    true,
-                    dispatchResult.actionResolved(),
-                    dispatchResult.executorFound(),
-                    dispatchResult.executionAttempted(),
-                    dispatchResult.executionSucceeded(),
-                    dispatchResult.executionFailed(),
-                    dispatchResult.failureReason());
-            logCommandOutcome("rule", action, outcome, correlationId);
-            sendCommandResponse(ctx.session, outcome, correlationId);
-
-            byte[] audio = voiceOutputService.resolveRuleResponseAudio(
-                    match.responseKey(),
-                    responseText,
-                    lang,
-                    languageCode(lang),
-                    voiceName(lang));
-            sendAudioResponse(ctx.session, audio, correlationId);
+            deliverRuleDispatchOutcome(
+                    ctx, match, action, matchedRuleId, recognizedText, responseText, dispatchResult, lang,
+                    correlationId);
         } catch (RuntimeException e) {
             log.error("❌ Error executing rule-based command: id={}, action={}, correlationId={}",
                     match.command().id(), action, correlationId, e);
-            String errorText = commandFailureMessage(lang, e.getMessage());
+            String errorText = actionFailureMessage(lang, match, action, e.getMessage());
             CommandResponseOutcome outcome = new CommandResponseOutcome(
                     action,
                     errorText,
@@ -557,6 +627,314 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
                     languageCode(lang),
                     voiceName(lang));
             sendAudioResponse(ctx.session, audio, correlationId);
+        } finally {
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "DONE");
+        }
+    }
+
+    /**
+     * Maps a dispatch result to a spoken response and sends it (RESPONSE frame + audio). Shared by
+     * the normal rule path and the confirm-execution path so a confirmed action is voiced exactly
+     * like a directly-spoken one.
+     */
+    private void deliverRuleDispatchOutcome(
+            SessionContext ctx,
+            VoiceCommandCatalog.Match match,
+            String action,
+            String matchedRuleId,
+            String recognizedText,
+            String responseText,
+            VoiceCommandActionDispatcher.DispatchResult dispatchResult,
+            String lang,
+            String correlationId) {
+        if (dispatchResult.routedAction() != null && !dispatchResult.routedAction().isBlank()) {
+            action = dispatchResult.routedAction();
+        }
+
+        if (shouldUseFailureResponse(
+                dispatchResult.actionResolved(),
+                dispatchResult.executionSucceeded(),
+                dispatchResult.executionFailed(),
+                dispatchResult.failureReason())) {
+            responseText = actionFailureMessage(lang, match, action, dispatchResult.failureReason());
+        } else if (dispatchResult.responseTextOverride() != null
+                && !dispatchResult.responseTextOverride().isBlank()) {
+            // Dynamic spoken text (e.g. real planner summary or the vision answer) overrides the
+            // static phrase.
+            responseText = dispatchResult.responseTextOverride();
+        } else {
+            // Truthful dynamic confirmation for actions whose result carries data (e.g. the
+            // volume level actually set). Only applied on real success.
+            String dynamic = dynamicSuccessMessage(lang, match, action);
+            if (dynamic != null) {
+                responseText = dynamic;
+            }
+        }
+
+        CommandResponseOutcome outcome = new CommandResponseOutcome(
+                action,
+                responseText,
+                isHandled(
+                        dispatchResult.actionResolved(),
+                        dispatchResult.executionAttempted(),
+                        dispatchResult.executionSucceeded(),
+                        dispatchResult.executionFailed(),
+                        dispatchResult.failureReason()),
+                true,
+                dispatchResult.actionResolved(),
+                dispatchResult.executorFound(),
+                dispatchResult.executionAttempted(),
+                dispatchResult.executionSucceeded(),
+                dispatchResult.executionFailed(),
+                dispatchResult.failureReason());
+        logCommandOutcome("rule", action, outcome, correlationId);
+        log.info(
+                "🧾 Voice action dispatch: recognizedText='{}', normalizedText='{}', matchedRuleId={}, intent={}, actionType={}, tool={}, targetService={}, payload={}, userId={}, correlationId={}, status={}, userMessage='{}', debugReason={}",
+                recognizedText,
+                ruleBasedVoiceCommandService.normalizedForDiagnostics(recognizedText),
+                matchedRuleId,
+                action,
+                action,
+                match.action() != null ? match.action().target() : "INTERNAL",
+                match.action() != null ? match.action().target() : "INTERNAL",
+                match.parameters(),
+                maskUserId(ctx.userId),
+                correlationId,
+                commandStatus(outcome),
+                responseText,
+                outcome.failureReason());
+        sendCommandResponse(ctx.session, outcome, correlationId);
+
+        byte[] audio = voiceOutputService.resolveRuleResponseAudio(
+                match.responseKey(),
+                responseText,
+                lang,
+                languageCode(lang),
+                voiceName(lang));
+        sendAudioResponse(ctx.session, audio, correlationId);
+    }
+
+    /**
+     * A guarded rule that must be confirmed before it runs: its action name ends with
+     * {@code _CONFIRM} and it carries a {@code confirmAction} parameter naming the real action to
+     * run on approval (e.g. the vision "что на экране" rule).
+     */
+    private boolean isConfirmationPromptRule(VoiceCommandCatalog.Match match) {
+        String name = match.actionName();
+        if (name == null || !name.endsWith("_CONFIRM")) {
+            return false;
+        }
+        Map<String, Object> params = match.parameters();
+        Object confirmAction = params != null ? params.get("confirmAction") : null;
+        return confirmAction != null && !String.valueOf(confirmAction).isBlank();
+    }
+
+    /**
+     * Creates the pending confirmation for a guarded rule and speaks its confirm prompt. Nothing is
+     * dispatched yet — the real action waits for an explicit "подтверждаю".
+     */
+    private void handleConfirmationPrompt(
+            SessionContext ctx, VoiceCommandCatalog.Match match, String recognizedText, String action,
+            String responseText, String lang, String correlationId) {
+        try {
+            Map<String, Object> params = match.parameters() != null
+                    ? new LinkedHashMap<>(match.parameters())
+                    : new LinkedHashMap<>();
+            String confirmAction = String.valueOf(params.get("confirmAction"));
+            Object confirmTargetValue = params.get("confirmTarget");
+            String confirmTarget = confirmTargetValue != null ? String.valueOf(confirmTargetValue) : null;
+            Map<String, Object> args = new LinkedHashMap<>(params);
+            args.remove("confirmAction");
+            args.remove("confirmTarget");
+
+            pendingConfirmationStore.create(
+                    ctx.userId,
+                    confirmTarget,
+                    confirmAction,
+                    confirmTarget,
+                    args,
+                    recognizedText,
+                    ruleBasedVoiceCommandService.normalizedForDiagnostics(recognizedText));
+
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    action, responseText, true, true, true, false, false, false, false, null);
+            logCommandOutcome("rule", action, outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
+            byte[] audio = voiceOutputService.resolveRuleResponseAudio(
+                    match.responseKey(), responseText, lang, languageCode(lang), voiceName(lang));
+            sendAudioResponse(ctx.session, audio, correlationId);
+        } catch (RuntimeException e) {
+            log.error("❌ Error creating pending confirmation: action={}, correlationId={}", action, correlationId, e);
+            String errorText = actionFailureMessage(lang, match, action, e.getMessage());
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    action, errorText, false, true, true, false, false, false, true, e.getMessage());
+            logCommandOutcome("rule", action, outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
+            byte[] audio = voiceOutputService.resolveRuleResponseAudio(
+                    null, errorText, lang, languageCode(lang), voiceName(lang));
+            sendAudioResponse(ctx.session, audio, correlationId);
+        } finally {
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "DONE");
+        }
+    }
+
+    /**
+     * Intercepts confirm/cancel utterances. Returns {@code true} when the utterance was handled as a
+     * confirmation decision (and no further command routing should happen). STRONG words always
+     * intercept; WEAK words only when a pending confirmation exists for the user.
+     */
+    private boolean checkPendingConfirmation(SessionContext ctx, String text, String lang, String correlationId) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String normalized = ruleBasedVoiceCommandService.normalizedForDiagnostics(text);
+        if (normalized == null || normalized.isBlank()) {
+            return false;
+        }
+        String wrapped = " " + normalized + " ";
+
+        boolean strongConfirm = containsAnyWord(wrapped, STRONG_CONFIRM_WORDS);
+        boolean strongCancel = containsAnyWord(wrapped, STRONG_CANCEL_WORDS);
+        boolean weakConfirm = containsAnyWord(wrapped, WEAK_CONFIRM_WORDS);
+        boolean weakCancel = containsAnyWord(wrapped, WEAK_CANCEL_WORDS);
+
+        if (!strongConfirm && !strongCancel && !weakConfirm && !weakCancel) {
+            return false;
+        }
+
+        boolean pendingExists = pendingConfirmationStore.hasPending(ctx.userId);
+        boolean cancelIntent = strongCancel || (weakCancel && pendingExists);
+        boolean confirmIntent = strongConfirm || (weakConfirm && pendingExists);
+
+        if (cancelIntent) {
+            return handleCancelDecision(ctx, lang, correlationId);
+        }
+        if (confirmIntent) {
+            return handleConfirmDecision(ctx, lang, correlationId);
+        }
+        return false;
+    }
+
+    private boolean handleConfirmDecision(SessionContext ctx, String lang, String correlationId) {
+        PendingConfirmationStore.TakeResult result = pendingConfirmationStore.take(ctx.userId);
+        switch (result.status()) {
+            case NONE -> respondWithClarification(
+                    ctx, lang, "CONFIRM_NOTHING_CLARIFY", "Сэр, нечего подтверждать.", correlationId);
+            case EXPIRED -> respondWithClarification(
+                    ctx, lang, "CONFIRM_EXPIRED_CLARIFY",
+                    "Сэр, подтверждение истекло. Повторите команду.", correlationId);
+            case FOUND -> {
+                PendingConfirmation pending = result.pending();
+                log.info("pendingConfirmation.confirmed confirmationId={} userId={} intent={}",
+                        pending.confirmationId(), maskUserId(ctx.userId), pending.intent());
+                executeConfirmedAction(ctx, pending, lang, correlationId);
+                log.info("pendingConfirmation.executed confirmationId={} intent={}",
+                        pending.confirmationId(), pending.intent());
+            }
+        }
+        return true;
+    }
+
+    private boolean handleCancelDecision(SessionContext ctx, String lang, String correlationId) {
+        PendingConfirmationStore.TakeResult result = pendingConfirmationStore.take(ctx.userId);
+        if (result.isFound() || result.isExpired()) {
+            log.info("pendingConfirmation.cancelled userId={}", maskUserId(ctx.userId));
+            respondWithClarification(ctx, lang, "CONFIRM_CANCELLED", "Отменено, сэр.", correlationId);
+            return true;
+        }
+        respondWithClarification(
+                ctx, lang, "CONFIRM_NOTHING_CANCEL_CLARIFY", "Сэр, нечего отменять.", correlationId);
+        return true;
+    }
+
+    /**
+     * Executes a confirmed action by building a synthetic {@link VoiceCommandCatalog.Action}
+     * (target derived from the captured confirmTarget) and dispatching it through the SAME dispatch
+     * + response path a directly-spoken command uses.
+     */
+    private void executeConfirmedAction(
+            SessionContext ctx, PendingConfirmation pending, String lang, String correlationId) {
+        VoiceCommandCatalog.ActionTarget target = VoiceCommandCatalog.ActionTarget.from(pending.service());
+        VoiceCommandCatalog.Action action = new VoiceCommandCatalog.Action(
+                target, pending.intent(), null, null, pending.args());
+        VoiceCommandCatalog.Match syntheticMatch = syntheticMatch(action, pending);
+        String responseText = resolveRuleResponseText(syntheticMatch, lang);
+        try {
+            var dispatchResult = voiceCommandActionDispatcher.dispatch(action, ctx.userId, correlationId);
+            deliverRuleDispatchOutcome(
+                    ctx, syntheticMatch, pending.intent(), "confirm-" + pending.confirmationId(),
+                    pending.originalTranscript() != null ? pending.originalTranscript() : pending.intent(),
+                    responseText, dispatchResult, lang, correlationId);
+        } catch (RuntimeException e) {
+            log.error("❌ Error executing confirmed action: intent={}, correlationId={}",
+                    pending.intent(), correlationId, e);
+            String errorText = actionFailureMessage(lang, syntheticMatch, pending.intent(), e.getMessage());
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    pending.intent(), errorText, false, true, true, false, false, false, true, e.getMessage());
+            logCommandOutcome("confirm", pending.intent(), outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
+            byte[] audio = voiceOutputService.resolveRuleResponseAudio(
+                    null, errorText, lang, languageCode(lang), voiceName(lang));
+            sendAudioResponse(ctx.session, audio, correlationId);
+        } finally {
+            resetSession(ctx, true);
+            ctx.phase = SessionPhase.DONE;
+            sendState(ctx, "DONE");
+        }
+    }
+
+    private VoiceCommandCatalog.Match syntheticMatch(
+            VoiceCommandCatalog.Action action, PendingConfirmation pending) {
+        VoiceCommandCatalog.Command command = new VoiceCommandCatalog.Command(
+                "confirm-" + pending.confirmationId(),
+                "confirmed action",
+                true,
+                0,
+                List.of(),
+                action,
+                null);
+        return new VoiceCommandCatalog.Match(
+                command, VoiceCommandCatalog.MatcherType.EXACT, pending.intent(), pending.args());
+    }
+
+    private boolean containsAnyWord(String wrappedNormalized, Set<String> words) {
+        for (String word : words) {
+            if (wrappedNormalized.contains(" " + word + " ")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * True when an UNMATCHED transcript is too short/garbled to safely guess an action from
+     * (e.g. "лет"). Real one-word commands (пауза/громче/тише/следующий/…) match a rule before
+     * this is ever reached, so they are unaffected.
+     */
+    private boolean isLowConfidenceTranscript(String text) {
+        if (text == null) {
+            return true;
+        }
+        return text.trim().length() < 4;
+    }
+
+    /** Speaks a clarification (e.g. "please repeat") and finishes the session — never falls to LLM. */
+    private void respondWithClarification(
+            SessionContext ctx, String lang, String action, String message, String correlationId) {
+        try {
+            CommandResponseOutcome outcome = new CommandResponseOutcome(
+                    action, message, true, true, true, false, false, false, false, null);
+            logCommandOutcome("guard", action, outcome, correlationId);
+            sendCommandResponse(ctx.session, outcome, correlationId);
+            byte[] audio = voiceOutputService.resolveRuleResponseAudio(
+                    null, message, lang, languageCode(lang), voiceName(lang));
+            sendAudioResponse(ctx.session, audio, correlationId);
+        } catch (RuntimeException e) {
+            log.error("Failed to send clarification, correlationId={}", correlationId, e);
         } finally {
             resetSession(ctx, true);
             ctx.phase = SessionPhase.DONE;
@@ -608,15 +986,351 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
     }
 
     private String commandFailureMessage(String lang, String failureReason) {
+        boolean ru = lang.startsWith("ru");
         if (failureReason != null) {
-            String normalizedReason = failureReason.toUpperCase(Locale.ROOT);
-            if (normalizedReason.contains("CAPABILITY_UNAVAILABLE") || normalizedReason.contains("UNSUPPORTED")) {
+            String reason = failureReason.toUpperCase(Locale.ROOT);
+            if (isConfirmationReason(reason)) {
+                return ru
+                        ? "Сэр, это действие требует подтверждения."
+                        : "Sir, this action requires confirmation.";
+            }
+            if (reason.contains("CAPABILITY_UNAVAILABLE") || reason.contains("UNSUPPORTED")) {
                 return capabilityUnavailableMessage(lang);
             }
+            if (reason.contains("NO_ACTIVE_PLAYER") || reason.contains("NO PLAYERS FOUND")) {
+                return ru
+                        ? "Сэр, сейчас нет активного плеера. Откройте Spotify или YouTube Music, либо скажите «включи музыку»."
+                        : "Sir, there is no active media player. Open Spotify or YouTube Music, or say 'turn on music'.";
+            }
+            if (reason.contains("PLAYERCTL_NOT_INSTALLED")) {
+                return ru
+                        ? "Не удалось управлять плеером: playerctl не установлен, сэр."
+                        : "Media control failed: playerctl is not installed, sir.";
+            }
+            if (reason.contains("APP_NOT_FOUND") || reason.contains("APP ALIAS")
+                    || reason.contains("UNKNOWN ACTION") || reason.contains("NO SUCH")) {
+                return ru
+                        ? "Сэр, не нашёл это приложение на компьютере."
+                        : "Sir, I couldn't find that application on the computer.";
+            }
+            if (reason.contains("ENDPOINT_UNREACHABLE") || reason.contains("CONNECTION REFUSED")
+                    || reason.contains("I/O ERROR") || reason.contains("CONNECT TO")) {
+                return ru
+                        ? "Сэр, не удалось связаться со службой управления компьютером."
+                        : "Sir, I couldn't reach the PC-control service.";
+            }
+            if (reason.contains("HTTP_401") || reason.contains("HTTP_403")
+                    || reason.contains("PERMISSION") || reason.contains("DENIED")
+                    || reason.contains("AUTH")) {
+                return ru
+                        ? "Не удалось выполнить: отказано в доступе, сэр."
+                        : "Command failed: access denied, sir.";
+            }
+            if (reason.contains("INVALID_PAYLOAD") || reason.contains("BAD REQUEST")) {
+                return ru
+                        ? "Сэр, команда пришла с неверными параметрами."
+                        : "Sir, the command had invalid parameters.";
+            }
+            if (reason.contains("ACK_TIMEOUT") || reason.contains("DID NOT ACKNOWLEDGE")
+                    || reason.contains("TIMED OUT") || reason.contains("TIMEOUT")) {
+                return ru
+                        ? "Сэр, компьютер не ответил вовремя."
+                        : "Sir, the computer did not respond in time.";
+            }
+            if (reason.contains("NO_CLIENTS") || reason.contains("USER_NOT_CONNECTED")
+                    || reason.contains("NOT_CONNECTED") || reason.contains("NOT CONNECTED")
+                    || reason.contains("NO IDENTIFIED DESKTOP") || reason.contains("SESSION_NOT_FOUND")
+                    || reason.contains("SESSION IS NOT CONNECTED")) {
+                return ru
+                        ? "Сэр, приложение на компьютере не подключено — не могу выполнить действие."
+                        : "Sir, the desktop app is not connected, so I can't run that action.";
+            }
         }
-        return lang.startsWith("ru")
+        return ru
                 ? "Не удалось выполнить команду."
                 : "I couldn't execute that command.";
+    }
+
+    /**
+     * Builds a failure message that names BOTH the attempted action and the failing
+     * subsystem (e.g. "Не удалось открыть Telegram: PC-control недоступен, сэр."), so the
+     * user never hears a bare generic error. Falls back to {@link #commandFailureMessage}
+     * for actions without a specific verb or for non-Russian output.
+     */
+    private String actionFailureMessage(
+            String lang, VoiceCommandCatalog.Match match, String action, String failureReason) {
+        boolean ru = lang.startsWith("ru");
+        String upper = failureReason == null ? "" : failureReason.toUpperCase(Locale.ROOT);
+        if (isConfirmationReason(upper)) {
+            return ru ? "Сэр, это действие требует подтверждения." : "Sir, this action requires confirmation.";
+        }
+        // Coded reasons from the desktop app-open and from vision carry structured data
+        // (clarify candidate, not-found query + suggestions, vision failure code) that map to a
+        // specific spoken sentence — always Russian per the fixed movie-JARVIS phrasing.
+        String coded = codedActionMessage(failureReason);
+        if (coded != null) {
+            return coded;
+        }
+        if (!ru) {
+            return commandFailureMessage(lang, failureReason);
+        }
+        String verb = failureVerb(match, action);
+        if (verb == null) {
+            return commandFailureMessage(lang, failureReason);
+        }
+        return "Не удалось " + verb + ": " + failureCause(match, action, upper) + ", сэр.";
+    }
+
+    /**
+     * Maps a structured coded failure reason (from the desktop app-open flow or the vision service)
+     * to its fixed spoken sentence. Returns {@code null} for reasons this does not specifically
+     * handle, so the caller falls through to the generic verb/cause builder.
+     *
+     * <p>Recognised codes (raw, pipe-delimited so names/queries keep their original case):
+     * {@code APP_CLARIFY|<name>}, {@code APP_NOT_FOUND|<query>[|<a>,<b>,<c>]},
+     * {@code VISION_UNAVAILABLE}, {@code VISION_HTTP_*}, {@code VISION_PERMISSION}, {@code VISION_EMPTY}.
+     */
+    private String codedActionMessage(String failureReason) {
+        if (failureReason == null || failureReason.isBlank()) {
+            return null;
+        }
+        String reason = failureReason.trim();
+        String upper = reason.toUpperCase(Locale.ROOT);
+
+        if (upper.startsWith("APP_CLARIFY")) {
+            String[] parts = reason.split("\\|", 2);
+            String name = parts.length > 1 ? parts[1].trim() : "";
+            return "Сэр, вы имеете в виду " + name + "?";
+        }
+        if (upper.startsWith("APP_NOT_FOUND")) {
+            String[] parts = reason.split("\\|");
+            String query = parts.length > 1 ? parts[1].trim() : "";
+            if (parts.length > 2 && !parts[2].isBlank()) {
+                String suggestions = formatSuggestions(parts[2]);
+                return "Сэр, не нашёл приложение «" + query + "». Возможно, вы имели в виду: " + suggestions + ".";
+            }
+            return "Сэр, не нашёл приложение «" + query + "».";
+        }
+        if (upper.startsWith("VISION_EMPTY")) {
+            return "Готово, сэр. На экране нет распознаваемого текста.";
+        }
+        if (upper.startsWith("VISION_PERMISSION")) {
+            return "Не удалось сделать скриншот: требуется разрешение.";
+        }
+        if (upper.startsWith("VISION_UNAVAILABLE") || upper.startsWith("VISION_HTTP")) {
+            return "Не удалось проанализировать экран: vision-service недоступен, сэр.";
+        }
+        return null;
+    }
+
+    /** Renders the first two comma-separated app suggestions as "<a>, <b>". */
+    private String formatSuggestions(String rawSuggestions) {
+        String[] items = rawSuggestions.split(",");
+        StringBuilder sb = new StringBuilder();
+        int limit = Math.min(2, items.length);
+        for (int i = 0; i < limit; i++) {
+            String item = items[i].trim();
+            if (item.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(item);
+        }
+        return sb.toString();
+    }
+
+    private String failureVerb(VoiceCommandCatalog.Match match, String action) {
+        VoiceCommandCatalog.ActionTarget target = match.action() != null ? match.action().target() : null;
+        if (target == VoiceCommandCatalog.ActionTarget.PLANNER) {
+            return "получить план";
+        }
+        if (target == VoiceCommandCatalog.ActionTarget.FINANCE) {
+            return "получить финансовую сводку";
+        }
+        String name = action == null ? "" : action.toUpperCase(Locale.ROOT);
+        return switch (name) {
+            case "OPEN_APP" -> "открыть " + appLabel(actionParam(match, "app"));
+            case "OPEN_URL" -> "включить музыку";
+            case "VOLUME_UP" -> "сделать громче";
+            case "VOLUME_DOWN" -> "убавить громкость";
+            case "MUTE" -> "выключить звук";
+            case "UNMUTE" -> "включить звук";
+            case "NEXT", "NEXT_TRACK" -> "переключить трек";
+            case "PREV", "PREVIOUS" -> "вернуть трек";
+            case "PAUSE" -> "поставить на паузу";
+            case "MINIMIZE_ALL_WINDOWS", "MINIMIZE_ALL", "SHOW_DESKTOP" -> "свернуть окна";
+            default -> null;
+        };
+    }
+
+    private String appLabel(String app) {
+        if (app == null || app.isBlank()) {
+            return "приложение";
+        }
+        return switch (app.toLowerCase(Locale.ROOT)) {
+            case "telegram", "telegram-desktop" -> "Telegram";
+            case "files", "file-manager", "nautilus", "dolphin" -> "файлы";
+            case "vscode", "vs code", "code" -> "VS Code";
+            case "terminal", "konsole" -> "терминал";
+            case "browser", "firefox" -> "браузер";
+            case "chrome", "google-chrome" -> "Chrome";
+            default -> app;
+        };
+    }
+
+    private String failureCause(VoiceCommandCatalog.Match match, String action, String upper) {
+        VoiceCommandCatalog.ActionTarget target = match.action() != null ? match.action().target() : null;
+        boolean unreachable = upper.contains("ENDPOINT_UNREACHABLE") || upper.contains("CONNECTION REFUSED")
+                || upper.contains("I/O ERROR") || upper.contains("CONNECT TO") || upper.contains("PLANNER_UNAVAILABLE");
+        if (target == VoiceCommandCatalog.ActionTarget.PLANNER) {
+            java.util.regex.Matcher httpCode =
+                    java.util.regex.Pattern.compile("PLANNER_ENDPOINT_HTTP_(\\d{3})").matcher(upper);
+            if (httpCode.find()) {
+                return "planner endpoint вернул " + httpCode.group(1);
+            }
+            return unreachable ? "planner endpoint недоступен" : "planner endpoint вернул ошибку";
+        }
+        if (target == VoiceCommandCatalog.ActionTarget.FINANCE) {
+            java.util.regex.Matcher httpCode =
+                    java.util.regex.Pattern.compile("FINANCE_ENDPOINT_HTTP_(\\d{3})").matcher(upper);
+            if (httpCode.find()) {
+                return "finance-service вернул " + httpCode.group(1);
+            }
+            return "finance-service недоступен";
+        }
+        boolean isWindows = "MINIMIZE_ALL_WINDOWS".equalsIgnoreCase(action) || "SHOW_DESKTOP".equalsIgnoreCase(action)
+                || "HOTKEY".equalsIgnoreCase(action);
+        if (unreachable) {
+            return isWindows ? "канал управления недоступен" : "PC-control недоступен";
+        }
+        if (upper.contains("NO_CLIENTS") || upper.contains("USER_NOT_CONNECTED") || upper.contains("NOT CONNECTED")
+                || upper.contains("NOT_CONNECTED") || upper.contains("NO IDENTIFIED DESKTOP")
+                || upper.contains("SESSION_NOT_FOUND")) {
+            return "приложение на компьютере не подключено";
+        }
+        if (upper.contains("ACK_TIMEOUT") || upper.contains("DID NOT ACKNOWLEDGE")
+                || upper.contains("TIMED OUT") || upper.contains("TIMEOUT")) {
+            return "компьютер не ответил вовремя";
+        }
+        if (upper.contains("HTTP_401") || upper.contains("HTTP_403") || upper.contains("PERMISSION")
+                || upper.contains("DENIED") || upper.contains("AUTH")) {
+            return "отказано в доступе";
+        }
+        if (upper.contains("NO_ACTIVE_PLAYER") || upper.contains("NO PLAYERS")) {
+            return "нет активного плеера";
+        }
+        if (upper.contains("PLAYERCTL_NOT_INSTALLED")) {
+            return "playerctl не установлен";
+        }
+        if (upper.contains("INVALID_PAYLOAD") || upper.contains("BAD REQUEST")) {
+            return "неверные параметры";
+        }
+        if ("OPEN_APP".equalsIgnoreCase(action)
+                && (upper.contains("APP_NOT_FOUND") || upper.contains("UNKNOWN ACTION") || upper.contains("NO SUCH")
+                        || upper.contains("CANNOT RUN") || upper.contains("COULD NOT OPEN") || upper.contains("OPEN APP"))) {
+            String app = actionParam(match, "app");
+            return "приложение " + (app != null ? app : "") + " не найдено";
+        }
+        return "PC-control вернул ошибку";
+    }
+
+    private String dynamicSuccessMessage(String lang, VoiceCommandCatalog.Match match, String action) {
+        boolean ru = lang.startsWith("ru");
+        if ("VOICE_COMMANDS_CATALOG".equals(action)) {
+            return serviceRegistry.catalogText(ru);
+        }
+        if ("OPEN_APP".equalsIgnoreCase(action)) {
+            String app = prettyApp(actionParam(match, "app"));
+            return ru
+                    ? "Открываю " + app + ", сэр."
+                    : "Opening " + app + ", sir.";
+        }
+        if ("SET_VOLUME".equalsIgnoreCase(action) || "VOLUME_SET".equalsIgnoreCase(action)) {
+            String level = actionParam(match, "level");
+            if (level != null && !level.isBlank()) {
+                return ru
+                        ? "Громкость установлена на " + level + "%, сэр."
+                        : "Volume set to " + level + "%, sir.";
+            }
+        }
+        if ("OPEN_URL".equalsIgnoreCase(action)) {
+            String query = actionParam(match, "query");
+            if (query != null && !query.isBlank()) {
+                return ru
+                        ? "Ищу на YouTube: " + query + ", сэр."
+                        : "Searching YouTube for: " + query + ", sir.";
+            }
+        }
+        return null;
+    }
+
+    /** Capitalizes the first letter of the app name for a spoken confirmation ("telegram" → "Telegram"). */
+    private String prettyApp(String app) {
+        if (app == null || app.isBlank()) {
+            return "приложение";
+        }
+        String trimmed = app.trim();
+        return Character.toUpperCase(trimmed.charAt(0)) + trimmed.substring(1);
+    }
+
+    private String actionParam(VoiceCommandCatalog.Match match, String key) {
+        Map<String, Object> params = match.parameters();
+        if (params == null) {
+            return null;
+        }
+        Object value = params.get(key);
+        return value != null ? String.valueOf(value) : null;
+    }
+
+    private String maskUserId(String userId) {
+        if (userId == null || userId.isBlank()) {
+            return "<none>";
+        }
+        if (userId.length() <= 2) {
+            return "***";
+        }
+        return userId.charAt(0) + "***" + userId.charAt(userId.length() - 1);
+    }
+
+    private boolean isConfirmationReason(String upperReason) {
+        return upperReason != null
+                && (upperReason.contains("REQUIRES_CONFIRMATION")
+                        || upperReason.contains("REQUIRE_CONFIRM")
+                        || upperReason.contains("CONFIRMATION REQUIRED")
+                        || upperReason.contains("CONFIRM=TRUE"));
+    }
+
+    private String commandStatus(CommandResponseOutcome outcome) {
+        String action = outcome.action();
+        if (action != null && action.endsWith("_CONFIRM")) {
+            return "REQUIRES_CONFIRMATION";
+        }
+        if (action != null && (action.equals("CLARIFY_OPEN") || action.equals("YOUTUBE_CLARIFY")
+                || action.endsWith("_CLARIFY"))) {
+            return "CLARIFICATION_NEEDED";
+        }
+        String reason = outcome.failureReason();
+        if (reason != null) {
+            String upper = reason.toUpperCase(Locale.ROOT);
+            if (isConfirmationReason(upper)) {
+                return "REQUIRES_CONFIRMATION";
+            }
+            // App-open clarify/not-found is a QUESTION back to the user, not an execution failure.
+            if (upper.startsWith("APP_CLARIFY") || upper.startsWith("APP_NOT_FOUND")) {
+                return "CLARIFICATION_NEEDED";
+            }
+            if (!outcome.handled()
+                    && (upper.contains("UNSUPPORTED") || upper.contains("NOT_SUPPORTED")
+                            || upper.contains("CAPABILITY_UNAVAILABLE"))) {
+                return "NOT_SUPPORTED";
+            }
+        }
+        if (outcome.handled()) {
+            return "SUCCESS";
+        }
+        return "FAILED";
     }
 
     private void logCommandOutcome(String source, String action, CommandResponseOutcome outcome, String correlationId) {
@@ -648,10 +1362,14 @@ public class VoiceWebSocketHandler extends AbstractWebSocketHandler {
             payload.put("executionSucceeded", outcome.executionSucceeded());
             payload.put("executionFailed", outcome.executionFailed());
             payload.put("text", outcome.responseText());
+            // P0.5 structured action result: UI shows userMessage; logs keep debugReason.
+            payload.put("status", commandStatus(outcome));
+            payload.put("userMessage", outcome.responseText());
             payload.put("correlationId", correlationId);
             if (outcome.failureReason() != null && !outcome.failureReason().isBlank()) {
                 payload.put("failureReason", outcome.failureReason());
                 payload.put("failureCode", reasonCode(outcome.failureReason()));
+                payload.put("debugReason", outcome.failureReason());
             }
             sendJsonMessage(session, payload);
         } catch (RuntimeException e) {

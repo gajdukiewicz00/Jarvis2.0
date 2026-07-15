@@ -35,7 +35,10 @@ class VoiceWebSocketClient(
     private val onSttStatusChanged: (available: Boolean, reason: String?) -> Unit = { _, _ -> },
     private val onTtsStatusChanged: (available: Boolean, reason: String?) -> Unit = { _, _ -> },
     private val authServiceFactory: () -> AuthService = { AuthService() },
-    private val uiDispatcher: ((() -> Unit) -> Unit) = { action -> Platform.runLater(action) }
+    private val uiDispatcher: ((() -> Unit) -> Unit) = { action -> Platform.runLater(action) },
+    // Gateway protocol ERROR frames (code + message): diagnostics only — the handler must
+    // route these here, NEVER to onResponse / the assistant response log.
+    private val onProtocolError: (code: String, message: String?) -> Unit = { _, _ -> }
 ) : WebSocketListener() {
     companion object {
         private const val PRECONNECT_REFRESH_WINDOW_SECONDS = 30L
@@ -84,6 +87,13 @@ class VoiceWebSocketClient(
     
     // Current command's correlation ID for tracing
     @Volatile var currentCorrelationId: String? = null
+
+    // END-guard state: only send END while a voice stream started by START is active,
+    // and never send END twice for the same correlation. This prevents the client from
+    // emitting an END the gateway can only reject ("END is only valid while audio is
+    // streaming"), e.g. a duplicate END or one that races the gateway's own silence-finalize.
+    @Volatile private var startedCorrelationId: String? = null
+    @Volatile private var endedCorrelationId: String? = null
     
     // Auto-reconnect state
     private var reconnectAttempts = 0
@@ -382,7 +392,9 @@ class VoiceWebSocketClient(
      */
     fun startCommand(correlationId: String) {
         currentCorrelationId = correlationId
-        
+        startedCorrelationId = correlationId
+        endedCorrelationId = null
+
         if (!isConnected) {
             logger.warn("⚠️ Cannot start command - not connected, correlationId={}", correlationId)
             return
@@ -420,11 +432,24 @@ class VoiceWebSocketClient(
 
     fun endOfSpeech() {
         if (!isConnected) return
+        val cid = currentCorrelationId
+        // Only end a stream that this client actually started, and only once. A stray END
+        // (session never started, or a duplicate/late END that races the gateway's own
+        // silence-based finalize) is dropped here instead of provoking a protocol ERROR.
+        if (cid.isNullOrBlank() || cid != startedCorrelationId) {
+            logger.debug("Skipping END: no active voice stream (correlationId={}, started={})", cid, startedCorrelationId)
+            return
+        }
+        if (cid == endedCorrelationId) {
+            logger.debug("Skipping duplicate END for correlationId={}", cid)
+            return
+        }
+        endedCorrelationId = cid
         val msg = buildJsonObject {
             put("type", "END")
-            put("correlationId", currentCorrelationId ?: "")
+            put("correlationId", cid)
         }.toString()
-        logger.info("⏹️ Sending end-of-speech marker, correlationId={}", currentCorrelationId)
+        logger.info("⏹️ Sending end-of-speech marker, correlationId={}", cid)
         webSocket?.send(msg)
     }
     
@@ -562,7 +587,13 @@ class VoiceWebSocketClient(
                             code == "STT_UNAVAILABLE" -> onSttStatusChanged(false, message)
                             code == "TTS_UNAVAILABLE" -> onTtsStatusChanged(false, message)
                         }
-                        onResponse(message, code, false)
+                        // A gateway ERROR frame is protocol diagnostics, NOT an assistant
+                        // reply — it must never be appended to the response log as
+                        // "Jarvis: ...". (This is what surfaced "END is only valid while
+                        // audio is streaming" as a spoken/shown response.) STT/TTS
+                        // availability is already reflected above; route the rest to the
+                        // dedicated protocol-error sink for logging/diagnostics only.
+                        onProtocolError(code, message)
                     }
                     "ACTION_RESULT" -> {
                         val success = json["success"]?.jsonPrimitive?.booleanOrNull ?: false

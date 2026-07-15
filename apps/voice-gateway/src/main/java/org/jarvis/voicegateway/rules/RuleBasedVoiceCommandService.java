@@ -35,12 +35,20 @@ public class RuleBasedVoiceCommandService {
         log.info("Compiled {} active rule-based voice commands", compiledCommands.size());
     }
 
+    /** The exact text (normalized + fuzzy-aliased) that {@link #match} runs against — for diagnostics/logging. */
+    public String normalizedForDiagnostics(String text) {
+        if (text == null) {
+            return "";
+        }
+        return VoiceTextNormalizer.applyAliases(normalize(text));
+    }
+
     public Optional<VoiceCommandCatalog.Match> match(String text, String locale) {
         if (text == null || text.isBlank()) {
             return Optional.empty();
         }
 
-        String normalizedText = normalize(text);
+        String normalizedText = VoiceTextNormalizer.applyAliases(normalize(text));
         if (normalizedText.isBlank()) {
             return Optional.empty();
         }

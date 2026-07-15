@@ -16,6 +16,9 @@ class WakeWordDetector(
     private val keywordPaths: List<String>? = null,  // paths to .ppn files
     private val builtInKeywords: List<BuiltInKeyword>? = null,  // built-in keywords
     private val sensitivity: Float = 0.5f,
+    // Optional specific input device (mixer) name. When null, the default input
+    // line is used — the same mic Manual Talk opens via AudioSystem.getLine.
+    private val deviceName: String? = null,
     private val onWakeWordDetected: (Int) -> Unit  // callback with keyword index
 ) {
     
@@ -138,17 +141,31 @@ class WakeWordDetector(
     fun pause() {
         if (currentState == ListeningState.LISTENING) {
             currentState = ListeningState.PAUSED
-            println("Wake word detector paused")
+            // Stop actively capturing so the command recorder is the ONLY open capture stream
+            // during a command — running two concurrent mic streams leaks OS capture handles and
+            // is the prime suspect for "recording stops after ~N commands". The line stays OPEN
+            // (cheap stop/start), so no per-command open/close churn.
+            try {
+                targetDataLine?.stop()
+            } catch (e: Exception) {
+                System.err.println("Wake detector pause stop() error: ${e.message}")
+            }
+            println("Wake word detector paused (capture stopped)")
         }
     }
-    
+
     /**
      * Resume wake word detection.
      */
     fun resume() {
         if (currentState == ListeningState.PAUSED) {
+            try {
+                targetDataLine?.start()
+            } catch (e: Exception) {
+                System.err.println("Wake detector resume start() error: ${e.message}")
+            }
             currentState = ListeningState.LISTENING
-            println("Wake word detector resumed")
+            println("Wake word detector resumed (capture restarted)")
         }
     }
     
@@ -167,14 +184,10 @@ class WakeWordDetector(
         )
         
         val dataLineInfo = DataLine.Info(TargetDataLine::class.java, audioFormat)
-        
-        if (!AudioSystem.isLineSupported(dataLineInfo)) {
-            throw IllegalStateException("Microphone not supported")
-        }
-        
-        targetDataLine = AudioSystem.getLine(dataLineInfo) as TargetDataLine
-        targetDataLine?.open(audioFormat)
-        targetDataLine?.start()
+
+        val line = openTargetLine(dataLineInfo, audioFormat)
+        targetDataLine = line
+        line.start()
         
         // Start audio processing thread
         audioThread = Thread {
@@ -184,6 +197,34 @@ class WakeWordDetector(
             isDaemon = true
             start()
         }
+    }
+
+    /**
+     * Open the capture line. If a specific [deviceName] was requested, open THAT
+     * mixer's [TargetDataLine] so wake-word detection can be pinned to the same
+     * mic Manual Talk uses; otherwise fall back to the default input line.
+     */
+    private fun openTargetLine(dataLineInfo: DataLine.Info, audioFormat: AudioFormat): TargetDataLine {
+        val requested = deviceName?.trim()
+        if (!requested.isNullOrEmpty()) {
+            val mixerInfo = AudioSystem.getMixerInfo().firstOrNull { it.name.trim() == requested }
+            if (mixerInfo != null) {
+                val mixer = AudioSystem.getMixer(mixerInfo)
+                if (mixer.isLineSupported(dataLineInfo)) {
+                    val line = mixer.getLine(dataLineInfo) as TargetDataLine
+                    line.open(audioFormat)
+                    return line
+                }
+            }
+            System.err.println("Requested wake-word input device '$requested' unavailable; using default input line")
+        }
+
+        if (!AudioSystem.isLineSupported(dataLineInfo)) {
+            throw IllegalStateException("Microphone not supported")
+        }
+        val line = AudioSystem.getLine(dataLineInfo) as TargetDataLine
+        line.open(audioFormat)
+        return line
     }
     
     private fun processMicrophoneAudio(porcupineInstance: Porcupine) {
@@ -195,9 +236,16 @@ class WakeWordDetector(
         
         while (isRunning) {
             try {
+                // While paused (a command is being recorded), don't read the mic at all — the
+                // command recorder owns the capture device. Prevents two concurrent capture streams.
+                if (currentState == ListeningState.PAUSED) {
+                    Thread.sleep(20)
+                    continue
+                }
+
                 // Read audio from microphone
                 val bytesRead = targetDataLine?.read(buffer, 0, buffer.size) ?: -1
-                
+
                 if (bytesRead <= 0) {
                     Thread.sleep(10)
                     continue
@@ -233,7 +281,113 @@ class WakeWordDetector(
         }
     }
     
+    /**
+     * Structured view of a caught wake-word initialization failure: the plain
+     * message, Porcupine 4.x's full [PorcupineException.getMessageStack], and the
+     * parsed native error code (when present).
+     */
+    data class FailureDetails(
+        val message: String?,
+        val messageStack: List<String>,
+        val nativeCode: String?,
+        /** Fully-qualified class of the caught throwable — the reliable signal for
+         *  Porcupine activation/access-key exceptions whose message is opaque. */
+        val exceptionClass: String = ""
+    )
+
     companion object {
+        // Porcupine 4.x messageStack lines look like "[0] d3ff828 00000136: ...";
+        // the 8-hex token ("00000136") is the native error code we surface.
+        private val NATIVE_CODE_REGEX = Regex("\\b([0-9a-fA-F]{8})\\b")
+
+        // Fragments in a Porcupine build failure that point at the ACCESS KEY
+        // (activation/credential) rather than at a model/runtime mismatch. All are
+        // matched case-insensitively against message + messageStack.
+        private val KEY_FAILURE_MARKERS = listOf(
+            "access key", "accesskey", "activation", "credential",
+            "invalid", "unauthorized", "authentication", "401", "403"
+        )
+
+        // Porcupine surfaces access-key/activation problems as dedicated exception
+        // SUBCLASSES (e.g. PorcupineActivationRefusedException, ...LimitException,
+        // ...ThrottledException, PorcupineActivationException) whose human message is
+        // often just "Initialization failed:" with an opaque native stack — so the
+        // exception CLASS name, not the message, is the reliable signal. Matched
+        // case-insensitively against the fully-qualified class name.
+        private val KEY_FAILURE_EXCEPTION_MARKERS = listOf(
+            "activation", "accesskey", "refused", "limitreached", "throttled"
+        )
+
+        /**
+         * Validate the Porcupine access key WITHOUT opening a microphone: building
+         * a Porcupine engine (built-in [builtInKeyword]) validates the key on its
+         * own, so a successful build proves the key is good and an immediate
+         * [Porcupine.delete] frees the native handle. This is what lets callers tell
+         * "key invalid" apart from "no real mic". The key is NEVER logged here.
+         */
+        fun validateAccessKey(
+            key: String,
+            builtInKeyword: BuiltInKeyword = BuiltInKeyword.JARVIS
+        ): AccessKeyValidationResult {
+            val engine = try {
+                Porcupine.Builder()
+                    .setAccessKey(key)
+                    .setBuiltInKeyword(builtInKeyword)
+                    .build()
+            } catch (t: Throwable) {
+                return classifyValidationFailure(describeFailure(t))
+            }
+            try {
+                engine.delete()
+            } catch (_: Throwable) {
+                // Best-effort cleanup: a failed delete does not change the VALID verdict.
+            }
+            return AccessKeyValidationResult(AccessKeyValidation.VALID, null)
+        }
+
+        /**
+         * Pure heuristic: decide whether a captured build [failure] is an access-key
+         * problem (→ INVALID) or something else (→ UNKNOWN). The reason is the plain
+         * message/stack text (Porcupine never echoes the key), safe to surface/log.
+         */
+        fun classifyValidationFailure(failure: FailureDetails): AccessKeyValidationResult {
+            val exceptionClassLower = failure.exceptionClass.lowercase()
+            val isKeyException = KEY_FAILURE_EXCEPTION_MARKERS.any { exceptionClassLower.contains(it) }
+
+            val haystack = (failure.messageStack + listOfNotNull(failure.message))
+                .joinToString(separator = " ")
+                .lowercase()
+            val isKeyMessage = KEY_FAILURE_MARKERS.any { haystack.contains(it) }
+
+            val status = if (isKeyException || isKeyMessage) {
+                AccessKeyValidation.INVALID
+            } else {
+                AccessKeyValidation.UNKNOWN
+            }
+            // Prefer a human-readable reason. For activation-refused/limit/throttled the
+            // message is opaque ("Initialization failed:"), so derive it from the class.
+            val reason = when {
+                isKeyException -> activationReason(failure.exceptionClass)
+                else -> failure.message?.takeIf { it.isNotBlank() } ?: failure.messageStack.firstOrNull()
+            }
+            return AccessKeyValidationResult(status, reason)
+        }
+
+        /** Map a Porcupine activation/key exception class to a plain-language reason. */
+        private fun activationReason(exceptionClass: String): String {
+            val c = exceptionClass.lowercase()
+            return when {
+                c.contains("refused") ->
+                    "Porcupine activation refused — the access key was rejected (activation limit reached, or the key is expired/revoked)."
+                c.contains("limit") ->
+                    "Porcupine activation limit reached — the access key is already used on the maximum number of devices."
+                c.contains("throttled") ->
+                    "Porcupine activation throttled — too many activations; try again later or use a different key."
+                else ->
+                    "Porcupine rejected the access key (activation/access-key error)."
+            }
+        }
+
         /**
          * Create detector with built-in Porcupine keywords (e.g., JARVIS in English).
          * No need to download or train models - works immediately!
@@ -242,6 +396,7 @@ class WakeWordDetector(
             accessKey: String,
             keywords: List<BuiltInKeyword>,  // e.g., [BuiltInKeyword.JARVIS]
             sensitivity: Float = 0.5f,
+            deviceName: String? = null,
             onWakeWordDetected: (Int) -> Unit
         ): WakeWordDetector {
             return WakeWordDetector(
@@ -249,8 +404,37 @@ class WakeWordDetector(
                 keywordPaths = null,
                 builtInKeywords = keywords,
                 sensitivity = sensitivity,
+                deviceName = deviceName,
                 onWakeWordDetected = onWakeWordDetected
             )
+        }
+
+        /**
+         * Turn any caught [Throwable] from a start() attempt into a structured
+         * [FailureDetails]. Captures the full Porcupine message stack (4.x) so the
+         * cryptic "[0] ... 00000136" native detail lands in logs/diagnostics rather
+         * than being shown raw to the user.
+         */
+        fun describeFailure(t: Throwable): FailureDetails {
+            val stack: List<String> = when (t) {
+                is PorcupineException -> t.messageStack?.toList().orEmpty()
+                else -> emptyList()
+            }
+            val searchable = stack + listOfNotNull(t.message)
+            return FailureDetails(
+                message = t.message,
+                messageStack = stack,
+                nativeCode = extractNativeCode(searchable),
+                exceptionClass = t.javaClass.name
+            )
+        }
+
+        /** Extract the first "00000136"-style native code from message/stack lines. */
+        fun extractNativeCode(lines: List<String>): String? {
+            for (line in lines) {
+                NATIVE_CODE_REGEX.find(line)?.let { return it.groupValues[1] }
+            }
+            return null
         }
     }
 }

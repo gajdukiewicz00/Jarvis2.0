@@ -48,6 +48,11 @@ public class TtsService {
     @Value("${tts.piper.timeout-ms:15000}")
     private long piperTimeoutMs;
 
+    @Value("${tts.piper.reprobe-interval-ms:15000}")
+    private long piperReprobeIntervalMs;
+
+    private volatile long lastPiperProbeAtMs = 0L;
+
     private volatile boolean piperAvailable = false;
     private volatile String piperInitStatus = "Piper TTS not initialized";
     private final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newHttpClient();
@@ -151,6 +156,7 @@ public class TtsService {
         status.put("status", selection.status());
         status.put("available", selection.available());
         status.put("reason", selection.reason());
+        status.put("reasonCode", ttsReasonCode(selection));
         status.put("espeakAvailable", espeakAvailable);
         status.put("googleAvailable", googleTtsAvailable);
         status.put("googleStatus", googleInitStatus);
@@ -343,8 +349,13 @@ public class TtsService {
             log.info("Piper TTS synthesis successful, rawSize={} bytes, normalizedSize={} bytes",
                     wav.length, normalized.length);
             return normalized;
+        } catch (java.net.http.HttpTimeoutException e) {
+            // Distinguish provider-timeout from a generic synthesis failure (task: TTS health
+            // categories + diagnostic logging). No transcript is logged — only the timing/url.
+            log.error("Piper TTS TIMEOUT after {}ms (url={}) [TTS_PROVIDER_TIMEOUT]", piperTimeoutMs, piperUrl);
+            throw new RuntimeException("Piper TTS timed out after " + piperTimeoutMs + "ms [TTS_PROVIDER_TIMEOUT]", e);
         } catch (IOException e) {
-            log.error("Piper TTS failed (IO): {}", e.getMessage());
+            log.error("Piper TTS synthesis FAILED (IO): {} [TTS_SYNTHESIS_FAILED]", e.getMessage());
             throw new RuntimeException("Piper TTS synthesis failed: IO error", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -412,7 +423,69 @@ public class TtsService {
         return sb.append("\"").toString();
     }
 
+    /**
+     * Stable machine-readable code for the current TTS availability category, so clients can
+     * branch on the exact reason (provider unavailable vs degraded fallback vs disabled) without
+     * string-matching the human-readable {@code reason}.
+     */
+    private String ttsReasonCode(ProviderSelection selection) {
+        return switch (selection.status() == null ? "" : selection.status()) {
+            case "available" -> "TTS_READY";
+            case "degraded" -> "TTS_DEGRADED_FALLBACK";
+            case "disabled" -> "TTS_DISABLED";
+            default -> unavailableReasonCode(selection);
+        };
+    }
+
+    /**
+     * Granular machine-readable code for WHY TTS is unavailable, so the desktop can show the exact
+     * server-side reason (service down vs not configured vs binary missing) rather than a generic
+     * "degraded". Client-side playback failures (no output device / playback failed / ALSA-Pulse)
+     * are reported separately by the desktop AudioPlayer's PlaybackResult.
+     */
+    private String unavailableReasonCode(ProviderSelection selection) {
+        String provider = selection.configuredProvider();
+        if (PROVIDER_PIPER.equals(provider)) {
+            String piperStatus = piperInitStatus == null ? "" : piperInitStatus.toLowerCase(Locale.ROOT);
+            if (piperStatus.contains("not configured")) {
+                return "TTS_NOT_CONFIGURED";
+            }
+            return "TTS_SERVICE_DOWN"; // Piper daemon unreachable / non-200 health
+        }
+        if (PROVIDER_ESPEAK.equals(provider)) {
+            return "TTS_BINARY_MISSING";
+        }
+        return "TTS_PROVIDER_UNAVAILABLE";
+    }
+
+    /**
+     * Re-probe the Piper daemon when it is currently marked unavailable, throttled to at most once
+     * per {@code tts.piper.reprobe-interval-ms}. {@link #checkPiperAvailable()} otherwise runs only
+     * once at {@code @PostConstruct}, so a daemon that was down at boot — or whose host Endpoints
+     * were corrected later — would stay {@code unavailable} until the pod restarts. This lets TTS
+     * recover in place. Only probes while unavailable, so a healthy provider adds zero overhead.
+     */
+    private void maybeReprobePiper() {
+        if (piperAvailable) {
+            return;
+        }
+        if (!PROVIDER_PIPER.equalsIgnoreCase(normalizeProvider(ttsProvider))
+                || piperUrl == null || piperUrl.isBlank()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastPiperProbeAtMs < piperReprobeIntervalMs) {
+            return;
+        }
+        lastPiperProbeAtMs = now;
+        if (checkPiperAvailable()) {
+            piperAvailable = true;
+            log.info("🔊 Piper TTS recovered — daemon now reachable at {} ({})", piperUrl, piperInitStatus);
+        }
+    }
+
     private ProviderSelection resolveProviderSelection() {
+        maybeReprobePiper();
         String configured = normalizeProvider(ttsProvider);
         if (!ttsEnabled) {
             return new ProviderSelection(configured, "none", "disabled", false,

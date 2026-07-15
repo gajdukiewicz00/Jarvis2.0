@@ -49,8 +49,9 @@ class VoiceWebSocketClientIdleErrorIntegrationTest {
         val states = CopyOnWriteArrayList<String>()
         val sttChanges = CopyOnWriteArrayList<Boolean>()
         val ttsChanges = CopyOnWriteArrayList<Boolean>()
+        val responses = CopyOnWriteArrayList<Triple<String, String?, Boolean>>()
         val connectedLatch = CountDownLatch(1)
-        val responseLatch = CountDownLatch(1)
+        val protocolErrorLatch = CountDownLatch(1)
 
         server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -83,18 +84,21 @@ class VoiceWebSocketClientIdleErrorIntegrationTest {
                 }
             },
             onTranscript = { _, _, _ -> },
-            onResponse = { _, _, _ -> responseLatch.countDown() },
+            onResponse = { t, a, h -> responses += Triple(t, a, h) },
             onAudioReceived = {},
             onSttStatusChanged = { available, _ -> sttChanges += available },
             onTtsStatusChanged = { available, _ -> ttsChanges += available },
-            uiDispatcher = { action -> action() }
+            uiDispatcher = { action -> action() },
+            onProtocolError = { _, _ -> protocolErrorLatch.countDown() }
         )
 
         client!!.connect()
 
         assertTrue(connectedLatch.await(5, TimeUnit.SECONDS), "voice websocket should connect")
-        assertTrue(responseLatch.await(5, TimeUnit.SECONDS), "idle response should still be surfaced to the UI")
+        assertTrue(protocolErrorLatch.await(5, TimeUnit.SECONDS),
+            "idle outcome should reach the protocol-error sink (diagnostics), not the response log")
 
+        assertTrue(responses.isEmpty(), "NO_AUDIO_RECEIVED must never be shown as a Jarvis response")
         assertTrue(sttChanges.isEmpty(), "NO_AUDIO_RECEIVED must not change STT availability")
         assertTrue(ttsChanges.isEmpty(), "NO_AUDIO_RECEIVED must not change TTS availability")
         assertTrue(

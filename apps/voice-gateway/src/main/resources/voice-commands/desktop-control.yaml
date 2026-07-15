@@ -39,7 +39,105 @@ commands:
       params:
         app: terminal
     response:
-      key: loading_sir
+      text:
+        ru: "Открываю терминал, сэр."
+        en: "Opening terminal, sir."
+
+  - id: rule_open_files
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой файлы"
+          - "открой файл менеджер"
+          - "открой папку"
+          - "открой проводник"
+          - "open files"
+          - "open file manager"
+      - type: contains
+        values:
+          - "запусти файл менеджер"
+          - "покажи файлы"
+          - "открой мои файлы"
+          - "open the files"
+      - type: regex
+        values:
+          - "(открой|открыть|запусти|запустить|покажи)\\s+(файл[а-я]*|папк[а-я]*|проводник[а-я]*)"
+          - "\\bopen\\b.*\\bfile(s| manager)?\\b"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: files
+    response:
+      text:
+        ru: "Открываю файлы, сэр."
+        en: "Opening files, sir."
+
+  - id: rule_open_vscode
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой vs code"
+          - "открой vscode"
+          - "открой visual studio code"
+          - "открой код"
+          - "открой редактор кода"
+          - "open vs code"
+          - "open vscode"
+      - type: contains
+        values:
+          - "запусти vs code"
+          - "запусти vscode"
+          - "открой вс код"
+          - "open visual studio code"
+      - type: regex
+        values:
+          - "(открой|открыть|запусти|запустить)\\s+(vs\\s*code|vscode|visual\\s+studio\\s+code)"
+          - "\\bopen\\b.*\\b(vs\\s*code|vscode)\\b"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: vscode
+    response:
+      text:
+        ru: "Открываю VS Code, сэр."
+        en: "Opening VS Code, sir."
+
+  - id: rule_open_telegram
+    priority: 30
+    matchers:
+      - type: exact
+        values:
+          - "открой телеграм"
+          - "open telegram"
+          - "launch telegram"
+      - type: alias
+        values:
+          - "телеграм"
+          - "telegram"
+      - type: contains
+        values:
+          - "open telegram"
+          - "открой телеграм"
+          - "запусти телеграм"
+          - "открой телегу"
+          - "включи телеграм"
+      - type: regex
+        values:
+          - "\\b(open|launch|start|run|show)\\b.*\\btelegram"
+          - "(открой|открыть|запусти|запустить|включи|покажи).*телегра"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: telegram
+    response:
+      text:
+        ru: "Открываю Telegram, сэр."
+        en: "Opening Telegram, sir."
 
   - id: rule_open_google
     matchers:
@@ -67,6 +165,7 @@ commands:
       - type: exact
         values:
           - "открой ютуб"
+          - "открой youtube"
           - "open youtube"
       - type: alias
         values:
@@ -75,14 +174,21 @@ commands:
       - type: contains
         values:
           - "запусти ютуб"
+          - "покажи ютуб"
+          - "включи ютуб"
           - "open the youtube"
+      - type: regex
+        values:
+          - "(открой|запусти|покажи|включи)\\s+(ютуб[а-я]*|youtube)"
     action:
       target: pc_control
       name: OPEN_URL
       params:
         url: "https://www.youtube.com/"
     response:
-      key: loading_sir
+      text:
+        ru: "Открываю YouTube, сэр."
+        en: "Opening YouTube, sir."
 
   - id: rule_volume_up
     matchers:
@@ -105,7 +211,9 @@ commands:
       params:
         delta: 10
     response:
-      key: yes_sir
+      text:
+        ru: "Делаю громче, сэр."
+        en: "Turning it up, sir."
 
   - id: rule_volume_down
     matchers:
@@ -128,7 +236,9 @@ commands:
       params:
         delta: 10
     response:
-      key: yes_sir
+      text:
+        ru: "Уменьшаю громкость, сэр."
+        en: "Turning it down, sir."
 
   - id: rule_mute
     matchers:
@@ -270,6 +380,58 @@ commands:
     response:
       key: yes_sir_alt
 
+  # STT variants of "сверни все окна" are canonicalized by VoiceTextNormalizer
+  # ("с кровь все окна"/"скорой все окна"/"скрой/убери все окна" -> "сверни все окна").
+  - id: rule_minimize_all_windows
+    priority: 20
+    matchers:
+      - type: exact
+        values:
+          - "сверни все окна"
+          - "свернуть все окна"
+          - "minimize all windows"
+      - type: contains
+        values:
+          - "сверни все окна"
+          - "спрячь все окна"
+          - "minimize everything"
+      - type: regex
+        values:
+          - "(сверни|свернуть|сворачивай|спрячь|скрой|убери)\\s+(все\\s+)?окна"
+          - "\\bminimize\\b.*\\bwindows?\\b"
+    action:
+      target: pc_control
+      name: MINIMIZE_ALL_WINDOWS
+    response:
+      text:
+        ru: "Сворачиваю все окна, сэр."
+        en: "Minimizing all windows, sir."
+
+  # Bring windows back after a minimize/show-desktop. "открой все окна" must resolve here
+  # (RESTORE_WINDOWS) and NOT be stolen by the generic OPEN_APP regex, which negative-lookahead
+  # excludes "все окна". Higher priority than the generic rule so the EXACT phrases always win.
+  - id: rule_restore_windows
+    priority: 20
+    matchers:
+      - type: exact
+        values:
+          - "открой все окна"
+          - "верни все окна"
+          - "разверни все окна"
+          - "покажи все окна"
+          - "restore windows"
+      - type: contains
+        values:
+          - "верни окна"
+          - "разверни окна"
+    action:
+      target: pc_control
+      name: RESTORE_WINDOWS
+    response:
+      text:
+        ru: "Возвращаю окна, сэр."
+        en: "Restoring windows, sir."
+
   - id: rule_sleep_mode
     matchers:
       - type: exact
@@ -301,3 +463,26 @@ commands:
       name: monitor_off
     response:
       key: rest_mode
+
+  # Generic "открой/запусти <app>" fallback: when no specific open-rule matched, capture the app
+  # name and let the PC-control handler resolve it (dynamic "Открываю <app>, сэр."). Scoring is
+  # score = typeScore + value.length + priority*100; REGEX(2000) outscores CONTAINS(1000), so this
+  # rule uses a strongly NEGATIVE priority (-50 → -5000) to guarantee ANY specific rule (priority>=0)
+  # wins, while it still matches an otherwise-unmatched app-open. Negative lookahead excludes the
+  # window-restore phrase ("все окна") and the clarify pronouns ("эту/это/его/её/ее/их") so those
+  # rules are never stolen. Capture group 1 is the app name → params.app.
+  - id: rule_open_app_generic
+    priority: -50
+    matchers:
+      - type: regex
+        values:
+          - "^(?:открой|запусти)\\s+(?!все\\s+окна$|эту$|это$|его$|её$|ее$|их$)([а-яёa-z0-9][а-яёa-z0-9 ._-]{1,40})$"
+    action:
+      target: pc_control
+      name: OPEN_APP
+      params:
+        app: "{1}"
+    response:
+      text:
+        ru: "Открываю, сэр."
+        en: "Opening, sir."

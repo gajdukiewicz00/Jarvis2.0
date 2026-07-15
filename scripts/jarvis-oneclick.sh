@@ -106,6 +106,22 @@ if [ -n "$NODE_IP" ]; then
       -p="[{\"op\":\"replace\",\"path\":\"/endpoints/0/addresses/0\",\"value\":\"${NODE_IP}\"}]" >>"$LOG" 2>&1 || true
     $K rollout restart deploy/llm-service >>"$LOG" 2>&1 || true
   fi
+  # host-tts-daemon (Piper :18090) + its egress NetworkPolicy must ALSO track the
+  # node IP, or voice-gateway can't reach Piper and TTS stays "degraded". Mirror the
+  # model-daemon heal (this is why TTS broke after an IP change / reboot).
+  TTS_EP="$($K get endpoints host-tts-daemon -o jsonpath='{.subsets[0].addresses[0].ip}' 2>/dev/null)"
+  if [ -n "$TTS_EP" ] && [ "$TTS_EP" != "$NODE_IP" ]; then
+    step "Обновляю endpoint голоса (TTS ${TTS_EP}→${NODE_IP})…"
+    log "patch host-tts-daemon endpoint + netpol ${TTS_EP} -> ${NODE_IP}"
+    $K patch endpoints host-tts-daemon --type=json \
+      -p="[{\"op\":\"replace\",\"path\":\"/subsets/0/addresses/0/ip\",\"value\":\"${NODE_IP}\"}]" >>"$LOG" 2>&1 || true
+    TSLICE="$($K get endpointslice -l kubernetes.io/service-name=host-tts-daemon -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+    [ -n "$TSLICE" ] && $K patch endpointslice "$TSLICE" --type=json \
+      -p="[{\"op\":\"replace\",\"path\":\"/endpoints/0/addresses/0\",\"value\":\"${NODE_IP}\"}]" >>"$LOG" 2>&1 || true
+    $K patch networkpolicy voice-gateway-egress-tts --type=json \
+      -p="[{\"op\":\"replace\",\"path\":\"/spec/egress/0/to/0/ipBlock/cidr\",\"value\":\"${NODE_IP}/32\"}]" >>"$LOG" 2>&1 || true
+    $K rollout restart deploy/voice-gateway >>"$LOG" 2>&1 || true
+  fi
 fi
 
 # ---- 3. recover pods if the gateway is not Ready ----

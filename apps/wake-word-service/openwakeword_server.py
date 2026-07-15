@@ -19,7 +19,9 @@ Endpoints:
   POST /pause         suspend detection (keep stream owned, /health stays UP)
   POST /resume        resume detection after a pause
   POST /stop          stop capture thread + close stream
-  GET  /diagnostics   full engine/device/error state incl. rejected devices
+  POST /calibrate     record a device (no model) + report an RMS summary
+  POST /self-test     run a synthesized wake fixture through the real model
+  GET  /diagnostics   full engine/device/signal/error state incl. rejected devices
   GET  /events        SSE stream of WAKE_DETECTED events + keepalives
 
 Env:
@@ -41,15 +43,23 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import io
 import json
 import logging
 import os
+import re
+import shutil
 import signal
+import subprocess
+import tempfile
 import threading
 import time
+import uuid
+import wave
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -69,8 +79,31 @@ FRAME_SAMPLES = 1280          # 80 ms @ 16 kHz — openWakeWord's native frame
 WAKE_COOLDOWN_SEC = max(0.0, int(os.getenv("JARVIS_WAKEWORD_COOLDOWN_MS", "2000")) / 1000.0)
 KEEPALIVE_SEC = 15.0          # SSE keepalive comment interval
 SUBSCRIBER_QUEUE_MAX = 64
-STREAM_OPEN_TIMEOUT = 4.0     # max seconds /start waits for the mic to open
+STREAM_OPEN_TIMEOUT = 6.0     # max seconds /start waits for the mic to open
 MAX_CONSECUTIVE_READ_ERRORS = 10  # transient device errors tolerated before giving up
+# A raw USB/ALSA hw device just released by the RMS probe can report "Device
+# unavailable" (PaErrorCode -9985) for a few hundred ms until the kernel frees
+# it. Retry the open a few times with a short settle instead of failing /start.
+STREAM_OPEN_ATTEMPTS = 4
+STREAM_OPEN_RETRY_SLEEP = 0.35
+DEVICE_SETTLE_SEC = 0.15      # pause after a probe closes a device, before reuse
+
+# --- Signal / RMS gating -----------------------------------------------------
+# A device whose probe RMS (int16 normalized to [-1, 1]) is at/below this floor
+# is treated as SILENT (hardware-dead mic). Auto-selection skips silent devices;
+# an explicitly requested silent device is still opened but flagged honest-false.
+RMS_SILENCE_FLOOR = float(os.getenv("JARVIS_WAKEWORD_RMS_FLOOR", "1e-4"))
+PROBE_SECONDS = float(os.getenv("JARVIS_WAKEWORD_PROBE_SEC", "0.5"))  # per-device probe duration
+SIGNAL_WINDOW_SEC = 2.0       # window over which audioSignalPresent is evaluated
+MAX_SCORE_WINDOW_SEC = 30.0   # window for maximumScoreLast30Seconds
+INFERENCE_LOG_INTERVAL_SEC = 1.0  # rate-limit for wake.inference log lines
+CALIBRATE_DEFAULT_SEC = 5      # default /calibrate recording duration
+CALIBRATE_MAX_SEC = 30         # hard cap so a bad request can't record forever
+RMS_HISTORY_MAX = 64           # ~5s of 80ms frames; caps memory even in tight loops
+SCORE_HISTORY_MAX = 512        # ~40s of 80ms frames
+SELFTEST_WAKE_PHRASE = "hey jarvis"  # phrase synthesized for /self-test fixtures
+PIPER_URL = os.getenv("JARVIS_PIPER_URL", "http://127.0.0.1:18090/synthesize")
+PIPER_TIMEOUT_SEC = float(os.getenv("JARVIS_PIPER_TIMEOUT_SEC", "6.0"))
 
 # Case-insensitive tokens that mark a device as an output/loopback (rejected).
 EXCLUDE_TOKENS = ("playback", "output", "monitor", "sink", "speaker")
@@ -104,6 +137,45 @@ def should_accept_wake(now: float, last_fire: float, cooldown_sec: float) -> boo
     ``cooldown_sec`` collapse to a single accepted event.
     """
     return (now - last_fire) >= cooldown_sec
+
+
+def rms_int16(samples) -> float:
+    """Root-mean-square of int16 PCM samples, normalized to [-1, 1].
+
+    A dead/muted microphone yields digital silence (RMS ~0); a live mic picking
+    up even ambient room noise reads well above ``RMS_SILENCE_FLOOR``. Pure and
+    hardware-free so signal gating can be unit-tested. Empty input -> 0.0.
+    """
+    import numpy as np
+
+    if samples is None:
+        return 0.0
+    arr = np.asarray(samples, dtype=np.float64)
+    if arr.size == 0:
+        return 0.0
+    arr = arr / 32768.0
+    return float(np.sqrt(np.mean(arr * arr)))
+
+
+def derive_wake_phrase(model_key_or_name: str) -> str:
+    """Derive the human wake phrase from a model key/name (never hardcoded).
+
+    ``hey_jarvis_v0.1`` -> ``hey jarvis``; ``alexa`` -> ``alexa``. Strips a
+    trailing version suffix and turns separators into spaces.
+    """
+    base = os.path.basename(str(model_key_or_name or "")).lower()
+    base = re.sub(r"\.(onnx|tflite)$", "", base)
+    base = re.sub(r"[_-]?v?\d+([._]\d+)*$", "", base)  # drop _v0.1 / -v2 / _1
+    phrase = re.sub(r"[_\-]+", " ", base).strip()
+    return phrase or "hey jarvis"
+
+
+def model_log_label(model_key_or_name: str) -> str:
+    """Short model label for structured logs: ``hey_jarvis_v0.1`` -> ``hey_jarvis``."""
+    base = os.path.basename(str(model_key_or_name or "")).lower()
+    base = re.sub(r"\.(onnx|tflite)$", "", base)
+    base = re.sub(r"[_-]?v?\d+([._]\d+)*$", "", base)
+    return base.strip("_- ") or "wakeword"
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +298,57 @@ def resolve_device(selector: str) -> Optional[Dict[str, Any]]:
         if low in dev["name"].lower():
             return dev
     return None
+
+
+def pick_usable_device(
+    devices: List[Dict[str, Any]],
+    probe_fn,
+    floor: float = RMS_SILENCE_FLOOR,
+) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Pure device-selection logic: probe each accepted device, pick a LIVE one.
+
+    ``devices`` must already be preferred-first (as ``enumerate_input_devices``
+    returns them). ``probe_fn(device_id) -> float`` returns that device's RMS;
+    it may raise (treated as unusable). Selection order:
+      1. first PREFERRED device whose probe RMS exceeds ``floor``
+      2. else first accepted device whose probe RMS exceeds ``floor``
+      3. else ``None`` (no microphone has signal)
+
+    Returns ``(chosen_device_or_None, probe_results)`` where each probe result is
+    ``{"name", "id", "rms"}`` (rms ``None`` if the probe raised). Pure over
+    ``probe_fn`` so it can be unit-tested with injected RMS values — no hardware.
+    """
+    probe_results: List[Dict[str, Any]] = []
+    usable_preferred: Optional[Dict[str, Any]] = None
+    usable_any: Optional[Dict[str, Any]] = None
+
+    for dev in devices:
+        try:
+            rms = float(probe_fn(dev["id"]))
+        except Exception as exc:  # device refused to open / read
+            logger.warning("probe failed for %s: %s", dev.get("name"), exc)
+            probe_results.append({"name": dev["name"], "id": dev["id"], "rms": None})
+            continue
+
+        probe_results.append({"name": dev["name"], "id": dev["id"], "rms": round(rms, 6)})
+        if rms > floor:
+            if usable_any is None:
+                usable_any = dev
+            if dev.get("preferred") and usable_preferred is None:
+                usable_preferred = dev
+
+    return (usable_preferred or usable_any), probe_results
+
+
+def probe_device_rms(device_id: int, seconds: float = PROBE_SECONDS) -> float:
+    """Open ``device_id`` briefly, read audio, return its RMS (normalized [-1,1]).
+
+    Hardware-touching companion to the pure ``pick_usable_device``. Reuses the
+    same open/downmix path as capture, so what we probe is what we would record.
+    Raises on any open/read failure so callers treat the device as unusable.
+    """
+    samples = STATE._capture_samples(device_id, seconds)
+    return rms_int16(samples)
 
 
 # ---------------------------------------------------------------------------
@@ -367,6 +490,98 @@ def _default_vosk_model_path() -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Wake-phrase fixture synthesis (for /self-test — never committed audio)
+# ---------------------------------------------------------------------------
+
+def _wav_bytes_to_frames16(wav_bytes: bytes):
+    """Decode WAV bytes to 16 kHz mono int16 using the SAME path as capture.
+
+    Downmix to mono, resample to 16 kHz with scipy (matching the capture loop),
+    then clip to int16. Returns a numpy int16 array, or None on decode failure.
+    """
+    import numpy as np
+
+    try:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as w:
+            rate = w.getframerate()
+            channels = w.getnchannels()
+            sampwidth = w.getsampwidth()
+            raw = w.readframes(w.getnframes())
+    except Exception as exc:
+        logger.warning("wav decode failed: %s", exc)
+        return None
+
+    if sampwidth != 2:  # only 16-bit PCM fixtures are supported
+        logger.warning("unexpected wav sample width: %d bytes", sampwidth)
+        return None
+
+    block = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+    if channels > 1:
+        block = block.reshape(-1, channels).mean(axis=1)
+    if rate != SAMPLE_RATE:
+        from scipy.signal import resample_poly
+
+        block = resample_poly(block, SAMPLE_RATE, rate)
+    return np.clip(block, -32768, 32767).astype(np.int16)
+
+
+def _synth_piper(text: str) -> Optional[bytes]:
+    """Synthesize ``text`` to WAV bytes via the host Piper daemon; None on failure."""
+    import urllib.request
+
+    payload = json.dumps({"text": text}).encode("utf-8")
+    req = urllib.request.Request(
+        PIPER_URL, data=payload, headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=PIPER_TIMEOUT_SEC) as resp:
+            if resp.status != 200:
+                return None
+            data = resp.read()
+        return data if data[:4] == b"RIFF" else None
+    except Exception as exc:
+        logger.info("piper fixture synth unavailable: %s", exc)
+        return None
+
+
+def _synth_espeak(text: str) -> Optional[bytes]:
+    """Synthesize ``text`` to WAV bytes via espeak-ng; None if unavailable."""
+    if not shutil.which("espeak-ng"):
+        return None
+    tmp = tempfile.NamedTemporaryFile(prefix="jarvis-wake-", suffix=".wav", delete=False)
+    tmp.close()
+    try:
+        subprocess.run(
+            ["espeak-ng", "-v", "en-us", "-w", tmp.name, text],
+            check=True, capture_output=True, timeout=10,
+        )
+        with open(tmp.name, "rb") as fh:
+            return fh.read()
+    except Exception as exc:
+        logger.info("espeak-ng fixture synth failed: %s", exc)
+        return None
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+
+def synth_wake_fixture(text: str = SELFTEST_WAKE_PHRASE):
+    """Return a 16 kHz mono int16 wake-phrase clip, or None if no TTS is available.
+
+    Prefers the host Piper daemon (natural voice, scores ~0.99 on the real
+    model); falls back to espeak-ng. Generated at call time — no audio is ever
+    committed to the repo. Decoded through the identical resample path as live
+    capture so the score proves the real capture->inference chain.
+    """
+    wav_bytes = _synth_piper(text) or _synth_espeak(text)
+    if not wav_bytes:
+        return None
+    return _wav_bytes_to_frames16(wav_bytes)
+
+
+# ---------------------------------------------------------------------------
 # Server state & capture loop
 # ---------------------------------------------------------------------------
 
@@ -395,6 +610,25 @@ class WakeWordState:
         self._stop = threading.Event()
         self._ready = threading.Event()   # capture loop signals stream open/failed
         self._last_fire = 0.0
+
+        # -- observability / signal metrics (Phase-2) ----------------------
+        # Guarded by _metrics_lock (NOT self.lock) so /diagnostics never blocks
+        # behind a slow /start, and the capture thread never blocks control ops.
+        self._metrics_lock = threading.Lock()
+        self.model_name_full: Optional[str] = None   # engine's real model key
+        self.expected_wake_phrase: Optional[str] = None
+        self.model_label: str = model_log_label(DEFAULT_MODEL)
+        self.audio_frames_received: int = 0
+        self.last_audio_frame_at: Optional[str] = None
+        self.current_rms: float = 0.0
+        self.inference_count: int = 0
+        self.last_inference_at: Optional[str] = None
+        self.current_score: float = 0.0
+        self.wake_detected_count: int = 0
+        self._selected_device_silent: bool = False
+        self._probe_results: List[Dict[str, Any]] = []
+        self._rms_history: Deque[Tuple[float, float]] = deque(maxlen=RMS_HISTORY_MAX)
+        self._score_history: Deque[Tuple[float, float]] = deque(maxlen=SCORE_HISTORY_MAX)
 
         # SSE plumbing — loop captured at app startup.
         self.loop: Optional[asyncio.AbstractEventLoop] = None
@@ -430,6 +664,70 @@ class WakeWordState:
         stream_active = stream is not None
         return thread_alive and stream_active and not self.paused and not self._stop.is_set()
 
+    # -- observability / signal metrics -------------------------------------
+    def _reset_metrics(self) -> None:
+        """Zero per-session counters/windows at the start of a fresh capture."""
+        with self._metrics_lock:
+            self.audio_frames_received = 0
+            self.last_audio_frame_at = None
+            self.current_rms = 0.0
+            self.inference_count = 0
+            self.last_inference_at = None
+            self.current_score = 0.0
+            self.wake_detected_count = 0
+            self._rms_history.clear()
+            self._score_history.clear()
+
+    def _record_audio_frame(self, frame_rms: float, ts_iso: str) -> None:
+        now = time.monotonic()
+        with self._metrics_lock:
+            self.audio_frames_received += 1
+            self.last_audio_frame_at = ts_iso
+            self.current_rms = frame_rms
+            self._rms_history.append((now, frame_rms))
+
+    def _record_inference(self, score: float, ts_iso: str) -> None:
+        now = time.monotonic()
+        with self._metrics_lock:
+            self.inference_count += 1
+            self.last_inference_at = ts_iso
+            self.current_score = score
+            self._score_history.append((now, score))
+
+    def signal_present(self) -> bool:
+        """True only if real audio energy was seen recently (last ~2s).
+
+        A silent/dead mic keeps ``listening`` true but this false — /diagnostics
+        must tell the truth. Falls back to the latest ``current_rms`` when no
+        windowed history exists yet (e.g. unit tests that set it directly).
+        """
+        now = time.monotonic()
+        cutoff = now - SIGNAL_WINDOW_SEC
+        with self._metrics_lock:
+            recent = [rms for (ts, rms) in self._rms_history if ts >= cutoff]
+            current = self.current_rms
+        if not recent:
+            return current > RMS_SILENCE_FLOOR
+        return max(recent) > RMS_SILENCE_FLOOR
+
+    def max_score_last_30s(self) -> float:
+        now = time.monotonic()
+        cutoff = now - MAX_SCORE_WINDOW_SEC
+        with self._metrics_lock:
+            recent = [s for (ts, s) in self._score_history if ts >= cutoff]
+        return round(max(recent), 4) if recent else 0.0
+
+    def provider_ready(self) -> bool:
+        """READY only when the model is loaded, a device is live-listening with
+        real signal, and the capture/inference loop is alive. Never READY for a
+        started-but-silent mic.
+        """
+        return (
+            self._engine is not None
+            and self.is_listening()
+            and self.signal_present()
+        )
+
     # -- capture control ----------------------------------------------------
     def start(self, device_sel: str, model: str, threshold: float, engine: str) -> Dict[str, Any]:
         engine = (engine or DEFAULT_ENGINE).lower()
@@ -441,16 +739,15 @@ class WakeWordState:
         if not _sounddevice_available():
             raise HTTPException(status_code=503, detail={"error": "sounddevice_not_installed"})
 
-        device = resolve_device(device_sel)
-        if device is None:
-            raise HTTPException(
-                status_code=404,
-                detail={"error": "no_input_device", "requested": device_sel},
-            )
-
         with self.lock:
-            # Idempotent restart: stop any existing capture first.
+            # Idempotent restart: stop any existing capture first, so probing is
+            # not fighting a still-open stream for the same device.
             self._stop_locked()
+
+            # RMS-verified device selection (THE fix): never blindly open the
+            # first name-preferred device — probe for real signal first so a
+            # hardware-dead mic (e.g. the C4K webcam) is skipped, not selected.
+            device, probe_results, signal_present, explicit_silent = self._select_device(device_sel)
 
             try:
                 built = self._build_engine(engine, model)
@@ -477,8 +774,16 @@ class WakeWordState:
             self.provider = built.provider
             self.loaded_models = built.loaded_models()
             self.inference_framework = getattr(built, "framework", DEFAULT_FRAMEWORK)
-            self.last_error = None
+            self.model_name_full = getattr(built, "model_key", model)
+            self.expected_wake_phrase = derive_wake_phrase(self.model_name_full)
+            self.model_label = model_log_label(self.model_name_full)
+            self._probe_results = probe_results
+            self._selected_device_silent = explicit_silent
+            # An explicitly-requested silent device is still opened (the user
+            # asked) but diagnostics tell the truth about it.
+            self.last_error = "selected_device_silent" if explicit_silent else None
             self.paused = False
+            self._reset_metrics()
 
             self._stop.clear()
             self._ready.clear()
@@ -504,8 +809,9 @@ class WakeWordState:
             self.listening = True
 
         logger.info(
-            "capture started (engine=%s, model=%s, device=%s[%d], threshold=%.2f)",
-            engine, model, device["name"], device["id"], threshold,
+            "capture started (engine=%s, model=%s, device=%s[%d], threshold=%.2f, "
+            "signalPresent=%s)",
+            engine, model, device["name"], device["id"], threshold, signal_present,
         )
         return {
             "status": "STARTED",
@@ -515,7 +821,54 @@ class WakeWordState:
             "model": model,
             "threshold": threshold,
             "modelsLoaded": self.loaded_models,
+            "audioSignalPresent": signal_present,
+            "probed": probe_results,
         }
+
+    def _select_device(self, device_sel: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]], bool, bool]:
+        """Resolve + RMS-probe a device selector into a device to open.
+
+        Returns ``(device, probe_results, signal_present, explicit_silent)``.
+
+        - ``auto``: probe accepted devices (preferred-first) and pick the first
+          LIVE one. Raises 404 if there are no input devices at all, or 503
+          ``no_microphone_signal`` (with probe results) if devices exist but none
+          have signal — we never silently open a dead mic.
+        - explicit ``<id>|<name>``: resolve, then probe. Opens even if silent
+          (the user asked), but returns ``explicit_silent=True`` and
+          ``signal_present=False`` so diagnostics stay honest.
+        """
+        sel = (device_sel or "auto").strip()
+
+        if sel.lower() == "auto":
+            devices = enumerate_input_devices()["devices"]
+            if not devices:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"error": "no_input_device", "requested": device_sel},
+                )
+            device, probe_results = pick_usable_device(devices, probe_device_rms, RMS_SILENCE_FLOOR)
+            if device is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail={"error": "no_microphone_signal", "probed": probe_results},
+                )
+            return device, probe_results, True, False
+
+        device = resolve_device(sel)
+        if device is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "no_input_device", "requested": device_sel},
+            )
+        try:
+            rms = float(probe_device_rms(device["id"]))
+        except Exception as exc:
+            logger.warning("probe failed for requested device %s: %s", device.get("name"), exc)
+            rms = 0.0
+        probe_results = [{"name": device["name"], "id": device["id"], "rms": round(rms, 6)}]
+        signal_present = rms > RMS_SILENCE_FLOOR
+        return device, probe_results, signal_present, (not signal_present)
 
     def _build_engine(self, engine: str, model: str) -> Any:
         if engine == "vosk":
@@ -576,6 +929,55 @@ class WakeWordState:
         self.listening = False
         self.paused = False
         self._ready.clear()
+        # Signal readings are only meaningful while a stream is live; clear them
+        # so /diagnostics can't report a stale currentRms / audioSignalPresent.
+        self._selected_device_silent = False
+        with self._metrics_lock:
+            self.current_rms = 0.0
+            self.current_score = 0.0
+            self._rms_history.clear()
+            self._score_history.clear()
+
+    def _capture_samples(self, device_id: int, seconds: float):
+        """Open ``device_id``, collect ~``seconds`` of 16 kHz mono int16 samples.
+
+        Shared low-level recorder used by device probing (``probe_device_rms``)
+        and ``/calibrate``. Uses the same open/downmix/resample path as capture
+        so the signal we measure is the signal we would detect on. Raises on any
+        open/read failure; always closes the stream. Returns a numpy int16 array.
+        """
+        import numpy as np
+
+        stream, native_rate, open_channels = self._open_input_stream(device_id)
+        resample = None
+        if native_rate != SAMPLE_RATE:
+            from scipy.signal import resample_poly
+
+            resample = resample_poly
+        native_frame = int(round(native_rate * FRAME_SAMPLES / SAMPLE_RATE))
+        collected: List[Any] = []
+        deadline = time.monotonic() + max(0.05, float(seconds))
+        try:
+            while time.monotonic() < deadline:
+                data, _ = stream.read(native_frame)
+                block = np.frombuffer(bytes(data), dtype=np.int16).astype(np.float32)
+                if open_channels > 1:
+                    block = block.reshape(-1, open_channels).mean(axis=1)
+                if resample is not None:
+                    block = resample(block, SAMPLE_RATE, native_rate)
+                collected.append(np.clip(block, -32768, 32767).astype(np.int16))
+        finally:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception as exc:
+                logger.warning("probe stream close error: %s", exc)
+            # Give the kernel a moment to release a raw USB/ALSA device so an
+            # immediate reopen (capture) does not hit "Device unavailable".
+            time.sleep(DEVICE_SETTLE_SEC)
+        if not collected:
+            return np.zeros(0, dtype=np.int16)
+        return np.concatenate(collected)
 
     def _open_input_stream(self, device_id: int):
         """Negotiate a working (samplerate, channels) combo for a raw device.
@@ -602,25 +1004,35 @@ class WakeWordState:
             (native_rate, min(2, max_in)),
         ]
         last_exc: Optional[Exception] = None
-        for rate, chans in combos:
-            frame = int(round(rate * FRAME_SAMPLES / SAMPLE_RATE))
-            try:
-                stream = sd.InputStream(
-                    samplerate=rate,
-                    channels=chans,
-                    dtype="int16",
-                    blocksize=frame,
-                    device=device_id,
-                )
-                stream.start()
+        # Outer retry: a device just released by the RMS probe can be briefly
+        # "unavailable" (-9985) until the kernel frees it. Settle and retry
+        # rather than fail /start on a transient busy state.
+        for attempt in range(STREAM_OPEN_ATTEMPTS):
+            for rate, chans in combos:
+                frame = int(round(rate * FRAME_SAMPLES / SAMPLE_RATE))
+                try:
+                    stream = sd.InputStream(
+                        samplerate=rate,
+                        channels=chans,
+                        dtype="int16",
+                        blocksize=frame,
+                        device=device_id,
+                    )
+                    stream.start()
+                    logger.info(
+                        "opened device %d at %d Hz, %d ch (resample->16k mono: %s)",
+                        device_id, rate, chans, rate != SAMPLE_RATE or chans != 1,
+                    )
+                    return stream, rate, chans
+                except Exception as exc:  # PortAudioError: unsupported combo / busy
+                    last_exc = exc
+                    continue
+            if attempt < STREAM_OPEN_ATTEMPTS - 1:
                 logger.info(
-                    "opened device %d at %d Hz, %d ch (resample->16k mono: %s)",
-                    device_id, rate, chans, rate != SAMPLE_RATE or chans != 1,
+                    "device %d not ready (attempt %d/%d), settling %.2fs: %s",
+                    device_id, attempt + 1, STREAM_OPEN_ATTEMPTS, STREAM_OPEN_RETRY_SLEEP, last_exc,
                 )
-                return stream, rate, chans
-            except Exception as exc:  # PortAudioError: unsupported combo
-                last_exc = exc
-                continue
+                time.sleep(STREAM_OPEN_RETRY_SLEEP)
         raise last_exc or RuntimeError("no supported input format")
 
     def _capture_loop(self) -> None:
@@ -653,6 +1065,7 @@ class WakeWordState:
 
         logger.info("capture loop running on device %s (native=%dHz)", device, native_rate)
         consecutive_errors = 0
+        last_inference_log = 0.0
         while not self._stop.is_set():
             try:
                 data, overflowed = stream.read(native_frame)
@@ -681,7 +1094,26 @@ class WakeWordState:
                         frame16 = frame16[:FRAME_SAMPLES]
                     else:
                         frame16 = np.pad(frame16, (0, FRAME_SAMPLES - frame16.size))
+
+                    # Observe the REAL signal energy before inference so a dead
+                    # mic surfaces as audioSignalPresent=false despite listening.
+                    frame_rms = rms_int16(frame16)
+                    ts = _now_iso()
+                    self._record_audio_frame(frame_rms, ts)
                     score = engine.process(frame16)
+                    self._record_inference(score, ts)
+
+                    # Rate-limited (~1/s) structured inference log. Never raw PCM.
+                    now = time.monotonic()
+                    if now - last_inference_log >= INFERENCE_LOG_INTERVAL_SEC:
+                        last_inference_log = now
+                        logger.info(
+                            "wake.inference provider=%s model=%s score=%.3f "
+                            "threshold=%.2f rms=%.4f frames=%d",
+                            self.engine_name, self.model_label, score,
+                            self.threshold, frame_rms, self.audio_frames_received,
+                        )
+
                     if score >= self.threshold:
                         self._on_wake(score)
             except Exception as exc:
@@ -704,26 +1136,177 @@ class WakeWordState:
         logger.info("capture loop exited")
 
     def _on_wake(self, score: float) -> None:
+        """Live-capture wake: debounced against the cooldown window."""
+        self._emit_wake(score, source=self.engine_name)
+
+    def _emit_wake(
+        self,
+        score: float,
+        source: str = "openwakeword",
+        bypass_cooldown: bool = False,
+        event_id: Optional[str] = None,
+    ) -> Optional[str]:
+        """Record + dispatch a WAKE_DETECTED event; returns its eventId (or None
+        if collapsed by the cooldown). ``bypass_cooldown`` is used by /self-test,
+        which must deterministically emit exactly one event.
+        """
         now = time.monotonic()
-        if not should_accept_wake(now, self._last_fire, WAKE_COOLDOWN_SEC):
-            return
+        if not bypass_cooldown and not should_accept_wake(now, self._last_fire, WAKE_COOLDOWN_SEC):
+            return None
         self._last_fire = now
 
         ts = _now_iso()
-        self.last_wake_detected_at = ts
-        self.last_wake_score = round(float(score), 4)
+        eid = event_id or uuid.uuid4().hex
+        score = round(float(score), 4)
+        with self._metrics_lock:
+            self.wake_detected_count += 1
+            self.last_wake_detected_at = ts
+            self.last_wake_score = score
         device_name = self.selected_device["name"] if self.selected_device else None
 
         event = {
             "type": "WAKE_DETECTED",
             "provider": self.provider,
             "model": self.model_name,
-            "score": round(float(score), 4),
+            "score": score,
             "device": device_name,
+            "eventId": eid,
+            "source": source,
             "timestamp": ts,
         }
-        logger.info("WAKE_DETECTED score=%.3f device=%s", score, device_name)
+        logger.info(
+            "wake.detected provider=%s model=%s score=%.3f eventId=%s",
+            self.engine_name, self.model_label, score, eid,
+        )
         self.dispatch_event(event)
+        return eid
+
+    def calibrate(self, device_sel: str, seconds: float) -> Dict[str, Any]:
+        """Record from a device WITHOUT running the model; return an RMS summary.
+
+        Backs the desktop "Calibrate" flow. Never touches the wake model — pure
+        signal measurement so the operator can see whether a mic is live before
+        arming detection. Guarded for headless (clear errors, never a crash).
+        """
+        import numpy as np
+
+        if not _sounddevice_available():
+            raise HTTPException(status_code=503, detail={"error": "sounddevice_not_installed"})
+
+        seconds = max(0.1, min(float(seconds or CALIBRATE_DEFAULT_SEC), CALIBRATE_MAX_SEC))
+        sel = (device_sel or "auto").strip()
+        if sel.lower() == "auto":
+            devices = enumerate_input_devices()["devices"]
+            device = devices[0] if devices else None
+        else:
+            device = resolve_device(sel)
+        if device is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "no_input_device", "requested": device_sel},
+            )
+
+        try:
+            samples = self._capture_samples(device["id"], seconds)
+        except Exception as exc:
+            logger.error("calibrate capture failed: %s", exc)
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "device_open_failed", "device": device.get("name"), "detail": str(exc)},
+            )
+
+        frames = [
+            samples[i:i + FRAME_SAMPLES]
+            for i in range(0, len(samples), FRAME_SAMPLES)
+            if len(samples[i:i + FRAME_SAMPLES]) > 0
+        ]
+        rmss = [rms_int16(f) for f in frames]
+        if rmss:
+            min_rms, avg_rms, max_rms = min(rmss), float(np.mean(rmss)), max(rmss)
+        else:
+            min_rms = avg_rms = max_rms = 0.0
+        signal_detected = max_rms > RMS_SILENCE_FLOOR
+        logger.info(
+            "calibrate device=%s frames=%d min=%.5f avg=%.5f max=%.5f signal=%s",
+            device["name"], len(frames), min_rms, avg_rms, max_rms, signal_detected,
+        )
+        return {
+            "device": device,
+            "frameCount": len(frames),
+            "minRms": round(min_rms, 6),
+            "avgRms": round(avg_rms, 6),
+            "maxRms": round(max_rms, 6),
+            "signalDetected": signal_detected,
+        }
+
+    def _inference_engine(self) -> Any:
+        """Engine used for /self-test fixture scoring.
+
+        Reuses the started engine only when idle; otherwise builds a fresh
+        instance of the SAME real model so a concurrent capture loop's streaming
+        state is never corrupted and the score stays deterministic.
+        """
+        if self._engine is not None and not self.is_listening():
+            return self._engine
+        return self._build_engine(self.engine_name, self.model_name)
+
+    def self_test(self) -> Dict[str, Any]:
+        """Reproducible end-to-end detection proof (no human voice needed).
+
+        Feeds a synthesized "hey jarvis" fixture through the REAL model frame by
+        frame and reports whether it crosses threshold; on success emits ONE real
+        WAKE_DETECTED over the existing SSE so a subscriber sees it. Stages are
+        checked in order and the first failure short-circuits with an honest
+        message. Returns ``{stage, ok, maxScore, threshold, message}``.
+        """
+        import numpy as np
+
+        threshold = self.threshold
+
+        # Stage 1: provider/model loaded (or buildable).
+        if not _openwakeword_available() and self.engine_name == "openwakeword":
+            return {"stage": "provider_loaded", "ok": False, "maxScore": 0.0,
+                    "threshold": threshold, "message": "openwakeword not installed"}
+        try:
+            engine = self._inference_engine()
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {"error": str(exc.detail)}
+            return {"stage": "provider_loaded", "ok": False, "maxScore": 0.0,
+                    "threshold": threshold, "message": f"model unavailable: {detail}"}
+        except Exception as exc:
+            return {"stage": "provider_loaded", "ok": False, "maxScore": 0.0,
+                    "threshold": threshold, "message": f"model unavailable: {exc}"}
+
+        # Stage 2: if a device is started, it must actually have signal.
+        if self.is_listening() and not self.signal_present():
+            return {"stage": "audio_signal", "ok": False, "maxScore": 0.0,
+                    "threshold": threshold,
+                    "message": "microphone is started but silent (audioSignalPresent=false)"}
+
+        # Stage 3: synthesize + run the fixture through the real engine.
+        fixture = synth_wake_fixture()
+        if fixture is None or len(fixture) < FRAME_SAMPLES:
+            return {"stage": "fixture", "ok": False, "maxScore": 0.0,
+                    "threshold": threshold, "message": "no tts fixture available"}
+
+        max_score = 0.0
+        for i in range(0, len(fixture) - FRAME_SAMPLES + 1, FRAME_SAMPLES):
+            frame = np.asarray(fixture[i:i + FRAME_SAMPLES], dtype=np.int16)
+            score = float(engine.process(frame))
+            if score > max_score:
+                max_score = score
+        max_score = round(max_score, 4)
+
+        if max_score < threshold:
+            return {"stage": "fixture_inference", "ok": False, "maxScore": max_score,
+                    "threshold": threshold,
+                    "message": f"fixture max score {max_score} below threshold {threshold}"}
+
+        # Stage 4: emit exactly one real WAKE_DETECTED over the SSE.
+        eid = self._emit_wake(max_score, source="self-test", bypass_cooldown=True)
+        return {"stage": "wake_emitted", "ok": True, "maxScore": max_score,
+                "threshold": threshold,
+                "message": f"fixture crossed threshold; WAKE_DETECTED emitted (eventId={eid})"}
 
 
 STATE = WakeWordState()
@@ -754,6 +1337,11 @@ class StartRequest(BaseModel):
     model: str = Field(default=DEFAULT_MODEL)
     threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0.0, le=1.0)
     engine: str = Field(default=DEFAULT_ENGINE, description="openwakeword | vosk")
+
+
+class CalibrateRequest(BaseModel):
+    device: str = Field(default=DEFAULT_DEVICE, description="auto | <id> | <name>")
+    seconds: float = Field(default=CALIBRATE_DEFAULT_SEC, gt=0.0, le=CALIBRATE_MAX_SEC)
 
 
 @asynccontextmanager
@@ -789,6 +1377,16 @@ async def health() -> Dict[str, Any]:
         # Honest: reflects the REAL stream state, not an optimistic flag.
         "listening": STATE.is_listening(),
         "paused": STATE.paused,
+        # READY only when model loaded AND a live device with real signal AND the
+        # loop is alive — never READY for a started-but-silent mic.
+        "ready": STATE.provider_ready(),
+        "modelLoaded": STATE._engine is not None,
+        "modelName": STATE.model_name,
+        "expectedWakePhrase": STATE.expected_wake_phrase,
+        "currentRms": round(STATE.current_rms, 6),
+        "audioSignalPresent": STATE.signal_present(),
+        "sampleRate": SAMPLE_RATE,
+        "threshold": STATE.threshold,
     }
 
 
@@ -823,6 +1421,19 @@ async def stop() -> Dict[str, Any]:
     return await run_in_threadpool(STATE.stop)
 
 
+@app.post("/calibrate")
+async def calibrate(req: CalibrateRequest) -> Dict[str, Any]:
+    # Records from the device (no model) — offloaded so the loop stays responsive.
+    return await run_in_threadpool(STATE.calibrate, req.device, req.seconds)
+
+
+@app.post("/self-test")
+async def self_test() -> Dict[str, Any]:
+    # Synthesizes a fixture and runs it through the real model — TTS + inference
+    # are blocking, so keep them off the event loop.
+    return await run_in_threadpool(STATE.self_test)
+
+
 @app.get("/diagnostics")
 async def diagnostics() -> Dict[str, Any]:
     listing = enumerate_input_devices()
@@ -838,6 +1449,27 @@ async def diagnostics() -> Dict[str, Any]:
         # Honest: computed from the live stream/thread, plus the pause flag.
         "listening": STATE.is_listening(),
         "paused": STATE.paused,
+        "ready": STATE.provider_ready(),
+        # -- audio pipeline (Phase-2 observability) ------------------------
+        "sampleRate": SAMPLE_RATE,
+        "channels": CHANNELS,
+        "pcmFormat": "int16",
+        "audioFramesReceived": STATE.audio_frames_received,
+        "lastAudioFrameAt": STATE.last_audio_frame_at,
+        "currentRms": round(STATE.current_rms, 6),
+        "audioSignalPresent": STATE.signal_present(),
+        "probedDevices": STATE._probe_results,
+        # -- model / inference --------------------------------------------
+        "modelLoaded": STATE._engine is not None,
+        "modelName": STATE.model_name,
+        "expectedWakePhrase": STATE.expected_wake_phrase,
+        "inferenceCount": STATE.inference_count,
+        "lastInferenceAt": STATE.last_inference_at,
+        "currentScore": round(STATE.current_score, 4),
+        "maximumScoreLast30Seconds": STATE.max_score_last_30s(),
+        "threshold": STATE.threshold,
+        # -- wake events ---------------------------------------------------
+        "wakeDetectedCount": STATE.wake_detected_count,
         "lastWakeDetectedAt": STATE.last_wake_detected_at,
         "lastWakeScore": STATE.last_wake_score,
         "lastError": STATE.last_error,

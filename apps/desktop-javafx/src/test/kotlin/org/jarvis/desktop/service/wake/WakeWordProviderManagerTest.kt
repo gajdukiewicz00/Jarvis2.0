@@ -195,18 +195,38 @@ class WakeWordProviderManagerTest {
     }
 
     @Test
-    fun `status reflects the active provider then falls back after stop`() {
+    fun `status mirrors the selection outcome then falls back after stop`() {
         val oww = RecordingProvider("openwakeword", WakeWordProviderType.OPENWAKEWORD)
         val (manager, _) = managerWith(
             WakeWordProviderType.OPENWAKEWORD to oww,
             WakeWordProviderType.MANUAL_ONLY to ManualOnlyProvider()
         )
 
-        manager.start { }
-        assertTrue(manager.status().message.contains("openwakeword"))
+        val started = manager.start { }
+        // openWakeWord is the AUTO primary → READY, and status now mirrors the SELECTION
+        // outcome (state + message), not the provider's own bare status line.
+        assertEquals(WakeProviderState.READY, started.status)
+        assertEquals(WakeProviderState.READY, manager.status().state)
+        assertEquals(started.message, manager.status().message)
 
         manager.stop()
-        // No active provider → falls back to the last selection message.
+        // No active provider → still reports the last selection message (never blank).
         assertTrue(manager.status().message.isNotBlank())
+    }
+
+    @Test
+    fun `status surfaces FALLBACK for a manual last-resort selection - not a bare provider READY`() {
+        // Only the manual last-resort is configured, so AUTO falls all the way through to it.
+        // ManualOnlyProvider.status() reports its own READY, but the SELECTION is a FALLBACK —
+        // the manager must surface FALLBACK, not the misleading bare provider READY.
+        val (manager, _) = managerWith(
+            WakeWordProviderType.MANUAL_ONLY to ManualOnlyProvider()
+        )
+
+        val result = manager.start { }
+
+        assertEquals(WakeWordProviderType.MANUAL_ONLY, result.selectedType)
+        assertEquals(WakeProviderState.FALLBACK, result.status)
+        assertEquals(WakeProviderState.FALLBACK, manager.status().state)
     }
 }

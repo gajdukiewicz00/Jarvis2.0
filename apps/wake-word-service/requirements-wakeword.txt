@@ -1,0 +1,10 @@
+# Pinned core dependencies for the Jarvis openWakeWord sidecar.
+# These are the known-good versions verified on the reference host — install
+# failures here are FATAL (see scripts/setup-wakeword-openwakeword.sh).
+# vosk is installed separately as a best-effort optional engine.
+openwakeword==0.4.0
+onnxruntime==1.27.0
+sounddevice==0.5.5
+numpy<2
+fastapi==0.139.0
+uvicorn[standard]==0.51.0

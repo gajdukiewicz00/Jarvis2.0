@@ -55,6 +55,8 @@ Base URL: `http://127.0.0.1:18095`
 | GET    | `/health`      | Liveness, loaded models, selected device |
 | GET    | `/devices`     | Enumerated input devices (preferred first, deduped) |
 | POST   | `/start`       | Open device, start capture + detection thread |
+| POST   | `/pause`       | Suspend detection (keep stream owned, `/health` stays UP) |
+| POST   | `/resume`      | Resume detection after a pause |
 | POST   | `/stop`        | Stop capture thread + close stream |
 | GET    | `/diagnostics` | Full engine/device/error state + rejected devices |
 | GET    | `/events`      | SSE stream of `WAKE_DETECTED` events + keepalives |

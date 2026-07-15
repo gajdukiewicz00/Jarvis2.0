@@ -111,22 +111,37 @@ abstract class SidecarWakeProvider(
 
     override fun pause() {
         if (paused) return // idempotent: already paused → no redundant POST
-        paused = true
-        try {
-            http.pause()
-        } catch (e: Exception) {
-            logger.debug("wake.{}.pause error: {}", providerId, e.message)
+        // Honest reconciliation: only report paused when the sidecar CONFIRMS it. If the
+        // POST /pause fails (or throws), stay paused=false and surface the reason — never
+        // claim we paused a sidecar that is still listening.
+        val ok = safeCall("pause") { http.pause() }
+        paused = ok
+        if (!ok) {
+            lastError = "pause_failed: $providerId sidecar did not confirm pause"
+            logger.warn("wake.{}.pause_unconfirmed — provider stays not-paused", providerId)
         }
     }
 
     override fun resume() {
         if (!paused) return // idempotent: not paused → nothing to resume
-        paused = false
-        try {
-            http.resume()
-        } catch (e: Exception) {
-            logger.debug("wake.{}.resume error: {}", providerId, e.message)
+        // Honest reconciliation with ONE retry: a single transient hiccup shouldn't strand us
+        // paused. If resume is still unconfirmed after the retry, STAY paused (paused=true) and
+        // surface the reason — never claim we resumed a sidecar that is still paused.
+        var ok = safeCall("resume") { http.resume() }
+        if (!ok) ok = safeCall("resume") { http.resume() }
+        paused = !ok
+        if (!ok) {
+            lastError = "resume_failed: $providerId sidecar did not confirm resume"
+            logger.warn("wake.{}.resume_unconfirmed — provider stays paused", providerId)
         }
+    }
+
+    /** Run a sidecar control POST, mapping any thrown transport error to `false` (never throws). */
+    private fun safeCall(op: String, call: () -> Boolean): Boolean = try {
+        call()
+    } catch (e: Exception) {
+        logger.debug("wake.{}.{} error: {}", providerId, op, e.message)
+        false
     }
 
     override fun stop() {

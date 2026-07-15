@@ -9,6 +9,9 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Regression coverage for [OkHttpWakeSidecarClient] parsing against the REAL sidecar
@@ -138,5 +141,55 @@ class OkHttpWakeSidecarClientTest {
 
         assertNotNull(diag)
         assertEquals(true, diag!!.paused)
+    }
+
+    @Test
+    fun `openEvents surfaces a data payload then close terminates the reader thread`() {
+        val dataLatch = CountDownLatch(1)
+        val received = CopyOnWriteArrayList<String>()
+
+        // One real SSE data line, then a long trickle of NON-data comment lines to hold the
+        // stream open (openEvents only surfaces lines starting with "data:"). throttleBody keeps
+        // the socket open until we close() — deterministic, no fixed sleeps.
+        val body = buildString {
+            append("data: {\"type\":\"WAKE_DETECTED\",\"model\":\"hey_jarvis\",\"score\":0.91}\n")
+            repeat(2000) { append(": keep-alive\n") }
+        }
+        server.enqueue(
+            MockResponse()
+                .addHeader("Content-Type", "text/event-stream")
+                .setBody(body)
+                .throttleBody(120, 300, TimeUnit.MILLISECONDS)
+        )
+
+        val closeable = client.openEvents(
+            onEvent = { received += it; dataLatch.countDown() },
+            onError = { }
+        )
+
+        // The WAKE_DETECTED data line must surface promptly through onEvent.
+        assertTrue(dataLatch.await(2, TimeUnit.SECONDS), "onEvent should fire for the data line")
+        assertTrue(received.first().contains("WAKE_DETECTED"))
+
+        // Closing must cancel the streaming call and let the daemon reader thread finish.
+        closeable.close()
+        assertTrue(awaitReaderThreadGone(2_000L), "SSE reader thread should terminate after close()")
+    }
+
+    /** Poll (bounded) until no live thread with the SSE reader's name remains. */
+    private fun awaitReaderThreadGone(timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (readerThreadAbsent()) return true
+            Thread.sleep(25)
+        }
+        return readerThreadAbsent()
+    }
+
+    private fun readerThreadAbsent(): Boolean =
+        Thread.getAllStackTraces().keys.none { it.isAlive && it.name == SSE_READER_THREAD_NAME }
+
+    private companion object {
+        const val SSE_READER_THREAD_NAME = "jarvis-wake-sse-reader"
     }
 }

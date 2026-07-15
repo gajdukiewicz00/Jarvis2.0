@@ -716,10 +716,23 @@ class VoiceTab(
         )
     }
 
-    /** "Restart Wake Word Provider": stop the active provider, then re-run selection. */
+    /**
+     * "Restart Wake Word Provider": stop the active provider, then re-run selection. The
+     * UI/session state is reset immediately (FX thread), then the blocking stop and the
+     * subsequent start run SEQUENTIALLY on ONE background thread — the old provider's
+     * POST /stop fully completes before the new provider's POST /start fires (no sidecar
+     * start/stop race), and the FX thread is never blocked on the teardown.
+     */
     private fun restartWakeProvider() {
-        stopAlwaysListening()
-        startAlwaysListening()
+        val teardown = resetAlwaysListeningStateImmediate()
+        Thread {
+            teardownProviders(teardown)
+            Platform.runLater { startAlwaysListening() }
+        }.apply {
+            name = "WakeProviderRestart"
+            isDaemon = true
+            start()
+        }
     }
 
     /**
@@ -1172,23 +1185,31 @@ class VoiceTab(
      * Stop the active wake provider (SSE + POST /stop for sidecar; detector stop for
      * Porcupine), disable always-listening, reset the toggle. Manual Talk + WS + STT
      * are untouched. Idempotent — safe to call when nothing is running.
+     *
+     * The UI/session state is reset SYNCHRONOUSLY so the app is instantly responsive; the
+     * provider teardown (a synchronous OkHttp POST /stop, up to a few seconds) is moved OFF
+     * the FX thread so it can NEVER freeze the UI.
      */
     private fun stopAlwaysListening() {
-        // Stop through the manager first — it owns the single active provider and clears
-        // it (SSE + POST /stop for sidecar; detector stop for Porcupine). Idempotent.
-        try {
-            wakeManager?.stop()
-        } catch (e: Exception) {
-            logger.debug("Wake manager stop failed: {}", e.message)
+        val teardown = resetAlwaysListeningStateImmediate()
+        Thread { teardownProviders(teardown) }.apply {
+            name = "WakeProviderStop"
+            isDaemon = true
+            start()
         }
-        try {
-            activeWakeProvider?.stop()
-        } catch (e: Exception) {
-            logger.debug("Wake provider stop failed: {}", e.message)
-        }
-        // Also stop the Porcupine detector directly (idempotent) in case it was
-        // adopted as the pause/resume handle.
-        wakeWordDetector?.stop()
+    }
+
+    /** Handles captured by [resetAlwaysListeningStateImmediate] for OFF-thread teardown. */
+    private data class WakeTeardown(val manager: WakeWordProviderManager?, val detector: WakeWordDetector?)
+
+    /**
+     * Reset always-listening SESSION + UI state immediately (no blocking network), null out
+     * every provider ref so a concurrent start can't observe a half-torn-down manager, and
+     * return the teardown handles for the caller to stop OFF the FX thread. Keeps the UI
+     * instantly responsive — the slow POST /stop never runs here.
+     */
+    private fun resetAlwaysListeningStateImmediate(): WakeTeardown {
+        val teardown = WakeTeardown(manager = wakeManager, detector = wakeWordDetector)
         wakeManager = null
         activeWakeProvider = null
         porcupineProvider = null
@@ -1207,7 +1228,25 @@ class VoiceTab(
             wakeStatusLabel.text = "Wake word stopped. Manual Talk still works."
             wakeStatusLabel.style = WAKE_STATUS_INFO_STYLE
         }
+        return teardown
+    }
 
+    /**
+     * Blocking provider teardown — MUST run OFF the FX thread. A SINGLE [WakeWordProviderManager.stop]
+     * (the manager owns and stops the active provider, so no redundant provider.stop()) plus the
+     * adopted Porcupine detector (idempotent). Each can do a synchronous OkHttp POST /stop (~5s).
+     */
+    private fun teardownProviders(teardown: WakeTeardown) {
+        try {
+            teardown.manager?.stop()
+        } catch (e: Exception) {
+            logger.debug("Wake manager stop failed: {}", e.message)
+        }
+        try {
+            teardown.detector?.stop()
+        } catch (e: Exception) {
+            logger.debug("Wake detector stop failed: {}", e.message)
+        }
         logger.info("🔇 Always listening mode deactivated")
     }
 

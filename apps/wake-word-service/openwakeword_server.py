@@ -52,6 +52,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -796,24 +797,30 @@ async def devices() -> Dict[str, Any]:
     return {"devices": enumerate_input_devices()["devices"]}
 
 
+# /start, /pause, /resume and /stop all take STATE.lock and can block on it (start
+# also does thread.join + _ready.wait; stop does thread.join). Running them inline
+# would freeze the single asyncio event loop for up to seconds, so /health and
+# /diagnostics would hang behind a slow /start. Offload each to a worker thread via
+# run_in_threadpool so the loop stays responsive. The JSON response shape is unchanged;
+# an HTTPException raised in the worker still propagates to the exception handler.
 @app.post("/start")
 async def start(req: StartRequest) -> Dict[str, Any]:
-    return STATE.start(req.device, req.model, req.threshold, req.engine)
+    return await run_in_threadpool(STATE.start, req.device, req.model, req.threshold, req.engine)
 
 
 @app.post("/pause")
 async def pause() -> Dict[str, Any]:
-    return STATE.pause()
+    return await run_in_threadpool(STATE.pause)
 
 
 @app.post("/resume")
 async def resume() -> Dict[str, Any]:
-    return STATE.resume()
+    return await run_in_threadpool(STATE.resume)
 
 
 @app.post("/stop")
 async def stop() -> Dict[str, Any]:
-    return STATE.stop()
+    return await run_in_threadpool(STATE.stop)
 
 
 @app.get("/diagnostics")

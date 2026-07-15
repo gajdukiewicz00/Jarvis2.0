@@ -37,15 +37,23 @@ log "Python: $(${VPY} --version 2>&1)"
 log "Upgrading pip/setuptools/wheel"
 "${VPY}" -m pip install --quiet --upgrade pip setuptools wheel || warn "pip upgrade had issues"
 
-log "Installing core dependencies (openwakeword, sounddevice, numpy, fastapi, uvicorn, onnxruntime)"
-"${VPY}" -m pip install \
-  "openwakeword" \
-  "sounddevice" \
-  "numpy<2" \
-  "fastapi" \
-  "uvicorn[standard]" \
-  "onnxruntime" \
-  || { err "core dependency install failed"; exit 1; }
+REQS_FILE="${REPO_ROOT}/apps/wake-word-service/requirements-wakeword.txt"
+log "Installing core dependencies (pinned via ${REQS_FILE})"
+if [[ -f "${REQS_FILE}" ]]; then
+  "${VPY}" -m pip install --requirement "${REQS_FILE}" \
+    || { err "core dependency install failed"; exit 1; }
+else
+  # Fallback: inline pinned list matching requirements-wakeword.txt (kept in sync).
+  warn "requirements-wakeword.txt missing; installing inline pinned versions"
+  "${VPY}" -m pip install \
+    "openwakeword==0.4.0" \
+    "onnxruntime==1.27.0" \
+    "sounddevice==0.5.5" \
+    "numpy<2" \
+    "fastapi==0.139.0" \
+    "uvicorn[standard]==0.51.0" \
+    || { err "core dependency install failed"; exit 1; }
+fi
 
 # tflite-runtime is optional; openWakeWord runs fine on the onnx framework.
 if [[ "${FRAMEWORK}" == "tflite" ]]; then
@@ -54,9 +62,9 @@ if [[ "${FRAMEWORK}" == "tflite" ]]; then
     || warn "tflite-runtime unavailable; will fall back to onnx at runtime"
 fi
 
-# vosk is best-effort (optional Russian/English phrase spotter).
-log "Attempting vosk (best-effort, optional)"
-"${VPY}" -m pip install "vosk" \
+# vosk is best-effort (optional Russian/English phrase spotter); pinned to the tested version.
+log "Attempting vosk==0.3.45 (best-effort, optional)"
+"${VPY}" -m pip install "vosk==0.3.45" \
   && log "vosk installed" \
   || warn "vosk not installed — vosk engine will report vosk_not_installed (openwakeword still works)"
 

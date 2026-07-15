@@ -96,13 +96,15 @@ class WakeWordProviderManager(
     fun activeType(): WakeWordProviderType? = active?.type
 
     /**
-     * Status of the active provider for the UI status line. Falls back to the last
-     * selection's message (degenerate manual case where no provider object exists),
-     * then to a "not started" default.
+     * Status for the UI status line. Prefer the last SELECTION outcome when present: a
+     * fallback/manual last-resort provider reports its own bare READY, which would hide the
+     * fact that it is a FALLBACK — the selection result carries the honest state/message.
+     * Fall back to the live provider status (started but never selection-recorded), then to
+     * a "not started" default.
      */
     fun status(): WakeWordStatus =
-        active?.status()
-            ?: lastSelection?.let { WakeWordStatus(it.status, it.message) }
+        lastSelection?.let { WakeWordStatus(it.status, it.message) }
+            ?: active?.status()
             ?: WakeWordStatus(WakeProviderState.UNAVAILABLE, "Wake word not started.")
 
     /** Aggregate diagnostics for EVERY configured provider (delegates to the selector). */

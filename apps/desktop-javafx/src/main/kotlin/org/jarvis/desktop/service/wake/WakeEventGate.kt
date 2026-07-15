@@ -24,8 +24,10 @@ class WakeEventGate(
     /** Cooldown clamped to the sane 1500–3000ms window. */
     private val cooldownMs: Long = cooldownMs.coerceIn(MIN_COOLDOWN_MS, MAX_COOLDOWN_MS)
 
-    private var lastAcceptedMs: Long? = null
-    private var lastCompletedMs: Long? = null
+    // Cross-thread: offer() runs on the provider's detection thread, markCompleted() on the
+    // FX thread. @Volatile guarantees each thread sees the other's latest write.
+    @Volatile private var lastAcceptedMs: Long? = null
+    @Volatile private var lastCompletedMs: Long? = null
 
     /**
      * @return true to ACCEPT the wake (caller starts a session), false to IGNORE.

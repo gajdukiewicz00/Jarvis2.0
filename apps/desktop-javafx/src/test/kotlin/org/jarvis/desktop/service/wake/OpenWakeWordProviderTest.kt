@@ -22,6 +22,9 @@ class FakeWakeSidecarClient(
     var stopCalls = 0
     var pauseCalls = 0
     var resumeCalls = 0
+    // Let a test simulate a sidecar that does NOT confirm a pause/resume POST.
+    var pauseResult = true
+    var resumeResult = true
     var streamClosed = false
     private var eventSink: ((String) -> Unit)? = null
     private var errorSink: ((Throwable) -> Unit)? = null
@@ -45,12 +48,12 @@ class FakeWakeSidecarClient(
 
     override fun pause(): Boolean {
         pauseCalls++
-        return true
+        return pauseResult
     }
 
     override fun resume(): Boolean {
         resumeCalls++
-        return true
+        return resumeResult
     }
 
     override fun openEvents(onEvent: (String) -> Unit, onError: (Throwable) -> Unit): Closeable {
@@ -206,6 +209,39 @@ class OpenWakeWordProviderTest {
         provider.resume()
         provider.resume() // already resumed → no second POST
         assertEquals(1, sidecar.resumeCalls)
+    }
+
+    @Test
+    fun `pause stays not-paused and records lastError when the sidecar does not confirm`() {
+        val sidecar = FakeWakeSidecarClient().apply { pauseResult = false }
+        val provider = OpenWakeWordProvider(http = sidecar)
+        provider.start(config) { }
+
+        provider.pause()
+
+        assertEquals(1, sidecar.pauseCalls)
+        // Sidecar refused → never claim we paused a still-listening sidecar (scenario B).
+        assertFalse(provider.diagnostics().paused)
+        assertFalse(provider.status().message.contains("paused"))
+        assertNotNull(provider.diagnostics().lastError)
+    }
+
+    @Test
+    fun `resume stays paused with one retry and records lastError when the sidecar does not confirm`() {
+        val sidecar = FakeWakeSidecarClient()
+        val provider = OpenWakeWordProvider(http = sidecar)
+        provider.start(config) { }
+
+        provider.pause() // confirmed → provider is paused
+        assertTrue(provider.diagnostics().paused)
+
+        sidecar.resumeResult = false
+        provider.resume()
+
+        // One retry after the first false → two POSTs, and the provider STAYS paused (scenario A).
+        assertEquals(2, sidecar.resumeCalls)
+        assertTrue(provider.diagnostics().paused)
+        assertNotNull(provider.diagnostics().lastError)
     }
 
     @Test

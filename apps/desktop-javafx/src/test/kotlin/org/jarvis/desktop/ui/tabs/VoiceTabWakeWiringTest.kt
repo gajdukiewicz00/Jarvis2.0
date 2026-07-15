@@ -241,6 +241,45 @@ class VoiceTabWakeWiringTest {
     }
 
     @Test
+    fun `diagnostics json carries the honest live observability fields from the sidecar`() {
+        val sidecar = SidecarDiagnosticsData(
+            installed = true,
+            models = listOf("hey_jarvis_v0.1"),
+            selectedDevice = "C4K",
+            listening = true,
+            lastWakeScore = 0.9,
+            lastWakeDetectedAt = "t",
+            lastError = null,
+            currentRms = 0.0,
+            audioSignalPresent = false,
+            audioFramesReceived = 1200L,
+            currentScore = 0.12,
+            maximumScoreLast30Seconds = 0.44,
+            inferenceCount = 999L,
+            threshold = 0.5,
+            modelName = "hey_jarvis_v0.1",
+            expectedWakePhrase = "hey jarvis",
+            ready = false
+        )
+
+        val json = VoiceTab.buildDiagnosticsJson(
+            selection = null,
+            providerDiags = emptyList(),
+            sidecarDiag = sidecar,
+            rejected = emptyList()
+        )
+
+        assertTrue(json.contains("\"audioSignalPresent\":false"), "audioSignalPresent present: $json")
+        assertTrue(json.contains("\"currentScore\":0.12"), "currentScore present")
+        assertTrue(json.contains("\"maximumScoreLast30Seconds\":0.44"), "max score present")
+        assertTrue(json.contains("\"audioFramesReceived\":1200"), "frames present")
+        assertTrue(json.contains("\"inferenceCount\":999"), "inference count present")
+        assertTrue(json.contains("\"expectedWakePhrase\":\"hey jarvis\""), "expected phrase present")
+        assertTrue(json.contains("\"modelName\":\"hey_jarvis_v0.1\""), "model name present")
+        assertTrue(json.contains("\"sidecarReady\":false"), "sidecar ready present")
+    }
+
+    @Test
     fun `diagnostics json for a null selection is still valid and manual-safe`() {
         val json = VoiceTab.buildDiagnosticsJson(
             selection = null,

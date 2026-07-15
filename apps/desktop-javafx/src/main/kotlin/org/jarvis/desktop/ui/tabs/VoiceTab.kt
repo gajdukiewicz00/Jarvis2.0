@@ -36,7 +36,9 @@ import org.jarvis.desktop.service.wake.OkHttpWakeSidecarClient
 import org.jarvis.desktop.service.wake.OpenWakeWordProvider
 import org.jarvis.desktop.service.wake.PorcupineProvider
 import org.jarvis.desktop.service.wake.SelectionResult
+import org.jarvis.desktop.service.wake.SelfTestResult
 import org.jarvis.desktop.service.wake.SidecarDiagnosticsData
+import org.jarvis.desktop.service.wake.WakeLiveStatus
 import org.jarvis.desktop.service.wake.VoskPhraseSpotterProvider
 import org.jarvis.desktop.service.wake.WakeEventGate
 import org.jarvis.desktop.service.wake.WakeProviderDiagnostics
@@ -86,6 +88,8 @@ class VoiceTab(
     private val cancelBtn = Button("⏹ Stop / Cancel")
     private val toggleListeningBtn = Button("Start Always Listening")
     private val testWakeWordBtn = Button("Test Wake Word Setup")
+    private val testWakeDetectionBtn = Button("Test Wake Detection")
+    private val calibrateWakeBtn = Button("Calibrate Wake Word")
     private val startWakeBtn = Button("Start Wake Word Provider")
     private val restartWakeBtn = Button("Restart Wake Word Provider")
     private val stopWakeBtn = Button("Stop Wake Word Provider")
@@ -97,6 +101,14 @@ class VoiceTab(
     private val wakeThresholdSpinner = Spinner<Double>()
     private val wakeStatusLabel = Label("")
     private val stateIndicator = Circle(10.0)
+
+    // ── "Wake Word Live" panel: honest, real-time view of what the sidecar actually sees ──
+    private val wakePhraseLabel = Label("Say: \"Hey Jarvis\"")
+    private val wakeModelThresholdLabel = Label("model: —   threshold: —")
+    private val wakeLiveScoreLabel = Label("score: n/a   max(30s): n/a   threshold: n/a")
+    private val wakeScoreBar = ProgressBar(0.0)
+    private val wakeRmsLabel = Label("rms: n/a   mic signal: unknown")
+    private val wakeSignalWarningLabel = Label("")
     
     private val audioRecorder = AudioRecorder()
     private val audioPlayer = AudioPlayer()
@@ -128,6 +140,14 @@ class VoiceTab(
     @Volatile private var pendingPorcupineDetector: WakeWordDetector? = null
     // Guards against re-firing the toggle while an async selector.select() is running.
     @Volatile private var wakeSelectionInProgress = false
+
+    // Background poller for the "Wake Word Live" panel. Runs ONLY while Always-Listening is
+    // active (started in applySelectionOutcome, stopped on any teardown), polling GET
+    // /diagnostics every ~500ms off the FX thread — never a busy loop, always torn down.
+    @Volatile private var wakeLivePoller: java.util.concurrent.ScheduledExecutorService? = null
+    // One sidecar client reused for the whole polling session (never rebuilt per tick) so the
+    // poll doesn't churn OkHttp dispatcher/connection pools every 500ms.
+    @Volatile private var wakeLivePollClient: OkHttpWakeSidecarClient? = null
 
     // User's explicit wake-word microphone choice from the dropdown (null == "Auto").
     // A volatile shadow so the background selector can read it off the FX thread
@@ -442,6 +462,22 @@ class VoiceTab(
         wakeButtonsRow.children.addAll(testWakeWordBtn, startWakeBtn, restartWakeBtn, stopWakeBtn)
         content.children.add(wakeButtonsRow)
 
+        // "Wake Word Live": the honest, real-time score/signal panel. Shows the ACTIVE phrase,
+        // model + threshold, live score vs threshold, raw mic RMS, and a loud warning when the
+        // mic is silent — so the user can SEE whether the model reacts (a dead mic no longer
+        // masquerades as "listening").
+        content.children.add(buildWakeLivePanel())
+
+        // "Test Wake Detection": the REAL staged self-test (distinct from the static config
+        // dump above). "Calibrate Wake Word": sample the selected mic and report RMS envelope.
+        testWakeDetectionBtn.style = "-fx-font-size: 12px;"
+        testWakeDetectionBtn.setOnAction { testWakeDetection() }
+        calibrateWakeBtn.style = "-fx-font-size: 12px;"
+        calibrateWakeBtn.setOnAction { calibrateWakeMic() }
+        val wakeTestRow = HBox(10.0)
+        wakeTestRow.children.addAll(testWakeDetectionBtn, calibrateWakeBtn)
+        content.children.add(wakeTestRow)
+
         // Separator
         content.children.add(Separator())
 
@@ -671,8 +707,12 @@ class VoiceTab(
         if (ui.enableWakeSession) {
             voiceSession.enableAlwaysListening()
             voiceControlService.onAlwaysListeningChanged(true)
+            // A real detector is live — start the honest live-score poll so the user can SEE
+            // whether the model actually reacts (and the status line reflects ready/signal).
+            startWakeLivePolling(currentWakeConfig().sidecarUrl)
         } else {
-            // Manual-only: wake word unavailable, but Manual Talk still works.
+            // Manual-only: wake word unavailable, but Manual Talk still works. No live poll.
+            stopWakeLivePolling()
             voiceControlService.onAlwaysListeningChanged(false)
             recordWakeInfo(ui.statusMessage)
         }
@@ -689,6 +729,7 @@ class VoiceTab(
         wakeWordDetector = null
         wakeGate = null
         wakeManager = null
+        stopWakeLivePolling()
         val ui = manualOnlyOutcome()
         applyWakeUi(ui)
         voiceControlService.onAlwaysListeningChanged(false)
@@ -1121,6 +1162,221 @@ class VoiceTab(
     }
 
     /**
+     * Build the "Wake Word Live" panel: the active wake phrase (prominent), model + threshold,
+     * a live score line + progress bar, the raw mic RMS/signal line, and a hidden-until-needed
+     * dead-mic warning. Values are placeholders until the poller feeds real diagnostics.
+     */
+    private fun buildWakeLivePanel(): VBox {
+        val panel = VBox(4.0)
+        panel.style =
+            "-fx-padding: 8; -fx-border-color: #cccccc; -fx-border-width: 1; " +
+                "-fx-border-radius: 4; -fx-background-radius: 4;"
+
+        val title = Label("Wake Word Live")
+        title.style = "-fx-font-weight: bold; -fx-font-size: 12px;"
+
+        wakePhraseLabel.style = "-fx-font-size: 15px; -fx-font-weight: bold; -fx-text-fill: #2C6E9B;"
+        wakeModelThresholdLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
+        wakeLiveScoreLabel.style = "-fx-font-size: 12px; -fx-font-family: 'monospace';"
+
+        wakeScoreBar.prefWidth = 240.0
+        wakeScoreBar.progress = 0.0
+
+        wakeRmsLabel.style = "-fx-font-size: 11px; -fx-text-fill: #666;"
+
+        wakeSignalWarningLabel.style = "-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #C0392B;"
+        wakeSignalWarningLabel.isWrapText = true
+        wakeSignalWarningLabel.isVisible = false
+        wakeSignalWarningLabel.isManaged = false
+
+        val hint = Label("Live scores appear while Always Listening is on.")
+        hint.style = "-fx-font-size: 10px; -fx-text-fill: #999;"
+
+        panel.children.addAll(
+            title,
+            wakePhraseLabel,
+            wakeModelThresholdLabel,
+            wakeLiveScoreLabel,
+            wakeScoreBar,
+            wakeRmsLabel,
+            wakeSignalWarningLabel,
+            hint
+        )
+        return panel
+    }
+
+    /**
+     * Start polling GET /diagnostics (~500ms) to drive the "Wake Word Live" panel + honest
+     * status line WHILE Always-Listening is active. Idempotent; a single daemon scheduler is
+     * reused. Each tick fetches diagnostics OFF the FX thread, then applies via Platform.runLater.
+     * Never a busy loop — a fixed-delay schedule that is always torn down by [stopWakeLivePolling].
+     */
+    private fun startWakeLivePolling(sidecarUrl: String) {
+        stopWakeLivePolling()
+        wakeLivePollClient = OkHttpWakeSidecarClient(sidecarUrl)
+        val executor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "WakeLivePoll").apply { isDaemon = true }
+        }
+        wakeLivePoller = executor
+        executor.scheduleWithFixedDelay(
+            { pollWakeLiveOnce() },
+            0L,
+            WAKE_LIVE_POLL_MS,
+            java.util.concurrent.TimeUnit.MILLISECONDS
+        )
+    }
+
+    /** Stop the live-panel poller (if any). Idempotent; safe to call when nothing is running. */
+    private fun stopWakeLivePolling() {
+        wakeLivePoller?.shutdownNow()
+        wakeLivePoller = null
+        wakeLivePollClient = null
+    }
+
+    /**
+     * One poll tick (runs on the poller thread): fetch diagnostics, then update the live panel
+     * + the honest Always-Listening status on the FX thread. `sseConnected` is derived from the
+     * live provider status so a dropped event stream is reflected honestly, not hidden.
+     */
+    private fun pollWakeLiveOnce() {
+        val client = wakeLivePollClient ?: return
+        val diag = try {
+            client.diagnostics()
+        } catch (e: Exception) {
+            logger.debug("wake.live.poll error: {}", e.message)
+            null
+        }
+        val sseConnected = activeWakeProvider?.status()?.state != WakeProviderState.ERROR
+        Platform.runLater { applyWakeLiveSnapshot(diag, sseConnected) }
+    }
+
+    /** Apply a diagnostics snapshot to the live panel + honest status (FX thread). */
+    private fun applyWakeLiveSnapshot(diag: SidecarDiagnosticsData?, sseConnected: Boolean) {
+        wakePhraseLabel.text = WakeLiveStatus.phraseLine(diag)
+        wakeModelThresholdLabel.text = WakeLiveStatus.modelThresholdLine(diag)
+        wakeLiveScoreLabel.text = WakeLiveStatus.liveScoreLine(diag)
+        wakeScoreBar.progress = WakeLiveStatus.scoreProgress(diag)
+        wakeRmsLabel.text = WakeLiveStatus.rmsLine(diag)
+
+        val warning = WakeLiveStatus.signalWarningOrNull(diag, isAlwaysListening)
+        wakeSignalWarningLabel.text = warning ?: ""
+        wakeSignalWarningLabel.isVisible = warning != null
+        wakeSignalWarningLabel.isManaged = warning != null
+
+        // Only overwrite the provider status line while Always-Listening is genuinely on, so a
+        // late tick can never clobber the "Wake word stopped" message set during teardown.
+        if (isAlwaysListening) {
+            wakeStatusLabel.text = WakeLiveStatus.listeningStatus(diag, true, sseConnected)
+            wakeStatusLabel.style = if (diag?.audioSignalPresent == false || diag?.ready == false) {
+                WAKE_STATUS_WARN_STYLE
+            } else {
+                WAKE_STATUS_INFO_STYLE
+            }
+        }
+    }
+
+    /** Reset the live panel to its idle placeholder state (FX thread) after wake stops. */
+    private fun resetWakeLivePanel() {
+        wakeLiveScoreLabel.text = "score: n/a   max(30s): n/a   threshold: n/a"
+        wakeScoreBar.progress = 0.0
+        wakeRmsLabel.text = "rms: n/a   mic signal: unknown"
+        wakeSignalWarningLabel.text = ""
+        wakeSignalWarningLabel.isVisible = false
+        wakeSignalWarningLabel.isManaged = false
+    }
+
+    /**
+     * "Test Wake Detection" (Phase 10): the REAL staged self-test. Off the FX thread, ask the
+     * sidecar to open the mic, feed a few seconds through the model, and report the stage it
+     * reached. The exact staged message is surfaced in a dialog + the status line — success
+     * (green) ONLY when the phrase was really detected, never faked.
+     */
+    private fun testWakeDetection() {
+        Platform.runLater {
+            testWakeDetectionBtn.isDisable = true
+            wakeStatusLabel.text = "Running wake self-test — say the wake phrase now…"
+            wakeStatusLabel.style = WAKE_STATUS_INFO_STYLE
+        }
+        Thread {
+            val result = try {
+                OkHttpWakeSidecarClient(currentWakeConfig().sidecarUrl).selfTest()
+            } catch (e: Exception) {
+                SelfTestResult(stage = "transport", ok = false, message = "Self-test failed: ${e.message}")
+            }
+            val text = WakeLiveStatus.selfTestText(result)
+            val ok = WakeLiveStatus.selfTestSucceeded(result)
+            logger.info("wake.self_test stage={} ok={} maxScore={}", result.stage, result.ok, result.maxScore)
+            Platform.runLater {
+                testWakeDetectionBtn.isDisable = false
+                wakeStatusLabel.text = text
+                wakeStatusLabel.style = if (ok) WAKE_STATUS_SUCCESS_STYLE else WAKE_STATUS_WARN_STYLE
+                showWakeInfoDialog(
+                    title = "Test Wake Detection",
+                    header = if (ok) "Wake phrase detected" else "Wake self-test: ${result.stage}",
+                    body = text
+                )
+            }
+        }.apply {
+            name = "WakeSelfTest"
+            isDaemon = true
+            start()
+        }
+    }
+
+    /**
+     * "Calibrate Wake Word": off the FX thread, ask the sidecar to sample the selected mic for
+     * a few seconds and report the RMS envelope + whether any real signal was detected — the
+     * direct dead-mic test. Result shown in a dialog + the status line.
+     */
+    private fun calibrateWakeMic() {
+        Platform.runLater {
+            calibrateWakeBtn.isDisable = true
+            wakeStatusLabel.text = "Calibrating wake mic (${WAKE_CALIBRATION_SECONDS}s)…"
+            wakeStatusLabel.style = WAKE_STATUS_INFO_STYLE
+        }
+        Thread {
+            val result = try {
+                OkHttpWakeSidecarClient(currentWakeConfig().sidecarUrl).calibrate(WAKE_CALIBRATION_SECONDS)
+            } catch (e: Exception) {
+                logger.debug("wake.calibrate error: {}", e.message)
+                null
+            }
+            Platform.runLater {
+                calibrateWakeBtn.isDisable = false
+                if (result == null) {
+                    wakeStatusLabel.text = "Calibration failed — wake sidecar unreachable."
+                    wakeStatusLabel.style = WAKE_STATUS_WARN_STYLE
+                    showWakeInfoDialog("Calibrate Wake Word", "Calibration failed", "Wake sidecar unreachable.")
+                } else {
+                    val text = WakeLiveStatus.calibrationText(result)
+                    wakeStatusLabel.text = text
+                    wakeStatusLabel.style = if (result.signalDetected) WAKE_STATUS_SUCCESS_STYLE else WAKE_STATUS_WARN_STYLE
+                    showWakeInfoDialog("Calibrate Wake Word", "Wake mic calibration", text)
+                }
+            }
+        }.apply {
+            name = "WakeCalibrate"
+            isDaemon = true
+            start()
+        }
+    }
+
+    /** Non-blocking-to-build INFORMATION dialog for the self-test / calibrate results (FX thread). */
+    private fun showWakeInfoDialog(title: String, header: String, body: String) {
+        val area = TextArea(body).apply {
+            isEditable = false
+            isWrapText = true
+            prefRowCount = 6
+            prefColumnCount = 48
+        }
+        val alert = Alert(Alert.AlertType.INFORMATION)
+        alert.title = title
+        alert.headerText = header
+        alert.dialogPane.content = area
+        alert.showAndWait()
+    }
+
+    /**
      * "Test Wake Word Setup": assemble the Section-8 aggregate diagnostics JSON
      * (selector.providerDiagnostics() + sidecar /diagnostics + /devices) off the FX
      * thread, then show it in a TextArea dialog + log it. NEVER emits the Porcupine key.
@@ -1218,6 +1474,7 @@ class VoiceTab(
         wakeGate = null
         lastSelection = null
         isAlwaysListening = false
+        stopWakeLivePolling()
         voiceSession.disableAlwaysListening()
         voiceControlService.onAlwaysListeningChanged(false)
 
@@ -1227,6 +1484,7 @@ class VoiceTab(
             toggleListeningBtn.isDisable = false
             wakeStatusLabel.text = "Wake word stopped. Manual Talk still works."
             wakeStatusLabel.style = WAKE_STATUS_INFO_STYLE
+            resetWakeLivePanel()
         }
         return teardown
     }
@@ -1381,6 +1639,7 @@ class VoiceTab(
 
     fun cleanup() {
         logger.info("🧹 Cleaning up VoiceTab resources")
+        stopWakeLivePolling()
         stopAlwaysListening()
         audioRecorder.stopRecording()
         voiceWebSocketClient.disconnect()
@@ -1406,6 +1665,14 @@ class VoiceTab(
 
         // Non-blocking wake status line style (INFO, never an error while a provider is active).
         private const val WAKE_STATUS_INFO_STYLE = "-fx-font-size: 12px; -fx-text-fill: #2C6E9B;"
+        // Honest self-test / calibration / no-signal styling: green on real success, red on trouble.
+        private const val WAKE_STATUS_SUCCESS_STYLE =
+            "-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #27AE60;"
+        private const val WAKE_STATUS_WARN_STYLE =
+            "-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #C0392B;"
+        // Live-panel poll cadence + calibration window.
+        private const val WAKE_LIVE_POLL_MS = 500L
+        private const val WAKE_CALIBRATION_SECONDS = 3
 
         // ── wake config defaults (mirror WakeWordConfig defaults) ──
         internal const val DEFAULT_SIDECAR_URL = "http://127.0.0.1:18095"
@@ -1561,6 +1828,16 @@ class VoiceTab(
                 }
                 put("lastWakeDetectedAt", sidecarDiag?.lastWakeDetectedAt ?: oww?.lastWakeDetectedAt)
                 put("lastWakeScore", sidecarDiag?.lastWakeScore ?: oww?.lastWakeScore)
+                // ── Honest live audio/inference observability (null when the sidecar omits them) ──
+                put("currentRms", sidecarDiag?.currentRms)
+                put("audioSignalPresent", sidecarDiag?.audioSignalPresent)
+                put("audioFramesReceived", sidecarDiag?.audioFramesReceived)
+                put("currentScore", sidecarDiag?.currentScore)
+                put("maximumScoreLast30Seconds", sidecarDiag?.maximumScoreLast30Seconds)
+                put("inferenceCount", sidecarDiag?.inferenceCount)
+                put("expectedWakePhrase", sidecarDiag?.expectedWakePhrase)
+                put("modelName", sidecarDiag?.modelName)
+                put("sidecarReady", sidecarDiag?.ready)
                 // Live voice-session + provider lifecycle state (null when not supplied by a caller
                 // that has a session/manager in hand — the pure unit tests pass neither).
                 put("voiceSessionState", voiceSessionState)

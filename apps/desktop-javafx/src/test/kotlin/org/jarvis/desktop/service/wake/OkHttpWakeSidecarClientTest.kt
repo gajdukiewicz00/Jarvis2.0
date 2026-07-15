@@ -144,6 +144,147 @@ class OkHttpWakeSidecarClientTest {
     }
 
     @Test
+    fun `diagnostics parses the new live observability fields`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"installed":true,"models":["hey_jarvis_v0.1"],"listening":true,"ready":true,
+                    "currentRms":0.042,"audioSignalPresent":true,"audioFramesReceived":15321,
+                    "currentScore":0.31,"maximumScoreLast30Seconds":0.87,"inferenceCount":2048,
+                    "threshold":0.5,"modelName":"hey_jarvis_v0.1","expectedWakePhrase":"hey jarvis",
+                    "sampleRate":16000,"channels":1,"pcmFormat":"S16_LE"}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val diag = client.diagnostics()
+
+        assertNotNull(diag)
+        assertEquals(true, diag!!.ready)
+        assertEquals(true, diag.audioSignalPresent)
+        assertEquals(0.042, diag.currentRms)
+        assertEquals(15321L, diag.audioFramesReceived)
+        assertEquals(0.31, diag.currentScore)
+        assertEquals(0.87, diag.maximumScoreLast30Seconds)
+        assertEquals(2048L, diag.inferenceCount)
+        assertEquals(0.5, diag.threshold)
+        assertEquals("hey_jarvis_v0.1", diag.modelName)
+        assertEquals("hey jarvis", diag.expectedWakePhrase)
+        assertEquals(16000, diag.sampleRate)
+        assertEquals(1, diag.channels)
+        assertEquals("S16_LE", diag.pcmFormat)
+    }
+
+    @Test
+    fun `diagnostics defaults the new fields to null when the sidecar omits them`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"installed":true,"models":["hey_jarvis"],"listening":true}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val diag = client.diagnostics()
+
+        assertNotNull(diag)
+        assertEquals(null, diag!!.audioSignalPresent)
+        assertEquals(null, diag.currentScore)
+        assertEquals(null, diag.expectedWakePhrase)
+        assertEquals(null, diag.ready)
+    }
+
+    @Test
+    fun `self-test parses a passing staged result and posts to slash self-test`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"stage":"detected","ok":true,"maxScore":0.998,"threshold":0.5,
+                    "message":"Wake phrase detected."}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val result = client.selfTest()
+
+        assertTrue(result.ok)
+        assertEquals("detected", result.stage)
+        assertEquals(0.998, result.maxScore)
+        assertEquals(0.5, result.threshold)
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/self-test", recorded.path)
+    }
+
+    @Test
+    fun `self-test parses a failing staged result without faking success`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"stage":"below_threshold","ok":false,"maxScore":0.21,"threshold":0.5,
+                    "message":"Audio signal present but model scores stayed below threshold (max 0.21)."}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val result = client.selfTest()
+
+        assertFalse(result.ok)
+        assertEquals("below_threshold", result.stage)
+        assertEquals(0.21, result.maxScore)
+        assertTrue(result.message.contains("below threshold"))
+    }
+
+    @Test
+    fun `self-test never throws and returns a failure result when the sidecar is unreachable`() {
+        // Nothing enqueued at a dead port → transport error must map to a failure result.
+        val dead = OkHttpWakeSidecarClient("http://127.0.0.1:1")
+        val result = dead.selfTest()
+        assertFalse(result.ok)
+        assertEquals("transport", result.stage)
+    }
+
+    @Test
+    fun `calibrate parses the RMS summary and posts seconds to slash calibrate`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"device":"C4K","frameCount":94,"minRms":0.0,"avgRms":0.031,"maxRms":0.12,
+                    "signalDetected":true}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val result = client.calibrate(3)
+
+        assertNotNull(result)
+        assertEquals("C4K", result!!.device)
+        assertEquals(94L, result.frameCount)
+        assertEquals(0.0, result.minRms)
+        assertEquals(0.031, result.avgRms)
+        assertEquals(0.12, result.maxRms)
+        assertTrue(result.signalDetected)
+
+        val recorded = server.takeRequest()
+        assertEquals("POST", recorded.method)
+        assertEquals("/calibrate", recorded.path)
+        assertTrue(recorded.body.readUtf8().contains("\"seconds\":3"))
+    }
+
+    @Test
+    fun `calibrate reports a dead mic with signalDetected false`() {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"device":"C4K","frameCount":94,"minRms":0.0,"avgRms":0.0,"maxRms":0.0,
+                    "signalDetected":false}"""
+            ).addHeader("Content-Type", "application/json")
+        )
+
+        val result = client.calibrate(3)
+
+        assertNotNull(result)
+        assertFalse(result!!.signalDetected)
+        assertEquals(0.0, result.maxRms)
+    }
+
+    @Test
+    fun `calibrate returns null on a non-2xx response and never throws`() {
+        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":"boom"}"""))
+        assertEquals(null, client.calibrate(3))
+    }
+
+    @Test
     fun `openEvents surfaces a data payload then close terminates the reader thread`() {
         val dataLatch = CountDownLatch(1)
         val received = CopyOnWriteArrayList<String>()

@@ -9,9 +9,11 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
@@ -41,7 +43,10 @@ import java.util.concurrent.TimeUnit
 class OkHttpWakeSidecarClient(
     baseUrl: String,
     private val shortClient: OkHttpClient = defaultShortClient(),
-    private val streamClient: OkHttpClient = defaultStreamClient()
+    private val streamClient: OkHttpClient = defaultStreamClient(),
+    // Self-test / calibrate RECORD a few seconds of audio, so they need a longer (but still
+    // bounded) read timeout than the short polling client — they must never hang the caller.
+    private val testClient: OkHttpClient = defaultTestClient()
 ) : WakeSidecarClient {
 
     private val logger = LoggerFactory.getLogger(OkHttpWakeSidecarClient::class.java)
@@ -198,11 +203,77 @@ class OkHttpWakeSidecarClient(
                     lastWakeScore = obj["lastWakeScore"]?.jsonPrimitive?.doubleOrNull,
                     lastWakeDetectedAt = obj["lastWakeDetectedAt"]?.jsonPrimitive?.contentOrNull,
                     lastError = obj["lastError"]?.jsonPrimitive?.contentOrNull,
-                    paused = obj["paused"]?.jsonPrimitive?.booleanOrNull
+                    paused = obj["paused"]?.jsonPrimitive?.booleanOrNull,
+                    currentRms = obj["currentRms"]?.jsonPrimitive?.doubleOrNull,
+                    audioSignalPresent = obj["audioSignalPresent"]?.jsonPrimitive?.booleanOrNull,
+                    audioFramesReceived = obj["audioFramesReceived"]?.jsonPrimitive?.longOrNull,
+                    currentScore = obj["currentScore"]?.jsonPrimitive?.doubleOrNull,
+                    maximumScoreLast30Seconds = obj["maximumScoreLast30Seconds"]?.jsonPrimitive?.doubleOrNull,
+                    inferenceCount = obj["inferenceCount"]?.jsonPrimitive?.longOrNull,
+                    threshold = obj["threshold"]?.jsonPrimitive?.doubleOrNull,
+                    modelName = obj["modelName"]?.jsonPrimitive?.contentOrNull,
+                    expectedWakePhrase = obj["expectedWakePhrase"]?.jsonPrimitive?.contentOrNull,
+                    ready = obj["ready"]?.jsonPrimitive?.booleanOrNull,
+                    sampleRate = obj["sampleRate"]?.jsonPrimitive?.intOrNull,
+                    channels = obj["channels"]?.jsonPrimitive?.intOrNull,
+                    pcmFormat = obj["pcmFormat"]?.jsonPrimitive?.contentOrNull
                 )
             }
         } catch (e: Exception) {
             logger.debug("wake.sidecar.diagnostics error: {}", e.message)
+            null
+        }
+    }
+
+    override fun selfTest(): SelfTestResult {
+        return try {
+            val httpReq = Request.Builder()
+                .url("$base/self-test")
+                .post(EMPTY_BODY.toRequestBody(JSON_MEDIA))
+                .build()
+            testClient.newCall(httpReq).execute().use { resp ->
+                val body = resp.body?.string().orEmpty()
+                val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull()
+                    ?: return SelfTestResult(
+                        stage = "transport",
+                        ok = false,
+                        message = "Self-test failed: HTTP ${resp.code} with no JSON body."
+                    )
+                SelfTestResult(
+                    stage = obj["stage"]?.jsonPrimitive?.contentOrNull ?: "unknown",
+                    ok = obj["ok"]?.jsonPrimitive?.booleanOrNull ?: false,
+                    maxScore = obj["maxScore"]?.jsonPrimitive?.doubleOrNull,
+                    threshold = obj["threshold"]?.jsonPrimitive?.doubleOrNull,
+                    message = obj["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                )
+            }
+        } catch (e: Exception) {
+            logger.debug("wake.sidecar.self-test error: {}", e.message)
+            SelfTestResult(stage = "transport", ok = false, message = "Self-test failed: ${e.message}")
+        }
+    }
+
+    override fun calibrate(seconds: Int): CalibrationResult? {
+        return try {
+            val payload = buildJsonObject { put("seconds", seconds) }.toString()
+            val httpReq = Request.Builder()
+                .url("$base/calibrate")
+                .post(payload.toRequestBody(JSON_MEDIA))
+                .build()
+            testClient.newCall(httpReq).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val obj = json.parseToJsonElement(resp.body?.string().orEmpty()).jsonObject
+                CalibrationResult(
+                    device = obj["device"]?.let { deviceDisplayName(it) },
+                    frameCount = obj["frameCount"]?.jsonPrimitive?.longOrNull ?: 0L,
+                    minRms = obj["minRms"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    avgRms = obj["avgRms"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    maxRms = obj["maxRms"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    signalDetected = obj["signalDetected"]?.jsonPrimitive?.booleanOrNull ?: false
+                )
+            }
+        } catch (e: Exception) {
+            logger.debug("wake.sidecar.calibrate error: {}", e.message)
             null
         }
     }
@@ -229,6 +300,14 @@ class OkHttpWakeSidecarClient(
         fun defaultStreamClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(3, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS) // SSE: keep the stream open indefinitely.
+            .build()
+
+        // Self-test / calibrate record a few seconds of audio server-side: give them room to
+        // finish but keep a hard ceiling so a stuck sidecar can never hang the caller thread.
+        fun defaultTestClient(): OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(5, TimeUnit.SECONDS)
             .build()
     }
 }
